@@ -32,7 +32,19 @@ pub struct KdfParams {
 
 impl Default for KdfParams {
     fn default() -> Self {
-        KdfParams { alg: "argon2id".into(), m_kib: 65536, t: 3, p: 4 }
+        KdfParams { alg: "argon2id".into(), m_kib: 262144, t: 3, p: 4 }
+    }
+}
+
+/// Minimum KDF parameters accepted from disk (guards against absurd downgrades).
+pub const KDF_FLOOR_M_KIB: u32 = 8192;
+
+impl KdfParams {
+    /// True if `self` is weaker than `target` in memory or iterations.
+    pub fn below(&self, target: &KdfParams) -> bool { self.m_kib < target.m_kib || self.t < target.t }
+    /// Component-wise max of two parameter sets.
+    pub fn max_with(&self, target: &KdfParams) -> KdfParams {
+        KdfParams { alg: "argon2id".into(), m_kib: self.m_kib.max(target.m_kib), t: self.t.max(target.t), p: self.p.max(target.p) }
     }
 }
 
@@ -92,6 +104,7 @@ pub fn random_bytes<const N: usize>() -> [u8; N] {
 /// AUK = Argon2id(password, salt) XOR HKDF-SHA256(secret_key, account_id, "gitpass-sk-v1")
 pub fn derive_auk(password: &str, secret: &SecretKey, salt: &[u8], account_id: &str, kdf: &KdfParams) -> Result<Key32> {
     if kdf.alg != "argon2id" { bail!("unsupported kdf {}", kdf.alg); }
+    if kdf.m_kib < KDF_FLOOR_M_KIB || kdf.t < 1 { bail!("kdf parameters below safety floor (format.json tampered?)"); }
     let params = Params::new(kdf.m_kib, kdf.t, kdf.p, Some(32)).map_err(|e| anyhow!("argon2 params: {e}"))?;
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let mut pw_key = Key32([0u8; 32]);
@@ -106,6 +119,14 @@ pub fn derive_auk(password: &str, secret: &SecretKey, salt: &[u8], account_id: &
     Ok(auk) // pw_key / sk_key zeroized on drop
 }
 
+/// HKDF-SHA256 expand to a 32-byte subkey.
+pub fn hkdf32(ikm: &[u8], salt: Option<&[u8]>, info: &[u8]) -> Key32 {
+    let hk = Hkdf::<Sha256>::new(salt, ikm);
+    let mut k = Key32([0u8; 32]);
+    hk.expand(info, &mut k.0).expect("32 bytes is a valid HKDF length");
+    k
+}
+
 /// Serialized AEAD envelope.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Envelope {
@@ -115,8 +136,12 @@ pub struct Envelope {
 }
 
 pub fn seal(key: &Key32, plaintext: &[u8], aad: &[u8]) -> Result<Envelope> {
+    seal_with_nonce(key, plaintext, aad, random_bytes())
+}
+
+/// Deterministic seal with a caller-supplied nonce. Only for known-answer tests; never reuse nonces.
+pub fn seal_with_nonce(key: &Key32, plaintext: &[u8], aad: &[u8], nonce: [u8; 24]) -> Result<Envelope> {
     let cipher = XChaCha20Poly1305::new((&key.0).into());
-    let nonce: [u8; 24] = random_bytes();
     let ct = cipher
         .encrypt(XNonce::from_slice(&nonce), Payload { msg: plaintext, aad })
         .map_err(|_| anyhow!("encryption failed"))?;
