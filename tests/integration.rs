@@ -1,8 +1,8 @@
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use gitpass::crypto::*;
-use gitpass::store::{self, Item, ItemFile, Session};
+use gitpass::store::{self, Item, ItemFile, Session, UnlockOpts};
 
-// Fast params for unit-level crypto tests; full flow test uses production MVP defaults.
+// Fast (8 MiB) params for tests only; production default is 256 MiB.
 fn fast() -> KdfParams { KdfParams { alg: "argon2id".into(), m_kib: 8192, t: 1, p: 1 } }
 
 #[test]
@@ -63,12 +63,13 @@ fn tamper_fails() {
 fn full_flow_on_temp_dir() {
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path();
-    let sk = store::init(root, "correct horse battery", KdfParams::default()).unwrap();
+    let sk = store::init(root, "correct horse battery", fast()).unwrap();
+    let o = UnlockOpts { accept_rollback: false, target_kdf: fast() };
     let skstr = sk.encode();
     let sk2 = SecretKey::parse(&skstr).unwrap();
-    for f in ["format.json", "keyset.enc"] { assert!(root.join(f).exists()); }
+    for f in ["format.json", "keyset.enc", "manifest.enc"] { assert!(root.join(f).exists()); }
 
-    let s = Session::unlock(root, "correct horse battery", &sk2).unwrap();
+    let s = Session::unlock_with(root, "correct horse battery", &sk2, &o).unwrap();
     let vid = s.create_vault("personal").unwrap();
     assert_eq!(s.resolve_vault("personal").unwrap(), vid);
     let item = Item { title: "GitHub".into(), username: Some("leeky".into()), password: Some("p@ss".into()),
@@ -78,9 +79,13 @@ fn full_flow_on_temp_dir() {
     // no plaintext on disk
     let raw = std::fs::read_to_string(root.join("vaults").join(&vid).join("items").join(format!("{iid}.enc"))).unwrap();
     assert!(!raw.contains("p@ss") && !raw.contains("leeky"));
+    // vault name is encrypted too (no meta.json)
+    assert!(!root.join("vaults").join(&vid).join("meta.json").exists());
+    let meta = std::fs::read_to_string(root.join("vaults").join(&vid).join("meta.enc")).unwrap();
+    assert!(!meta.contains("personal"));
 
     // fresh session reads it back
-    let s2 = Session::unlock(root, "correct horse battery", &sk2).unwrap();
+    let s2 = Session::unlock_with(root, "correct horse battery", &sk2, &o).unwrap();
     let found = s2.find_items(&vid, "git").unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].1, item);
@@ -97,10 +102,18 @@ fn full_flow_on_temp_dir() {
     f.version = 1;
     std::fs::write(&p, serde_json::to_vec(&f).unwrap()).unwrap();
     assert!(s2.read_item(&vid, &iid).is_err());
+    // ...and the manifest check refuses the whole vault
+    assert!(Session::unlock_with(root, "correct horse battery", &sk2, &o).is_err());
+    // accept-rollback re-seals without the unauthenticated item
+    let ar = UnlockOpts { accept_rollback: true, target_kdf: fast() };
+    let s2 = Session::unlock_with(root, "correct horse battery", &sk2, &ar).unwrap();
+    assert!(!s2.accepted_problems.is_empty());
+    assert!(s2.list_items(&vid).unwrap().is_empty());
+    let iid = s2.add_item(&vid, &item).unwrap();
 
     // wrong password / wrong secret key cannot unlock
-    assert!(Session::unlock(root, "wrong password", &sk2).is_err());
-    assert!(Session::unlock(root, "correct horse battery", &SecretKey::generate()).is_err());
+    assert!(Session::unlock_with(root, "wrong password", &sk2, &o).is_err());
+    assert!(Session::unlock_with(root, "correct horse battery", &SecretKey::generate(), &o).is_err());
 
     s2.remove_item(&vid, &iid).unwrap();
     assert!(s2.list_items(&vid).unwrap().is_empty());
