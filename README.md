@@ -1,14 +1,33 @@
-# gitpass — zero-knowledge password manager synced through a private GitHub repo (format v2)
+# gitpass 0.3.0 — zero-knowledge password manager synced through a private git repo (format v3)
 
-A clean-room Rust CLI. Its design follows the *publicly documented* two-secret model used by 1Password: a master password plus a Secret Key, with end-to-end encryption. It contains no proprietary code. It only uses vetted RustCrypto crates (`argon2`, `hkdf`, `sha2`, `chacha20poly1305`, `zeroize`, `rand`).
+A clean-room Rust password manager following the publicly documented two-secret model (master password + Secret Key), end-to-end encrypted, synced through git. No proprietary code; only vetted RustCrypto crates.
 
 > **NOT audited.** Don't trust it with real secrets until it has been reviewed independently.
 
+## Workspace layout
+```
+Cargo.toml                 # workspace root (version 0.3.0 for all crates)
+crates/gitpass-core/       # headless library: crypto, fsutil, store, merge, device, sync, migrate, totp, search
+  tests/                   # integration, v2, merge, devices, usability, integrated_v3
+crates/gitpass-cli/        # binary `gitpass` (main.rs) + clip.rs (arboard, `clipboard` feature, default on)
+  tests/clip.rs
+```
+`gitpass-core` is the API for a future GUI (e.g. Tauri): `Session`, `Item`, `ItemRecord`, `merge_items`, `device::*`,
+`totp_now`, `fuzzy_find`, `FORMAT_VERSION`/`MIN_READ_FORMAT`.
+
 ## Build
 ```bash
-cargo build --release      # binary: target/release/gitpass
-cargo test                 # unit/integration/KAT/proptest suites (tests use 8 MiB Argon2 for speed)
+cargo build --release --workspace          # binary: target/release/gitpass
+cargo build -p gitpass-cli --no-default-features   # without clipboard (no arboard)
+cargo test --workspace
 ```
+Toolchain is pinned to Rust 1.85 (`.cargo/config.toml` uses the MSRV-aware resolver fallback).
+
+## Format compatibility
+- v2 vaults open unchanged. First unlock creates `devices.enc` and the next write re-seals the manifest as format 3.
+- v2 item payloads have no clocks; clocks are synthesized from `updated_at` and written on the next update/merge.
+- `format.json` stays at 2 until the keyset is re-wrapped (passwd / rotate-secret-key / KDF upgrade / v1 migrate),
+  because the keyset AAD binds format.json; then it becomes 3. Formats newer than 3 are refused.
 
 ## Key hierarchy (two-secret model)
 ```
@@ -108,3 +127,47 @@ If it's interrupted, `format.json` still says v1. Rerun `gitpass migrate`, and i
 - `get` prints passwords to stdout. Clipboard support isn't implemented.
 - **Back up the Secret Key** (Emergency Kit). If you lose either secret, your data is unrecoverable.
 - `GITPASS_PASSWORD`, `GITPASS_NEW_PASSWORD` and `GITPASS_ITEM_PASSWORD` are for scripts and tests only.
+
+## Device management (format v3)
+
+Every successful unlock registers this device (or refreshes `last_seen_at`) in an encrypted registry.
+
+- `devices.enc` (vault root, synced): XChaCha20-Poly1305 envelope, key `hkdf32(account_key, None, "gitpass/devices/v3")`,
+  AAD `"{account_id}|devices|3"`. Plaintext `{ "format": 3, "devices": [{id, name, created_at, last_seen_at, revoked, revoked_at}] }`.
+- Its blake3 hash is stored in the authenticated manifest as `devices_hash`; the manifest `format` becomes 3.
+  `format.json`/`keyset.enc` are unchanged (still v2). v2 manifests (no `devices_hash`) still open; the registry is created on first unlock.
+- `.gitpass-device.json` (git-ignored, local only) holds this checkout's stable device id.
+- Name: `--device-name`, else `$GITPASS_DEVICE_NAME`, else hostname.
+
+```
+gitpass device list
+gitpass device rename <id|prefix> <name>
+gitpass device revoke <id|prefix>      # asks for confirmation unless --yes
+gitpass device unrevoke <id|prefix>    # from another, non-revoked device
+```
+
+A revoked device can still unlock and run `device list` and `rotate-account-key`. Every other mutating operation is refused.
+
+**Limitation:** revoke is only a trust marker that cooperating clients enforce. It does **not** re-encrypt anything.
+A device that has the master password and Secret Key (or has stored the Account Key) can still decrypt data and could
+use a modified client to ignore the marker. After revoking a lost or compromised device, run
+`gitpass rotate-account-key --with-vault-keys`, then `gitpass passwd` and `gitpass rotate-secret-key`.
+## Format v3: field-level merge
+Item plaintext = `{title, username, password, url, notes, totp, updated_at, clocks:{<field>: u64 ms}}` (inside the same
+padded, encrypted envelope). Merge per field: higher clock wins; equal clock + equal value = clean; equal clock + different
+value = conflict, local kept and reported; `None` with a clock is a tombstone. v2 items read with all clocks = `updated_at`*1000.
+`gitpass sync --merge` applies this to every item after fetching when local and remote histories diverged.
+## Usability: clipboard, TOTP, fuzzy search
+
+- `gitpass copy <vault> <query> [--field password|username|url|totp|notes|title] [--pick N] [--clear-secs 30] [--quiet]`
+  copies a field to the clipboard, **blocks** for `--clear-secs` (default 30; the process must stay alive to own
+  the X11/Wayland selection), then clears it (only if it still holds our value). `--clear-secs 0` copies and exits
+  without clearing. If no clipboard is available (headless), prints a warning and the value to stdout unless `--quiet`.
+  `get` accepts the same `--copy --field --clear-secs --quiet` flags.
+- `gitpass totp <vault> <query> [--pick N] [--copy] [--clear-secs 30]` prints the current RFC 6238 code and seconds
+  remaining. `Item.totp` may be an `otpauth://totp/...?secret=...` URI (digits/period/algorithm SHA1|SHA256|SHA512
+  honoured) or a raw base32 secret.
+- `gitpass find <vault> <query>` ranked fuzzy search over title/username/url (exact > prefix > word > substring > subsequence).
+- `gitpass list <vault> --query <q>` ranked filter. `get` with several matches lists ranked candidates and exits 1
+  unless one is a clear winner or `--pick <n>` is given.
+- Build without clipboard support: `cargo build --no-default-features`.
