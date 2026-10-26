@@ -17,3 +17,6 @@ export interface Identity { publicKey: string; fingerprint: string; }
 export interface Onboarding { extensionInstalled: boolean; emergencyKitSaved: boolean; repoConnected: boolean; imported: boolean; dismissed: boolean; }
 export interface UnlockState { unlocked: boolean; vaultPath: string; account: string|null; vaultExists?: boolean; biometricAvailable?: boolean; }
 export interface CreateAccountResult { vaultPath: string; secretKey: string; }
+export interface EmergencyKitData { accountId: string; vaultPath: string; remote: string | null; deviceName: string | null; createdAt: string; secretKeyAvailable: boolean; secretKey: string | null; }
+export interface ImportPreviewItem { title: string; category: string; username: string | null; url: string | null; hasPassword: boolean; hasTotp: boolean; tags: string[]; fields: number; archived: boolean; }
+export interface ImportResult { parsed: number; added: number; duplicates: number; duplicateTitles?: string[]; warnings?: string[]; categories?: Record<string, number>; preview?: ImportPreviewItem[]; }

@@ -1,0 +1,60 @@
+{
+  "encrypted": false,
+  "folders": [
+    { "id": "f1a2b3c4-0000-4000-8000-000000000001", "name": "Work" },
+    { "id": "f1a2b3c4-0000-4000-8000-000000000002", "name": "မိသားစု" }
+  ],
+  "items": [
+    {
+      "passwordHistory": null, "revisionDate": "2025-03-14T09:26:53.589Z", "creationDate": "2024-01-02T03:04:05.000Z", "deletedDate": null,
+      "id": "a0000000-0000-4000-8000-000000000001", "organizationId": null, "folderId": "f1a2b3c4-0000-4000-8000-000000000001",
+      "type": 1, "reprompt": 0, "name": "Example Mail", "notes": "Line one, with comma\nLine \"two\"", "favorite": true,
+      "fields": [
+        { "name": "Recovery PIN", "value": "4242", "type": 1, "linkedId": null },
+        { "name": "Remember me", "value": "true", "type": 2, "linkedId": null }
+      ],
+      "login": {
+        "fido2Credentials": [],
+        "uris": [ { "match": null, "uri": "https://mail.example.com/login" }, { "match": 1, "uri": "https://example.com" } ],
+        "username": "alice@example.com", "password": "Fake-P@ss, \"quoted\"", "totp": "otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example"
+      },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null, "revisionDate": "2025-04-01T00:00:00.000Z", "creationDate": "2025-04-01T00:00:00.000Z", "deletedDate": null,
+      "id": "a0000000-0000-4000-8000-000000000002", "organizationId": null, "folderId": "f1a2b3c4-0000-4000-8000-000000000002",
+      "type": 1, "reprompt": 0, "name": "ဘဏ် အကောင့်", "notes": "မြန်မာစာ မှတ်စု", "favorite": false, "fields": null,
+      "login": { "fido2Credentials": [], "uris": [ { "match": null, "uri": "https://bank.example.mm" } ], "username": "မောင်မောင်", "password": "ပစ်စကား123", "totp": "JBSW Y3DP EHPK 3PXP" },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null, "revisionDate": "2025-04-02T00:00:00.000Z", "creationDate": "2025-04-02T00:00:00.000Z", "deletedDate": null,
+      "id": "a0000000-0000-4000-8000-000000000003", "organizationId": null, "folderId": null,
+      "type": 3, "reprompt": 0, "name": "Fake Visa", "notes": null, "favorite": false, "fields": [],
+      "card": { "cardholderName": "Alice Example", "brand": "Visa", "number": "4111111111111111", "expMonth": "7", "expYear": "2030", "code": "123" },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null, "revisionDate": "2025-04-03T00:00:00.000Z", "creationDate": "2025-04-03T00:00:00.000Z", "deletedDate": null,
+      "id": "a0000000-0000-4000-8000-000000000004", "organizationId": null, "folderId": null,
+      "type": 4, "reprompt": 0, "name": "Alice ID", "notes": "", "favorite": false, "fields": [],
+      "identity": { "title": "Ms", "firstName": "Alice", "middleName": null, "lastName": "Example", "address1": "1 Fake St", "address2": null, "address3": null,
+        "city": "Yangon", "state": null, "postalCode": "11181", "country": "MM", "company": null, "email": "alice@example.com", "phone": "+95 9 000 000",
+        "ssn": null, "username": "alicex", "passportNumber": "MA000000", "licenseNumber": null },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null, "revisionDate": "2025-04-04T00:00:00.000Z", "creationDate": "2025-04-04T00:00:00.000Z", "deletedDate": null,
+      "id": "a0000000-0000-4000-8000-000000000005", "organizationId": null, "folderId": "f1a2b3c4-0000-4000-8000-000000000001",
+      "type": 2, "reprompt": 0, "name": "Wi-Fi notes", "notes": "SSID: FakeNet\nKey: not-real", "favorite": false, "fields": [], "secureNote": { "type": 0 },
+      "collectionIds": null
+    },
+    {
+      "passwordHistory": null, "revisionDate": "2025-03-14T09:26:53.589Z", "creationDate": "2024-01-02T03:04:05.000Z", "deletedDate": null,
+      "id": "a0000000-0000-4000-8000-000000000006", "organizationId": null, "folderId": "f1a2b3c4-0000-4000-8000-000000000001",
+      "type": 1, "reprompt": 0, "name": "Example Mail", "notes": null, "favorite": false, "fields": [],
+      "login": { "fido2Credentials": [], "uris": [ { "match": null, "uri": "https://mail.example.com/login" } ], "username": "alice@example.com", "password": "dup", "totp": null },
+      "collectionIds": null
+    }
+  ]
+}

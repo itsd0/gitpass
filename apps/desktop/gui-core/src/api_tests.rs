@@ -451,3 +451,29 @@ fn create_account_and_biometric_unlock() {
     app.lock();
     assert!(app.unlock_biometric("").is_err());
 }
+
+#[test]
+fn emergency_kit_data_reveal_rules() {
+    let root = tempfile::tempdir().unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let dir = root.path().join("v");
+    let app = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default()));
+    app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
+    let r = app.create_account(&dir.display().to_string(), "correct horse", false).unwrap();
+    // right after create_account the kit carries the fresh Secret Key
+    let k = app.emergency_kit_data(None).unwrap();
+    assert_eq!(k.secret_key.as_deref(), Some(r.secret_key.as_str()));
+    assert!(!k.account_id.is_empty() && k.vault_path.ends_with("v") && k.remote.is_none());
+    // after lock+unlock the key is hidden until the master password is re-entered
+    app.lock();
+    app.unlock(&dir.display().to_string(), "correct horse", Some(&r.secret_key)).unwrap();
+    assert!(app.emergency_kit_data(None).unwrap().secret_key.is_none());
+    assert!(app.emergency_kit_data(Some("wrong password")).is_err());
+    assert_eq!(app.emergency_kit_data(Some("correct horse")).unwrap().secret_key.as_deref(), Some(r.secret_key.as_str()));
+    // after rotation the new key is shown without a re-prompt
+    app.rotate_secret_key().unwrap();
+    let k2 = app.emergency_kit_data(None).unwrap();
+    assert!(k2.secret_key.is_some() && k2.secret_key.as_deref() != Some(r.secret_key.as_str()));
+    app.lock();
+    assert!(app.emergency_kit_data(None).is_err());
+}

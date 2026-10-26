@@ -20,7 +20,8 @@ fn item(title: &str, pw: Option<&str>, url: Option<&str>) -> Item {
         notes: None, totp: None, updated_at: store::now() }
 }
 
-fn by_title<'a>(items: &'a [Item], t: &str) -> &'a Item { items.iter().find(|i| i.title == t).unwrap() }
+fn by_title<'a>(items: &'a [gitpass_core::merge::ItemRecord], t: &str) -> &'a Item { items.iter().find(|i| i.item.title == t).map(|r| &r.item).unwrap() }
+fn rec<'a>(items: &'a [gitpass_core::merge::ItemRecord], t: &str) -> &'a gitpass_core::merge::ItemRecord { items.iter().find(|i| i.item.title == t).unwrap() }
 
 const BW_JSON: &str = r#"{"encrypted":false,"folders":[{"id":"f1","name":"Fake Folder"}],"items":[
  {"id":"1","folderId":"f1","type":1,"name":"Example Login","notes":"fake note","revisionDate":"2020-01-02T03:04:05.000Z",
@@ -42,8 +43,14 @@ fn import_bitwarden_json() {
     assert_eq!(l.totp.as_deref(), Some("JBSWY3DPEHPK3PXP"));
     assert_eq!(l.updated_at, "1577934245");
     let n = l.notes.as_deref().unwrap();
-    for s in ["fake note", "Folder: Fake Folder", "PIN: 0000", "Additional URL: https://alt.example.invalid"] { assert!(n.contains(s), "{n}"); }
-    assert!(by_title(&p.items, "Fake Card").notes.as_deref().unwrap().contains("brand: Visa"));
+    assert_eq!(n, "fake note");
+    let r = rec(&p.items, "Example Login");
+    assert_eq!(r.tags, vec!["Fake Folder"]);
+    assert_eq!(r.find_field("custom1").and_then(|f| f.value).as_deref(), Some("0000"));
+    assert_eq!(r.find_field("url2").and_then(|f| f.value).as_deref(), Some("https://alt.example.invalid"));
+    let card = rec(&p.items, "Fake Card");
+    assert_eq!(card.category, gitpass_core::item::Category::CreditCard);
+    assert_eq!(card.find_field("type").and_then(|f| f.value).as_deref(), Some("Visa"));
     assert!(import::parse(ImportFormat::BitwardenJson, r#"{"encrypted":true,"items":[]}"#, None).is_err());
 }
 
@@ -57,8 +64,9 @@ fn import_bitwarden_csv() {
     let m = by_title(&p.items, "Fake Mail");
     assert_eq!((m.username.as_deref(), m.password.as_deref(), m.totp.as_deref()), (Some("bob"), Some("FAKE-pw-2"), Some("JBSWY3DPEHPK3PXP")));
     let n = m.notes.as_deref().unwrap();
-    assert!(n.contains("hello") && n.contains("folder: Work") && n.contains("fields: Recovery: abc"), "{n}");
-    assert!(by_title(&p.items, "Fake Note").notes.as_deref().unwrap().contains("secure note"));
+    assert!(n.contains("hello") && n.contains("fields: Recovery: abc"), "{n}");
+    assert_eq!(rec(&p.items, "Fake Mail").tags, vec!["Work"]);
+    assert_eq!(rec(&p.items, "Fake Note").category, gitpass_core::item::Category::SecureNote);
 }
 
 #[test]
@@ -66,15 +74,16 @@ fn import_1password_csv_case_insensitive_and_bom() {
     let csv = "\u{feff}Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes\n\
                Fake Shop,https://shop.example.invalid,carol,FAKE-pw-3,otpauth://totp/x?secret=JBSWY3DPEHPK3PXP,false,false,shopping,n1\n";
     let p = import::parse(ImportFormat::OnePasswordCsv, csv, None).unwrap();
-    let i = &p.items[0];
+    let i = &p.items[0].item;
     assert_eq!(i.title, "Fake Shop");
     assert_eq!(i.url.as_deref(), Some("https://shop.example.invalid"));
     assert!(i.totp.as_deref().unwrap().starts_with("otpauth://"));
-    assert!(i.notes.as_deref().unwrap().contains("Tags: shopping"));
+    assert_eq!(i.notes.as_deref(), Some("n1"));
+    assert_eq!(p.items[0].tags, vec!["shopping"]);
     // lower-case / older header variants
     let p2 = import::parse(ImportFormat::OnePasswordCsv, "title,website,username,password,notesPlain\nX,https://x.invalid,u,p,nn\n", None).unwrap();
-    assert_eq!(p2.items[0].url.as_deref(), Some("https://x.invalid"));
-    assert_eq!(p2.items[0].notes.as_deref(), Some("nn"));
+    assert_eq!(p2.items[0].item.url.as_deref(), Some("https://x.invalid"));
+    assert_eq!(p2.items[0].item.notes.as_deref(), Some("nn"));
 }
 
 #[test]
@@ -82,11 +91,11 @@ fn import_keepassxc_csv() {
     let csv = "\"Group\",\"Title\",\"Username\",\"Password\",\"URL\",\"Notes\",\"TOTP\",\"Icon\",\"Last Modified\",\"Created\"\n\
                \"Root/Fake\",\"Fake Forum\",\"dave\",\"FAKE-pw-4\",\"https://forum.example.invalid\",\"multi\nline\",\"\",\"0\",\"2021-06-01T00:00:00Z\",\"2021-01-01T00:00:00Z\"\n";
     let p = import::parse(ImportFormat::KeepassCsv, csv, None).unwrap();
-    let i = &p.items[0];
+    let i = &p.items[0].item;
     assert_eq!((i.title.as_str(), i.password.as_deref(), i.totp.as_deref()), ("Fake Forum", Some("FAKE-pw-4"), None));
     assert_eq!(i.updated_at, "1622505600");
     let n = i.notes.as_deref().unwrap();
-    assert!(n.contains("multi\nline") && n.contains("Group: Root/Fake") && !n.contains("Icon"), "{n}");
+    assert!(n.contains("multi\nline") && !n.contains("Group") && !n.contains("Icon"), "{n}");
 }
 
 #[test]
@@ -94,8 +103,8 @@ fn import_chrome_csv() {
     let csv = "name,url,username,password,note\nlogin.example.invalid,https://login.example.invalid/,erin,FAKE-pw-5,\n,https://noname.example.invalid/,f,g,\n";
     let p = import::parse(ImportFormat::ChromeCsv, csv, None).unwrap();
     assert_eq!(p.items.len(), 2);
-    assert_eq!(p.items[0].username.as_deref(), Some("erin"));
-    assert_eq!(p.items[1].title, "https://noname.example.invalid/"); // falls back to url
+    assert_eq!(p.items[0].item.username.as_deref(), Some("erin"));
+    assert_eq!(p.items[1].item.title, "https://noname.example.invalid/"); // falls back to url
     assert!(import::parse(ImportFormat::ChromeCsv, "foo,bar\n1,2\n", None).is_err());
 }
 
@@ -130,7 +139,7 @@ fn export_import_roundtrip_plain_json_and_csv() {
     for it in sample_items() { s.add_item(&v, &it).unwrap(); }
     let items: Vec<Item> = s.list_items(&v).unwrap().into_iter().map(|(_, i)| i).collect();
     let json = import::export_json(&items).unwrap();
-    let back = import::parse(ImportFormat::GitpassJson, &json, None).unwrap().items;
+    let back: Vec<Item> = import::parse(ImportFormat::GitpassJson, &json, None).unwrap().items.into_iter().map(|r| r.item.clone()).collect();
     assert_eq!(back, items);
     let (_d2, s2, v2) = vault();
     let r = import::import_items(&s2, &v2, import::parse(ImportFormat::GitpassJson, &json, None).unwrap(), ImportOpts::default()).unwrap();
@@ -142,7 +151,7 @@ fn export_import_roundtrip_plain_json_and_csv() {
     // CSV export is readable back through the tolerant 1password-csv mapper (title/username/password/url/notes/totp)
     let csv = import::export_csv(&items).unwrap();
     let back = import::parse(ImportFormat::OnePasswordCsv, &csv, None).unwrap().items;
-    let rt = back.iter().find(|i| i.title == "Round, \"Trip\"").unwrap();
+    let rt = by_title(&back, "Round, \"Trip\"");
     assert_eq!(rt.password.as_deref(), Some("FAKE-pw,\"q\"")); // CSV path trims surrounding whitespace
     assert!(rt.notes.as_deref().unwrap().starts_with("line1\nline2"));
 }
@@ -155,7 +164,7 @@ fn export_import_roundtrip_encrypted() {
     assert!(!enc.contains("FAKE-pw") && !enc.contains("Round"));
     assert!(import::parse(ImportFormat::GitpassJson, &enc, None).is_err());
     assert!(import::parse(ImportFormat::GitpassJson, &enc, Some("wrong passphrase!")).is_err());
-    let back = import::parse(ImportFormat::GitpassJson, &enc, Some("fake export passphrase")).unwrap().items;
+    let back: Vec<Item> = import::parse(ImportFormat::GitpassJson, &enc, Some("fake export passphrase")).unwrap().items.into_iter().map(|r| r.item.clone()).collect();
     assert_eq!(back, items);
     // tamper
     let mut v: serde_json::Value = serde_json::from_str(&enc).unwrap();

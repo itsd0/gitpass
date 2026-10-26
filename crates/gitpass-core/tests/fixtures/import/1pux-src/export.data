@@ -1,0 +1,121 @@
+{
+  "accounts": [
+    {
+      "attrs": { "accountName": "Fake Family", "name": "Alice Example", "avatar": "", "email": "alice@example.com", "uuid": "FAKEACCOUNTUUID0000000000A", "domain": "https://fake.1password.com/" },
+      "vaults": [
+        {
+          "attrs": { "uuid": "fakevaultuuid000000000000a", "desc": "", "avatar": "", "name": "Private", "type": "P" },
+          "items": [
+            {
+              "uuid": "fakeitem000000000000000001", "favIndex": 1, "createdAt": 1704164645, "updatedAt": 1741944413, "state": "active", "categoryUuid": "001",
+              "details": {
+                "loginFields": [
+                  { "value": "alice@example.com", "id": "", "name": "username", "fieldType": "T", "designation": "username" },
+                  { "value": "Fake-P@ss, \"quoted\"", "id": "", "name": "password", "fieldType": "P", "designation": "password" },
+                  { "value": "✓", "id": "", "name": "remember", "fieldType": "C" }
+                ],
+                "notesPlain": "Line one, with comma\nLine \"two\"",
+                "sections": [
+                  { "title": "", "name": "add more", "fields": [
+                    { "title": "one-time password", "id": "TOTP_FAKE1", "value": { "totp": "otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example" }, "indexAtSource": 0, "guarded": false, "multiline": false, "dontGenerate": false, "inputTraits": { "keyboard": "default", "correction": "default", "capitalization": "default" } } ] },
+                  { "title": "Security", "name": "security", "fields": [
+                    { "title": "Recovery PIN", "id": "pin1", "value": { "concealed": "4242" }, "indexAtSource": 0, "guarded": true, "multiline": false, "dontGenerate": true } ] }
+                ],
+                "passwordHistory": []
+              },
+              "overview": { "subtitle": "alice@example.com", "urls": [ { "label": "", "url": "https://mail.example.com/login" }, { "label": "alt", "url": "https://example.com" } ],
+                "title": "Example Mail", "url": "https://mail.example.com/login", "ps": 72, "pbe": 85.9, "pgrng": false, "tags": ["Work", "Email"] }
+            },
+            {
+              "uuid": "fakeitem000000000000000002", "favIndex": 0, "createdAt": 1743465600, "updatedAt": 1743465600, "state": "active", "categoryUuid": "001",
+              "details": { "loginFields": [
+                  { "value": "မောင်မောင်", "id": "", "name": "username", "fieldType": "T", "designation": "username" },
+                  { "value": "ပစ်စကား123", "id": "", "name": "password", "fieldType": "P", "designation": "password" } ],
+                "notesPlain": "မြန်မာစာ မှတ်စု", "sections": [], "passwordHistory": [] },
+              "overview": { "subtitle": "", "urls": [ { "label": "", "url": "https://bank.example.mm" } ], "title": "ဘဏ် အကောင့်", "url": "https://bank.example.mm", "tags": ["မိသားစု"] }
+            },
+            {
+              "uuid": "fakeitem000000000000000003", "favIndex": 0, "createdAt": 1743552000, "updatedAt": 1743552000, "state": "active", "categoryUuid": "002",
+              "details": { "loginFields": [], "notesPlain": "", "sections": [
+                  { "title": "", "name": "", "fields": [
+                    { "title": "cardholder name", "id": "cardholder", "value": { "string": "Alice Example" } },
+                    { "title": "type", "id": "type", "value": { "creditCardType": "visa" } },
+                    { "title": "number", "id": "ccnum", "value": { "creditCardNumber": "4111111111111111" } },
+                    { "title": "verification number", "id": "cvv", "value": { "concealed": "123" } },
+                    { "title": "expiry date", "id": "expiry", "value": { "monthYear": 203007 } } ] },
+                  { "title": "Contact Information", "name": "contactInfo", "fields": [
+                    { "title": "phone (toll free)", "id": "phoneTollFree", "value": { "phone": "+1 800 000 0000" } } ] } ], "passwordHistory": [] },
+              "overview": { "subtitle": "4111 ********1111", "title": "Fake Visa", "url": "", "tags": [] }
+            },
+            {
+              "uuid": "fakeitem000000000000000004", "favIndex": 0, "createdAt": 1743638400, "updatedAt": 1743638400, "state": "active", "categoryUuid": "004",
+              "details": { "loginFields": [], "notesPlain": "", "sections": [
+                  { "title": "Identification", "name": "name", "fields": [
+                    { "title": "first name", "id": "firstname", "value": { "string": "Alice" } },
+                    { "title": "last name", "id": "lastname", "value": { "string": "Example" } },
+                    { "title": "birth date", "id": "birthdate", "value": { "date": 631152000 } } ] },
+                  { "title": "Address", "name": "address", "fields": [
+                    { "title": "address", "id": "address", "value": { "address": { "street": "1 Fake St", "city": "Yangon", "country": "mm", "zip": "11181", "state": "" } } } ] },
+                  { "title": "Internet Details", "name": "internet", "fields": [
+                    { "title": "email", "id": "email", "value": { "email": { "email_address": "alice@example.com", "provider": null } } } ] } ], "passwordHistory": [] },
+              "overview": { "subtitle": "Alice Example", "title": "Alice ID", "url": "", "tags": [] }
+            },
+            {
+              "uuid": "fakeitem000000000000000005", "favIndex": 0, "createdAt": 1743724800, "updatedAt": 1743724800, "state": "active", "categoryUuid": "003",
+              "details": { "loginFields": [], "notesPlain": "SSID: FakeNet\nKey: not-real", "sections": [], "passwordHistory": [] },
+              "overview": { "subtitle": "", "title": "Plain note", "url": "", "tags": [] }
+            },
+            {
+              "uuid": "fakeitem000000000000000006", "favIndex": 0, "createdAt": 1743724800, "updatedAt": 1743724800, "state": "archived", "categoryUuid": "005",
+              "details": { "loginFields": [], "notesPlain": "", "sections": [], "passwordHistory": [], "password": "old-fake-password" },
+              "overview": { "subtitle": "", "title": "Old password", "url": "", "tags": [] }
+            },
+            {
+              "uuid": "fakeitem000000000000000007", "favIndex": 0, "createdAt": 1743724800, "updatedAt": 1743724800, "state": "active", "categoryUuid": "109",
+              "details": { "loginFields": [], "notesPlain": "", "sections": [
+                  { "title": "", "name": "", "fields": [
+                    { "title": "network name", "id": "network_name", "value": { "string": "FakeNet" } },
+                    { "title": "wireless network password", "id": "wireless_password", "value": { "concealed": "not-a-real-wifi-pass" } },
+                    { "title": "security", "id": "wireless_security", "value": { "menu": "wpa2p" } } ] } ], "passwordHistory": [] },
+              "overview": { "subtitle": "", "title": "Home Wi-Fi", "url": "", "tags": [] }
+            },
+            {
+              "uuid": "fakeitem000000000000000008", "favIndex": 0, "createdAt": 1743724800, "updatedAt": 1743724800, "state": "active", "categoryUuid": "114",
+              "details": { "loginFields": [], "notesPlain": "", "sections": [
+                  { "title": "", "name": "", "fields": [
+                    { "title": "private key", "id": "private_key", "value": { "sshKey": { "privateKey": "-----BEGIN OPENSSH PRIVATE KEY-----\nFAKEFAKEFAKE\n-----END OPENSSH PRIVATE KEY-----", "metadata": { "publicKey": "ssh-ed25519 AAAAFAKE", "fingerprint": "SHA256:fake", "keyType": "ed25519" } } } } ] } ], "passwordHistory": [] },
+              "overview": { "subtitle": "", "title": "Fake SSH key", "url": "", "tags": [] }
+            },
+            {
+              "uuid": "fakeitem000000000000000009", "favIndex": 0, "createdAt": 1743724800, "updatedAt": 1743724800, "state": "active", "categoryUuid": "112",
+              "details": { "loginFields": [], "notesPlain": "", "sections": [
+                  { "title": "", "name": "", "fields": [
+                    { "title": "username", "id": "username", "value": { "string": "svc-fake" } },
+                    { "title": "credential", "id": "credential", "value": { "concealed": "fake-api-token-000" } },
+                    { "title": "hostname", "id": "hostname", "value": { "string": "api.example.com" } } ] } ], "passwordHistory": [] },
+              "overview": { "subtitle": "", "title": "Fake API", "url": "", "tags": [] }
+            },
+            {
+              "uuid": "fakeitem000000000000000010", "favIndex": 0, "createdAt": 1743724800, "updatedAt": 1743724800, "state": "active", "categoryUuid": "006",
+              "details": { "loginFields": [], "notesPlain": "scan of a fake doc", "sections": [], "passwordHistory": [],
+                "documentAttributes": { "fileName": "fake-passport.pdf", "documentId": "fakedoc1", "decryptedSize": 1024 } },
+              "overview": { "subtitle": "", "title": "Passport scan", "url": "", "tags": [] }
+            }
+          ]
+        },
+        {
+          "attrs": { "uuid": "fakevaultuuid000000000000b", "desc": "", "avatar": "", "name": "Shared Work", "type": "E" },
+          "items": [
+            {
+              "uuid": "fakeitem000000000000000011", "favIndex": 0, "createdAt": 1704164645, "updatedAt": 1741944413, "state": "active", "categoryUuid": "001",
+              "details": { "loginFields": [
+                  { "value": "alice@example.com", "id": "", "name": "username", "fieldType": "T", "designation": "username" },
+                  { "value": "dup", "id": "", "name": "password", "fieldType": "P", "designation": "password" } ], "notesPlain": "", "sections": [], "passwordHistory": [] },
+              "overview": { "subtitle": "", "urls": [ { "label": "", "url": "https://mail.example.com/login" } ], "title": "Example Mail", "url": "https://mail.example.com/login", "tags": [] }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

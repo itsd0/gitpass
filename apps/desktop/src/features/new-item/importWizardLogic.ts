@@ -1,10 +1,11 @@
 export const IMPORT_FORMATS = [
   { id: 'bitwarden-json', label: 'Bitwarden (.json)', ext: 'json' }, { id: 'bitwarden-csv', label: 'Bitwarden (.csv)', ext: 'csv' },
-  { id: '1password-csv', label: '1Password (.csv)', ext: 'csv' }, { id: 'keepass-csv', label: 'KeePass (.csv)', ext: 'csv' },
+  { id: '1password-csv', label: '1Password 8 (.csv)', ext: 'csv' }, { id: '1password-1pux', label: '1Password (.1pux)', ext: '1pux' }, { id: 'keepass-csv', label: 'KeePass (.csv)', ext: 'csv' },
   { id: 'chrome-csv', label: 'Chrome / Chromium (.csv)', ext: 'csv' }, { id: 'gitpass-json', label: 'gitpass (.json)', ext: 'json' },
 ] as const;
+import type { ImportResult } from '../../api/types';
 export type ImportStep = 'format' | 'file' | 'preview' | 'done';
-export interface ImportState { step: ImportStep; format: string | null; path: string; vaultId: string | null; preview: { parsed: number; added: number; duplicates: number } | null; result: { parsed: number; added: number; duplicates: number } | null; error: string | null; }
+export interface ImportState { step: ImportStep; format: string | null; path: string; vaultId: string | null; preview: ImportResult | null; result: ImportResult | null; error: string | null; }
 export type ImportAction = { type: 'format'; format: string } | { type: 'path'; path: string } | { type: 'vault'; vaultId: string } | { type: 'preview'; preview: ImportState['preview'] } | { type: 'done'; result: ImportState['result'] } | { type: 'error'; error: string } | { type: 'back' };
 export const initialImport = (vaultId: string | null = null): ImportState => ({ step: 'format', format: null, path: '', vaultId, preview: null, result: null, error: null });
 export function importReducer(s: ImportState, a: ImportAction): ImportState {
