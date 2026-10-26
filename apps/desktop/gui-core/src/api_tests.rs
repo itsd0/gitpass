@@ -477,3 +477,32 @@ fn emergency_kit_data_reveal_rules() {
     app.lock();
     assert!(app.emergency_kit_data(None).is_err());
 }
+
+#[test]
+fn remote_connect_sync_disconnect_with_local_bare_repo() {
+    let e = env();
+    let bare = tempfile::tempdir().unwrap();
+    let ok = std::process::Command::new("git").args(["init", "--bare", "-q", "-b", "main"]).arg(bare.path()).status().map(|s| s.success()).unwrap_or(false);
+    if !ok { eprintln!("git unavailable; skipping"); return; }
+    let url = bare.path().display().to_string();
+    // a local path is only accepted with allow_local (tests); the public API refuses it
+    assert!(e.app.remote_connect(&url).unwrap_err().to_string().starts_with(gitpass_core::remote::E_BAD_URL));
+    let st = e.app.remote_connect_opts(&url, true).unwrap();
+    assert_eq!(st.remote.as_deref(), Some(url.as_str()));
+    assert_eq!((st.ahead, st.behind), (0, 0));
+    assert!(e.app.onboarding().repo_connected);
+    login(&e, "Remote test", "me", "FAKE-pw-1");
+    let r = e.app.sync(false).unwrap();
+    assert!(r.message.contains("pushed"), "{}", r.message);
+    let st = e.app.sync_status().unwrap();
+    let vp = e.app.status().unwrap().vault_path;
+    let por = std::process::Command::new("git").args(["-C", &vp, "status", "--porcelain"]).output().unwrap();
+    eprintln!("after sync porcelain: {}", String::from_utf8_lossy(&por.stdout));
+    assert!(st.ahead == 0 && st.behind == 0 && st.last_sync.is_some(), "{st:?}");
+    let o = std::process::Command::new("git").arg("-C").arg(bare.path()).args(["ls-tree", "-r", "--name-only", "main"]).output().unwrap();
+    let files = String::from_utf8_lossy(&o.stdout).to_string();
+    assert!(!files.contains("secret.key") && !files.contains(".gitpass-"), "{files}");
+    let st = e.app.remote_disconnect().unwrap();
+    assert!(st.remote.is_none());
+    assert!(!e.app.onboarding().repo_connected);
+}

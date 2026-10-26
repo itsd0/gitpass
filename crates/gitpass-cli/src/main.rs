@@ -93,6 +93,8 @@ enum Cmd {
     Rm { vault: String, id: String },
     /// Generate a random password
     Gen { #[arg(default_value_t = 24)] len: usize },
+    /// Connect the vault folder to a private git remote (GitHub or any git host)
+    Remote { #[command(subcommand)] cmd: RemoteCmd },
     /// git add/commit/pull --rebase/push in the vault directory, then verify the manifest
     Sync {
         /// On divergence, field-merge items (per-field clocks) instead of failing on rebase conflicts
@@ -182,6 +184,23 @@ enum DeviceCmd {
     },
     /// Clear a revocation marker (run from another, non-revoked device)
     Unrevoke { id: String },
+}
+
+#[derive(Subcommand)]
+enum RemoteCmd {
+    /// git init (if needed), ensure .gitignore, commit the encrypted files and push -u origin main.
+    /// URL: https://github.com/YOU/REPO.git or git@github.com:YOU/REPO.git (create an EMPTY private repo first).
+    /// Uses your existing git credentials (SSH key or credential helper); never force-pushes.
+    Add {
+        url: String,
+        /// Also accept a local path / file:// URL (testing, local mirrors)
+        #[arg(long, hide = true)]
+        allow_local: bool,
+    },
+    /// Show the remote URL, branch and ahead/behind counts
+    Show,
+    /// Disconnect: remove the 'origin' remote (local files and history are kept; nothing is deleted remotely)
+    Remove,
 }
 
 #[derive(Subcommand)]
@@ -502,6 +521,20 @@ fn run() -> Result<()> {
             println!("removed {iid}");
         }
         Cmd::Gen { len } => println!("{}", generate_password(*len)),
+        Cmd::Remote { cmd } => match cmd {
+            RemoteCmd::Add { url, allow_local } => {
+                print!("{}", gitpass_core::remote::add(&root, url, *allow_local)?);
+                println!("connected: origin = {}", url.trim());
+            }
+            RemoteCmd::Show => {
+                let i = gitpass_core::remote::show(&root)?;
+                match &i.url {
+                    Some(u) => println!("origin: {u}\nbranch: {}\nahead: {}  behind: {}", i.branch.as_deref().unwrap_or("?"), i.ahead, i.behind),
+                    None => println!("not connected (run: gitpass remote add git@github.com:YOU/REPO.git)"),
+                }
+            }
+            RemoteCmd::Remove => { gitpass_core::remote::remove(&root)?; println!("disconnected: removed 'origin' (local files and history kept)"); }
+        },
         Cmd::Sync { merge } => {
             let (_s, pw, sk) = unlock_full(&cli, &root)?;
             if *merge {

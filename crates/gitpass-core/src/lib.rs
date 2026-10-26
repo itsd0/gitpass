@@ -12,6 +12,7 @@ pub mod keys;
 pub mod import;
 pub mod item;
 pub mod merge;
+pub mod remote;
 pub mod migrate;
 pub mod search;
 pub mod store;

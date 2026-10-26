@@ -72,6 +72,16 @@ impl a::Clipboard for SysClipboard {
 }
 #[tauri::command(async)] pub fn rotate_secret_key(s: State<'_, App>) -> R<a::RotateResult> { s.rotate_secret_key().map_err(e) }
 #[tauri::command(async)] pub fn sync_status(s: State<'_, App>) -> R<a::SyncStatus> { s.sync_status().map_err(e) }
+#[tauri::command(async)] pub fn remote_connect(s: State<'_, App>, url: String) -> R<a::SyncStatus> { s.remote_connect(&url).map_err(e) }
+/// Open https://github.com/new (fixed URL; no user input reaches the shell) in the default browser.
+#[tauri::command] pub fn open_new_repo_page() -> R<()> {
+    const URL: &str = "https://github.com/new";
+    #[cfg(target_os = "macos")] let r = std::process::Command::new("/usr/bin/open").arg(URL).status();
+    #[cfg(target_os = "windows")] let r = std::process::Command::new("explorer").arg(URL).status();
+    #[cfg(all(unix, not(target_os = "macos")))] let r = std::process::Command::new("xdg-open").arg(URL).status();
+    r.map(|_| ()).map_err(|x| x.to_string())
+}
+#[tauri::command(async)] pub fn remote_disconnect(s: State<'_, App>) -> R<a::SyncStatus> { s.remote_disconnect().map_err(e) }
 #[tauri::command(async)] pub fn sync(s: State<'_, App>, merge: bool) -> R<a::SyncResult> { s.sync(merge).map_err(e) }
 #[tauri::command] pub fn onboarding(s: State<App>) -> a::Onboarding { s.onboarding() }
 #[tauri::command] pub fn set_onboarding(s: State<App>, patch: a::OnboardingPatch) -> R<a::Onboarding> { s.set_onboarding(patch).map_err(e) }

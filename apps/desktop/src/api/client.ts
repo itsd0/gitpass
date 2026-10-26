@@ -49,6 +49,11 @@ export const api = {
   rotateSecretKey: () => call<{emergencyKit:string}>('rotate_secret_key'),
   syncStatus: () => call<T.SyncStatus>('sync_status'),
   sync: (a:{merge:boolean}) => call<{message:string}>('sync', a),
+  /** `gitpass remote add <url>`: git init, .gitignore, commit encrypted files, push -u origin main. Uses existing git credentials. */
+  remoteConnect: (a:{url:string}) => call<T.SyncStatus>('remote_connect', a),
+  remoteDisconnect: () => call<T.SyncStatus>('remote_disconnect'),
+  /** Opens https://github.com/new in the default browser (fixed URL). */
+  openNewRepoPage: () => call<void>('open_new_repo_page'),
   onboarding: () => call<T.Onboarding>('onboarding'),
   setOnboarding: (a:{patch:Partial<T.Onboarding>}) => call<T.Onboarding>('set_onboarding', a),
   emergencyKit: () => call<string>('emergency_kit'),

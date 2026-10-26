@@ -1,14 +1,15 @@
 import { Logo } from '../../ui/logo';
 import { EmergencyKitFlow } from '../onboarding/EmergencyKit';
 import { useEffect, useState } from 'react';
-import { ExternalLink, Laptop, Lock, Info, RefreshCw, SlidersHorizontal, Smartphone, GitMerge } from 'lucide-react';
+import { ExternalLink, Laptop, Lock, Info, RefreshCw, SlidersHorizontal, Smartphone } from 'lucide-react';
 import { api } from '../../api/client';
-import type { DeviceInfo, SyncStatus, VaultInfo } from '../../api/types';
+import type { DeviceInfo, VaultInfo } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { Badge, Button, Modal, Input, Skeleton, toast } from '../../ui';
 import { languages, useT, type Lang } from '../../i18n';
 import { useApp } from '../../lib/store';
 import { useSettings } from './useSettings';
+import { SyncPanel } from './SyncPanel';
 
 const errMsg = (e: unknown) => String((e as Error)?.message ?? e);
 export const APP_VERSION = '0.5.0';
@@ -109,19 +110,7 @@ function Devices() {
       <p className="mt-2 text-xs text-muted">{t('devices.rotateHelp')}</p></Modal></>;
 }
 
-function Sync() {
-  const t = useT(); const [st, setSt] = useState<SyncStatus | null>(null); const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null); const [busy, setBusy] = useState(false);
-  const load = () => api.syncStatus().then(setSt).catch((e) => setResult({ ok: false, text: errMsg(e) }));
-  useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const run = async (merge: boolean) => { setBusy(true); try { setResult({ ok: true, text: (await api.sync({ merge })).message }); } catch (e) { setResult({ ok: false, text: errMsg(e) }); } finally { setBusy(false); load(); } };
-  return <>{!st ? <Skeleton className="h-24" /> : <>
-    <Row label={t('sync.remote')}><span className="font-mono text-sm">{st.remote ?? t('sync.none')}</span></Row>
-    <Row label={t('sync.lastSync')}><span className="text-sm">{st.lastSync ? new Date(st.lastSync).toLocaleString() : t('sync.never')}</span></Row>
-    <Row label="Status"><div className="flex gap-1"><Badge>{t('sync.ahead', { n: st.ahead })}</Badge><Badge>{t('sync.behind', { n: st.behind })}</Badge>{st.dirty && <Badge tone="warn">{t('sync.dirty')}</Badge>}</div></Row></>}
-    <div className="mt-4 flex gap-2"><Button variant="default" disabled={busy || !st?.remote} onClick={() => run(false)}><RefreshCw className={cn('h-4 w-4', busy && 'motion-safe:animate-spin')} aria-hidden />{t('sync.now')}</Button>
-      <Button variant="outline" disabled={busy || !st?.remote} onClick={() => run(true)}><GitMerge className="h-4 w-4" aria-hidden />{t('sync.merge')}</Button></div>
-    {result && <div role="status" className={cn('mt-4 rounded-md border p-3 text-sm', result.ok ? 'border-border' : 'border-danger text-danger')}><div className="text-xs text-muted">{t('sync.result')}</div>{result.text}</div>}</>;
-}
+const Sync = SyncPanel;
 
 function About() {
   const t = useT();

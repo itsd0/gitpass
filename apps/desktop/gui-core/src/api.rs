@@ -870,6 +870,24 @@ impl App {
         let dirty = git(&root, &["status", "--porcelain"]).is_some_and(|s| !s.is_empty());
         Ok(SyncStatus { remote, last_sync, ahead, behind, dirty })
     }
+    /// Settings → Sync → Connect: `gitpass remote add <url>` for the unlocked vault. Uses the user's existing git
+    /// credentials only (no tokens are asked for or stored). Errors start with a `remote::E_*` category marker.
+    pub fn remote_connect(&self, url: &str) -> Result<SyncStatus> { self.remote_connect_opts(url, false) }
+    #[doc(hidden)]
+    pub fn remote_connect_opts(&self, url: &str, allow_local: bool) -> Result<SyncStatus> {
+        let root = self.with(|u| Ok(u.session.root.clone()))?;
+        gitpass_core::remote::add(&root, url, allow_local)?;
+        let _ = self.update_local(|l| l.last_sync = Some(gitpass_core::device::now_iso8601()));
+        let _ = self.set_onboarding(OnboardingPatch { repo_connected: Some(true), ..Default::default() });
+        self.sync_status()
+    }
+    /// Remove `origin` (local files and history are kept; nothing is deleted on the remote).
+    pub fn remote_disconnect(&self) -> Result<SyncStatus> {
+        let root = self.with(|u| Ok(u.session.root.clone()))?;
+        gitpass_core::remote::remove(&root)?;
+        let _ = self.set_onboarding(OnboardingPatch { repo_connected: Some(false), ..Default::default() });
+        self.sync_status()
+    }
     pub fn sync(&self, merge: bool) -> Result<SyncResult> {
         let d = self.state.sync(merge)?;
         let _ = self.update_local(|l| l.last_sync = Some(gitpass_core::device::now_iso8601()));

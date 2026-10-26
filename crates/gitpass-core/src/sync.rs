@@ -3,28 +3,22 @@
 use crate::fsutil;
 use anyhow::{bail, Result};
 use std::path::Path;
-use std::process::Command;
 
 fn git(dir: &Path, args: &[&str]) -> Result<(bool, String)> {
-    let o = Command::new("git").arg("-C").arg(dir).args(args).output()?;
-    Ok((o.status.success(), format!("{}{}", String::from_utf8_lossy(&o.stdout), String::from_utf8_lossy(&o.stderr))))
+    crate::remote::git_cmd(dir, args)
 }
 
 /// `git add -A && git commit -m msg` if there is anything staged. Returns true if a commit was made.
 pub fn commit_all(dir: &Path, msg: &str) -> Result<bool> {
-    git(dir, &["add", "-A"])?;
-    let (clean, _) = git(dir, &["diff", "--cached", "--quiet"])?;
-    if clean { return Ok(false); }
-    let (ok, out) = git(dir, &["commit", "-m", msg])?;
-    if !ok { bail!("git commit failed:\n{out}"); }
-    Ok(true)
+    crate::remote::ensure_gitignore(dir)?;
+    crate::remote::commit_checked(dir, msg)
 }
 
 /// Lock; git add/commit; backup; pull --rebase; push (skips remote steps if no origin).
 pub fn sync(dir: &Path) -> Result<String> {
     let mut log = String::new();
     if !dir.join(".git").exists() {
-        bail!("{} is not a git repository. Run: git -C {} init && git -C {} remote add origin git@github.com:YOU/your-private-vault.git", dir.display(), dir.display(), dir.display());
+        bail!("{} is not a git repository. Connect a remote first: gitpass remote add git@github.com:YOU/your-private-vault.git (or Settings → Sync → Connect GitHub in the app)", dir.display());
     }
     let _g = fsutil::lock(dir)?;
     log.push_str(if commit_all(dir, "sync")? { "committed local changes\n" } else { "nothing to commit\n" });
@@ -39,7 +33,7 @@ pub fn sync(dir: &Path) -> Result<String> {
     let (ok, out) = git(dir, &["pull", "--rebase", "origin", "HEAD"])?;
     if !ok && !out.contains("couldn't find remote ref") { bail!("git pull --rebase failed (backup at {}):\n{out}", b.display()); }
     let (ok, out) = git(dir, &["push", "-u", "origin", "HEAD"])?;
-    if !ok { bail!("git push failed:\n{out}"); }
+    if !ok { return Err(crate::remote::classify_git_error("git push", &out)); }
     log.push_str("pulled and pushed to origin\n");
     Ok(log)
 }

@@ -155,6 +155,7 @@ function genPw(length: number, symbols: boolean, digits: boolean, words?: boolea
 }
 
 type A = any; // eslint-disable-line @typescript-eslint/no-explicit-any
+let syncState: T.SyncStatus = { remote: 'git@example.com:demo/vault.git', lastSync: '2026-10-25T09:00:00Z', ahead: 0, behind: 1, dirty: false };
 export const mock: Record<string, (a: A) => Promise<unknown>> = {
   status: () => delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: unlocked ? 'Demo Family' : null }),
   unlock: (a: { password: string }) => { if (!a.password) return Promise.reject(new Error('password required')); unlocked = true; return delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: 'Demo Family' }, 300); },
@@ -245,7 +246,11 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   set_settings: (a: { settings: T.Settings }) => { settings = { ...a.settings }; return delay(settings); },
   change_password: (a: { current: string; next: string }) => (!a.current || !a.next ? Promise.reject(new Error('both passwords required')) : delay(undefined, 300)),
   rotate_secret_key: () => delay({ emergencyKit: 'gitpass Emergency Kit (DEMO)\nSecret Key: A3-FAKE00-FAKE00-FAKE00-FAKE00' }),
-  sync_status: () => delay<T.SyncStatus>({ remote: 'git@example.com:demo/vault.git', lastSync: '2026-10-25T09:00:00Z', ahead: 0, behind: 1, dirty: false }),
+  sync_status: () => delay<T.SyncStatus>({ ...syncState }),
+  remote_connect: (a: { url: string }) => (/fail|bad/.test(a.url) ? Promise.reject(new Error('AUTH_FAILED: git push failed (mock)'))
+    : (syncState = { remote: a.url, lastSync: new Date().toISOString(), ahead: 0, behind: 0, dirty: false }, onboarding = { ...onboarding, repoConnected: true }, delay<T.SyncStatus>({ ...syncState }, 400))),
+  remote_disconnect: () => { syncState = { remote: null, lastSync: syncState.lastSync, ahead: 0, behind: 0, dirty: false }; onboarding = { ...onboarding, repoConnected: false }; return delay<T.SyncStatus>({ ...syncState }); },
+  open_new_repo_page: () => { if (typeof window !== 'undefined') window.open('https://github.com/new', '_blank', 'noopener'); return delay(undefined); },
   sync: () => delay({ message: 'Pulled 1 commit (mock)' }, 400),
   onboarding: () => delay(onboarding),
   set_onboarding: (a: { patch: Partial<T.Onboarding> }) => { onboarding = { ...onboarding, ...a.patch }; return delay(onboarding); },
