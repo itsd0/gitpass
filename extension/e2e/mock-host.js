@@ -19,6 +19,7 @@ const ITEMS = [
   { id: 'v1:i1', category: 'login', title: 'Localhost Test Login', subtitle: 'alice@example.com', url: 'http://localhost', favicon_host: 'localhost', has_totp: true, favorite: true, _u: 'alice@example.com', _p: 'Corr3ct-H0rse-Battery' },
   { id: 'v1:i2', category: 'login', title: 'GitHub', subtitle: 'alice', url: 'https://github.com', favicon_host: 'github.com', has_totp: false, favorite: false, _u: 'alice', _p: 'gh-pass-123' },
   { id: 'v1:i3', category: 'credit_card', title: 'Visa', subtitle: '•••• 1234', has_totp: false, favorite: false },
+  { id: 'v1:i5', category: 'identity', title: 'Home Identity', subtitle: 'Naing Oo', has_totp: false, favorite: false },
   { id: 'v1:i4', category: 'secure_note', title: 'Wi-Fi notes', subtitle: '', has_totp: false, favorite: false },
 ].map((i) => ({ vault_id: V.id, vault_name: V.name, updated_at: now, ...i }));
 const pub = (i) => { const o = { ...i }; delete o._u; delete o._p; return o; };
@@ -52,7 +53,14 @@ function handle(m) {
     case 'generate': return { password: 'Gen-' + 'x'.repeat(Math.max(4, (m.len || 20) - 4)) };
     case 'list_vaults': needUnlock(); return { vaults: [{ ...V, item_count: ITEMS.length }] };
     case 'open_in_app': return {};
-    case 'fill_card': case 'fill_identity': needUnlock(); return {};
+    case 'fill_card': case 'fill_identity': { needUnlock();
+      // Same rule as the real host: popup-initiated or after an in-page click only.
+      if (!['popup', 'inpage_click'].includes(m.source)) throw Object.assign(new Error('needs user action'), { code: 'denied' });
+      const i = ITEMS.find((x) => x.id === m.item_id); const want = m.cmd === 'fill_card' ? 'credit_card' : 'identity';
+      if (!i || i.category !== want) throw Object.assign(new Error('wrong item'), { code: 'bad_request' });
+      // gitpass-core v5 template field ids (fake test data).
+      return want === 'credit_card' ? { cardholder: 'ALICE TESTER', number: '4111 1111 1111 1111', expiry: '12/2028', cvv: '737', type: 'visa' }
+        : { first: 'Naing', last: 'Oo', address: '99 Test Road\nBangkok', email: 'naing@example.com', phone: '+66812345678' }; }
   }
   throw Object.assign(new Error('unknown cmd ' + m.cmd), { code: 'bad_request' });
 }
