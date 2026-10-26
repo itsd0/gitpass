@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..'), out = path.join(root, 'dist', 'firefox');
 fs.rmSync(out, { recursive: true, force: true });
-for (const f of ['background.js', 'content.js', 'lib', 'popup', 'icons'])
+for (const f of ['background.js', 'content.js', 'lib', 'popup', 'icons', '_locales'])
   fs.cpSync(path.join(root, f), path.join(out, f), { recursive: true });
 fs.copyFileSync(path.join(root, 'manifest.firefox.json'), path.join(out, 'manifest.json'));
 console.log('built', out);

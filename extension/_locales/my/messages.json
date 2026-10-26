@@ -1,0 +1,110 @@
+{
+ "hostTitle": {
+  "message": "gitpass helper ချိတ်ဆက်မထားပါ"
+ },
+ "hostBody": {
+  "message": "Browser က local gitpass-host ကို မရောက်နိုင်ပါ။ Terminal မှာ တစ်ကြိမ် install လုပ်ပြီး extension ကို reload လုပ်ပါ:"
+ },
+ "retry": {
+  "message": "ထပ်စမ်းရန်"
+ },
+ "unlockTitle": {
+  "message": "gitpass ကို ဖွင့်ရန်"
+ },
+ "masterPassword": {
+  "message": "Master password"
+ },
+ "secretKey": {
+  "message": "Secret Key"
+ },
+ "skHint": {
+  "message": "ဖွင့်ရန် တစ်ကြိမ်သာ သုံးပါသည်။ ဖွင့်ထားစဉ် memory ထဲမှာသာ ထားပြီး ဘယ်တော့မှ မသိမ်းပါ။"
+ },
+ "unlock": {
+  "message": "ဖွင့်ရန်"
+ },
+ "touchIdSoon": {
+  "message": "Touch ID ဖြင့်ဖွင့်ခြင်း မကြာမီ လာပါမည်။ Secret Key သည် Emergency Kit ထဲတွင် ရှိပါသည်။"
+ },
+ "searchPh": {
+  "message": "Vault တွင် ရှာရန်"
+ },
+ "lock": {
+  "message": "ပိတ်ရန်"
+ },
+ "forThisSite": {
+  "message": "ဤဆိုက်အတွက်"
+ },
+ "searchResults": {
+  "message": "ရှာဖွေမှု ရလဒ်များ"
+ },
+ "generator": {
+  "message": "Password ထုတ်ပေးစနစ်"
+ },
+ "regenerate": {
+  "message": "ပြန်ထုတ်ရန်"
+ },
+ "length": {
+  "message": "အရှည်"
+ },
+ "digits": {
+  "message": "ဂဏန်းများ"
+ },
+ "symbols": {
+  "message": "သင်္ကေတများ"
+ },
+ "copy": {
+  "message": "ကူးရန်"
+ },
+ "copied": {
+  "message": "ကူးပြီးပါပြီ"
+ },
+ "fill": {
+  "message": "ဖြည့်ရန်"
+ },
+ "fillTitle": {
+  "message": "ဤစာမျက်နှာတွင် ဖြည့်ရန်"
+ },
+ "copyPassword": {
+  "message": "Password ကူးရန်"
+ },
+ "passwordCopied": {
+  "message": "Password ကူးပြီးပါပြီ"
+ },
+ "copyTotp": {
+  "message": "TOTP ကူးရန်"
+ },
+ "totpCopied": {
+  "message": "TOTP ကူးပြီးပါပြီ"
+ },
+ "notHttps": {
+  "message": "https စာမျက်နှာ မဟုတ်ပါ"
+ },
+ "noMatches": {
+  "message": "ဤဆိုက်အတွက် သိမ်းထားသော login မရှိပါ"
+ },
+ "notFillable": {
+  "message": "ဖြည့်ရန် https စာမျက်နှာကို ဖွင့်ပါ"
+ },
+ "noResults": {
+  "message": "ရလဒ် မတွေ့ပါ"
+ },
+ "pwRequired": {
+  "message": "Master password ထည့်ပါ"
+ },
+ "wrongCreds": {
+  "message": "Master password သို့မဟုတ် Secret Key မှားနေပါသည်"
+ },
+ "csFillWith": {
+  "message": "gitpass ဖြင့် ဖြည့်ရန်"
+ },
+ "csNoLogins": {
+  "message": "ဤဆိုက်အတွက် gitpass login မရှိပါ"
+ },
+ "csLocked": {
+  "message": "gitpass ပိတ်ထားပါသည်။ toolbar icon မှ ဖွင့်ပါ။"
+ },
+ "extDesc": {
+  "message": "gitpass autofill. Key များသည် local gitpass-host ထဲတွင်သာ ရှိပါသည်။"
+ }
+}

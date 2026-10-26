@@ -1,0 +1,110 @@
+{
+ "hostTitle": {
+  "message": "gitpass helper not connected"
+ },
+ "hostBody": {
+  "message": "The browser can't reach the local gitpass-host. Install it once in Terminal, then reload this extension:"
+ },
+ "retry": {
+  "message": "Retry"
+ },
+ "unlockTitle": {
+  "message": "Unlock gitpass"
+ },
+ "masterPassword": {
+  "message": "Master password"
+ },
+ "secretKey": {
+  "message": "Secret Key"
+ },
+ "skHint": {
+  "message": "Used once to unlock. It's kept only in memory while unlocked and never saved."
+ },
+ "unlock": {
+  "message": "Unlock"
+ },
+ "touchIdSoon": {
+  "message": "Touch ID unlock is coming soon. Your Secret Key is in your Emergency Kit."
+ },
+ "searchPh": {
+  "message": "Search vault"
+ },
+ "lock": {
+  "message": "Lock"
+ },
+ "forThisSite": {
+  "message": "For this site"
+ },
+ "searchResults": {
+  "message": "Search results"
+ },
+ "generator": {
+  "message": "Password generator"
+ },
+ "regenerate": {
+  "message": "Regenerate"
+ },
+ "length": {
+  "message": "Length"
+ },
+ "digits": {
+  "message": "Digits"
+ },
+ "symbols": {
+  "message": "Symbols"
+ },
+ "copy": {
+  "message": "Copy"
+ },
+ "copied": {
+  "message": "Copied"
+ },
+ "fill": {
+  "message": "Fill"
+ },
+ "fillTitle": {
+  "message": "Fill on this page"
+ },
+ "copyPassword": {
+  "message": "Copy password"
+ },
+ "passwordCopied": {
+  "message": "Password copied"
+ },
+ "copyTotp": {
+  "message": "Copy TOTP"
+ },
+ "totpCopied": {
+  "message": "TOTP copied"
+ },
+ "notHttps": {
+  "message": "not an https page"
+ },
+ "noMatches": {
+  "message": "No saved logins for this site"
+ },
+ "notFillable": {
+  "message": "Open an https page to fill"
+ },
+ "noResults": {
+  "message": "No items found"
+ },
+ "pwRequired": {
+  "message": "Enter your master password"
+ },
+ "wrongCreds": {
+  "message": "Wrong master password or Secret Key"
+ },
+ "csFillWith": {
+  "message": "Fill with gitpass"
+ },
+ "csNoLogins": {
+  "message": "No gitpass logins for this site"
+ },
+ "csLocked": {
+  "message": "gitpass is locked. Unlock it from the toolbar icon."
+ },
+ "extDesc": {
+  "message": "gitpass autofill. Keys stay in the local gitpass-host process."
+ }
+}

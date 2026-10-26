@@ -1,31 +1,59 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>gitpass</title>
-<style>
-body{font:13px sans-serif;width:320px;margin:10px}
-input,button{font:inherit} .row{display:flex;gap:6px;margin:6px 0} .row input{flex:1}
-.item{border-bottom:1px solid #ddd;padding:6px 0} .item small{color:#666} .hidden{display:none}
-#err{color:#b00}
-</style></head>
+<html lang="en"><head><meta charset="utf-8"><title>gitpass</title>
+<link rel="stylesheet" href="popup.css">
+</head>
 <body>
-<div id="err"></div>
-<section id="locked" class="hidden">
-  <form id="unlockForm">
-    <div class="row"><input id="pw" type="password" placeholder="Master password" autocomplete="off" autofocus></div>
-    <div class="row" id="skRow"><input id="sk" type="password" placeholder="Secret Key (A3-…)" autocomplete="off" spellcheck="false"></div>
-    <small id="skHint">Your Secret Key is used only to unlock and is kept in memory by the local gitpass-host while unlocked. It is never saved.</small>
-    <div class="row"><button>Unlock</button></div>
+<!-- Host not connected -->
+<section id="nohost" class="view hidden">
+  <div class="hero"><img src="../icons/logo64.png" alt="" class="logo-lg"><h1 data-i18n="hostTitle">gitpass helper not connected</h1></div>
+  <p class="muted" data-i18n="hostBody">The browser can't reach the local gitpass-host. Install it once in Terminal, then reload this extension:</p>
+  <pre class="code" id="hostCmd"></pre>
+  <p class="err" id="hostErr"></p>
+  <button id="retry" class="btn btn-primary w-full" data-i18n="retry">Retry</button>
+</section>
+
+<!-- Locked -->
+<section id="locked" class="view hidden">
+  <div class="hero"><img src="../icons/logo64.png" alt="" class="logo-lg"><h1 data-i18n="unlockTitle">Unlock gitpass</h1></div>
+  <form id="unlockForm" autocomplete="off">
+    <label class="lbl" for="pw" data-i18n="masterPassword">Master password</label>
+    <div class="field"><input id="pw" type="password" autocomplete="off" spellcheck="false" autofocus>
+      <button type="button" class="eye" data-for="pw" aria-label="Show"></button></div>
+    <div id="skRow">
+      <label class="lbl" for="sk" data-i18n="secretKey">Secret Key</label>
+      <div class="field"><input id="sk" type="password" placeholder="A3-XXXXXX-…" autocomplete="off" spellcheck="false">
+        <button type="button" class="eye" data-for="sk" aria-label="Show"></button></div>
+      <p class="hint" data-i18n="skHint">Used once to unlock. It's kept only in memory while unlocked and never saved.</p>
+    </div>
+    <p class="err" id="unlockErr" role="alert"></p>
+    <button id="unlockBtn" class="btn btn-primary w-full" type="submit"><span class="spinner hidden"></span><span data-i18n="unlock">Unlock</span></button>
+    <p class="hint center" data-i18n="touchIdSoon">Touch ID unlock is coming soon. Your Secret Key is in your Emergency Kit.</p>
   </form>
 </section>
-<section id="unlocked" class="hidden">
-  <div class="row"><input id="q" placeholder="Search vault"><button id="lock">Lock</button></div>
-  <div><b>For this site</b> <small id="origin"></small></div>
-  <div id="matches"></div>
-  <div><b>Search results</b></div>
-  <div id="results"></div>
+
+<!-- Unlocked -->
+<section id="unlocked" class="view hidden">
+  <header class="topbar">
+    <img src="../icons/logo64.png" alt="gitpass" class="logo-sm">
+    <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
+      <input id="q" type="search" data-i18n-ph="searchPh" placeholder="Search vault"></div>
+    <button id="lock" class="icon-btn" data-i18n-title="lock" title="Lock"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
+  </header>
+  <p class="err" id="err" role="alert"></p>
+  <div class="sec-h"><span data-i18n="forThisSite">For this site</span><small id="origin"></small></div>
+  <div id="matches" class="list"></div>
+  <div id="resultsWrap" class="hidden"><div class="sec-h"><span data-i18n="searchResults">Search results</span></div><div id="results" class="list"></div></div>
+  <details class="panel" id="genPanel">
+    <summary data-i18n="generator">Password generator</summary>
+    <div class="gen-out"><code id="genOut"></code><button id="regen" class="icon-btn" data-i18n-title="regenerate" title="Regenerate"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg></button></div>
+    <div class="gen-row"><label data-i18n="length">Length</label><input id="len" type="range" min="8" max="64" value="20"><span id="lenV">20</span></div>
+    <div class="gen-row"><label class="tog"><input type="checkbox" id="digits" checked><span data-i18n="digits">Digits</span></label>
+      <label class="tog"><input type="checkbox" id="symbols" checked><span data-i18n="symbols">Symbols</span></label></div>
+    <button id="gen" class="btn btn-primary w-full" data-i18n="copy">Copy</button>
+  </details>
 </section>
-<section>
-  <div class="row"><input id="len" type="number" value="20" min="8" max="128" style="max-width:60px"><button id="gen">Generate &amp; copy</button></div>
-  <code id="genOut"></code>
-</section>
+<div id="toast" class="toast hidden"></div>
+<script src="../lib/i18n.js"></script>
+<script src="../lib/icons.js"></script>
 <script src="popup.js"></script>
 </body></html>

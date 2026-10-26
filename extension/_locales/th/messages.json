@@ -1,0 +1,110 @@
+{
+ "hostTitle": {
+  "message": "ยังไม่ได้เชื่อมต่อ gitpass helper"
+ },
+ "hostBody": {
+  "message": "เบราว์เซอร์เข้าถึง gitpass-host ในเครื่องไม่ได้ ติดตั้งครั้งเดียวใน Terminal แล้วรีโหลดส่วนขยายนี้:"
+ },
+ "retry": {
+  "message": "ลองอีกครั้ง"
+ },
+ "unlockTitle": {
+  "message": "ปลดล็อก gitpass"
+ },
+ "masterPassword": {
+  "message": "รหัสผ่านหลัก"
+ },
+ "secretKey": {
+  "message": "Secret Key"
+ },
+ "skHint": {
+  "message": "ใช้เพื่อปลดล็อกเพียงครั้งเดียว เก็บไว้ในหน่วยความจำขณะปลดล็อกเท่านั้น และไม่บันทึกลงดิสก์"
+ },
+ "unlock": {
+  "message": "ปลดล็อก"
+ },
+ "touchIdSoon": {
+  "message": "การปลดล็อกด้วย Touch ID จะมาเร็วๆ นี้ Secret Key อยู่ใน Emergency Kit ของคุณ"
+ },
+ "searchPh": {
+  "message": "ค้นหาในคลัง"
+ },
+ "lock": {
+  "message": "ล็อก"
+ },
+ "forThisSite": {
+  "message": "สำหรับเว็บไซต์นี้"
+ },
+ "searchResults": {
+  "message": "ผลการค้นหา"
+ },
+ "generator": {
+  "message": "ตัวสร้างรหัสผ่าน"
+ },
+ "regenerate": {
+  "message": "สร้างใหม่"
+ },
+ "length": {
+  "message": "ความยาว"
+ },
+ "digits": {
+  "message": "ตัวเลข"
+ },
+ "symbols": {
+  "message": "สัญลักษณ์"
+ },
+ "copy": {
+  "message": "คัดลอก"
+ },
+ "copied": {
+  "message": "คัดลอกแล้ว"
+ },
+ "fill": {
+  "message": "กรอก"
+ },
+ "fillTitle": {
+  "message": "กรอกในหน้านี้"
+ },
+ "copyPassword": {
+  "message": "คัดลอกรหัสผ่าน"
+ },
+ "passwordCopied": {
+  "message": "คัดลอกรหัสผ่านแล้ว"
+ },
+ "copyTotp": {
+  "message": "คัดลอก TOTP"
+ },
+ "totpCopied": {
+  "message": "คัดลอก TOTP แล้ว"
+ },
+ "notHttps": {
+  "message": "ไม่ใช่หน้า https"
+ },
+ "noMatches": {
+  "message": "ไม่มีข้อมูลเข้าสู่ระบบที่บันทึกไว้สำหรับเว็บไซต์นี้"
+ },
+ "notFillable": {
+  "message": "เปิดหน้า https เพื่อกรอก"
+ },
+ "noResults": {
+  "message": "ไม่พบรายการ"
+ },
+ "pwRequired": {
+  "message": "กรอกรหัสผ่านหลัก"
+ },
+ "wrongCreds": {
+  "message": "รหัสผ่านหลักหรือ Secret Key ไม่ถูกต้อง"
+ },
+ "csFillWith": {
+  "message": "กรอกด้วย gitpass"
+ },
+ "csNoLogins": {
+  "message": "ไม่มีข้อมูลเข้าสู่ระบบ gitpass สำหรับเว็บไซต์นี้"
+ },
+ "csLocked": {
+  "message": "gitpass ถูกล็อกอยู่ ปลดล็อกจากไอคอนบนแถบเครื่องมือ"
+ },
+ "extDesc": {
+  "message": "ระบบกรอกอัตโนมัติ gitpass คีย์อยู่ในโปรเซส gitpass-host ในเครื่องเท่านั้น"
+ }
+}

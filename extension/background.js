@@ -70,6 +70,14 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           if (!origin || !GitpassPolicy.isFillableOrigin(origin)) return { items: [], origin: null };
           return { ...(await host('match', { url: origin })), origin };
         }
+        case 'copyActive': {
+          // Password goes only to the extension popup (for the clipboard), never to a page, and only for items matching the active tab.
+          const tab = await activeTab();
+          const origin = tab && GitpassPolicy.originOf(tab.url);
+          if (!origin || !GitpassPolicy.isFillableOrigin(origin)) throw new Error('page is not https');
+          const c = await host('fill', { item_id: msg.item_id, origin });
+          return { password: c.password };
+        }
         case 'fillActive': {
           const tab = await activeTab();
           return fillTab(tab.id, GitpassPolicy.originOf(tab.url), msg.item_id);

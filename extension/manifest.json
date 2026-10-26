@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
   "name": "gitpass",
-  "version": "0.5.0",
-  "version_name": "0.5.0",
-  "description": "gitpass autofill. Keys stay in the local gitpass-host process.",
+  "version": "0.5.1",
+  "version_name": "0.5.1",
+  "description": "__MSG_extDesc__",
   "permissions": [
     "nativeMessaging",
     "activeTab",
@@ -30,6 +30,8 @@
       ],
       "js": [
         "lib/policy.js",
+        "lib/i18n.js",
+        "lib/icons.js",
         "content.js"
       ],
       "all_frames": false,
@@ -38,5 +40,6 @@
   ],
   "icons": {
     "128": "icons/icon128.png"
-  }
+  },
+  "default_locale": "en"
 }
