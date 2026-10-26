@@ -40,7 +40,7 @@ fn ok(h: &mut Host, v: Value) -> Value {
 fn err(h: &mut Host, v: Value) -> String {
     let r = call(h, v.clone());
     assert_eq!(r["ok"], false, "{v} -> {r}");
-    r["error"].as_str().unwrap().to_string()
+    format!("{}: {}", r["error"].as_str().unwrap(), r["message"].as_str().unwrap())
 }
 
 #[test]

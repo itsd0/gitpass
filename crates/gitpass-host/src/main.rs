@@ -1,12 +1,13 @@
 //! `gitpass-host` — run by the browser (native messaging), or `gitpass-host install ...`.
 use anyhow::{bail, Context, Result};
-use gitpass_host::framing::{read_message, write_message};
+use gitpass_host::agent::AgentPaths;
+use gitpass_host::bridge::{self, Bridge};
+use gitpass_host::framing::write_message;
 use gitpass_host::handler::{Host, HostConfig};
 use gitpass_host::install::{self, Browser, Os};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 /// `~/.config/gitpass/host.json` (written by `install`).
@@ -76,11 +77,10 @@ fn main() -> Result<()> {
 
 fn run_host(args: &[String]) -> Result<()> {
     let c = load_config()?;
-    // Chromium: argv[1] = "chrome-extension://<id>/". Firefox: argv[1] = manifest path, argv[2] = extension id.
-    let caller = if args.len() >= 2 && !args[0].starts_with("chrome-extension://") { args[1].clone() } else { args[0].clone() };
-    if c.allowed_callers.is_empty() || !c.allowed_callers.contains(&caller) {
+    if let Err(caller) = bridge::caller_allowed(args, &c.allowed_callers) {
         // Write an error frame so the extension can show it, then exit.
-        let _ = write_message(&mut std::io::stdout(), &json!({"id": null, "ok": false, "error": format!("caller {caller} not allowed; run `gitpass-host install`")}));
+        let _ = write_message(&mut std::io::stdout(), &json!({"id": null, "ok": false, "error": "denied",
+            "message": format!("caller {caller} not allowed; run `gitpass-host install`")}));
         bail!("caller {caller} not in allowed_callers");
     }
     let home = dirs::home_dir().context("no home dir")?;
@@ -91,20 +91,15 @@ fn run_host(args: &[String]) -> Result<()> {
         idle_timeout: Duration::from_secs(c.idle_secs.unwrap_or(300)),
         target_kdf: Default::default(),
     };
-    let host = Arc::new(Mutex::new(Host::new(cfg)));
+    let b = Bridge::new(AgentPaths::default_paths(), Host::new(cfg), Box::new(std::io::stdout()));
     {
-        let h = host.clone();
+        let h = b.host.clone();
         std::thread::spawn(move || loop {
             std::thread::sleep(Duration::from_secs(1));
             if let Ok(mut g) = h.lock() { g.expire_if_idle(); }
         });
     }
-    let stdin = std::io::stdin();
-    let mut rin = stdin.lock();
-    let mut out = std::io::stdout();
-    while let Some(msg) = read_message(&mut rin)? {
-        let resp = host.lock().unwrap().handle(&msg);
-        write_message(&mut out, &resp)?;
-    }
-    Ok(())
+    // Connect eagerly so app lock/unlock events reach the extension even before its first request.
+    let _ = b.agent();
+    b.run(std::io::stdin().lock())
 }
