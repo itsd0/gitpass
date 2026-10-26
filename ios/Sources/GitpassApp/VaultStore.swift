@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import UIKit
+import UniformTypeIdentifiers
 
 /// App state for the gitpass iOS app.
 ///
@@ -81,8 +82,8 @@ final class VaultStore: ObservableObject {
         guard KeychainStore.biometricsAvailable() else {
             throw KeychainError.notFound
         }
-        _ = try await KeychainStore.evaluateBiometrics(reason: "Unlock gitpass")
-        let credentials = try KeychainStore.shared.loadUnlockCredentials()
+        let context = try await KeychainStore.evaluateBiometrics(reason: "Unlock gitpass")
+        let credentials = try KeychainStore.shared.loadUnlockCredentials(context: context)
         try unlock(password: credentials.password, secretKey: credentials.secretKey)
     }
 
@@ -174,7 +175,16 @@ final class VaultStore: ObservableObject {
     /// only if the clipboard still holds exactly what we copied, so a
     /// newer copy by the user (or another app) is never wiped.
     func copyToClipboard(_ text: String, clearAfter seconds: TimeInterval = 30) {
-        UIPasteboard.general.string = text
+        // localOnly keeps secrets off Universal Clipboard (other Apple
+        // devices); expirationDate makes iOS clear the item even if the
+        // app is suspended before the timer below fires.
+        UIPasteboard.general.setItems(
+            [[UTType.utf8PlainText.identifier: text]],
+            options: [
+                .localOnly: true,
+                .expirationDate: Date().addingTimeInterval(seconds),
+            ]
+        )
         clipboardToken = text
         clipboardClearWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
