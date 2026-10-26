@@ -20,15 +20,16 @@ pub enum Category {
     Document,
     SshKey,
     Wifi,
+    Passkey,
 }
 impl Category {
-    pub const ALL: [Category; 8] = [Category::Login, Category::CreditCard, Category::SecureNote, Category::Identity,
-        Category::ApiCredential, Category::Document, Category::SshKey, Category::Wifi];
+    pub const ALL: [Category; 9] = [Category::Login, Category::CreditCard, Category::SecureNote, Category::Identity,
+        Category::ApiCredential, Category::Document, Category::SshKey, Category::Wifi, Category::Passkey];
     pub fn as_str(&self) -> &'static str {
         match self {
             Category::Login => "login", Category::CreditCard => "credit_card", Category::SecureNote => "secure_note",
             Category::Identity => "identity", Category::ApiCredential => "api_credential", Category::Document => "document",
-            Category::SshKey => "ssh_key", Category::Wifi => "wifi",
+            Category::SshKey => "ssh_key", Category::Wifi => "wifi", Category::Passkey => "passkey",
         }
     }
 }

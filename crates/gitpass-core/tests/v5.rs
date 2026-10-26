@@ -37,6 +37,7 @@ fn sample(cat: Category) -> Vec<Section> {
         Category::Document => vec![sec("doc", vec![f("desc", Text, "scan")])],
         Category::SshKey => vec![sec("ssh", vec![f("private", Concealed, "-----FAKE KEY-----"), f("public", Text, "ssh-ed25519 AAAA fake")])],
         Category::Wifi => vec![sec("wifi", vec![f("ssid", Text, "FakeNet"), f("wifi_password", Concealed, "FAKE-wifi")])],
+        Category::Passkey => vec![sec("main", vec![f("rp_id", Text, "example.invalid"), f("credential_id", Text, "AAAA"), f("private_key", Concealed, "FAKE")])],
     }
 }
 

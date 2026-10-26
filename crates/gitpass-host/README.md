@@ -92,3 +92,17 @@ target/release/gitpass-host install --browser firefox --extension-id gitpass@git
 - `popup/`: unlock, site matches + Fill, search, Copy TOTP, generator.
 - Firefox: `browser_specific_settings.gecko` + `background.scripts` (Chrome uses `service_worker`).
 - `npm test` (node:test policy tests), `npm run check` (syntax + manifest refs).
+
+## Passkeys (contract v0.7, feat/keys)
+
+Both need explicit user approval: `source:"popup", approved:true` (extension approval window) or, via the
+desktop broker, the app's own confirm dialog. `origin` is the browser-verified top-frame origin; `rp_id` must
+equal its host or be a registrable suffix (public suffixes refused). ES256 only.
+
+- `passkey_create {origin, rp_id?, rp_name?, challenge, user_id, user_name, user_display_name?, exclude_credentials?, algorithms?, vault_id?}`
+  → `{item_id, rp_id, credential_id, client_data_json, attestation_object, authenticator_data, public_key (SPKI), public_key_algorithm:-7, transports}`
+- `passkey_get {origin, rp_id?, challenge, allow_credentials?, credential_id?}`
+  → `{item_id, credential_id, client_data_json, authenticator_data, signature (DER), user_handle, sign_count}`
+
+All binary values are base64url (no padding). Errors: `denied`, `locked`, `origin_mismatch`, `exists`,
+`not_found`, `not_supported`, `bad_request`.

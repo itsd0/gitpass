@@ -139,6 +139,8 @@ enum Cmd {
         /// Passphrase-protected gitpass-json (Argon2id + XChaCha20-Poly1305); passphrase from $GITPASS_EXPORT_PASSPHRASE or prompt
         #[arg(long)] encrypted: bool,
     },
+    /// SSH keys: generate / import / list / public key, `~/.ssh/config` line, and a standalone agent
+    Ssh { #[command(subcommand)] cmd: SshCmd },
     /// Security audit: weak / reused / old passwords, missing TOTP, optional HIBP check
     Audit {
         /// Vault (default: all vaults)
@@ -201,6 +203,23 @@ enum RemoteCmd {
     Show,
     /// Disconnect: remove the 'origin' remote (local files and history are kept; nothing is deleted remotely)
     Remove,
+}
+
+#[derive(Subcommand)]
+enum SshCmd {
+    /// Generate an Ed25519 key into a new SSH Key item
+    Generate { vault: String, #[arg(long)] title: String, /// Key comment (default: the title)
+        #[arg(long)] comment: Option<String> },
+    /// Import an OpenSSH private key file (passphrase from $GITPASS_SSH_PASSPHRASE or a prompt if encrypted)
+    Import { vault: String, file: PathBuf, #[arg(long)] title: Option<String> },
+    /// List SSH keys (all vaults, or one)
+    List { vault: Option<String> },
+    /// Print an SSH key's public key line (for authorized_keys / GitHub)
+    Public { vault: String, query: String },
+    /// Print the `~/.ssh/config` snippet that points ssh at the gitpass agent
+    Config { #[arg(long)] socket: Option<PathBuf> },
+    /// Run a foreground SSH agent serving this vault's keys (until Ctrl-C). The desktop app runs its own.
+    Agent { #[arg(long)] socket: Option<PathBuf> },
 }
 
 #[derive(Subcommand)]
@@ -429,6 +448,7 @@ fn run() -> Result<()> {
             let vid = s.resolve_vault(vault)?;
             for (f, p) in s.members(&vid)? { println!("{f}  {}{p}", gitpass_core::keys::PUB_PREFIX); }
         }
+        Cmd::Ssh { cmd } => ssh_cmd(&cli, &root, cmd)?,
         Cmd::Identity { cmd: IdentityCmd::Show } => {
             let s = unlock(&cli, &root)?;
             let (pk, fpr) = s.identity()?;
@@ -690,6 +710,84 @@ fn run() -> Result<()> {
             let pw = prompt_secret("GITPASS_PASSWORD", "Master password: ")?;
             let sk = load_secret_key(&root)?;
             do_migrate(&root, &pw, &sk)?;
+        }
+    }
+    Ok(())
+}
+
+/// Default agent socket (same path the desktop app uses).
+fn default_ssh_socket() -> PathBuf {
+    #[cfg(target_os = "macos")]
+    { dirs::home_dir().unwrap_or_default().join("Library/Application Support/gitpass/ssh-agent.sock") }
+    #[cfg(not(target_os = "macos"))]
+    { std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("gitpass/ssh-agent.sock") }
+}
+
+fn ssh_cmd(cli: &Cli, root: &Path, cmd: &SshCmd) -> Result<()> {
+    use gitpass_core::ssh::{self, SshKey};
+    match cmd {
+        SshCmd::Config { socket } => println!("{}", ssh::identity_agent_line(&socket.clone().unwrap_or_else(default_ssh_socket))),
+        SshCmd::Generate { vault, title, comment } => {
+            let s = unlock(cli, root)?;
+            let vid = s.resolve_vault(vault)?;
+            let k = SshKey::generate_ed25519(comment.as_deref().unwrap_or(title))?;
+            let iid = s.add_record(&vid, k.to_record(title)?)?;
+            println!("id:          {iid}\npublic key:  {}\nfingerprint: {}", k.info.public_key, k.info.fingerprint);
+        }
+        SshCmd::Import { vault, file, title } => {
+            let pem = Zeroizing::new(std::fs::read_to_string(file).with_context(|| format!("read {}", file.display()))?);
+            let k = match SshKey::import_openssh(&pem, None) {
+                Ok(k) => k,
+                Err(e) if e.to_string().contains("encrypted") => {
+                    let p = prompt_secret("GITPASS_SSH_PASSPHRASE", "Key passphrase: ")?;
+                    SshKey::import_openssh(&pem, Some(&p))?
+                }
+                Err(e) => return Err(e),
+            };
+            let s = unlock(cli, root)?;
+            let vid = s.resolve_vault(vault)?;
+            let t = title.clone().filter(|t| !t.is_empty()).unwrap_or_else(|| if k.info.comment.is_empty() { file.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default() } else { k.info.comment.clone() });
+            let iid = s.add_record(&vid, k.to_record(&t)?)?;
+            println!("id:          {iid}\npublic key:  {}\nfingerprint: {}", k.info.public_key, k.info.fingerprint);
+        }
+        SshCmd::List { vault } => {
+            let s = unlock(cli, root)?;
+            let only = match vault { Some(v) => Some(s.resolve_vault(v)?), None => None };
+            for i in ssh::session_identities(&s)? {
+                if only.as_ref().is_some_and(|v| *v != i.vault_id) { continue; }
+                println!("{}  {}  {}  {}", i.item_id, i.key.info.key_type, i.key.info.fingerprint, i.title);
+            }
+        }
+        SshCmd::Public { vault, query } => {
+            let s = unlock(cli, root)?;
+            let vid = s.resolve_vault(vault)?;
+            let iid = s.resolve_item(&vid, query)?;
+            let (_, r) = s.read_record(&vid, &iid)?;
+            let k = SshKey::from_record(&r)?;
+            println!("{}", k.info.public_key);
+        }
+        SshCmd::Agent { socket } => {
+            use std::os::unix::fs::PermissionsExt;
+            use std::os::unix::net::{UnixListener, UnixStream};
+            let sp = socket.clone().unwrap_or_else(default_ssh_socket);
+            let s = unlock(cli, root)?;
+            let ids = ssh::session_identities(&s)?;
+            drop(s);
+            if let Some(d) = sp.parent() { std::fs::create_dir_all(d)?; std::fs::set_permissions(d, std::fs::Permissions::from_mode(0o700))?; }
+            if sp.exists() {
+                if UnixStream::connect(&sp).is_ok() { bail!("an agent is already listening on {}", sp.display()); }
+                std::fs::remove_file(&sp)?;
+            }
+            let l = UnixListener::bind(&sp)?;
+            std::fs::set_permissions(&sp, std::fs::Permissions::from_mode(0o600))?;
+            eprintln!("gitpass ssh agent: {} key(s) on {}", ids.len(), sp.display());
+            eprintln!("export SSH_AUTH_SOCK=\"{}\"", sp.display());
+            let keys = std::sync::Arc::new(ssh::StaticKeys { ids, approve: Box::new(|_, _| true) });
+            for c in l.incoming() {
+                let Ok(mut c) = c else { continue };
+                let k = keys.clone();
+                std::thread::spawn(move || { let _ = ssh::serve_stream(&mut c, &*k); });
+            }
         }
     }
     Ok(())
