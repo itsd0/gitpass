@@ -240,7 +240,54 @@ fn input_to_record(input: ItemInput) -> anyhow::Result<ItemRecord> {
     Ok(rec)
 }
 
+/// Card brand by number prefix — same rules as the desktop app's
+/// `detectBrand` (apps/desktop/src/features/new-item/card.ts).
+fn card_brand(digits: &str) -> &'static str {
+    let p = |n: usize| digits.get(..n).and_then(|s| s.parse::<u32>().ok());
+    let in_range = |n: usize, lo: u32, hi: u32| p(n).is_some_and(|v| (lo..=hi).contains(&v));
+    if digits.starts_with('4') {
+        "Visa"
+    } else if in_range(2, 34, 34) || in_range(2, 37, 37) {
+        "American Express"
+    } else if in_range(2, 51, 55) || in_range(4, 2221, 2720) {
+        "Mastercard"
+    } else if in_range(4, 6011, 6011) || in_range(2, 65, 65) || in_range(3, 644, 649) {
+        "Discover"
+    } else if in_range(3, 300, 305) || in_range(2, 36, 36) || in_range(2, 38, 39) {
+        "Diners Club"
+    } else if in_range(4, 3528, 3589) {
+        "JCB"
+    } else if in_range(2, 62, 62) {
+        "UnionPay"
+    } else {
+        ""
+    }
+}
+
+/// "Visa •••• 7575" — same as the desktop `cardLabel`: empty for fewer
+/// than 8 digits, brand omitted when unknown. Never the full number.
+fn card_label(number: &str) -> String {
+    let d: String = number.chars().filter(|c| c.is_ascii_digit()).collect();
+    if d.len() < 8 {
+        return String::new();
+    }
+    let brand = card_brand(&d);
+    let last4 = &d[d.len() - 4..];
+    if brand.is_empty() { format!("•••• {last4}") } else { format!("{brand} •••• {last4}") }
+}
+
 fn subtitle(rec: &ItemRecord) -> String {
+    if rec.category == Category::CreditCard {
+        // Like desktop: brand + last 4 of the number, not the cardholder.
+        return rec
+            .view_sections()
+            .into_iter()
+            .flat_map(|s| s.fields)
+            .find(|f| f.id == "number" || f.label == "number")
+            .and_then(|f| f.value)
+            .map(|v| card_label(&v))
+            .unwrap_or_default();
+    }
     if rec.category == Category::Login {
         return rec.item.username.clone().unwrap_or_default();
     }
@@ -461,5 +508,30 @@ impl Vault {
             let rec: ItemRecord = serde_json::from_str(&record_json)?;
             s.put_record(&vault_id, &item_id, &rec)
         })
+    }
+}
+
+#[cfg(test)]
+mod card_tests {
+    use super::{card_brand, card_label};
+
+    #[test]
+    fn brands_match_desktop_rules() {
+        assert_eq!(card_brand("4111111111111111"), "Visa");
+        assert_eq!(card_brand("371449635398431"), "American Express");
+        assert_eq!(card_brand("5555555555554444"), "Mastercard");
+        assert_eq!(card_brand("2221000000000009"), "Mastercard");
+        assert_eq!(card_brand("6011111111111117"), "Discover");
+        assert_eq!(card_brand("30569309025904"), "Diners Club");
+        assert_eq!(card_brand("3530111333300000"), "JCB");
+        assert_eq!(card_brand("6200000000000005"), "UnionPay");
+        assert_eq!(card_brand("9999999999999999"), "");
+    }
+
+    #[test]
+    fn label_is_brand_and_last_four() {
+        assert_eq!(card_label("4242 4242 4242 7575"), "Visa •••• 7575");
+        assert_eq!(card_label("9999-9999-9999-1234"), "•••• 1234");
+        assert_eq!(card_label("1234"), "");
     }
 }
