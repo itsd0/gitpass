@@ -97,7 +97,7 @@ async function popupRoute(msg) {
     case 'totp': return host('totp', { item_id: msg.item_id });
     case 'generate': return host('generate', { len: msg.len, digits: !!msg.digits, symbols: !!msg.symbols });
     case 'save_login': return host('save_login', { origin: msg.origin, title: msg.title, username: msg.username, password: msg.password, vault_id: msg.vault_id });
-    case 'set_favorite': return host('set_favorite', { item_id: msg.item_id, favorite: !!msg.favorite }); // NOTE: not in contract v0.6 command list
+    case 'set_favorite': return host('set_favorite', { item_id: msg.item_id, favorite: !!msg.favorite });
     case 'open_in_app': return host('open_in_app', msg.item_id ? { item_id: msg.item_id } : {});
     case 'open_fill': return openFill(msg);
   }

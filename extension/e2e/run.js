@@ -170,7 +170,7 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     // --- Save prompt after submit
     await page.goto(LOGIN); await sleep(1000);
     await page.fill('#u', 'newuser@example.com'); await page.fill('#p', 'Brand-New-Pass-42'); await page.click('#go');
-    const banner = await until(async () => { const h = await findInShadow(page, /^\s*(Save|บันทึก|သိမ်း)/i); return h.length && h; }, T(6000));
+    const banner = await until(async () => { const h = await findInShadow(page, /^\s*(Save|บันทึก|သိမ်းရန်)\s*$/i)  /* the button, not the 'Save login to gitpass?' title */; return h.length && h; }, T(6000));
     if (banner) { await page.mouse.click(banner[0].x, banner[0].y); }
     const saved = await until(() => cmdsIn(mockDir).find((m) => m.cmd === 'save_login' && m.username === 'newuser@example.com'), T(4000));
     rec('save-login prompt after submit -> save_login sent', !!saved, banner ? `banner button "${banner[0].text}"; save_login ${saved ? 'received' : 'NOT received'}` : 'no Save button found in page shadow DOM');

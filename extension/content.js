@@ -54,11 +54,23 @@
   }
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
+  // ---------- user settings (options page: chrome.storage.local.settings) ----------
+  const SETTINGS = { autofill: true, savePrompts: true, autolockFollowsApp: true };
+  try {
+    chrome.storage.local.get('settings', (r) => { Object.assign(SETTINGS, (r && r.settings) || {}); rescan(); });
+    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.settings) { Object.assign(SETTINGS, ch.settings.newValue || {}); if (!SETTINGS.savePrompts) closeBanner(); rescan(); } });
+  } catch (_) { /* storage unavailable: keep defaults */ }
+
   // ---------- detection state ----------
   let forms = [];
   const badges = new Map(); // field -> { host, btn, role }
   const bound = new WeakSet();
   function rescan() {
+    if (!SETTINGS.autofill) { // in-page suggestions turned off: drop badges/dropdown, keep capture (governed by savePrompts)
+      closeDropdown();
+      for (const [field, b] of badges) { b.host.remove(); badges.delete(field); }
+      return;
+    }
     forms = GitpassForms.detectForms(document);
     const live = new Set();
     for (const f of forms) for (const { el: field, role } of GitpassForms.anchorFields(f)) {
@@ -232,7 +244,7 @@
   let banner = null;
   function closeBanner() { if (banner) { banner.host.remove(); banner = null; } }
   function showBanner(p) {
-    if (!p || !p.prompt) return;
+    if (!p || !p.prompt || !SETTINGS.savePrompts) return;
     closeBanner();
     banner = shadowHost(true);
     banner.host.style.zIndex = '2147483647'; banner.host.style.top = '0'; banner.host.style.right = '0';
@@ -257,6 +269,7 @@
 
   let lastCapture = 0;
   function capture(scopeHint) {
+    if (!SETTINGS.savePrompts) return;
     const now = Date.now(); if (now - lastCapture < 400) return; lastCapture = now;
     const list = GitpassForms.detectForms(document);
     const cand = scopeHint ? list.filter((f) => f.scope === scopeHint || (f.scope === document && scopeHint === document)) : list;
@@ -278,12 +291,19 @@
     if (e.key === 'Enter' && e.isTrusted && e.target && e.target.tagName === 'INPUT' && !dd) capture(e.target.form || document);
   }, true);
 
-  // ---------- legacy: popup "Open & Fill" (background sends gitpass-fill to frame 0) ----------
-  chrome.runtime.onMessage.addListener((msg) => {
-    if (!msg || msg.type !== 'gitpass-fill') return;
+  // ---------- popup "Open & Fill" (background sends to frame 0 only; sender must be our extension) ----------
+  chrome.runtime.onMessage.addListener((msg, sender) => {
+    if (!msg || (sender && sender.id && sender.id !== chrome.runtime.id)) return;
     if (msg.origin !== location.origin) return; // page navigated meanwhile: drop
-    const f = GitpassForms.detectForms(document).find((x) => ['login', 'login_username', 'change_password'].includes(x.kind));
-    if (f) GitpassForms.fillLogin(f, msg);
+    const list = GitpassForms.detectForms(document);
+    if (msg.type === 'gitpass-fill') {
+      const f = list.find((x) => ['login', 'login_username', 'change_password'].includes(x.kind));
+      if (f) GitpassForms.fillLogin(f, msg);
+    } else if (msg.type === 'gitpass-fill-fields' && (msg.kind === 'card' || msg.kind === 'identity')) {
+      // fields = host fill_card/fill_identity map (gitpass-core field id -> value); lib/forms.js maps ids to form roles.
+      const f = list.find((x) => x.kind === msg.kind);
+      if (f) (msg.kind === 'card' ? GitpassForms.fillCard : GitpassForms.fillIdentity)(f, msg.fields || {});
+    }
   });
 
   // ---------- wiring ----------

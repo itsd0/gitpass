@@ -35,7 +35,7 @@ Request `{"id": <any>, "cmd": "<name>", ...}` → `{"id", "ok": true, "result": 
 Commands (see the v0.6 contract): `hello`, `status`, `request_unlock`, `lock`, `list_items {vault_id?, category?,
 query?, limit?}`, `match {origin}`, `get_item {item_id}`, `reveal {item_id, field, source:"popup"}`,
 `fill {item_id, origin}` → `{username, password, totp?}`, `fill_card` / `fill_identity {item_id}` (needs
-`source:"popup"` or `user_gesture:true`) → `{<field id>: value}`, `totp` → `{code, remaining, period}`,
+`source:"popup"` or `source:"inpage_click"`) → `{<field id>: value}`, `totp` → `{code, remaining, period}`,
 `save_login {origin, title?, username, password, vault_id?}` → `{item_id}`, `update_password`,
 `generate {len, digits, symbols}`, `list_vaults`, `open_in_app`. Standalone-only: `unlock`; 0.5 compat: `search`,
 `match {url}`.

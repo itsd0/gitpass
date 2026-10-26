@@ -324,7 +324,7 @@
   }
 
   const pick = (m, ...keys) => { for (const k of keys) if (m[k] != null && m[k] !== '') return m[k]; return null; };
-  /** Normalise a host field map (keys vary) into card values. */
+  /** Normalise a host field map (keys vary) into card values. gitpass-core v5 card ids: number, cardholder, cvv, expiry, pin, type. */
   function cardValues(m) {
     const out = {
       cc_number: pick(m, 'number', 'card_number', 'ccnum', 'cc_number'),
@@ -362,13 +362,16 @@
   }
 
   function identityValues(m) {
-    const given = pick(m, 'first_name', 'firstname', 'given_name');
-    const family = pick(m, 'last_name', 'lastname', 'family_name', 'surname');
+    // gitpass-core v5 identity template ids: first, last, birth, address (multiline), email, phone.
+    const given = pick(m, 'first', 'first_name', 'firstname', 'given_name');
+    const family = pick(m, 'last', 'last_name', 'lastname', 'family_name', 'surname');
+    const addr = pick(m, 'address1', 'street', 'address_line1', 'address');
+    const addrLines = addr ? String(addr).split(/\r?\n/).map((x) => x.trim()).filter(Boolean) : [];
     return {
       given_name: given, family_name: family,
       full_name: pick(m, 'full_name', 'name') || [given, family].filter(Boolean).join(' ') || null,
       email: pick(m, 'email'), phone: pick(m, 'phone', 'tel', 'mobile'),
-      address1: pick(m, 'address1', 'address', 'street', 'address_line1'), address2: pick(m, 'address2', 'address_line2'),
+      address1: addrLines[0] || null, address2: pick(m, 'address2', 'address_line2'),
       city: pick(m, 'city', 'town'), state: pick(m, 'state', 'province', 'region'), postal: pick(m, 'zip', 'postal_code', 'postcode', 'zip_code'),
       country: pick(m, 'country'), company: pick(m, 'company', 'organization'),
     };

@@ -1,245 +1,461 @@
 {
- "hostTitle": {
-  "message": "gitpass helper ချိတ်ဆက်မထားပါ"
- },
- "hostBody": {
-  "message": "Browser က local gitpass-host ကို မရောက်နိုင်ပါ။ Terminal မှာ တစ်ကြိမ် install လုပ်ပြီး extension ကို reload လုပ်ပါ:"
- },
- "retry": {
-  "message": "ထပ်စမ်းရန်"
- },
- "unlockTitle": {
-  "message": "gitpass ကို ဖွင့်ရန်"
- },
- "masterPassword": {
-  "message": "Master password"
- },
- "secretKey": {
-  "message": "Secret Key"
- },
- "skHint": {
-  "message": "ဖွင့်ရန် တစ်ကြိမ်သာ သုံးပါသည်။ ဖွင့်ထားစဉ် memory ထဲမှာသာ ထားပြီး ဘယ်တော့မှ မသိမ်းပါ။"
- },
- "unlock": {
-  "message": "ဖွင့်ရန်"
- },
- "touchIdSoon": {
-  "message": "Touch ID ဖြင့်ဖွင့်ခြင်း မကြာမီ လာပါမည်။ Secret Key သည် Emergency Kit ထဲတွင် ရှိပါသည်။"
- },
- "searchPh": {
-  "message": "Vault တွင် ရှာရန်"
- },
- "lock": {
-  "message": "ပိတ်ရန်"
- },
- "forThisSite": {
-  "message": "ဤဆိုက်အတွက်"
- },
- "searchResults": {
-  "message": "ရှာဖွေမှု ရလဒ်များ"
- },
- "generator": {
-  "message": "Password ထုတ်ပေးစနစ်"
- },
- "regenerate": {
-  "message": "ပြန်ထုတ်ရန်"
- },
- "length": {
-  "message": "အရှည်"
- },
- "digits": {
-  "message": "ဂဏန်းများ"
- },
- "symbols": {
-  "message": "သင်္ကေတများ"
- },
- "copy": {
-  "message": "ကူးရန်"
- },
- "copied": {
-  "message": "ကူးပြီးပါပြီ"
- },
- "fill": {
-  "message": "ဖြည့်ရန်"
- },
- "fillTitle": {
-  "message": "ဤစာမျက်နှာတွင် ဖြည့်ရန်"
- },
- "copyPassword": {
-  "message": "Password ကူးရန်"
- },
- "passwordCopied": {
-  "message": "Password ကူးပြီးပါပြီ"
- },
- "copyTotp": {
-  "message": "TOTP ကူးရန်"
- },
- "totpCopied": {
-  "message": "TOTP ကူးပြီးပါပြီ"
- },
- "notHttps": {
-  "message": "https စာမျက်နှာ မဟုတ်ပါ"
- },
- "noMatches": {
-  "message": "ဤဆိုက်အတွက် သိမ်းထားသော login မရှိပါ"
- },
- "notFillable": {
-  "message": "ဖြည့်ရန် https စာမျက်နှာကို ဖွင့်ပါ"
- },
- "noResults": {
-  "message": "ရလဒ် မတွေ့ပါ"
- },
- "pwRequired": {
-  "message": "Master password ထည့်ပါ"
- },
- "wrongCreds": {
-  "message": "Master password သို့မဟုတ် Secret Key မှားနေပါသည်"
- },
- "csFillWith": {
-  "message": "gitpass ဖြင့် ဖြည့်ရန်"
- },
- "csNoLogins": {
-  "message": "ဤဆိုက်အတွက် gitpass login မရှိပါ"
- },
- "csLocked": {
-  "message": "gitpass ပိတ်ထားပါသည်။ toolbar icon မှ ဖွင့်ပါ။"
- },
- "extDesc": {
-  "message": "gitpass autofill. Key များသည် local gitpass-host ထဲတွင်သာ ရှိပါသည်။"
- },
- "unlockTouchId": {
-  "message": "Touch ID ဖြင့် သော့ဖွင့်ပါ"
- },
- "usePassword": {
-  "message": "စကားဝှက် သုံးပါ"
- },
- "unlockWithPassword": {
-  "message": "စကားဝှက်ဖြင့် သော့ဖွင့်ပါ"
- },
- "openAppToUnlock": {
-  "message": "သော့ဖွင့်ရန် gitpass အက်ပ်ကို ဖွင့်ပါ"
- },
- "appNotRunning": {
-  "message": "gitpass အက်ပ် ဖွင့်မထားပါ။"
- },
- "waitingForApp": {
-  "message": "gitpass ကို စောင့်နေသည်…"
- },
- "unlockReason": {
-  "message": "gitpass browser extension ကို သော့ဖွင့်ရန်"
- },
- "unlockCancelled": {
-  "message": "သော့ဖွင့်ခြင်း ပယ်ဖျက်လိုက်သည်"
- },
- "back": {
-  "message": "နောက်သို့"
- },
- "newItem": {
-  "message": "အသစ်ထည့်ရန်"
- },
- "newLogin": {
-  "message": "Login အသစ်"
- },
- "filterSuggested": {
-  "message": "ဤဆိုက်အတွက် အကြံပြုချက်များ"
- },
- "filterAll": {
-  "message": "အရာအားလုံး"
- },
- "filterFavorites": {
-  "message": "အကြိုက်ဆုံးများ"
- },
- "categories": {
-  "message": "အမျိုးအစားများ"
- },
- "vaults": {
-  "message": "Vault များ"
- },
- "catLogin": {
-  "message": "Login များ"
- },
- "catNote": {
-  "message": "လုံခြုံသော မှတ်စုများ"
- },
- "catCard": {
-  "message": "ခရက်ဒစ်ကတ်များ"
- },
- "catIdentity": {
-  "message": "ကိုယ်ရေးအချက်အလက်များ"
- },
- "catApi": {
-  "message": "API အထောက်အထားများ"
- },
- "catDocument": {
-  "message": "စာရွက်စာတမ်းများ"
- },
- "catSsh": {
-  "message": "SSH Key များ"
- },
- "catWifi": {
-  "message": "Wi-Fi"
- },
- "noItems": {
-  "message": "အရာများ မရှိပါ"
- },
- "selectItem": {
-  "message": "အရာတစ်ခု ရွေးပါ"
- },
- "openFill": {
-  "message": "ဖွင့်ပြီး ဖြည့်ပါ"
- },
- "reveal": {
-  "message": "ပြပါ"
- },
- "lastEdited": {
-  "message": "နောက်ဆုံး ပြင်ဆင်ချိန်"
- },
- "openInApp": {
-  "message": "gitpass တွင် ဖွင့်ပါ"
- },
- "copyLink": {
-  "message": "လင့်ခ် ကူးပါ"
- },
- "linkCopied": {
-  "message": "လင့်ခ် ကူးပြီး"
- },
- "favorite": {
-  "message": "အကြိုက်ဆုံးသို့ ထည့်ပါ"
- },
- "unfavorite": {
-  "message": "အကြိုက်ဆုံးမှ ဖယ်ပါ"
- },
- "more": {
-  "message": "နောက်ထပ်"
- },
- "close": {
-  "message": "ပိတ်ပါ"
- },
- "title": {
-  "message": "ခေါင်းစဉ်"
- },
- "website": {
-  "message": "ဝက်ဘ်ဆိုက်"
- },
- "username": {
-  "message": "အသုံးပြုသူအမည်"
- },
- "password": {
-  "message": "စကားဝှက်"
- },
- "generate": {
-  "message": "ထုတ်ပါ"
- },
- "vault": {
-  "message": "Vault"
- },
- "save": {
-  "message": "သိမ်းပါ"
- },
- "saved": {
-  "message": "သိမ်းပြီး"
- },
- "needUrlPw": {
-  "message": "ဝက်ဘ်ဆိုက်နှင့် စကားဝှက် လိုအပ်သည်"
- }
+  "hostTitle": {
+    "message": "gitpass helper ချိတ်ဆက်မထားပါ"
+  },
+  "hostBody": {
+    "message": "Browser က local gitpass-host ကို မရောက်နိုင်ပါ။ Terminal မှာ တစ်ကြိမ် install လုပ်ပြီး extension ကို reload လုပ်ပါ:"
+  },
+  "retry": {
+    "message": "ထပ်စမ်းရန်"
+  },
+  "unlockTitle": {
+    "message": "gitpass ကို ဖွင့်ရန်"
+  },
+  "masterPassword": {
+    "message": "Master password"
+  },
+  "secretKey": {
+    "message": "Secret Key"
+  },
+  "skHint": {
+    "message": "ဖွင့်ရန် တစ်ကြိမ်သာ သုံးပါသည်။ ဖွင့်ထားစဉ် memory ထဲမှာသာ ထားပြီး ဘယ်တော့မှ မသိမ်းပါ။"
+  },
+  "unlock": {
+    "message": "ဖွင့်ရန်"
+  },
+  "touchIdSoon": {
+    "message": "Touch ID ဖြင့်ဖွင့်ခြင်း မကြာမီ လာပါမည်။ Secret Key သည် Emergency Kit ထဲတွင် ရှိပါသည်။"
+  },
+  "searchPh": {
+    "message": "Vault တွင် ရှာရန်"
+  },
+  "lock": {
+    "message": "ပိတ်ရန်"
+  },
+  "forThisSite": {
+    "message": "ဤဆိုက်အတွက်"
+  },
+  "searchResults": {
+    "message": "ရှာဖွေမှု ရလဒ်များ"
+  },
+  "generator": {
+    "message": "Password ထုတ်ပေးစနစ်"
+  },
+  "regenerate": {
+    "message": "ပြန်ထုတ်ရန်"
+  },
+  "length": {
+    "message": "အရှည်"
+  },
+  "digits": {
+    "message": "ဂဏန်းများ"
+  },
+  "symbols": {
+    "message": "သင်္ကေတများ"
+  },
+  "copy": {
+    "message": "ကူးရန်"
+  },
+  "copied": {
+    "message": "ကူးပြီးပါပြီ"
+  },
+  "fill": {
+    "message": "ဖြည့်ရန်"
+  },
+  "fillTitle": {
+    "message": "ဤစာမျက်နှာတွင် ဖြည့်ရန်"
+  },
+  "copyPassword": {
+    "message": "Password ကူးရန်"
+  },
+  "passwordCopied": {
+    "message": "Password ကူးပြီးပါပြီ"
+  },
+  "copyTotp": {
+    "message": "TOTP ကူးရန်"
+  },
+  "totpCopied": {
+    "message": "TOTP ကူးပြီးပါပြီ"
+  },
+  "notHttps": {
+    "message": "https စာမျက်နှာ မဟုတ်ပါ"
+  },
+  "noMatches": {
+    "message": "ဤဆိုက်အတွက် သိမ်းထားသော login မရှိပါ"
+  },
+  "notFillable": {
+    "message": "ဖြည့်ရန် https စာမျက်နှာကို ဖွင့်ပါ"
+  },
+  "noResults": {
+    "message": "ရလဒ် မတွေ့ပါ"
+  },
+  "pwRequired": {
+    "message": "Master password ထည့်ပါ"
+  },
+  "wrongCreds": {
+    "message": "Master password သို့မဟုတ် Secret Key မှားနေပါသည်"
+  },
+  "csFillWith": {
+    "message": "gitpass ဖြင့် ဖြည့်ရန်"
+  },
+  "csNoLogins": {
+    "message": "ဤဆိုက်အတွက် gitpass login မရှိပါ"
+  },
+  "csLocked": {
+    "message": "gitpass ပိတ်ထားပါသည်။ toolbar icon မှ ဖွင့်ပါ။"
+  },
+  "extDesc": {
+    "message": "gitpass autofill. Key များသည် local gitpass-host ထဲတွင်သာ ရှိပါသည်။"
+  },
+  "unlockTouchId": {
+    "message": "Touch ID ဖြင့် သော့ဖွင့်ပါ"
+  },
+  "usePassword": {
+    "message": "စကားဝှက် သုံးပါ"
+  },
+  "unlockWithPassword": {
+    "message": "စကားဝှက်ဖြင့် သော့ဖွင့်ပါ"
+  },
+  "openAppToUnlock": {
+    "message": "သော့ဖွင့်ရန် gitpass အက်ပ်ကို ဖွင့်ပါ"
+  },
+  "appNotRunning": {
+    "message": "gitpass အက်ပ် ဖွင့်မထားပါ။"
+  },
+  "waitingForApp": {
+    "message": "gitpass ကို စောင့်နေသည်…"
+  },
+  "unlockReason": {
+    "message": "gitpass browser extension ကို သော့ဖွင့်ရန်"
+  },
+  "unlockCancelled": {
+    "message": "သော့ဖွင့်ခြင်း ပယ်ဖျက်လိုက်သည်"
+  },
+  "back": {
+    "message": "နောက်သို့"
+  },
+  "newItem": {
+    "message": "အသစ်ထည့်ရန်"
+  },
+  "newLogin": {
+    "message": "Login အသစ်"
+  },
+  "filterSuggested": {
+    "message": "ဤဆိုက်အတွက် အကြံပြုချက်များ"
+  },
+  "filterAll": {
+    "message": "အရာအားလုံး"
+  },
+  "filterFavorites": {
+    "message": "အကြိုက်ဆုံးများ"
+  },
+  "categories": {
+    "message": "အမျိုးအစားများ"
+  },
+  "vaults": {
+    "message": "Vault များ"
+  },
+  "catLogin": {
+    "message": "Login များ"
+  },
+  "catNote": {
+    "message": "လုံခြုံသော မှတ်စုများ"
+  },
+  "catCard": {
+    "message": "ခရက်ဒစ်ကတ်များ"
+  },
+  "catIdentity": {
+    "message": "ကိုယ်ရေးအချက်အလက်များ"
+  },
+  "catApi": {
+    "message": "API အထောက်အထားများ"
+  },
+  "catDocument": {
+    "message": "စာရွက်စာတမ်းများ"
+  },
+  "catSsh": {
+    "message": "SSH Key များ"
+  },
+  "catWifi": {
+    "message": "Wi-Fi"
+  },
+  "noItems": {
+    "message": "အရာများ မရှိပါ"
+  },
+  "selectItem": {
+    "message": "အရာတစ်ခု ရွေးပါ"
+  },
+  "openFill": {
+    "message": "ဖွင့်ပြီး ဖြည့်ပါ"
+  },
+  "reveal": {
+    "message": "ပြပါ"
+  },
+  "lastEdited": {
+    "message": "နောက်ဆုံး ပြင်ဆင်ချိန်"
+  },
+  "openInApp": {
+    "message": "gitpass တွင် ဖွင့်ပါ"
+  },
+  "copyLink": {
+    "message": "လင့်ခ် ကူးပါ"
+  },
+  "linkCopied": {
+    "message": "လင့်ခ် ကူးပြီး"
+  },
+  "favorite": {
+    "message": "အကြိုက်ဆုံးသို့ ထည့်ပါ"
+  },
+  "unfavorite": {
+    "message": "အကြိုက်ဆုံးမှ ဖယ်ပါ"
+  },
+  "more": {
+    "message": "နောက်ထပ်"
+  },
+  "close": {
+    "message": "ပိတ်ပါ"
+  },
+  "title": {
+    "message": "ခေါင်းစဉ်"
+  },
+  "website": {
+    "message": "ဝက်ဘ်ဆိုက်"
+  },
+  "username": {
+    "message": "အသုံးပြုသူအမည်"
+  },
+  "password": {
+    "message": "စကားဝှက်"
+  },
+  "generate": {
+    "message": "ထုတ်ပါ"
+  },
+  "vault": {
+    "message": "Vault"
+  },
+  "save": {
+    "message": "သိမ်းပါ"
+  },
+  "saved": {
+    "message": "သိမ်းပြီး"
+  },
+  "needUrlPw": {
+    "message": "ဝက်ဘ်ဆိုက်နှင့် စကားဝှက် လိုအပ်သည်"
+  },
+  "csSuggest": {
+    "message": "ခိုင်မာသော စကားဝှက် အကြံပြုရန်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csSuggestSub": {
+    "message": "တင်သွင်းသောအခါ gitpass က သိမ်းဆည်းပေးပါမည်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csNoCards": {
+    "message": "gitpass တွင် ကတ်များ မရှိပါ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csNoIdentities": {
+    "message": "gitpass တွင် ကိုယ်ရေးအချက်အလက်များ မရှိပါ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csUnlock": {
+    "message": "gitpass ကို ဖွင့်ရန်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csUnlockSub": {
+    "message": "gitpass အက်ပ်တွင် Touch ID သို့မဟုတ် စကားဝှက်ကို အသုံးပြုပါ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csOpenApp": {
+    "message": "ဖွင့်ရန် gitpass အက်ပ်ကို ဖွင့်ပါ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csUpdateQ": {
+    "message": "gitpass တွင် စကားဝှက်ကို အပ်ဒိတ်လုပ်မလား?",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csSaveQ": {
+    "message": "gitpass တွင် လော့ဂ်အင်ကို သိမ်းမလား?",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csNoUser": {
+    "message": "(အသုံးပြုသူအမည် မရှိ)",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csNotNow": {
+    "message": "ယခု မလုပ်ပါ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csUpdate": {
+    "message": "အပ်ဒိတ်လုပ်ရန်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csSave": {
+    "message": "သိမ်းရန်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csUpdated": {
+    "message": "စကားဝှက် အပ်ဒိတ်လုပ်ပြီးပါပြီ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csSaved": {
+    "message": "gitpass တွင် သိမ်းပြီးပါပြီ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csLockedShort": {
+    "message": "gitpass ကို အရင်ဖွင့်ပြီး ထပ်ကြိုးစားပါ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "allSet": {
+    "message": "အားလုံး အဆင်သင့်ဖြစ်ပါပြီ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "oneStepLeft": {
+    "message": "အဆင့် 1 ဆင့် ကျန်ပါသေးသည်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepsLeft": {
+    "message": "အဆင့် {n} ဆင့် ကျန်ပါသေးသည်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "checking": {
+    "message": "စစ်ဆေးနေသည်…",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "hostMissing": {
+    "message": "gitpass helper ကို ရှာမတွေ့ပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "hostMissingHelp": {
+    "message": "gitpass အက်ပ်မှ တစ်ကြိမ် ထည့်သွင်းပါ (Settings → Browser extension → Install helper)၊ သို့မဟုတ် Terminal တွင် ဤအမိန့်ကို run ပါ ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "thenRetry": {
+    "message": "ထို့နောက် Retry ကို နှိပ်ပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "appNotRunningHelp": {
+    "message": "gitpass အက်ပ်ကို ဖွင့်ပြီး ဝင်ရောက်ပါ၊ ထို့နောက် Retry ကို နှိပ်ပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "connectedUnlocked": {
+    "message": "ချိတ်ဆက်ပြီးပါပြီ။ gitpass ပွင့်နေပါသည်။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "connectedLocked": {
+    "message": "ချိတ်ဆက်ပြီးပါပြီ။ extension ကို အသုံးပြုရန် gitpass အက်ပ်ကို ဖွင့်ပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "tryDone": {
+    "message": "ဖြည့်ပြီးပါပြီ။ Autofill အလုပ်လုပ်ပါသည်။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "settingsTitle": {
+    "message": "gitpass ဆက်တင်များ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optAutolock": {
+    "message": "gitpass အက်ပ်နှင့်အတူ အလိုအလျောက် သော့ခတ်ရန်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optAutolockBody": {
+    "message": "အက်ပ် သော့ခတ်သောအခါ extension ကိုလည်း သော့ခတ်ပါ (idle timeout ကို အက်ပ်တွင် သတ်မှတ်ပါ)။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optAutofill": {
+    "message": "စာမျက်နှာများတွင် Autofill အကြံပြုချက်များ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optAutofillBody": {
+    "message": "လော့ဂ်အင် အကွက်များအောက်တွင် gitpass မီနူးကို ပြပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optSave": {
+    "message": "လော့ဂ်အင်များ သိမ်းရန် အကြံပြုပါ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optSaveBody": {
+    "message": "ဝင်ရောက်ပြီးနောက် စကားဝှက်ကို သိမ်းရန် သို့မဟုတ် အပ်ဒိတ်လုပ်ရန် မေးပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optShortcut": {
+    "message": "ကီးဘုတ် ဖြတ်လမ်း",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optShortcutBody": {
+    "message": "gitpass popup ကို ဖွင့်ပါသည်။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "change": {
+    "message": "ပြောင်းရန်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "welcomeTitle": {
+    "message": "gitpass မှ ကြိုဆိုပါသည်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "welcomeSub": {
+    "message": "gitpass အက်ပ်ကို တစ်ကြိမ် ဖွင့်လိုက်ရုံဖြင့် extension လည်း ပွင့်ပါမည်။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepConnect": {
+    "message": "gitpass အက်ပ်နှင့် ချိတ်ဆက်ပါ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepConnectBody": {
+    "message": "Extension သည် gitpass desktop အက်ပ်နှင့် local helper (gitpass-host) မှတစ်ဆင့် ဆက်သွယ်ပါသည်။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "openApp": {
+    "message": "gitpass အက်ပ်ကို ဖွင့်ရန်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepPin": {
+    "message": "Extension ကို pin လုပ်ပါ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepPinBody": {
+    "message": "toolbar ရှိ ပဟေဠိအပိုင်း အိုင်ကွန်ကို နှိပ်ပြီး gitpass ဘေးရှိ pin ကို နှိပ်ပါ။ အချိန်မရွေး ဖွင့်နိုင်သည်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "pinDone": {
+    "message": "pin လုပ်ပြီးပါပြီ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepTry": {
+    "message": "Autofill ကို စမ်းကြည့်ပါ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepTryBody": {
+    "message": "ဤသည်မှာ နမူနာ ဖောင်ဖြစ်သည်။ အသုံးပြုသူအမည် အကွက်ကို နှိပ်ပြီး gitpass မီနူးမှ လော့ဂ်အင်ကို ရွေးပါ၊ သို့မဟုတ် popup ကိုဖွင့်ပြီး Fill ကို နှိပ်ပါ။ မည်သည့်နေရာသို့မျှ မပို့ပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "demoSignIn": {
+    "message": "ဝင်ရောက်ရန်",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "openSettings": {
+    "message": "ဆက်တင်များ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "errLocked": {
+    "message": "gitpass ကို သော့ခတ်ထားသည်။ ဆက်လုပ်ရန် ဖွင့်ပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "errDenied": {
+    "message": "gitpass က ဤတောင်းဆိုမှုကို ငြင်းပယ်ခဲ့သည်။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "errNotFound": {
+    "message": "အရာကို ရှာမတွေ့ပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "errOrigin": {
+    "message": "ဤအရာသည် လက်ရှိ ဆိုက်နှင့် မကိုက်ညီပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "errAppDown": {
+    "message": "gitpass အက်ပ် ဖွင့်မထားပါ။",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  }
 }

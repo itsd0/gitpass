@@ -22,7 +22,19 @@ function iconBtn(svg, title, onclick) {
 }
 let toastT = null;
 function toast(msg) { const e = $('toast'); if (!e) return; e.textContent = msg; e.classList.remove('hidden'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.add('hidden'), 1600); }
-function showErr(e) { toast(String((e && e.message) || e)); }
+// Host errors carry a contract code (locked/denied/not_found/origin_mismatch/bad_request/app_not_running/internal).
+function errText(e) {
+  const c = e && e.code;
+  const M = {
+    locked: t('errLocked', 'gitpass is locked. Unlock it to continue.'),
+    denied: t('errDenied', 'gitpass refused this request.'),
+    not_found: t('errNotFound', 'Item not found.'),
+    origin_mismatch: t('errOrigin', 'This item does not match the current site.'),
+    app_not_running: t('errAppDown', 'The gitpass app is not running.'),
+  };
+  return (c && M[c]) || String((e && e.message) || e);
+}
+function showErr(e) { if (e && e.code === 'locked') { refresh(); return; } toast(errText(e)); }
 async function copy(text, label) {
   if (window.__gitpassMock) { toast(label || t('copied', 'Copied')); return; }
   await navigator.clipboard.writeText(text); toast(label || t('copied', 'Copied'));
@@ -74,7 +86,7 @@ $('touchBtn').onclick = async () => {
     const r = await send({ type: 'popup:request_unlock', reason: t('unlockReason', 'Unlock the gitpass browser extension') });
     if (r && r.unlocked) await refresh(); else $('unlockErr').textContent = t('unlockCancelled', 'Unlock was cancelled');
   } catch (e) {
-    if (/app_not_running/.test(e.code || e.message)) return showLocked('appdown');
+    if (e.code === 'app_not_running' || /app_not_running/.test(e.message)) return showLocked('appdown');
     $('unlockErr').textContent = String(e.message || e);
   } finally { b.disabled = false; }
 };
@@ -89,7 +101,7 @@ $('unlockForm').onsubmit = async (e) => {
   const sp = btn.querySelector('.spinner');
   btn.disabled = true; if (sp) sp.classList.remove('hidden');
   try { await send(msg); $('pw').value = ''; $('sk').value = ''; await refresh(); }
-  catch (err) { $('unlockErr').textContent = /unlock failed|denied/i.test(err.message) ? t('wrongCreds', 'Wrong master password or Secret Key') : String(err.message); $('pw').select(); }
+  catch (err) { $('unlockErr').textContent = (err.code === 'denied' || /unlock failed|denied/i.test(err.message)) ? t('wrongCreds', 'Wrong master password or Secret Key') : String(err.message); $('pw').select(); }
   finally { btn.disabled = false; if (sp) sp.classList.add('hidden'); }
 };
 document.querySelectorAll('.eye').forEach((b) => {
@@ -363,10 +375,20 @@ document.addEventListener('keydown', (e) => {
   else if (act === 'copyPassword') copyPrimary().catch(showErr);
 });
 
+// ---------- user settings (options page) ----------
+function popupSettings() {
+  return new Promise((res) => {
+    try { chrome.storage.local.get('settings', (r) => res(Object.assign({ autofill: true, savePrompts: true, autolockFollowsApp: true }, (r && r.settings) || {}))); }
+    catch (_) { res({ autofill: true, savePrompts: true, autolockFollowsApp: true }); }
+  });
+}
+
 // ---------- live lock/unlock events ----------
 if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((msg) => {
-    if (msg && msg.type === 'popup:event' && (msg.event === 'lock' || msg.event === 'unlock')) refresh();
+    if (!msg || msg.type !== 'popup:event') return;
+    if (msg.event === 'unlock') refresh();
+    else if (msg.event === 'lock') popupSettings().then((st) => { if (st.autolockFollowsApp !== false) refresh(); });
   });
 }
 

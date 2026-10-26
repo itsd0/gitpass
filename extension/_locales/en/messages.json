@@ -1,245 +1,407 @@
 {
- "hostTitle": {
-  "message": "gitpass helper not connected"
- },
- "hostBody": {
-  "message": "The browser can't reach the local gitpass-host. Install it once in Terminal, then reload this extension:"
- },
- "retry": {
-  "message": "Retry"
- },
- "unlockTitle": {
-  "message": "Unlock gitpass"
- },
- "masterPassword": {
-  "message": "Master password"
- },
- "secretKey": {
-  "message": "Secret Key"
- },
- "skHint": {
-  "message": "Used once to unlock. It's kept only in memory while unlocked and never saved."
- },
- "unlock": {
-  "message": "Unlock"
- },
- "touchIdSoon": {
-  "message": "Touch ID unlock is coming soon. Your Secret Key is in your Emergency Kit."
- },
- "searchPh": {
-  "message": "Search vault"
- },
- "lock": {
-  "message": "Lock"
- },
- "forThisSite": {
-  "message": "For this site"
- },
- "searchResults": {
-  "message": "Search results"
- },
- "generator": {
-  "message": "Password generator"
- },
- "regenerate": {
-  "message": "Regenerate"
- },
- "length": {
-  "message": "Length"
- },
- "digits": {
-  "message": "Digits"
- },
- "symbols": {
-  "message": "Symbols"
- },
- "copy": {
-  "message": "Copy"
- },
- "copied": {
-  "message": "Copied"
- },
- "fill": {
-  "message": "Fill"
- },
- "fillTitle": {
-  "message": "Fill on this page"
- },
- "copyPassword": {
-  "message": "Copy password"
- },
- "passwordCopied": {
-  "message": "Password copied"
- },
- "copyTotp": {
-  "message": "Copy TOTP"
- },
- "totpCopied": {
-  "message": "TOTP copied"
- },
- "notHttps": {
-  "message": "not an https page"
- },
- "noMatches": {
-  "message": "No saved logins for this site"
- },
- "notFillable": {
-  "message": "Open an https page to fill"
- },
- "noResults": {
-  "message": "No items found"
- },
- "pwRequired": {
-  "message": "Enter your master password"
- },
- "wrongCreds": {
-  "message": "Wrong master password or Secret Key"
- },
- "csFillWith": {
-  "message": "Fill with gitpass"
- },
- "csNoLogins": {
-  "message": "No gitpass logins for this site"
- },
- "csLocked": {
-  "message": "gitpass is locked. Unlock it from the toolbar icon."
- },
- "extDesc": {
-  "message": "gitpass autofill. Keys stay in the local gitpass-host process."
- },
- "unlockTouchId": {
-  "message": "Unlock with Touch ID"
- },
- "usePassword": {
-  "message": "Use password"
- },
- "unlockWithPassword": {
-  "message": "Unlock with password"
- },
- "openAppToUnlock": {
-  "message": "Open gitpass app to unlock"
- },
- "appNotRunning": {
-  "message": "The gitpass app is not running."
- },
- "waitingForApp": {
-  "message": "Waiting for gitpass…"
- },
- "unlockReason": {
-  "message": "Unlock the gitpass browser extension"
- },
- "unlockCancelled": {
-  "message": "Unlock was cancelled"
- },
- "back": {
-  "message": "Back"
- },
- "newItem": {
-  "message": "New item"
- },
- "newLogin": {
-  "message": "New Login"
- },
- "filterSuggested": {
-  "message": "Suggestions for this site"
- },
- "filterAll": {
-  "message": "All Items"
- },
- "filterFavorites": {
-  "message": "Favorites"
- },
- "categories": {
-  "message": "Categories"
- },
- "vaults": {
-  "message": "Vaults"
- },
- "catLogin": {
-  "message": "Logins"
- },
- "catNote": {
-  "message": "Secure Notes"
- },
- "catCard": {
-  "message": "Credit Cards"
- },
- "catIdentity": {
-  "message": "Identities"
- },
- "catApi": {
-  "message": "API Credentials"
- },
- "catDocument": {
-  "message": "Documents"
- },
- "catSsh": {
-  "message": "SSH Keys"
- },
- "catWifi": {
-  "message": "Wi-Fi"
- },
- "noItems": {
-  "message": "No items"
- },
- "selectItem": {
-  "message": "Select an item"
- },
- "openFill": {
-  "message": "Open & Fill"
- },
- "reveal": {
-  "message": "Reveal"
- },
- "lastEdited": {
-  "message": "Last edited"
- },
- "openInApp": {
-  "message": "Open in gitpass"
- },
- "copyLink": {
-  "message": "Copy link"
- },
- "linkCopied": {
-  "message": "Link copied"
- },
- "favorite": {
-  "message": "Add to Favorites"
- },
- "unfavorite": {
-  "message": "Remove from Favorites"
- },
- "more": {
-  "message": "More"
- },
- "close": {
-  "message": "Close"
- },
- "title": {
-  "message": "Title"
- },
- "website": {
-  "message": "Website"
- },
- "username": {
-  "message": "Username"
- },
- "password": {
-  "message": "Password"
- },
- "generate": {
-  "message": "Generate"
- },
- "vault": {
-  "message": "Vault"
- },
- "save": {
-  "message": "Save"
- },
- "saved": {
-  "message": "Saved"
- },
- "needUrlPw": {
-  "message": "Website and password are required"
- }
+  "hostTitle": {
+    "message": "gitpass helper not connected"
+  },
+  "hostBody": {
+    "message": "The browser can't reach the local gitpass-host. Install it once in Terminal, then reload this extension:"
+  },
+  "retry": {
+    "message": "Retry"
+  },
+  "unlockTitle": {
+    "message": "Unlock gitpass"
+  },
+  "masterPassword": {
+    "message": "Master password"
+  },
+  "secretKey": {
+    "message": "Secret Key"
+  },
+  "skHint": {
+    "message": "Used once to unlock. It's kept only in memory while unlocked and never saved."
+  },
+  "unlock": {
+    "message": "Unlock"
+  },
+  "touchIdSoon": {
+    "message": "Touch ID unlock is coming soon. Your Secret Key is in your Emergency Kit."
+  },
+  "searchPh": {
+    "message": "Search vault"
+  },
+  "lock": {
+    "message": "Lock"
+  },
+  "forThisSite": {
+    "message": "For this site"
+  },
+  "searchResults": {
+    "message": "Search results"
+  },
+  "generator": {
+    "message": "Password generator"
+  },
+  "regenerate": {
+    "message": "Regenerate"
+  },
+  "length": {
+    "message": "Length"
+  },
+  "digits": {
+    "message": "Digits"
+  },
+  "symbols": {
+    "message": "Symbols"
+  },
+  "copy": {
+    "message": "Copy"
+  },
+  "copied": {
+    "message": "Copied"
+  },
+  "fill": {
+    "message": "Fill"
+  },
+  "fillTitle": {
+    "message": "Fill on this page"
+  },
+  "copyPassword": {
+    "message": "Copy password"
+  },
+  "passwordCopied": {
+    "message": "Password copied"
+  },
+  "copyTotp": {
+    "message": "Copy TOTP"
+  },
+  "totpCopied": {
+    "message": "TOTP copied"
+  },
+  "notHttps": {
+    "message": "not an https page"
+  },
+  "noMatches": {
+    "message": "No saved logins for this site"
+  },
+  "notFillable": {
+    "message": "Open an https page to fill"
+  },
+  "noResults": {
+    "message": "No items found"
+  },
+  "pwRequired": {
+    "message": "Enter your master password"
+  },
+  "wrongCreds": {
+    "message": "Wrong master password or Secret Key"
+  },
+  "csFillWith": {
+    "message": "Fill with gitpass"
+  },
+  "csNoLogins": {
+    "message": "No gitpass logins for this site"
+  },
+  "csLocked": {
+    "message": "gitpass is locked. Unlock it from the toolbar icon."
+  },
+  "extDesc": {
+    "message": "gitpass autofill. Keys stay in the local gitpass-host process."
+  },
+  "unlockTouchId": {
+    "message": "Unlock with Touch ID"
+  },
+  "usePassword": {
+    "message": "Use password"
+  },
+  "unlockWithPassword": {
+    "message": "Unlock with password"
+  },
+  "openAppToUnlock": {
+    "message": "Open gitpass app to unlock"
+  },
+  "appNotRunning": {
+    "message": "The gitpass app is not running."
+  },
+  "waitingForApp": {
+    "message": "Waiting for gitpass…"
+  },
+  "unlockReason": {
+    "message": "Unlock the gitpass browser extension"
+  },
+  "unlockCancelled": {
+    "message": "Unlock was cancelled"
+  },
+  "back": {
+    "message": "Back"
+  },
+  "newItem": {
+    "message": "New item"
+  },
+  "newLogin": {
+    "message": "New Login"
+  },
+  "filterSuggested": {
+    "message": "Suggestions for this site"
+  },
+  "filterAll": {
+    "message": "All Items"
+  },
+  "filterFavorites": {
+    "message": "Favorites"
+  },
+  "categories": {
+    "message": "Categories"
+  },
+  "vaults": {
+    "message": "Vaults"
+  },
+  "catLogin": {
+    "message": "Logins"
+  },
+  "catNote": {
+    "message": "Secure Notes"
+  },
+  "catCard": {
+    "message": "Credit Cards"
+  },
+  "catIdentity": {
+    "message": "Identities"
+  },
+  "catApi": {
+    "message": "API Credentials"
+  },
+  "catDocument": {
+    "message": "Documents"
+  },
+  "catSsh": {
+    "message": "SSH Keys"
+  },
+  "catWifi": {
+    "message": "Wi-Fi"
+  },
+  "noItems": {
+    "message": "No items"
+  },
+  "selectItem": {
+    "message": "Select an item"
+  },
+  "openFill": {
+    "message": "Open & Fill"
+  },
+  "reveal": {
+    "message": "Reveal"
+  },
+  "lastEdited": {
+    "message": "Last edited"
+  },
+  "openInApp": {
+    "message": "Open in gitpass"
+  },
+  "copyLink": {
+    "message": "Copy link"
+  },
+  "linkCopied": {
+    "message": "Link copied"
+  },
+  "favorite": {
+    "message": "Add to Favorites"
+  },
+  "unfavorite": {
+    "message": "Remove from Favorites"
+  },
+  "more": {
+    "message": "More"
+  },
+  "close": {
+    "message": "Close"
+  },
+  "title": {
+    "message": "Title"
+  },
+  "website": {
+    "message": "Website"
+  },
+  "username": {
+    "message": "Username"
+  },
+  "password": {
+    "message": "Password"
+  },
+  "generate": {
+    "message": "Generate"
+  },
+  "vault": {
+    "message": "Vault"
+  },
+  "save": {
+    "message": "Save"
+  },
+  "saved": {
+    "message": "Saved"
+  },
+  "needUrlPw": {
+    "message": "Website and password are required"
+  },
+  "csSuggest": {
+    "message": "Suggest strong password"
+  },
+  "csSuggestSub": {
+    "message": "gitpass will save it when you submit"
+  },
+  "csNoCards": {
+    "message": "No cards in gitpass"
+  },
+  "csNoIdentities": {
+    "message": "No identities in gitpass"
+  },
+  "csUnlock": {
+    "message": "Unlock gitpass"
+  },
+  "csUnlockSub": {
+    "message": "Use Touch ID or your password in the gitpass app"
+  },
+  "csOpenApp": {
+    "message": "Open gitpass app to unlock"
+  },
+  "csUpdateQ": {
+    "message": "Update password in gitpass?"
+  },
+  "csSaveQ": {
+    "message": "Save login to gitpass?"
+  },
+  "csNoUser": {
+    "message": "(no username)"
+  },
+  "csNotNow": {
+    "message": "Not now"
+  },
+  "csUpdate": {
+    "message": "Update"
+  },
+  "csSave": {
+    "message": "Save"
+  },
+  "csUpdated": {
+    "message": "Password updated"
+  },
+  "csSaved": {
+    "message": "Saved to gitpass"
+  },
+  "csLockedShort": {
+    "message": "Unlock gitpass first, then try again"
+  },
+  "allSet": {
+    "message": "All set"
+  },
+  "oneStepLeft": {
+    "message": "1 step left"
+  },
+  "stepsLeft": {
+    "message": "{n} steps left"
+  },
+  "checking": {
+    "message": "Checking…"
+  },
+  "hostMissing": {
+    "message": "gitpass helper not found."
+  },
+  "hostMissingHelp": {
+    "message": "Install it once from the gitpass app (Settings → Browser extension → Install helper), or in Terminal run "
+  },
+  "thenRetry": {
+    "message": "Then press Retry."
+  },
+  "appNotRunningHelp": {
+    "message": "Open the gitpass app and sign in, then press Retry."
+  },
+  "connectedUnlocked": {
+    "message": "Connected. gitpass is unlocked."
+  },
+  "connectedLocked": {
+    "message": "Connected. Unlock the gitpass app to use the extension."
+  },
+  "tryDone": {
+    "message": "Filled. Autofill works."
+  },
+  "settingsTitle": {
+    "message": "gitpass settings"
+  },
+  "optAutolock": {
+    "message": "Auto-lock follows the gitpass app"
+  },
+  "optAutolockBody": {
+    "message": "Lock the extension when the app locks (idle timeout is set in the app)."
+  },
+  "optAutofill": {
+    "message": "Autofill suggestions on pages"
+  },
+  "optAutofillBody": {
+    "message": "Show the gitpass menu under login fields."
+  },
+  "optSave": {
+    "message": "Offer to save logins"
+  },
+  "optSaveBody": {
+    "message": "Ask to save or update a password after you sign in."
+  },
+  "optShortcut": {
+    "message": "Keyboard shortcut"
+  },
+  "optShortcutBody": {
+    "message": "Opens the gitpass popup."
+  },
+  "change": {
+    "message": "Change"
+  },
+  "welcomeTitle": {
+    "message": "Welcome to gitpass"
+  },
+  "welcomeSub": {
+    "message": "Unlock the gitpass app once and the extension unlocks too."
+  },
+  "stepConnect": {
+    "message": "Connect to the gitpass app"
+  },
+  "stepConnectBody": {
+    "message": "The extension talks to the gitpass desktop app through a small local helper (gitpass-host)."
+  },
+  "openApp": {
+    "message": "Open gitpass app"
+  },
+  "stepPin": {
+    "message": "Pin the extension"
+  },
+  "stepPinBody": {
+    "message": "Click the puzzle-piece icon in the toolbar, then the pin next to gitpass. You can also open it any time with"
+  },
+  "pinDone": {
+    "message": "I pinned it"
+  },
+  "stepTry": {
+    "message": "Try autofill"
+  },
+  "stepTryBody": {
+    "message": "This is a demo form. Click the username field and pick a login from the gitpass menu, or open the popup and press Fill. Nothing is submitted anywhere."
+  },
+  "demoSignIn": {
+    "message": "Sign in"
+  },
+  "openSettings": {
+    "message": "Settings"
+  },
+  "errLocked": {
+    "message": "gitpass is locked. Unlock it to continue."
+  },
+  "errDenied": {
+    "message": "gitpass refused this request."
+  },
+  "errNotFound": {
+    "message": "Item not found."
+  },
+  "errOrigin": {
+    "message": "This item does not match the current site."
+  },
+  "errAppDown": {
+    "message": "The gitpass app is not running."
+  }
 }

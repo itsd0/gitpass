@@ -68,12 +68,21 @@ fn reveal_and_card_identity_need_user_action() {
     assert_eq!(c["number"], "4111 1111 1111 1234");
     assert_eq!(c["expiry"], "12/30");
     assert_eq!(c["cardholder"], "Test Person");
-    let c2 = ok(&mut f.host, json!({"cmd":"fill_card","item_id":f.card,"user_gesture":true}));
+    let c2 = ok(&mut f.host, json!({"cmd":"fill_card","item_id":f.card,"source":"inpage_click"}));
     assert_eq!(c2["cvv"], "123");
     assert_eq!(err(&mut f.host, json!({"cmd":"fill_card","item_id":f.ident,"source":"popup"})).0, "bad_request");
     let i = ok(&mut f.host, json!({"cmd":"fill_identity","item_id":f.ident,"source":"popup"}));
     assert_eq!(i["email"], "t@example.invalid");
     assert_eq!(i["name"], "Test Person");
+    // v0.6: the old `user_gesture:true` flag is no longer accepted; `source:"inpage_click"` is the only in-page form.
+    assert_eq!(err(&mut f.host, json!({"cmd":"fill_card","item_id":f.card,"user_gesture":true})).0, "denied");
+
+    // set_favorite toggles the item favorite flag.
+    assert_eq!(ok(&mut f.host, json!({"cmd":"set_favorite","item_id":f.login,"favorite":true}))["favorite"], true);
+    assert_eq!(ok(&mut f.host, json!({"cmd":"get_item","item_id":f.login}))["item"]["favorite"], true);
+    assert_eq!(ok(&mut f.host, json!({"cmd":"set_favorite","item_id":f.login,"favorite":false}))["favorite"], false);
+    assert_eq!(ok(&mut f.host, json!({"cmd":"get_item","item_id":f.login}))["item"]["favorite"], false);
+    assert_eq!(err(&mut f.host, json!({"cmd":"set_favorite","item_id":f.login})).0, "bad_request");
 }
 
 #[test]

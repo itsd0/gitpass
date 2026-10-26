@@ -349,6 +349,17 @@ impl Agent {
                 })?;
                 Ok(json!({"ok": true}))
             }
+            "set_favorite" => {
+                let (vid, iid) = split_id(&req("item_id")?)?;
+                let fav = q.get("favorite").and_then(|v| v.as_bool()).ok_or_else(|| err("bad_request", "favorite must be a bool"))?;
+                self.app.state.with(|x| {
+                    crate::GuiState::writable(x).map_err(|e| err("denied", e.to_string()))?;
+                    let (_, mut r) = x.session.read_record(&vid, &iid)?;
+                    r.favorite = fav;
+                    x.session.update_record(&vid, &iid, r)
+                })?;
+                Ok(json!({"favorite": fav}))
+            }
             "generate" => {
                 let len = q.get("len").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
                 let b = |k: &str| q.get(k).and_then(|v| v.as_bool()).unwrap_or(true);

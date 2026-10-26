@@ -5,6 +5,7 @@ import { useApp } from './lib/store';
 import { Toaster, TooltipProvider } from './ui';
 import { api } from './api/client';
 import { QuickAccessPage, isQuickAccessWindow } from './features/quick-access';
+import { useAgentEvents } from './lib/agentEvents';
 
 /** Dedicated quick-access window (`#/quick-access` or `?window=quick-access`): no shell, no unlock form;
  * the Rust session is shared with the main window, so it only works while that is unlocked. */
@@ -18,6 +19,7 @@ function QuickAccessWindow() {
 export default function App() {
   const locked = useApp((s) => s.locked);
   const theme = useApp((s) => s.theme);
+  useAgentEvents();
   useEffect(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); }, [theme]);
   return (
     <TooltipProvider>

@@ -234,9 +234,8 @@ impl Host {
     }
 
     fn require_user_action(req: &Value, what: &str) -> Result<()> {
-        let popup = req.get("source").and_then(Value::as_str) == Some("popup");
-        let gesture = req.get("user_gesture").and_then(Value::as_bool) == Some(true);
-        if popup || gesture { Ok(()) } else { Err(coded(code::DENIED, format!("{what} is allowed only from the popup or after an in-page click"))) }
+        let src = req.get("source").and_then(Value::as_str);
+        if matches!(src, Some("popup") | Some("inpage_click")) { Ok(()) } else { Err(coded(code::DENIED, format!("{what} is allowed only from the popup or after an in-page click"))) }
     }
 
     fn dispatch(&mut self, req: &Value) -> Result<Value> {
@@ -393,6 +392,13 @@ impl Host {
                 r.item.password = Some(password);
                 self.sess()?.update_record(&vid, &iid, r)?;
                 Ok(json!({"ok": true}))
+            }
+            "set_favorite" => {
+                let fav = req.get("favorite").and_then(Value::as_bool).ok_or_else(|| coded(code::BAD_REQUEST, "favorite must be a bool"))?;
+                let (vid, iid, mut r) = self.record(arg_str(req, "item_id")?)?;
+                r.favorite = fav;
+                self.sess()?.update_record(&vid, &iid, r)?;
+                Ok(json!({"favorite": fav}))
             }
             "generate" => {
                 let len = req.get("len").and_then(Value::as_u64).unwrap_or(20) as usize;

@@ -1,245 +1,461 @@
 {
- "hostTitle": {
-  "message": "ยังไม่ได้เชื่อมต่อ gitpass helper"
- },
- "hostBody": {
-  "message": "เบราว์เซอร์เข้าถึง gitpass-host ในเครื่องไม่ได้ ติดตั้งครั้งเดียวใน Terminal แล้วรีโหลดส่วนขยายนี้:"
- },
- "retry": {
-  "message": "ลองอีกครั้ง"
- },
- "unlockTitle": {
-  "message": "ปลดล็อก gitpass"
- },
- "masterPassword": {
-  "message": "รหัสผ่านหลัก"
- },
- "secretKey": {
-  "message": "Secret Key"
- },
- "skHint": {
-  "message": "ใช้เพื่อปลดล็อกเพียงครั้งเดียว เก็บไว้ในหน่วยความจำขณะปลดล็อกเท่านั้น และไม่บันทึกลงดิสก์"
- },
- "unlock": {
-  "message": "ปลดล็อก"
- },
- "touchIdSoon": {
-  "message": "การปลดล็อกด้วย Touch ID จะมาเร็วๆ นี้ Secret Key อยู่ใน Emergency Kit ของคุณ"
- },
- "searchPh": {
-  "message": "ค้นหาในคลัง"
- },
- "lock": {
-  "message": "ล็อก"
- },
- "forThisSite": {
-  "message": "สำหรับเว็บไซต์นี้"
- },
- "searchResults": {
-  "message": "ผลการค้นหา"
- },
- "generator": {
-  "message": "ตัวสร้างรหัสผ่าน"
- },
- "regenerate": {
-  "message": "สร้างใหม่"
- },
- "length": {
-  "message": "ความยาว"
- },
- "digits": {
-  "message": "ตัวเลข"
- },
- "symbols": {
-  "message": "สัญลักษณ์"
- },
- "copy": {
-  "message": "คัดลอก"
- },
- "copied": {
-  "message": "คัดลอกแล้ว"
- },
- "fill": {
-  "message": "กรอก"
- },
- "fillTitle": {
-  "message": "กรอกในหน้านี้"
- },
- "copyPassword": {
-  "message": "คัดลอกรหัสผ่าน"
- },
- "passwordCopied": {
-  "message": "คัดลอกรหัสผ่านแล้ว"
- },
- "copyTotp": {
-  "message": "คัดลอก TOTP"
- },
- "totpCopied": {
-  "message": "คัดลอก TOTP แล้ว"
- },
- "notHttps": {
-  "message": "ไม่ใช่หน้า https"
- },
- "noMatches": {
-  "message": "ไม่มีข้อมูลเข้าสู่ระบบที่บันทึกไว้สำหรับเว็บไซต์นี้"
- },
- "notFillable": {
-  "message": "เปิดหน้า https เพื่อกรอก"
- },
- "noResults": {
-  "message": "ไม่พบรายการ"
- },
- "pwRequired": {
-  "message": "กรอกรหัสผ่านหลัก"
- },
- "wrongCreds": {
-  "message": "รหัสผ่านหลักหรือ Secret Key ไม่ถูกต้อง"
- },
- "csFillWith": {
-  "message": "กรอกด้วย gitpass"
- },
- "csNoLogins": {
-  "message": "ไม่มีข้อมูลเข้าสู่ระบบ gitpass สำหรับเว็บไซต์นี้"
- },
- "csLocked": {
-  "message": "gitpass ถูกล็อกอยู่ ปลดล็อกจากไอคอนบนแถบเครื่องมือ"
- },
- "extDesc": {
-  "message": "ระบบกรอกอัตโนมัติ gitpass คีย์อยู่ในโปรเซส gitpass-host ในเครื่องเท่านั้น"
- },
- "unlockTouchId": {
-  "message": "ปลดล็อกด้วย Touch ID"
- },
- "usePassword": {
-  "message": "ใช้รหัสผ่าน"
- },
- "unlockWithPassword": {
-  "message": "ปลดล็อกด้วยรหัสผ่าน"
- },
- "openAppToUnlock": {
-  "message": "เปิดแอป gitpass เพื่อปลดล็อก"
- },
- "appNotRunning": {
-  "message": "แอป gitpass ไม่ได้ทำงานอยู่"
- },
- "waitingForApp": {
-  "message": "กำลังรอ gitpass…"
- },
- "unlockReason": {
-  "message": "ปลดล็อกส่วนขยายเบราว์เซอร์ gitpass"
- },
- "unlockCancelled": {
-  "message": "ยกเลิกการปลดล็อกแล้ว"
- },
- "back": {
-  "message": "ย้อนกลับ"
- },
- "newItem": {
-  "message": "รายการใหม่"
- },
- "newLogin": {
-  "message": "การเข้าสู่ระบบใหม่"
- },
- "filterSuggested": {
-  "message": "คำแนะนำสำหรับเว็บนี้"
- },
- "filterAll": {
-  "message": "รายการทั้งหมด"
- },
- "filterFavorites": {
-  "message": "รายการโปรด"
- },
- "categories": {
-  "message": "หมวดหมู่"
- },
- "vaults": {
-  "message": "ห้องนิรภัย"
- },
- "catLogin": {
-  "message": "การเข้าสู่ระบบ"
- },
- "catNote": {
-  "message": "บันทึกที่ปลอดภัย"
- },
- "catCard": {
-  "message": "บัตรเครดิต"
- },
- "catIdentity": {
-  "message": "ข้อมูลประจำตัว"
- },
- "catApi": {
-  "message": "ข้อมูลรับรอง API"
- },
- "catDocument": {
-  "message": "เอกสาร"
- },
- "catSsh": {
-  "message": "คีย์ SSH"
- },
- "catWifi": {
-  "message": "Wi-Fi"
- },
- "noItems": {
-  "message": "ไม่มีรายการ"
- },
- "selectItem": {
-  "message": "เลือกรายการ"
- },
- "openFill": {
-  "message": "เปิดและกรอก"
- },
- "reveal": {
-  "message": "แสดง"
- },
- "lastEdited": {
-  "message": "แก้ไขล่าสุด"
- },
- "openInApp": {
-  "message": "เปิดใน gitpass"
- },
- "copyLink": {
-  "message": "คัดลอกลิงก์"
- },
- "linkCopied": {
-  "message": "คัดลอกลิงก์แล้ว"
- },
- "favorite": {
-  "message": "เพิ่มในรายการโปรด"
- },
- "unfavorite": {
-  "message": "นำออกจากรายการโปรด"
- },
- "more": {
-  "message": "เพิ่มเติม"
- },
- "close": {
-  "message": "ปิด"
- },
- "title": {
-  "message": "ชื่อ"
- },
- "website": {
-  "message": "เว็บไซต์"
- },
- "username": {
-  "message": "ชื่อผู้ใช้"
- },
- "password": {
-  "message": "รหัสผ่าน"
- },
- "generate": {
-  "message": "สร้าง"
- },
- "vault": {
-  "message": "ห้องนิรภัย"
- },
- "save": {
-  "message": "บันทึก"
- },
- "saved": {
-  "message": "บันทึกแล้ว"
- },
- "needUrlPw": {
-  "message": "ต้องระบุเว็บไซต์และรหัสผ่าน"
- }
+  "hostTitle": {
+    "message": "ยังไม่ได้เชื่อมต่อ gitpass helper"
+  },
+  "hostBody": {
+    "message": "เบราว์เซอร์เข้าถึง gitpass-host ในเครื่องไม่ได้ ติดตั้งครั้งเดียวใน Terminal แล้วรีโหลดส่วนขยายนี้:"
+  },
+  "retry": {
+    "message": "ลองอีกครั้ง"
+  },
+  "unlockTitle": {
+    "message": "ปลดล็อก gitpass"
+  },
+  "masterPassword": {
+    "message": "รหัสผ่านหลัก"
+  },
+  "secretKey": {
+    "message": "Secret Key"
+  },
+  "skHint": {
+    "message": "ใช้เพื่อปลดล็อกเพียงครั้งเดียว เก็บไว้ในหน่วยความจำขณะปลดล็อกเท่านั้น และไม่บันทึกลงดิสก์"
+  },
+  "unlock": {
+    "message": "ปลดล็อก"
+  },
+  "touchIdSoon": {
+    "message": "การปลดล็อกด้วย Touch ID จะมาเร็วๆ นี้ Secret Key อยู่ใน Emergency Kit ของคุณ"
+  },
+  "searchPh": {
+    "message": "ค้นหาในคลัง"
+  },
+  "lock": {
+    "message": "ล็อก"
+  },
+  "forThisSite": {
+    "message": "สำหรับเว็บไซต์นี้"
+  },
+  "searchResults": {
+    "message": "ผลการค้นหา"
+  },
+  "generator": {
+    "message": "ตัวสร้างรหัสผ่าน"
+  },
+  "regenerate": {
+    "message": "สร้างใหม่"
+  },
+  "length": {
+    "message": "ความยาว"
+  },
+  "digits": {
+    "message": "ตัวเลข"
+  },
+  "symbols": {
+    "message": "สัญลักษณ์"
+  },
+  "copy": {
+    "message": "คัดลอก"
+  },
+  "copied": {
+    "message": "คัดลอกแล้ว"
+  },
+  "fill": {
+    "message": "กรอก"
+  },
+  "fillTitle": {
+    "message": "กรอกในหน้านี้"
+  },
+  "copyPassword": {
+    "message": "คัดลอกรหัสผ่าน"
+  },
+  "passwordCopied": {
+    "message": "คัดลอกรหัสผ่านแล้ว"
+  },
+  "copyTotp": {
+    "message": "คัดลอก TOTP"
+  },
+  "totpCopied": {
+    "message": "คัดลอก TOTP แล้ว"
+  },
+  "notHttps": {
+    "message": "ไม่ใช่หน้า https"
+  },
+  "noMatches": {
+    "message": "ไม่มีข้อมูลเข้าสู่ระบบที่บันทึกไว้สำหรับเว็บไซต์นี้"
+  },
+  "notFillable": {
+    "message": "เปิดหน้า https เพื่อกรอก"
+  },
+  "noResults": {
+    "message": "ไม่พบรายการ"
+  },
+  "pwRequired": {
+    "message": "กรอกรหัสผ่านหลัก"
+  },
+  "wrongCreds": {
+    "message": "รหัสผ่านหลักหรือ Secret Key ไม่ถูกต้อง"
+  },
+  "csFillWith": {
+    "message": "กรอกด้วย gitpass"
+  },
+  "csNoLogins": {
+    "message": "ไม่มีข้อมูลเข้าสู่ระบบ gitpass สำหรับเว็บไซต์นี้"
+  },
+  "csLocked": {
+    "message": "gitpass ถูกล็อกอยู่ ปลดล็อกจากไอคอนบนแถบเครื่องมือ"
+  },
+  "extDesc": {
+    "message": "ระบบกรอกอัตโนมัติ gitpass คีย์อยู่ในโปรเซส gitpass-host ในเครื่องเท่านั้น"
+  },
+  "unlockTouchId": {
+    "message": "ปลดล็อกด้วย Touch ID"
+  },
+  "usePassword": {
+    "message": "ใช้รหัสผ่าน"
+  },
+  "unlockWithPassword": {
+    "message": "ปลดล็อกด้วยรหัสผ่าน"
+  },
+  "openAppToUnlock": {
+    "message": "เปิดแอป gitpass เพื่อปลดล็อก"
+  },
+  "appNotRunning": {
+    "message": "แอป gitpass ไม่ได้ทำงานอยู่"
+  },
+  "waitingForApp": {
+    "message": "กำลังรอ gitpass…"
+  },
+  "unlockReason": {
+    "message": "ปลดล็อกส่วนขยายเบราว์เซอร์ gitpass"
+  },
+  "unlockCancelled": {
+    "message": "ยกเลิกการปลดล็อกแล้ว"
+  },
+  "back": {
+    "message": "ย้อนกลับ"
+  },
+  "newItem": {
+    "message": "รายการใหม่"
+  },
+  "newLogin": {
+    "message": "การเข้าสู่ระบบใหม่"
+  },
+  "filterSuggested": {
+    "message": "คำแนะนำสำหรับเว็บนี้"
+  },
+  "filterAll": {
+    "message": "รายการทั้งหมด"
+  },
+  "filterFavorites": {
+    "message": "รายการโปรด"
+  },
+  "categories": {
+    "message": "หมวดหมู่"
+  },
+  "vaults": {
+    "message": "ห้องนิรภัย"
+  },
+  "catLogin": {
+    "message": "การเข้าสู่ระบบ"
+  },
+  "catNote": {
+    "message": "บันทึกที่ปลอดภัย"
+  },
+  "catCard": {
+    "message": "บัตรเครดิต"
+  },
+  "catIdentity": {
+    "message": "ข้อมูลประจำตัว"
+  },
+  "catApi": {
+    "message": "ข้อมูลรับรอง API"
+  },
+  "catDocument": {
+    "message": "เอกสาร"
+  },
+  "catSsh": {
+    "message": "คีย์ SSH"
+  },
+  "catWifi": {
+    "message": "Wi-Fi"
+  },
+  "noItems": {
+    "message": "ไม่มีรายการ"
+  },
+  "selectItem": {
+    "message": "เลือกรายการ"
+  },
+  "openFill": {
+    "message": "เปิดและกรอก"
+  },
+  "reveal": {
+    "message": "แสดง"
+  },
+  "lastEdited": {
+    "message": "แก้ไขล่าสุด"
+  },
+  "openInApp": {
+    "message": "เปิดใน gitpass"
+  },
+  "copyLink": {
+    "message": "คัดลอกลิงก์"
+  },
+  "linkCopied": {
+    "message": "คัดลอกลิงก์แล้ว"
+  },
+  "favorite": {
+    "message": "เพิ่มในรายการโปรด"
+  },
+  "unfavorite": {
+    "message": "นำออกจากรายการโปรด"
+  },
+  "more": {
+    "message": "เพิ่มเติม"
+  },
+  "close": {
+    "message": "ปิด"
+  },
+  "title": {
+    "message": "ชื่อ"
+  },
+  "website": {
+    "message": "เว็บไซต์"
+  },
+  "username": {
+    "message": "ชื่อผู้ใช้"
+  },
+  "password": {
+    "message": "รหัสผ่าน"
+  },
+  "generate": {
+    "message": "สร้าง"
+  },
+  "vault": {
+    "message": "ห้องนิรภัย"
+  },
+  "save": {
+    "message": "บันทึก"
+  },
+  "saved": {
+    "message": "บันทึกแล้ว"
+  },
+  "needUrlPw": {
+    "message": "ต้องระบุเว็บไซต์และรหัสผ่าน"
+  },
+  "csSuggest": {
+    "message": "แนะนำรหัสผ่านที่รัดกุม",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csSuggestSub": {
+    "message": "gitpass จะบันทึกให้เมื่อคุณส่งฟอร์ม",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csNoCards": {
+    "message": "ไม่มีบัตรใน gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csNoIdentities": {
+    "message": "ไม่มีข้อมูลประจำตัวใน gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csUnlock": {
+    "message": "ปลดล็อก gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csUnlockSub": {
+    "message": "ใช้ Touch ID หรือรหัสผ่านของคุณในแอป gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csOpenApp": {
+    "message": "เปิดแอป gitpass เพื่อปลดล็อก",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csUpdateQ": {
+    "message": "อัปเดตรหัสผ่านใน gitpass หรือไม่?",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csSaveQ": {
+    "message": "บันทึกข้อมูลเข้าสู่ระบบลงใน gitpass หรือไม่?",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csNoUser": {
+    "message": "(ไม่มีชื่อผู้ใช้)",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csNotNow": {
+    "message": "ไม่ใช่ตอนนี้",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csUpdate": {
+    "message": "อัปเดต",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csSave": {
+    "message": "บันทึก",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csUpdated": {
+    "message": "อัปเดตรหัสผ่านแล้ว",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csSaved": {
+    "message": "บันทึกลงใน gitpass แล้ว",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "csLockedShort": {
+    "message": "ปลดล็อก gitpass ก่อน แล้วลองอีกครั้ง",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "allSet": {
+    "message": "พร้อมใช้งานแล้ว",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "oneStepLeft": {
+    "message": "เหลืออีก 1 ขั้นตอน",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepsLeft": {
+    "message": "เหลืออีก {n} ขั้นตอน",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "checking": {
+    "message": "กำลังตรวจสอบ…",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "hostMissing": {
+    "message": "ไม่พบตัวช่วย gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "hostMissingHelp": {
+    "message": "ติดตั้งครั้งเดียวจากแอป gitpass (Settings → Browser extension → Install helper) หรือรันคำสั่งนี้ใน Terminal ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "thenRetry": {
+    "message": "จากนั้นกด Retry",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "appNotRunningHelp": {
+    "message": "เปิดแอป gitpass และลงชื่อเข้าใช้ จากนั้นกด Retry",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "connectedUnlocked": {
+    "message": "เชื่อมต่อแล้ว gitpass ปลดล็อกอยู่",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "connectedLocked": {
+    "message": "เชื่อมต่อแล้ว ปลดล็อกแอป gitpass เพื่อใช้ส่วนขยาย",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "tryDone": {
+    "message": "กรอกแล้ว การกรอกอัตโนมัติทำงานได้",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "settingsTitle": {
+    "message": "การตั้งค่า gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optAutolock": {
+    "message": "ล็อกอัตโนมัติตามแอป gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optAutolockBody": {
+    "message": "ล็อกส่วนขยายเมื่อแอปล็อก (ตั้งเวลาไม่ใช้งานได้ในแอป)",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optAutofill": {
+    "message": "คำแนะนำการกรอกอัตโนมัติบนหน้าเว็บ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optAutofillBody": {
+    "message": "แสดงเมนู gitpass ใต้ช่องเข้าสู่ระบบ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optSave": {
+    "message": "เสนอให้บันทึกข้อมูลเข้าสู่ระบบ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optSaveBody": {
+    "message": "ถามเพื่อบันทึกหรืออัปเดตรหัสผ่านหลังจากคุณลงชื่อเข้าใช้",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optShortcut": {
+    "message": "แป้นพิมพ์ลัด",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "optShortcutBody": {
+    "message": "เปิดป๊อปอัป gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "change": {
+    "message": "เปลี่ยน",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "welcomeTitle": {
+    "message": "ยินดีต้อนรับสู่ gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "welcomeSub": {
+    "message": "ปลดล็อกแอป gitpass ครั้งเดียว ส่วนขยายก็จะปลดล็อกด้วย",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepConnect": {
+    "message": "เชื่อมต่อกับแอป gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepConnectBody": {
+    "message": "ส่วนขยายสื่อสารกับแอปเดสก์ท็อป gitpass ผ่านตัวช่วยภายในเครื่องขนาดเล็ก (gitpass-host)",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "openApp": {
+    "message": "เปิดแอป gitpass",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepPin": {
+    "message": "ปักหมุดส่วนขยาย",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepPinBody": {
+    "message": "คลิกไอคอนจิ๊กซอว์ในแถบเครื่องมือ แล้วคลิกหมุดข้าง gitpass คุณยังเปิดได้ทุกเมื่อด้วย",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "pinDone": {
+    "message": "ปักหมุดแล้ว",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepTry": {
+    "message": "ลองกรอกอัตโนมัติ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "stepTryBody": {
+    "message": "นี่คือฟอร์มตัวอย่าง คลิกช่องชื่อผู้ใช้แล้วเลือกข้อมูลเข้าสู่ระบบจากเมนู gitpass หรือเปิดป๊อปอัปแล้วกด Fill จะไม่มีการส่งข้อมูลไปที่ใด",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "demoSignIn": {
+    "message": "ลงชื่อเข้าใช้",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "openSettings": {
+    "message": "การตั้งค่า",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "errLocked": {
+    "message": "gitpass ถูกล็อกอยู่ ปลดล็อกเพื่อดำเนินการต่อ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "errDenied": {
+    "message": "gitpass ปฏิเสธคำขอนี้",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "errNotFound": {
+    "message": "ไม่พบรายการ",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "errOrigin": {
+    "message": "รายการนี้ไม่ตรงกับเว็บไซต์ปัจจุบัน",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "errAppDown": {
+    "message": "แอป gitpass ไม่ได้ทำงานอยู่",
+    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  }
 }

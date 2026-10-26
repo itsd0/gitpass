@@ -26,12 +26,12 @@ impl AgentUi for TauriUi {
             let bio = app.status().map(|s| s.biometric_available).unwrap_or(false);
             let _ = h.emit("agent-unlock-request", serde_json::json!({"reason": reason, "biometric": bio}));
             if bio {
-                // Same Touch ID path as the unlock screen's button; on success reload the UI so it shows the vault.
+                // Same Touch ID path as the unlock screen's button; on success the UI updates in place (no reload).
                 let h2 = h.clone();
                 std::thread::spawn(move || match app.unlock_biometric("") {
                     Ok(_) => {
+                        // The frontend (src/lib/agentEvents.ts) listens for `unlocked` and switches to the vault in place.
                         let _ = h2.emit("unlocked", "agent");
-                        if let Some(w) = h2.get_webview_window("main") { let _ = w.eval("window.location.reload()"); }
                     }
                     // Touch ID cancelled/failed: the window is in front showing the password screen.
                     Err(e) => { let _ = h2.emit("agent-unlock-failed", format!("{e:#}")); }

@@ -28,3 +28,8 @@
 - [ ] my reviewer: ____  date: ____
 - [ ] th reviewer: ____  date: ____
 - [ ] Screenshots of each surface in each locale attached (Chrome `--lang=my` / `--lang=th`, Firefox `intl.locale.requested`).
+
+## v0.6 integration note
+The 49 keys added during the v0.6 merge (in-page `cs*` strings plus the welcome/options keys above) have draft my/th
+translations marked `"description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"` in `_locales/my|th/messages.json`.
+They are not reviewed by native speakers yet.

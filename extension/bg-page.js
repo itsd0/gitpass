@@ -83,7 +83,7 @@
         if (typeof a.item_id !== 'string') throw err('bad_request', 'item_id');
         if (!a.user_click) throw err('denied', 'card/identity fill needs an in-page click');
         const cmd = a.type === 'page:fill_card' ? 'fill_card' : 'fill_identity';
-        const r = await host(cmd, { item_id: a.item_id, origin, source: 'page' });
+        const r = await host(cmd, { item_id: a.item_id, origin, source: 'inpage_click' });
         return { origin, fields: (r && (r.fields || r)) || {} };
       }
       case 'page:generate': {
