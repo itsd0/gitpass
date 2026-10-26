@@ -24,7 +24,7 @@ export function NewItemModal(props: NewItemModalProps) {
       <div className="grid grid-cols-3 gap-2">{visible.map(c => (
         <button key={c.id} data-testid={`tile-${c.id}`} onClick={() => setView({ kind: 'form', category: c.id, initial: suggestion && c.id === 'login' ? suggestion : undefined })}
           className="flex h-[74px] flex-col justify-between rounded-lg border border-border bg-panel p-2.5 text-left text-sm hover:border-border hover:bg-hover">
-          <CategoryIcon category={c.id} size={24} /><span>{c.label}</span></button>))}</div>
+          <CategoryIcon category={c.id} size={36} /><span>{c.label}</span></button>))}</div>
       {!q && !more && (<button className="mt-2 flex w-full items-center justify-between rounded-lg border border-border bg-panel px-3 py-3 text-sm hover:bg-hover" onClick={() => setMore(true)}>
         More categories <span className="flex items-center gap-1"><CategoryIcon category="ssh_key" size={20} /><CategoryIcon category="wifi" size={20} /><ChevronDown size={14} /></span></button>)}
       {visible.length === 0 && !suggestion && <p className="py-6 text-center text-sm text-muted">No categories match “{q}”.</p>}

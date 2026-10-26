@@ -7,6 +7,7 @@ import { useApp } from '../../lib/store';
 import { cn } from '../../lib/utils';
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, Skeleton, toast } from '../../ui';
 import { CATEGORIES, ItemIcon, catMeta } from './categories';
+import { CategoryIcon } from '../../components/CategoryIcon';
 import { groupRows } from './grouping';
 import { useItemsUI } from './state';
 import { copyPrimarySecret, errText } from './actions';
@@ -53,17 +54,16 @@ export function ItemList() {
     }
   }
 
-  const CatIcon = category ? catMeta(category).icon : LayoutGrid;
   return (
     <div className="flex h-full flex-col bg-panel" data-testid="item-list">
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="sm" className="gap-1.5 text-sm"><CatIcon size={14} className="text-accent" />{category ? catMeta(category).label : 'All Categories'}<ChevronDown size={14} className="text-muted" /></Button>
+            <Button variant="ghost" size="sm" className="gap-1.5 text-sm">{category ? <CategoryIcon category={category} size={18} /> : <LayoutGrid size={14} className="text-accent" />}{category ? catMeta(category).label : 'All Categories'}<ChevronDown size={14} className="text-muted" /></Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuItem onSelect={() => setCategory(null)}><LayoutGrid size={14} />All Categories</DropdownMenuItem>
-            {CATEGORIES.map((c) => <DropdownMenuItem key={c.id} onSelect={() => setCategory(c.id)}><c.icon size={14} style={{ color: c.color }} />{c.label}</DropdownMenuItem>)}
+            {CATEGORIES.map((c) => <DropdownMenuItem key={c.id} onSelect={() => setCategory(c.id)}><CategoryIcon category={c.id} size={18} />{c.label}</DropdownMenuItem>)}
           </DropdownMenuContent>
         </DropdownMenu>
         <DropdownMenu>
