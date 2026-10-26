@@ -9,7 +9,9 @@ use crate::agent::peer_uid;
 use crate::agent::AgentUi;
 use crate::api::App;
 use anyhow::{anyhow, bail, Result};
-use gitpass_core::ssh::{handle_message, session_identities, KeyProvider};
+#[cfg(unix)]
+use gitpass_core::ssh::handle_message;
+use gitpass_core::ssh::{session_identities, KeyProvider};
 #[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
