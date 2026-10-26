@@ -1,0 +1,1 @@
+{"default":{"identifier":"default","description":"Main + quick-access windows: core defaults (+ hide for quick-access); all vault access goes through app commands","local":true,"windows":["main","quick-access"],"permissions":["core:default","core:window:allow-hide"]}}
