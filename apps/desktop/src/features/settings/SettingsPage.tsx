@@ -11,9 +11,11 @@ import { useApp } from '../../lib/store';
 import { useSettings } from './useSettings';
 import { SyncPanel } from './SyncPanel';
 import { UpdateRow } from './UpdateRow';
+import { getAppVersion } from '../../lib/updater';
 
 const errMsg = (e: unknown) => String((e as Error)?.message ?? e);
-export const APP_VERSION = '0.5.0';
+/** Build-time fallback; About shows the running app's version from getAppVersion(). */
+export const APP_VERSION = __APP_VERSION__;
 export const REPO_URL = 'https://github.com/itsd0/gitpass';
 export const ISSUES_URL = `${REPO_URL}/issues`;
 const TABS = [{ id: 'general', icon: SlidersHorizontal }, { id: 'security', icon: Lock }, { id: 'devices', icon: Laptop }, { id: 'sync', icon: RefreshCw }, { id: 'ssh', icon: Terminal }, { id: 'about', icon: Info }] as const;
@@ -132,10 +134,11 @@ function SshAgent() {
 }
 
 function About() {
-  const t = useT();
+  const t = useT(); const [ver, setVer] = useState(APP_VERSION);
+  useEffect(() => { let on = true; getAppVersion().then((v) => on && setVer(v)); return () => { on = false; }; }, []);
   return <><div className="flex items-center gap-3 py-4"><Logo size={48} />
     <div><div className="text-lg font-semibold">gitpass</div><div className="text-sm text-muted">{t('about.license')}</div></div></div>
-    <Row label={t('about.version')}><span className="font-mono text-sm">{APP_VERSION}</span></Row>
+    <Row label={t('about.version')}><span className="font-mono text-sm">{ver}</span></Row>
     <UpdateRow />
     <Row label={t('about.repo')}><a className="inline-flex items-center gap-1 text-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" href={REPO_URL} target="_blank" rel="noreferrer">{REPO_URL.replace('https://', '')}<ExternalLink className="h-3 w-3" aria-hidden /></a></Row>
     <Row label={t('about.issues')}><a className="text-sm text-accent hover:underline" href={ISSUES_URL} target="_blank" rel="noreferrer">{t('about.issues')}</a></Row></>;

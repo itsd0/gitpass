@@ -44,6 +44,7 @@ export const th: Partial<Record<Key, string>> = {
   'sync.remote': 'รีโมต', 'sync.none': 'ยังไม่ได้เชื่อมต่อ', 'sync.lastSync': 'ซิงค์ล่าสุด', 'sync.never': 'ไม่เคย', 'sync.ahead': 'นำหน้า {n}', 'sync.behind': 'ตามหลัง {n}', 'sync.dirty': 'มีการเปลี่ยนแปลงที่ยังไม่คอมมิต',
   'sync.now': 'ซิงค์', 'sync.merge': 'ซิงค์แบบผสาน', 'sync.result': 'ผลลัพธ์',
   'about.version': 'เวอร์ชัน', 'about.repo': 'ซอร์สโค้ด', 'about.issues': 'รายงานปัญหา', 'about.license': 'ตัวจัดการรหัสผ่านโอเพนซอร์สที่ทำงานบน git',
+  'update.title': 'อัปเดต', 'update.check': 'ตรวจหาอัปเดต', 'update.checking': 'กำลังตรวจหาอัปเดต…', 'update.none': 'คุณใช้เวอร์ชันล่าสุดอยู่แล้ว', 'update.available': 'มีเวอร์ชัน {version} ให้อัปเดต', 'update.install': 'ติดตั้งและรีสตาร์ต', 'update.installing': 'กำลังดาวน์โหลดอัปเดต… {pct}', 'update.error': 'ตรวจหาอัปเดตไม่สำเร็จ: {msg}', 'update.unsupported': 'อัปเดตใช้ได้เฉพาะในแอปเดสก์ท็อป',
   'palette.placeholder': 'ค้นหารายการหรือพิมพ์คำสั่ง…', 'palette.commands': 'คำสั่ง', 'palette.items': 'รายการ', 'palette.empty': 'ไม่พบผลลัพธ์สำหรับ “{q}”',
   'palette.label': 'แถบคำสั่ง', 'cmd.newItem': 'รายการใหม่', 'cmd.lock': 'ล็อก gitpass', 'cmd.watchtower': 'ไปที่ Watchtower', 'cmd.settings': 'ไปที่การตั้งค่า', 'cmd.people': 'ไปที่บุคคล',
   'cmd.toggleTheme': 'สลับธีม', 'cmd.sync': 'ซิงค์ตอนนี้', 'cmd.shortcuts': 'แป้นพิมพ์ลัด', 'cmd.home': 'ไปที่หน้าแรก',

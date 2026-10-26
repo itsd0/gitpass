@@ -17,7 +17,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use zeroize::Zeroizing;
 
-pub const VERSION: &str = "0.5.0-core";
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const CLIPBOARD_CLEAR_SECS: u64 = 30;
 
 /// Default vault folder: ~/.gitpass

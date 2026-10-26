@@ -43,6 +43,7 @@ export const my: Partial<Record<Key, string>> = {
   'devices.done': 'စက်ကို ရုပ်သိမ်းပြီးပါပြီ', 'devices.empty': 'စက် မတွေ့ပါ။',
   'sync.remote': 'Remote', 'sync.none': 'မချိတ်ဆက်ရသေးပါ', 'sync.lastSync': 'နောက်ဆုံး ချိန်ကိုက်ချိန်', 'sync.never': 'တစ်ခါမျှ မရှိ', 'sync.now': 'ချိန်ကိုက်ရန်', 'sync.merge': 'ပေါင်းစပ်၍ ချိန်ကိုက်ရန်', 'sync.result': 'ရလဒ်',
   'about.version': 'ဗားရှင်း', 'about.repo': 'ရင်းမြစ်ကုဒ်', 'about.issues': 'ပြဿနာ တင်ပြရန်',
+  'update.title': 'အပ်ဒိတ်များ', 'update.check': 'အပ်ဒိတ် စစ်ရန်', 'update.checking': 'အပ်ဒိတ် စစ်နေသည်…', 'update.none': 'နောက်ဆုံးဗားရှင်းကို သုံးနေပါပြီ။', 'update.available': 'ဗားရှင်း {version} ရနိုင်ပါပြီ။', 'update.install': 'ထည့်သွင်းပြီး ပြန်စရန်', 'update.installing': 'အပ်ဒိတ် ဒေါင်းလုဒ်လုပ်နေသည်… {pct}', 'update.error': 'အပ်ဒိတ် စစ်ဆေးမှု မအောင်မြင်ပါ- {msg}', 'update.unsupported': 'အပ်ဒိတ်များကို desktop app တွင်သာ ရနိုင်သည်။',
   'palette.placeholder': 'အရာများ ရှာပါ သို့မဟုတ် command ရိုက်ပါ…', 'palette.commands': 'Command များ', 'palette.items': 'အရာများ', 'palette.empty': '“{q}” အတွက် ရလဒ် မရှိပါ',
   'cmd.newItem': 'အရာအသစ်', 'cmd.lock': 'gitpass ကို သော့ခတ်ရန်', 'cmd.settings': 'ဆက်တင်များသို့', 'cmd.people': 'လူများသို့', 'cmd.toggleTheme': 'အပြင်အဆင် ပြောင်းရန်', 'cmd.sync': 'ယခု ချိန်ကိုက်ရန်', 'cmd.shortcuts': 'ကီးဘုတ် ဖြတ်လမ်းများ', 'cmd.home': 'ပင်မသို့',
   'shortcuts.title': 'ကီးဘုတ် ဖြတ်လမ်းများ',
