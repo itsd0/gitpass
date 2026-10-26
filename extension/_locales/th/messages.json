@@ -106,5 +106,140 @@
  },
  "extDesc": {
   "message": "ระบบกรอกอัตโนมัติ gitpass คีย์อยู่ในโปรเซส gitpass-host ในเครื่องเท่านั้น"
+ },
+ "unlockTouchId": {
+  "message": "ปลดล็อกด้วย Touch ID"
+ },
+ "usePassword": {
+  "message": "ใช้รหัสผ่าน"
+ },
+ "unlockWithPassword": {
+  "message": "ปลดล็อกด้วยรหัสผ่าน"
+ },
+ "openAppToUnlock": {
+  "message": "เปิดแอป gitpass เพื่อปลดล็อก"
+ },
+ "appNotRunning": {
+  "message": "แอป gitpass ไม่ได้ทำงานอยู่"
+ },
+ "waitingForApp": {
+  "message": "กำลังรอ gitpass…"
+ },
+ "unlockReason": {
+  "message": "ปลดล็อกส่วนขยายเบราว์เซอร์ gitpass"
+ },
+ "unlockCancelled": {
+  "message": "ยกเลิกการปลดล็อกแล้ว"
+ },
+ "back": {
+  "message": "ย้อนกลับ"
+ },
+ "newItem": {
+  "message": "รายการใหม่"
+ },
+ "newLogin": {
+  "message": "การเข้าสู่ระบบใหม่"
+ },
+ "filterSuggested": {
+  "message": "คำแนะนำสำหรับเว็บนี้"
+ },
+ "filterAll": {
+  "message": "รายการทั้งหมด"
+ },
+ "filterFavorites": {
+  "message": "รายการโปรด"
+ },
+ "categories": {
+  "message": "หมวดหมู่"
+ },
+ "vaults": {
+  "message": "ห้องนิรภัย"
+ },
+ "catLogin": {
+  "message": "การเข้าสู่ระบบ"
+ },
+ "catNote": {
+  "message": "บันทึกที่ปลอดภัย"
+ },
+ "catCard": {
+  "message": "บัตรเครดิต"
+ },
+ "catIdentity": {
+  "message": "ข้อมูลประจำตัว"
+ },
+ "catApi": {
+  "message": "ข้อมูลรับรอง API"
+ },
+ "catDocument": {
+  "message": "เอกสาร"
+ },
+ "catSsh": {
+  "message": "คีย์ SSH"
+ },
+ "catWifi": {
+  "message": "Wi-Fi"
+ },
+ "noItems": {
+  "message": "ไม่มีรายการ"
+ },
+ "selectItem": {
+  "message": "เลือกรายการ"
+ },
+ "openFill": {
+  "message": "เปิดและกรอก"
+ },
+ "reveal": {
+  "message": "แสดง"
+ },
+ "lastEdited": {
+  "message": "แก้ไขล่าสุด"
+ },
+ "openInApp": {
+  "message": "เปิดใน gitpass"
+ },
+ "copyLink": {
+  "message": "คัดลอกลิงก์"
+ },
+ "linkCopied": {
+  "message": "คัดลอกลิงก์แล้ว"
+ },
+ "favorite": {
+  "message": "เพิ่มในรายการโปรด"
+ },
+ "unfavorite": {
+  "message": "นำออกจากรายการโปรด"
+ },
+ "more": {
+  "message": "เพิ่มเติม"
+ },
+ "close": {
+  "message": "ปิด"
+ },
+ "title": {
+  "message": "ชื่อ"
+ },
+ "website": {
+  "message": "เว็บไซต์"
+ },
+ "username": {
+  "message": "ชื่อผู้ใช้"
+ },
+ "password": {
+  "message": "รหัสผ่าน"
+ },
+ "generate": {
+  "message": "สร้าง"
+ },
+ "vault": {
+  "message": "ห้องนิรภัย"
+ },
+ "save": {
+  "message": "บันทึก"
+ },
+ "saved": {
+  "message": "บันทึกแล้ว"
+ },
+ "needUrlPw": {
+  "message": "ต้องระบุเว็บไซต์และรหัสผ่าน"
  }
 }

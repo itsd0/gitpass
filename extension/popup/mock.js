@@ -1,0 +1,78 @@
+// Mock backend for popup.html?mock=1 (fake data only; used for previews and screenshots).
+// Extra params: &view=locked|appdown|nohost  &item=<id>  &filter=<filter id>
+(function (root) {
+  'use strict';
+  const P = new URLSearchParams((root.location && root.location.search) || '');
+  if (P.get('mock') !== '1') return;
+  const now = Date.now();
+  const V = [{ id: 'v1', name: 'Personal', item_count: 0 }, { id: 'v2', name: 'Work', item_count: 0 }];
+  const raw = [
+    ['v1', 'login', 'GitHub', 'naing@example.com', 'https://github.com', true, true],
+    ['v2', 'login', 'GitHub (work)', 'naing-work', 'https://github.com', true, false],
+    ['v1', 'login', 'Google', 'naing.demo@gmail.com', 'https://accounts.google.com', false, true],
+    ['v1', 'login', 'Netflix', 'family@example.com', 'https://netflix.com', false, false],
+    ['v2', 'login', 'Vercel', 'naing@acme.dev', 'https://vercel.com', true, false],
+    ['v1', 'login', 'Amazon', 'naing@example.com', 'https://amazon.com', false, false],
+    ['v1', 'login', 'Grab', '+66 81 234 5678', 'https://grab.com', false, false],
+    ['v2', 'login', 'AWS Console', 'admin', 'https://aws.amazon.com', false, true],
+    ['v1', 'credit_card', 'Visa Platinum', '•••• 4242', null, true, false],
+    ['v1', 'credit_card', 'Mastercard', '•••• 5100', null, false, false],
+    ['v1', 'identity', 'Naing Oo', 'Naing Oo', null, false, false],
+    ['v1', 'secure_note', 'Recovery codes', 'Updated last week', null, false, false],
+    ['v2', 'api_credential', 'OpenAI API', 'sk-…', null, false, false],
+    ['v2', 'document', 'Passport scan', 'passport.pdf · 1.2 MB', null, false, false],
+    ['v2', 'ssh_key', 'Deploy key', 'ed25519', null, false, false],
+    ['v1', 'wifi', 'Home Wi-Fi', 'NaingHome-5G', null, false, false],
+  ];
+  for (let i = 1; i <= 30; i++) raw.push(['v1', 'login', 'Demo site ' + i, 'user' + i + '@example.com', 'https://demo' + i + '.example', false, false]);
+  const items = raw.map(([v, category, title, subtitle, url, favorite, has_totp], i) => ({
+    id: v + ':i' + i, vault_id: v, vault_name: V.find((x) => x.id === v).name, category, title, subtitle,
+    url: url || undefined, favicon_host: url ? new URL(url).hostname : undefined, has_totp, favorite, updated_at: now - i * 3600e3,
+  }));
+  for (const v of V) v.item_count = items.filter((i) => i.vault_id === v.id).length;
+  const F = (name, label, kind, value, concealed) => ({ name, label, kind, concealed: !!concealed, value: concealed ? undefined : value });
+  const secrets = {};
+  function detail(it) {
+    let fields;
+    switch (it.category) {
+      case 'login': fields = [F('username', 'username', 'text', it.subtitle), F('password', 'password', 'password', null, true), F('url', 'website', 'url', it.url)];
+        secrets.password = 'c0rrect-Horse-battery!'; if (it.has_totp) fields.push(F('totp', 'one-time password', 'totp', null, true)); break;
+      case 'credit_card': fields = [F('cardholder', 'cardholder name', 'text', 'NAING OO'), F('number', 'number', 'card_number', null, true), F('expiry', 'expiry date', 'date', '08/2029'), F('cvv', 'verification number', 'password', null, true), F('type', 'type', 'text', 'Visa')];
+        secrets.number = '4242424242424242'; secrets.cvv = '123'; break;
+      case 'identity': fields = [F('first', 'first name', 'text', 'Naing'), F('last', 'last name', 'text', 'Oo'), F('email', 'email', 'email', 'naing@example.com'), F('phone', 'phone', 'phone', '+66 81 234 5678'), F('birth', 'birth date', 'date', '1990-04-12')]; break;
+      case 'secure_note': fields = []; break;
+      case 'api_credential': fields = [F('username', 'username', 'text', 'naing'), F('credential', 'credential', 'password', null, true), F('host', 'hostname', 'url', 'https://api.openai.com')]; secrets.credential = 'sk-demo-1234567890'; break;
+      case 'document': fields = [F('file', 'file', 'text', 'passport.pdf (1.2 MB)')]; break;
+      case 'ssh_key': fields = [F('public', 'public key', 'text', 'ssh-ed25519 AAAAC3Nza…demo naing@mac'), F('private', 'private key', 'password', null, true), F('fp', 'fingerprint', 'text', 'SHA256:x2Tq…9fA')]; secrets.private = '-----BEGIN OPENSSH PRIVATE KEY-----demo'; break;
+      case 'wifi': fields = [F('ssid', 'network name', 'text', 'NaingHome-5G'), F('password', 'wireless password', 'password', null, true), F('security', 'security', 'text', 'WPA3')]; secrets.password = 'wifi-demo-pass'; break;
+    }
+    return { ...it, fields, notes: it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : '', tags: ['demo'], created_at: now - 864e5 * 30 };
+  }
+  let unlocked = !['locked', 'appdown', 'nohost'].includes(P.get('view'));
+  const appRunning = P.get('view') !== 'appdown';
+  const ok = (r) => new Promise((res) => setTimeout(() => res(r), 20));
+  const err = (code) => Promise.reject(Object.assign(new Error(code), { code }));
+  root.__gitpassMockParams = P;
+  root.__gitpassMock = function (msg) {
+    const t = msg.type.replace(/^popup:/, '');
+    if (P.get('view') === 'nohost') return err('Specified native messaging host not found.');
+    if (t === 'status') return ok({ unlocked, app_running: appRunning, account: { name: 'Naing Oo', email: 'naing@example.com', vault_count: 2 }, idle_timeout_secs: 600 });
+    if (t === 'request_unlock' || t === 'unlock') { unlocked = true; return ok({ unlocked: true }); }
+    if (t === 'open_in_app') return ok({});
+    if (!unlocked) return err('locked');
+    switch (t) {
+      case 'lock': unlocked = false; return ok({ unlocked: false });
+      case 'list_vaults': return ok({ vaults: V });
+      case 'list_items': return ok({ items });
+      case 'match_active': return ok({ origin: 'https://github.com', items: items.filter((i) => i.favicon_host === 'github.com') });
+      case 'get_item': return ok({ item: detail(items.find((i) => i.id === msg.item_id)) });
+      case 'reveal': detail(items.find((i) => i.id === msg.item_id)); return ok({ value: secrets[msg.field] || '' });
+      case 'totp': { const s = Math.floor(Date.now() / 1000); return ok({ code: String(100000 + (Math.floor(s / 30) * 7919) % 900000), remaining: 30 - (s % 30), period: 30 }); }
+      case 'generate': return ok({ password: 'Xk7#pQ2m-Vr9!tLz4wNb' });
+      case 'save_login': return ok({ item_id: 'v1:new' });
+      case 'set_favorite': { const it = items.find((i) => i.id === msg.item_id); it.favorite = !!msg.favorite; return ok({ ok: true }); }
+      case 'open_fill': case 'fill_active': return ok(true);
+    }
+    return err('bad_request');
+  };
+})(typeof globalThis !== 'undefined' ? globalThis : this);

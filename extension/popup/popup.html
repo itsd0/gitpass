@@ -3,57 +3,59 @@
 <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-<!-- Host not connected -->
-<section id="nohost" class="view hidden">
-  <div class="hero"><img src="../icons/logo64.png" alt="" class="logo-lg"><h1 data-i18n="hostTitle">gitpass helper not connected</h1></div>
+<!-- Native host missing -->
+<section id="nohost" class="view center-view hidden">
+  <img src="../icons/logo64.png" alt="" class="logo-lg">
+  <h1 data-i18n="hostTitle">gitpass helper not connected</h1>
   <p class="muted" data-i18n="hostBody">The browser can't reach the local gitpass-host. Install it once in Terminal, then reload this extension:</p>
   <pre class="code" id="hostCmd"></pre>
   <p class="err" id="hostErr"></p>
-  <button id="retry" class="btn btn-primary w-full" data-i18n="retry">Retry</button>
+  <button id="retry" class="btn btn-primary" data-i18n="retry">Retry</button>
 </section>
 
-<!-- Locked -->
-<section id="locked" class="view hidden">
-  <div class="hero"><img src="../icons/logo64.png" alt="" class="logo-lg"><h1 data-i18n="unlockTitle">Unlock gitpass</h1></div>
-  <form id="unlockForm" autocomplete="off">
-    <label class="lbl" for="pw" data-i18n="masterPassword">Master password</label>
-    <div class="field"><input id="pw" type="password" autocomplete="off" spellcheck="false" autofocus>
+<!-- Locked / app not running -->
+<section id="locked" class="view center-view hidden">
+  <img src="../icons/logo64.png" alt="" class="logo-lg">
+  <h1 id="lockedTitle" data-i18n="unlockTitle">Unlock gitpass</h1>
+  <p class="muted" id="lockedSub"></p>
+  <div id="primaryBox" class="stack">
+    <button id="touchBtn" class="btn btn-primary btn-lg"><span class="ic" id="touchIc"></span><span id="touchLbl" data-i18n="unlockTouchId">Unlock with Touch ID</span></button>
+    <button id="usePw" class="btn btn-link" data-i18n="usePassword">Use password</button>
+  </div>
+  <form id="unlockForm" class="stack hidden" autocomplete="off">
+    <div class="field"><input id="pw" type="password" autocomplete="off" spellcheck="false" data-i18n-ph="masterPassword" placeholder="Master password">
       <button type="button" class="eye" data-for="pw" aria-label="Show"></button></div>
-    <div id="skRow">
-      <label class="lbl" for="sk" data-i18n="secretKey">Secret Key</label>
-      <div class="field"><input id="sk" type="password" placeholder="A3-XXXXXX-…" autocomplete="off" spellcheck="false">
-        <button type="button" class="eye" data-for="sk" aria-label="Show"></button></div>
-      <p class="hint" data-i18n="skHint">Used once to unlock. It's kept only in memory while unlocked and never saved.</p>
-    </div>
-    <p class="err" id="unlockErr" role="alert"></p>
-    <button id="unlockBtn" class="btn btn-primary w-full" type="submit"><span class="spinner hidden"></span><span data-i18n="unlock">Unlock</span></button>
-    <p class="hint center" data-i18n="touchIdSoon">Touch ID unlock is coming soon. Your Secret Key is in your Emergency Kit.</p>
+    <div id="skRow" class="field"><input id="sk" type="password" placeholder="Secret Key (A3-XXXXXX-…)" autocomplete="off" spellcheck="false">
+      <button type="button" class="eye" data-for="sk" aria-label="Show"></button></div>
+    <button id="unlockBtn" class="btn btn-primary" type="submit"><span class="spinner hidden"></span><span data-i18n="unlock">Unlock</span></button>
+    <button id="backTouch" type="button" class="btn btn-link" data-i18n="back">Back</button>
   </form>
+  <p class="err" id="unlockErr" role="alert"></p>
 </section>
 
-<!-- Unlocked -->
+<!-- Unlocked: 2 panes -->
 <section id="unlocked" class="view hidden">
   <header class="topbar">
-    <img src="../icons/logo64.png" alt="gitpass" class="logo-sm">
-    <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
-      <input id="q" type="search" data-i18n-ph="searchPh" placeholder="Search vault"></div>
-    <button id="lock" class="icon-btn" data-i18n-title="lock" title="Lock"><svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg></button>
+    <div class="acct" id="acct" title=""><img src="../icons/logo64.png" alt="gitpass" class="logo-sm"><span id="acctName">gitpass</span></div>
+    <div class="search"><span class="ic" id="searchIc"></span><input id="q" type="search" data-i18n-ph="searchPh" placeholder="Search vault" autocomplete="off"></div>
+    <button id="genBtn" class="icon-btn" data-i18n-title="generator" title="Password generator"></button>
+    <button id="newBtn" class="icon-btn" data-i18n-title="newItem" title="New item"></button>
+    <button id="lock" class="icon-btn" data-i18n-title="lock" title="Lock"></button>
   </header>
-  <p class="err" id="err" role="alert"></p>
-  <div class="sec-h"><span data-i18n="forThisSite">For this site</span><small id="origin"></small></div>
-  <div id="matches" class="list"></div>
-  <div id="resultsWrap" class="hidden"><div class="sec-h"><span data-i18n="searchResults">Search results</span></div><div id="results" class="list"></div></div>
-  <details class="panel" id="genPanel">
-    <summary data-i18n="generator">Password generator</summary>
-    <div class="gen-out"><code id="genOut"></code><button id="regen" class="icon-btn" data-i18n-title="regenerate" title="Regenerate"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.3-5.6M20 4v4h-4"/></svg></button></div>
-    <div class="gen-row"><label data-i18n="length">Length</label><input id="len" type="range" min="8" max="64" value="20"><span id="lenV">20</span></div>
-    <div class="gen-row"><label class="tog"><input type="checkbox" id="digits" checked><span data-i18n="digits">Digits</span></label>
-      <label class="tog"><input type="checkbox" id="symbols" checked><span data-i18n="symbols">Symbols</span></label></div>
-    <button id="gen" class="btn btn-primary w-full" data-i18n="copy">Copy</button>
-  </details>
+  <div class="panes">
+    <aside class="left">
+      <div class="filter-wrap"><select id="filter" aria-label="Filter"></select></div>
+      <div id="list" class="list" tabindex="-1" role="listbox"><div id="listInner"></div></div>
+    </aside>
+    <main class="right" id="detail"></main>
+  </div>
+  <!-- Overlay panels -->
+  <div id="panel" class="panel hidden" role="dialog"></div>
 </section>
 <div id="toast" class="toast hidden"></div>
 <script src="../lib/i18n.js"></script>
-<script src="../lib/icons.js"></script>
+<script src="icons.js"></script>
+<script src="view.js"></script>
+<script src="mock.js"></script>
 <script src="popup.js"></script>
 </body></html>
