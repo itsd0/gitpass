@@ -1389,6 +1389,7 @@ dependencies = [
  "dirs 5.0.1",
  "gitpass-core",
  "psl",
+ "rand",
  "serde",
  "serde_json",
  "url",
