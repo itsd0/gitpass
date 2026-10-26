@@ -82,4 +82,4 @@ pub fn prune_backups(root: &Path, keep: usize) -> Result<()> {
     Ok(())
 }
 
-pub const GITIGNORE: &str = "secret.key\n*.tmp\n.gitpass.lock\n.gitpass-state.json\n.gitpass-device.json\n.gitpass-backup-*/\n.gitpass-migrate-tmp/\n.gitpass-migrating\n";
+pub const GITIGNORE: &str = "secret.key\n*.tmp\n.gitpass.lock\n.gitpass-state.json\n.gitpass-device.json\n.gitpass-device-key.json\n.gitpass-revoke-pending.json\n.gitpass-backup-*/\n.gitpass-migrate-tmp/\n.gitpass-migrating\n";

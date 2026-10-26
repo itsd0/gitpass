@@ -5,17 +5,23 @@
 //! Its blake3 hash is bound into the authenticated manifest (`devices_hash`).
 //! The local device id lives in git-ignored `.gitpass-device.json`.
 //!
-//! LIMITATION: revocation is a policy marker only. It does NOT re-encrypt anything; a revoked device
-//! that still has the master password + Secret Key (or a copy of the Account Key) can decrypt data.
-//! After revoking a compromised device run `gitpass rotate-account-key --with-vault-keys` and change the
-//! master password / Secret Key.
+//! Format v4: each device has an X25519 keypair. The private key stays in the git-ignored
+//! `.gitpass-device-key.json`, encrypted under a key derived from the AUK (master password + Secret Key);
+//! the public key is recorded in devices.enc (registry format 4 once any device has a key).
+//! `Session::revoke_device_and_rotate` rotates the Account Key and every Vault Key so a revoked device
+//! cannot read FUTURE changes. It cannot claw back data/keys the device already copied, and if the device
+//! knew the master password + Secret Key those must be rotated too (`--rotate-credentials`).
 use crate::crypto::{hkdf32, open, seal, Envelope, Key32};
 use crate::store::{read_json, write_json};
 use anyhow::{bail, Result};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-pub const DEVICES_FORMAT: u32 = 3;
+/// Highest registry format understood.
+pub const DEVICES_FORMAT: u32 = 4;
+/// Registry format written while no device has a public key (keeps v3 readers happy).
+pub const DEVICES_FORMAT_V3: u32 = 3;
+pub const LOCAL_DEVICE_KEY_FILE: &str = ".gitpass-device-key.json";
 pub const DEVICES_FILE: &str = "devices.enc";
 pub const LOCAL_DEVICE_FILE: &str = ".gitpass-device.json";
 
@@ -29,6 +35,9 @@ pub struct Device {
     pub revoked: bool,
     #[serde(default)]
     pub revoked_at: Option<String>,
+    /// v4: device X25519 public key (base64). Absent for v3 devices.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub public_key: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -37,7 +46,7 @@ pub struct DeviceRegistry {
     pub devices: Vec<Device>,
 }
 impl Default for DeviceRegistry {
-    fn default() -> Self { DeviceRegistry { format: DEVICES_FORMAT, devices: vec![] } }
+    fn default() -> Self { DeviceRegistry { format: DEVICES_FORMAT_V3, devices: vec![] } }
 }
 
 impl DeviceRegistry {
@@ -58,7 +67,7 @@ impl DeviceRegistry {
         match self.devices.iter_mut().find(|d| d.id == id) {
             Some(d) => { if !d.revoked { d.last_seen_at = now.into(); } }
             None => self.devices.push(Device { id: id.into(), name: name.into(), created_at: now.into(),
-                last_seen_at: now.into(), revoked: false, revoked_at: None }),
+                last_seen_at: now.into(), revoked: false, revoked_at: None, public_key: None }),
         }
     }
 }
@@ -78,7 +87,9 @@ pub fn open_registry(account_key: &Key32, account_id: &str, env: &Envelope) -> R
 }
 /// Seal + atomic write of devices.enc; returns blake3 of the bytes written.
 pub fn write_registry(root: &Path, account_key: &Key32, account_id: &str, r: &DeviceRegistry) -> Result<String> {
-    write_json(&root.join(DEVICES_FILE), &seal_registry(account_key, account_id, r)?)
+    let mut r = r.clone();
+    r.format = if r.devices.iter().any(|d| d.public_key.is_some()) { DEVICES_FORMAT } else { r.format.min(DEVICES_FORMAT_V3) };
+    write_json(&root.join(DEVICES_FILE), &seal_registry(account_key, account_id, &r)?)
 }
 /// Read devices.enc; Ok(None) if it does not exist (pre-v3 vault).
 pub fn read_registry(root: &Path, account_key: &Key32, account_id: &str) -> Result<Option<DeviceRegistry>> {
@@ -103,16 +114,52 @@ pub fn local_device_id(root: &Path) -> Result<String> {
     ensure_gitignored(root)?;
     Ok(id)
 }
-fn ensure_gitignored(root: &Path) -> Result<()> {
+fn ensure_gitignored(root: &Path) -> Result<()> { ensure_ignored(root, LOCAL_DEVICE_FILE) }
+/// Append `name` to <root>/.gitignore if it is not listed yet.
+pub fn ensure_ignored(root: &Path, name: &str) -> Result<()> {
     let p = root.join(".gitignore");
     let cur = std::fs::read_to_string(&p).unwrap_or_default();
-    if !cur.lines().any(|l| l.trim() == LOCAL_DEVICE_FILE) {
+    if !cur.lines().any(|l| l.trim() == name) {
         let mut n = cur;
         if !n.is_empty() && !n.ends_with('\n') { n.push('\n'); }
-        n.push_str(LOCAL_DEVICE_FILE); n.push('\n');
+        n.push_str(name); n.push('\n');
         crate::fsutil::atomic_write(&p, n.as_bytes())?;
     }
     Ok(())
+}
+
+// ---------- local device keypair (v4) ----------
+#[derive(Serialize, Deserialize)]
+struct LocalDeviceKey { format: u32, device_id: String, public: String, envelope: Envelope }
+fn device_key_aad(device_id: &str, public: &str) -> Vec<u8> { format!("gitpass/device-key/v4|{device_id}|{public}").into_bytes() }
+
+/// Load this device's X25519 keypair, or create + store one. `kek` is derived from the AUK, so the file is
+/// useless without the master password + Secret Key. If it cannot be decrypted (e.g. credentials changed
+/// on another device) a fresh keypair is generated; the returned bool is true when a new key was made.
+pub fn load_or_create_device_key(root: &Path, device_id: &str, kek: &Key32) -> Result<(crate::keys::KeyPair, bool)> {
+    use base64::{engine::general_purpose::STANDARD as B64, Engine};
+    let p = root.join(LOCAL_DEVICE_KEY_FILE);
+    if let Ok(l) = read_json::<LocalDeviceKey>(&p) {
+        if l.device_id == device_id {
+            if let Ok(pt) = open(kek, &l.envelope, &device_key_aad(device_id, &l.public)) {
+                if let Ok(b) = <[u8; 32]>::try_from(&pt[..]) {
+                    let kp = crate::keys::KeyPair::from_secret_bytes(b);
+                    if B64.encode(kp.public) == l.public { return Ok((kp, false)); }
+                }
+            }
+        }
+    }
+    let kp = crate::keys::KeyPair::generate();
+    store_device_key(root, device_id, kek, &kp)?;
+    Ok((kp, true))
+}
+/// (Re)write the local device key file under `kek` (atomic).
+pub fn store_device_key(root: &Path, device_id: &str, kek: &Key32, kp: &crate::keys::KeyPair) -> Result<()> {
+    use base64::{engine::general_purpose::STANDARD as B64, Engine};
+    let public = B64.encode(kp.public);
+    let env = seal(kek, &kp.secret_bytes()[..], &device_key_aad(device_id, &public))?;
+    write_json(&root.join(LOCAL_DEVICE_KEY_FILE), &LocalDeviceKey { format: 4, device_id: device_id.into(), public, envelope: env })?;
+    ensure_ignored(root, LOCAL_DEVICE_KEY_FILE)
 }
 
 /// Default device name: $GITPASS_DEVICE_NAME, else hostname, else "unknown-device".
