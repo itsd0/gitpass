@@ -571,3 +571,20 @@ fn card_brand_and_labels() {
     assert_eq!(card_mask("4000123412347575"), "•••• •••• •••• 7575");
     assert!(!card_label("4000123412347575").contains("4000"));
 }
+
+#[test]
+fn card_subtitle_with_cardholder_first_and_imported_labels() {
+    let e = env();
+    let mk = |fields: Vec<Field>| e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "C".into(), url: None,
+        sections: vec![Section { id: "main".into(), title: None, fields }], notes: None, tags: None, favorite: None }).unwrap();
+    // template order: cardholder name comes before the number
+    let a = mk(vec![Field { id: "cardholder".into(), label: "cardholder name".into(), kind: FieldKind::Text, value: Some("Demo User".into()), masked: None },
+                    Field { id: "type".into(), label: "type".into(), kind: FieldKind::Text, value: Some("Visa".into()), masked: None },
+                    fld("number", FieldKind::Concealed, Some("4000 1234 5678 4432")), fld("cvv", FieldKind::Concealed, Some("999"))]);
+    assert_eq!(a.subtitle, "Visa •••• 4432");
+    // imported card: random field id, label "Card Number"
+    let b = mk(vec![Field { id: "f_x1".into(), label: "Card Number".into(), kind: FieldKind::Concealed, value: Some("5555555555554444".into()), masked: None }]);
+    assert_eq!(b.subtitle, "Mastercard •••• 4444");
+    let listed = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap();
+    assert!(listed.iter().any(|s| s.subtitle == "Visa •••• 4432"));
+}

@@ -256,13 +256,13 @@ pub fn strength(pw: &str) -> u8 {
 /// others -> first non-concealed field value or "".
 pub(crate) fn is_card_number(f: &item::Field) -> bool {
     let l = f.label.to_lowercase();
-    if f.id == "cvv" || f.id == "pin" || ["cvv", "cvc", "verification", "security", "pin"].iter().any(|k| l.contains(k)) { return false; }
+    if f.id == "cvv" || f.id == "pin" || ["cvv", "cvc", "verification", "security", "pin", "holder", "name", "type", "expir", "valid"].iter().any(|k| l.contains(k)) { return false; }
     f.id == "number" || l.contains("number") || l.contains("card")
 }
 fn card_digits(r: &ItemRecord) -> Option<String> {
     if r.category != Category::CreditCard { return None; }
-    r.view_sections().into_iter().flat_map(|s| s.fields).find(is_card_number).and_then(|f| f.value)
-        .map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8)
+    // First card-number-like field that actually holds >= 8 digits ("cardholder" etc. are excluded above).
+    r.view_sections().into_iter().flat_map(|s| s.fields).filter(is_card_number).find_map(|f| f.value.as_deref().and_then(card_digits_of))
 }
 /// Card brand from the BIN (leading digits). None when unknown.
 pub fn card_brand(d: &str) -> Option<&'static str> {
