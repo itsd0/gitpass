@@ -1,0 +1,10 @@
+{
+  "format": 4,
+  "device_id": "4343d0a6-b4a9-4f9d-9fb6-6e8ab4ee7dda",
+  "public": "kFHtC0E/9I5PXAggbeBGKUZiS56gd/7Y2S8QDc0QgT8=",
+  "envelope": {
+    "alg": "xchacha20poly1305",
+    "nonce": "Ha8/KlnAZv/nz/j9/H9051ZyJA0oItDS",
+    "ct": "ADp5nEvfzNesJQKjUGruRZlRNUoDrO8WEnhT4/jFzbg7EZKJQKZ6PTm4VrPXh9mi"
+  }
+}
