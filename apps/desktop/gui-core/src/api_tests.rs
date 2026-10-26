@@ -28,7 +28,10 @@ fn env() -> Env {
     app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
     let st = app.unlock(&d.path().display().to_string(), "correct horse", Some(&sk)).unwrap();
     assert!(st.unlocked && st.account.is_some());
-    let v = app.create_vault("Personal", Some("mine".into()), Some("home".into()), Some("#336699".into())).unwrap();
+    // unlock auto-creates the default "Personal" vault for a fresh account
+    let vs = app.list_vaults().unwrap();
+    assert_eq!(vs.len(), 1); assert_eq!(vs[0].name, "Personal");
+    let v = vs[0].clone();
     Env { vault: v.id, _vault: d, _cfg: cfg, app, clip, sk }
 }
 fn fld(id: &str, kind: FieldKind, v: Option<&str>) -> Field { Field { id: id.into(), label: id.into(), kind, value: v.map(Into::into) } }
@@ -49,7 +52,7 @@ fn status_lock_unlock_and_vaults() {
     let e = env();
     let vs = e.app.list_vaults().unwrap();
     assert_eq!(vs.len(), 1);
-    assert_eq!((vs[0].icon.as_deref(), vs[0].color.as_deref(), vs[0].item_count, vs[0].shared), (Some("home"), Some("#336699"), 0, false));
+    assert_eq!((vs[0].icon.as_deref(), vs[0].color.as_deref(), vs[0].item_count, vs[0].shared), (None, None, 0, false));
     let path = e.app.status().unwrap().vault_path;
     e.app.lock();
     let st = e.app.status().unwrap();
@@ -291,7 +294,7 @@ fn devices_settings_onboarding_favicon() {
     assert_eq!(json["autoLockMinutes"], 15);
     assert_eq!(json["language"], "th");
     let mut s3 = s2.clone(); s3.biometric_unlock = true;
-    assert!(e.app.set_settings(s3).unwrap_err().to_string().contains("not supported yet"));
+    assert!(e.app.set_settings(s3).unwrap_err().to_string().contains("not supported"));
     let o = e.app.set_onboarding(OnboardingPatch { emergency_kit_saved: Some(true), ..Default::default() }).unwrap();
     assert!(o.emergency_kit_saved && !o.dismissed);
     assert_eq!(e.app.onboarding(), o);
@@ -405,4 +408,46 @@ fn settings_hibp_defaults_off_and_old_files_parse() {
     let s: Settings = serde_json::from_str(old).unwrap();
     assert!(!s.hibp_check);
     assert!(serde_json::to_string(&Settings::default()).unwrap().contains("\"hibpCheck\":false"));
+}
+
+struct MemBio(std::sync::Mutex<Option<(String, String, String)>>);
+impl BiometricStore for MemBio {
+    fn supported(&self) -> bool { true }
+    fn store(&self, v: &str, p: &str, k: &str) -> anyhow::Result<()> { *self.0.lock().unwrap() = Some((v.into(), p.into(), k.into())); Ok(()) }
+    fn load(&self, v: &str, _: &str) -> anyhow::Result<(zeroize::Zeroizing<String>, zeroize::Zeroizing<String>)> {
+        let g = self.0.lock().unwrap(); let (vv, p, k) = g.clone().ok_or_else(|| anyhow::anyhow!("none"))?;
+        assert_eq!(vv, v); Ok((p.into(), k.into()))
+    }
+    fn delete(&self, _: &str) -> anyhow::Result<()> { *self.0.lock().unwrap() = None; Ok(()) }
+}
+
+#[test]
+fn create_account_and_biometric_unlock() {
+    let root = tempfile::tempdir().unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let dir = root.path().join("v");
+    let app = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default())).with_biometric(Box::new(MemBio(Default::default())));
+    app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
+    let st = app.status().unwrap();
+    assert!(!st.unlocked);
+    assert!(app.create_account(&dir.display().to_string(), "short", false).is_err());
+    let r = app.create_account(&dir.display().to_string(), "correct horse", false).unwrap();
+    assert!(r.secret_key.starts_with("A3-") || !r.secret_key.is_empty());
+    assert!(!dir.join("secret.key").exists());
+    assert!(app.status().unwrap().unlocked);
+    assert_eq!(app.list_vaults().unwrap()[0].name, "Personal");
+    assert!(app.create_account(&dir.display().to_string(), "correct horse", false).is_err());
+    // enable biometrics while unlocked, then unlock with it
+    let mut s = app.get_settings(); s.biometric_unlock = true;
+    app.set_settings(s.clone()).unwrap();
+    app.lock();
+    let st = app.status().unwrap();
+    assert!(st.vault_exists && st.biometric_available);
+    assert!(app.unlock_biometric("").unwrap().unlocked);
+    // settings file never contains the secrets
+    let raw = std::fs::read_to_string(cfg.path().join(SETTINGS_FILE)).unwrap();
+    assert!(!raw.contains("correct horse") && !raw.contains(&r.secret_key));
+    s.biometric_unlock = false; app.set_settings(s).unwrap();
+    app.lock();
+    assert!(app.unlock_biometric("").is_err());
 }

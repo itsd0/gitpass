@@ -23,6 +23,11 @@ impl a::Clipboard for SysClipboard {
     let sk = secret_key.map(Zeroizing::new);
     s.unlock(&vault_path, &password, sk.as_deref().map(|x| x.as_str())).map_err(e)
 }
+#[tauri::command(async)] pub fn create_account(s: State<'_, App>, vault_path: String, password: String, save_secret_key: bool) -> R<a::CreateAccountResult> {
+    let password = Zeroizing::new(password);
+    s.create_account(&vault_path, &password, save_secret_key).map_err(e)
+}
+#[tauri::command(async)] pub fn unlock_biometric(s: State<'_, App>, vault_path: String) -> R<a::UnlockState> { s.unlock_biometric(&vault_path).map_err(e) }
 #[tauri::command] pub fn lock(s: State<App>) { s.lock() }
 #[tauri::command] pub fn list_vaults(s: State<App>) -> R<Vec<a::VaultInfo>> { s.list_vaults().map_err(e) }
 #[tauri::command] pub fn create_vault(s: State<App>, name: String, description: Option<String>, icon: Option<String>, color: Option<String>) -> R<a::VaultInfo> { s.create_vault(&name, description, icon, color).map_err(e) }
@@ -60,7 +65,7 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn list_devices(s: State<App>) -> R<Vec<a::DeviceInfo>> { s.list_devices().map_err(e) }
 #[tauri::command(async)] pub fn revoke_device(s: State<'_, App>, id: String, rotate_credentials: bool) -> R<()> { s.revoke_device(&id, rotate_credentials).map_err(e) }
 #[tauri::command] pub fn get_settings(s: State<App>) -> a::Settings { s.get_settings() }
-#[tauri::command] pub fn set_settings(s: State<App>, settings: a::Settings) -> R<a::Settings> { s.set_settings(settings).map_err(e) }
+#[tauri::command(async)] pub fn set_settings(s: State<'_, App>, settings: a::Settings) -> R<a::Settings> { s.set_settings(settings).map_err(e) }
 #[tauri::command(async)] pub fn change_password(s: State<'_, App>, current: String, next: String) -> R<()> {
     let (c, n) = (Zeroizing::new(current), Zeroizing::new(next));
     s.change_password(&c, &n).map_err(e)

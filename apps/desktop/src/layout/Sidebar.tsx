@@ -1,6 +1,7 @@
 import type * as React from "react";
 import { useState } from 'react';
-import { Archive, ChevronDown, LayoutGrid, Lock, Moon, PanelLeftClose, Plus, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
+import { Archive, Check, ChevronDown, LayoutGrid, Lock, Moon, PanelLeftClose, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
+import { VaultIcon } from '../features/home/vaultIcons';
 import { api } from '../api/client';
 import type { Filter } from '../api/types';
 import { features } from '../features/registry';
@@ -10,7 +11,7 @@ import { cn } from '../lib/utils';
 import { useT, type Key } from '../i18n';
 import { OnboardingBadge } from '../features/onboarding';
 import { useSettings } from '../features/settings/useSettings';
-import { Avatar, Button, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Input, Tooltip, toast } from '../ui';
+import { Button, Logo, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Input, Tooltip, toast } from '../ui';
 
 const same = (r: Route, f: Filter) => r.name === 'items' && r.filter.kind === f.kind && r.filter.vaultId === f.vaultId && r.filter.tag === f.tag;
 
@@ -32,6 +33,9 @@ export function Sidebar() {
   const toggleTheme = () => { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); if (useSettings.getState().settings) void useSettings.getState().save({ theme: next }).catch(() => {}); };
   const go = (filter: Filter) => setRoute({ name: 'items', filter: { sort: 'updated', ...filter } });
   const [newVault, setNewVault] = useState(false);
+  // `account` is the account UUID: show a friendly name instead (first vault, else Personal).
+  const accountName = vaults.find((v) => v.name === 'Personal')?.name ?? vaults[0]?.name ?? 'Personal';
+  void account;
   const [vName, setVName] = useState('');
   const extraTop = features.filter((f) => f.sidebar?.section === 'top' && f.id !== 'items' && f.route);
   const extraBottom = features.filter((f) => f.sidebar?.section === 'bottom' && f.route);
@@ -42,16 +46,17 @@ export function Sidebar() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1.5 py-1.5 hover:bg-hover">
-              <Avatar name={account ?? 'gitpass'} size={30} color="#2E7DF6" />
-              <span className="flex-1 truncate text-left font-medium">{account ?? 'gitpass'}</span><ChevronDown size={14} className="text-muted" />
+              <Logo size={30} />
+              <span className="flex min-w-0 flex-1 flex-col text-left leading-tight"><span className="truncate font-medium">{accountName}</span><span className="truncate text-[11px] text-muted">gitpass</span></span><ChevronDown size={14} className="text-muted" />
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuLabel>Account</DropdownMenuLabel>
-            <DropdownMenuItem><Avatar name={account ?? 'gitpass'} size={18} color="#2E7DF6" />{account ?? 'gitpass'}<span className="ml-auto text-accent">✓</span></DropdownMenuItem>
+            <DropdownMenuLabel>Vaults</DropdownMenuLabel>
+            {(vaults.length ? vaults : [{ id: '', name: accountName, color: null, icon: null }]).map((v) => <DropdownMenuItem key={v.id || 'default'} onSelect={() => v.id && go({ kind: 'vault', vaultId: v.id })}><VaultIcon icon={v.icon} color={v.color} size={18} />{v.name}{v.name === accountName && <Check size={14} className="ml-auto text-accent" />}</DropdownMenuItem>)}
+            <DropdownMenuItem onSelect={() => setNewVault(true)}><Plus size={14} />New vault…</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onSelect={toggleTheme}>{theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}{theme === 'dark' ? 'Light theme' : 'Dark theme'}</DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setRoute({ name: 'settings' })}>{t('nav.settings')}…</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setRoute({ name: 'settings' })}><SettingsIcon size={14} />{t('nav.settings')}…</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => { void api.lock().finally(lock); }}><Lock size={14} />{t('cmd.lock')}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -68,7 +73,7 @@ export function Sidebar() {
         <SectionHeader label={t('nav.vaults').toUpperCase()} action={<Tooltip content="New vault"><button aria-label="New vault" className="rounded p-0.5 hover:bg-hover" onClick={() => setNewVault(true)}><Plus size={14} /></button></Tooltip>} />
         {vaults.map((v) => (
           <NavItem key={v.id} active={same(route, { kind: 'vault', vaultId: v.id })} label={v.name}
-            icon={<span className="h-3 w-3 rounded-full" style={{ background: v.color ?? '#888' }} />}
+            icon={<VaultIcon icon={v.icon} color={v.color} size={16} />}
             onClick={() => go({ kind: 'vault', vaultId: v.id })}
             right={v.shared ? <Users size={13} className="text-muted" aria-label="Shared vault" /> : <span className="text-xs text-muted opacity-0 group-hover:opacity-100">{v.itemCount}</span>} />
         ))}

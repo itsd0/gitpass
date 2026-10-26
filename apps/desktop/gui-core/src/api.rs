@@ -124,7 +124,31 @@ pub struct OnboardingPatch {
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct UnlockState { pub unlocked: bool, pub vault_path: String, pub account: Option<String> }
+pub struct UnlockState { pub unlocked: bool, pub vault_path: String, pub account: Option<String>,
+    /// true when `vault_path` already holds a gitpass vault (format.json); false => offer "create".
+    #[serde(default)] pub vault_exists: bool,
+    /// true when biometric unlock is enabled and supported on this machine.
+    #[serde(default)] pub biometric_available: bool }
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateAccountResult { pub vault_path: String, pub secret_key: String }
+
+/// Platform secure store for biometric unlock (macOS: Keychain + LocalAuthentication).
+/// `store`/`load` hold the master password + Secret Key for `vault_path`; `load` MUST require a
+/// successful biometric check before returning anything.
+pub trait BiometricStore: Send + Sync {
+    fn supported(&self) -> bool;
+    fn store(&self, vault_path: &str, password: &str, secret_key: &str) -> Result<()>;
+    fn load(&self, vault_path: &str, reason: &str) -> Result<(Zeroizing<String>, Zeroizing<String>)>;
+    fn delete(&self, vault_path: &str) -> Result<()>;
+}
+pub struct NoBiometrics;
+impl BiometricStore for NoBiometrics {
+    fn supported(&self) -> bool { false }
+    fn store(&self, _: &str, _: &str, _: &str) -> Result<()> { bail!("biometric unlock is not supported yet on this platform") }
+    fn load(&self, _: &str, _: &str) -> Result<(Zeroizing<String>, Zeroizing<String>)> { bail!("biometric unlock is not supported yet on this platform") }
+    fn delete(&self, _: &str) -> Result<()> { Ok(()) }
+}
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct TotpNow { pub code: String, pub remaining: u64, pub period: u64 }
@@ -190,6 +214,7 @@ pub struct App {
     unlock_opts: Mutex<UnlockOpts>,
     /// Emergency kit text with the NEW Secret Key, kept only right after rotate_secret_key (until lock).
     fresh_kit: Mutex<Option<Zeroizing<String>>>,
+    biometric: Box<dyn BiometricStore>,
     file_lock: Mutex<()>,
 }
 
@@ -300,12 +325,14 @@ impl App {
     /// `settings_dir`: where `.gitpass-settings.json` lives (the desktop app uses the default vault dir).
     pub fn new(settings_dir: PathBuf, clipboard: Arc<dyn Clipboard>) -> Self {
         let app = App { state: GuiState::new(5), settings_dir, clipboard, clip_gen: Arc::new(AtomicU64::new(0)), hibp: Box::new(UreqHibp),
-            unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), file_lock: Mutex::new(()) };
+            unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), biometric: Box::new(NoBiometrics), file_lock: Mutex::new(()) };
         let s = app.get_settings();
         app.state.set_auto_lock_minutes(s.auto_lock_minutes);
         app
     }
     /// Inject an HIBP client (tests).
+    /// Inject the platform biometric store.
+    pub fn with_biometric(mut self, b: Box<dyn BiometricStore>) -> Self { self.biometric = b; self }
     pub fn with_hibp(mut self, c: Box<dyn PwnedRangeClient + Send + Sync>) -> Self { self.hibp = c; self }
     #[doc(hidden)]
     pub fn set_unlock_opts(&self, o: UnlockOpts) { *self.unlock_opts.lock().unwrap() = o; }
@@ -334,8 +361,14 @@ impl App {
         self.state.check_idle();
         let g = self.state.inner.lock().map_err(|_| anyhow!("state poisoned"))?;
         Ok(match &g.unlocked {
-            Some(u) => UnlockState { unlocked: true, vault_path: u.session.root.display().to_string(), account: Some(u.session.fmt.account_id.clone()) },
-            None => UnlockState { unlocked: false, vault_path: self.read_local().last_vault_path.unwrap_or_else(|| crate::default_vault_dir().display().to_string()), account: None },
+            Some(u) => UnlockState { unlocked: true, vault_path: u.session.root.display().to_string(), account: Some(u.session.fmt.account_id.clone()), vault_exists: true,
+                biometric_available: false },
+            None => {
+                let vp = self.read_local().last_vault_path.unwrap_or_else(|| crate::default_vault_dir().display().to_string());
+                let exists = PathBuf::from(&vp).join("format.json").exists();
+                let bio = exists && self.biometric.supported() && self.get_settings().biometric_unlock;
+                UnlockState { unlocked: false, vault_path: vp, account: None, vault_exists: exists, biometric_available: bio }
+            }
         })
     }
     pub fn unlock(&self, vault_path: &str, password: &str, secret_key: Option<&str>) -> Result<UnlockState> {
@@ -349,7 +382,34 @@ impl App {
         let opts = { let o = self.unlock_opts.lock().map_err(|_| anyhow!("poisoned"))?; UnlockOpts { accept_rollback: o.accept_rollback, target_kdf: o.target_kdf.clone() } };
         self.state.unlock_with_opts(&dir, password, sk, None, &opts)?;
         let _ = self.update_local(|l| l.last_vault_path = Some(dir.display().to_string()));
+        self.ensure_default_vault();
         self.status()
+    }
+    /// `gitpass init` creates no vault; give a fresh account a "Personal" vault so the sidebar is not empty.
+    fn ensure_default_vault(&self) {
+        let _ = self.write(|u| { if u.session.list_vaults()?.is_empty() { u.session.create_vault_full("Personal", None, None, None)?; } Ok(()) });
+    }
+    /// Create a new account/vault at `vault_path` (like `gitpass init`) and unlock it.
+    /// Returns the Secret Key ONCE for the user to save; it is written to disk only if `save_secret_key`.
+    pub fn create_account(&self, vault_path: &str, password: &str, save_secret_key: bool) -> Result<CreateAccountResult> {
+        let dir = PathBuf::from(if vault_path.trim().is_empty() { crate::default_vault_dir().display().to_string() } else { vault_path.trim().to_string() });
+        if password.chars().count() < 8 { bail!("master password must be at least 8 characters"); }
+        if dir.join("format.json").exists() { bail!("{} already contains a gitpass vault", dir.display()); }
+        let sk = gitpass_core::store::init(&dir, password, gitpass_core::crypto::KdfParams::default())?;
+        let enc = Zeroizing::new(sk.encode());
+        if save_secret_key {
+            gitpass_core::fsutil::atomic_write(&dir.join("secret.key"), format!("{}\n", enc.as_str()).as_bytes())?;
+            #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(dir.join("secret.key"), std::fs::Permissions::from_mode(0o600))?; }
+        }
+        self.unlock(&dir.display().to_string(), password, Some(&enc))?;
+        Ok(CreateAccountResult { vault_path: dir.display().to_string(), secret_key: enc.to_string() })
+    }
+    /// Unlock with credentials released by the platform biometric store (Touch ID on macOS).
+    pub fn unlock_biometric(&self, vault_path: &str) -> Result<UnlockState> {
+        if !self.get_settings().biometric_unlock { bail!("biometric unlock is not enabled"); }
+        let vp = if vault_path.trim().is_empty() { self.status()?.vault_path } else { vault_path.trim().to_string() };
+        let (pw, sk) = self.biometric.load(&vp, "unlock gitpass")?;
+        self.unlock(&vp, &pw, Some(&sk))
     }
     pub fn lock(&self) { self.state.lock(); if let Ok(mut k) = self.fresh_kit.lock() { *k = None; } }
 
@@ -672,7 +732,16 @@ impl App {
     // ---------------- settings / onboarding
     pub fn get_settings(&self) -> Settings { self.read_local().settings.unwrap_or_default() }
     pub fn set_settings(&self, s: Settings) -> Result<Settings> {
-        if s.biometric_unlock { bail!("biometric unlock is not supported yet"); }
+        let was = self.get_settings().biometric_unlock;
+        if s.biometric_unlock && !was {
+            if !self.biometric.supported() { bail!("biometric unlock is not supported yet on this device"); }
+            let (root, pw, sk) = self.with(|u| Ok((u.session.root.display().to_string(), u.password.clone(), Zeroizing::new(u.secret.encode()))))
+                .map_err(|_| anyhow!("unlock the vault before enabling biometric unlock"))?;
+            self.biometric.store(&root, &pw, &sk)?;
+        } else if !s.biometric_unlock && was {
+            let root = self.status()?.vault_path;
+            self.biometric.delete(&root)?;
+        }
         if s.auto_lock_minutes > 24 * 60 { bail!("autoLockMinutes must be <= 1440"); }
         if s.clipboard_clear_secs > 3600 { bail!("clipboardClearSecs must be <= 3600"); }
         self.update_local(|l| l.settings = Some(s.clone()))?;

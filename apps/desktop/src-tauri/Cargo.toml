@@ -20,3 +20,10 @@ serde = { version = "1", features = ["derive"] }
 arboard = { version = "3", default-features = false }
 zeroize = "1"
 anyhow = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
+objc2 = "0.6"
+block2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSString", "NSError"] }
+objc2-local-authentication = { version = "0.3", features = ["LAContext", "LAError", "block2"] }

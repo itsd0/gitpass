@@ -1,3 +1,4 @@
+import { Logo } from '../../ui/logo';
 import { useEffect, useState } from 'react';
 import { ExternalLink, Laptop, Lock, Info, RefreshCw, SlidersHorizontal, Smartphone, GitMerge } from 'lucide-react';
 import { api } from '../../api/client';
@@ -10,7 +11,8 @@ import { useSettings } from './useSettings';
 
 const errMsg = (e: unknown) => String((e as Error)?.message ?? e);
 export const APP_VERSION = '0.5.0';
-export const REPO_URL = 'https://github.com/gitpass/gitpass'; // TODO(integrator): confirm canonical repo URL
+export const REPO_URL = 'https://github.com/itsd0/gitpass';
+export const ISSUES_URL = `${REPO_URL}/issues`;
 const TABS = [{ id: 'general', icon: SlidersHorizontal }, { id: 'security', icon: Lock }, { id: 'devices', icon: Laptop }, { id: 'sync', icon: RefreshCw }, { id: 'about', icon: Info }] as const;
 type Tab = (typeof TABS)[number]['id'];
 const Row = ({ label, children, help }: { label: string; children: React.ReactNode; help?: React.ReactNode }) =>
@@ -67,14 +69,14 @@ function RotateKey({ open, onOpenChange }: { open: boolean; onOpenChange: (o: bo
 }
 
 function Security() {
-  const t = useT(); const { settings, save } = useSettings(); const [bioErr, setBioErr] = useState(false); const [pw, setPw] = useState(false); const [rot, setRot] = useState(false);
+  const t = useT(); const { settings, save } = useSettings(); const [bioErr, setBioErr] = useState(''); const [pw, setPw] = useState(false); const [rot, setRot] = useState(false);
   if (!settings) return <Skeleton className="h-40" />;
   const s = (p: Parameters<typeof save>[0]) => save(p).then(() => toast(t('common.saved'))).catch((e) => toast(t('common.error', { msg: errMsg(e) }), 'danger'));
   return <>
     <NumberSetting label={t('settings.autoLock')} value={settings.autoLockMinutes} min={1} max={1440} onSave={(autoLockMinutes) => s({ autoLockMinutes })} />
     <NumberSetting label={t('settings.clipboard')} value={settings.clipboardClearSecs} min={5} max={600} onSave={(clipboardClearSecs) => s({ clipboardClearSecs })} />
-    <Row label={t('settings.biometric')} help={bioErr && <span role="status" className="text-warn">{t('settings.biometricUnsupported')}</span>}>
-      <button role="switch" aria-checked={settings.biometricUnlock} aria-label={t('settings.biometric')} onClick={async () => { try { await save({ biometricUnlock: !settings.biometricUnlock }); setBioErr(false); } catch { setBioErr(true); } }}
+    <Row label={t('settings.biometric')} help={bioErr && <span role="status" className="text-warn">{/not supported|unsupported/i.test(bioErr) ? t('settings.biometricUnsupported') : bioErr}</span>}>
+      <button role="switch" aria-checked={settings.biometricUnlock} aria-label={t('settings.biometric')} onClick={async () => { try { await save({ biometricUnlock: !settings.biometricUnlock }); setBioErr(''); } catch (e) { setBioErr(errMsg(e) || 'error'); } }}
         className={cn('relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent', settings.biometricUnlock ? 'bg-accent' : 'bg-border')}>
         <span className={cn('absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform', settings.biometricUnlock ? 'translate-x-5' : 'translate-x-0.5')} /></button></Row>
     <Row label={t('settings.hibp')} help={t('settings.hibpHelp')}>
@@ -121,11 +123,11 @@ function Sync() {
 
 function About() {
   const t = useT();
-  return <><div className="flex items-center gap-3 py-4"><div className="flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-xl font-bold text-white" aria-hidden>g</div>
+  return <><div className="flex items-center gap-3 py-4"><Logo size={48} />
     <div><div className="text-lg font-semibold">gitpass</div><div className="text-sm text-muted">{t('about.license')}</div></div></div>
     <Row label={t('about.version')}><span className="font-mono text-sm">{APP_VERSION}</span></Row>
     <Row label={t('about.repo')}><a className="inline-flex items-center gap-1 text-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" href={REPO_URL} target="_blank" rel="noreferrer">{REPO_URL.replace('https://', '')}<ExternalLink className="h-3 w-3" aria-hidden /></a></Row>
-    <Row label={t('about.issues')}><a className="text-sm text-accent hover:underline" href={`${REPO_URL}/issues`} target="_blank" rel="noreferrer">{t('about.issues')}</a></Row></>;
+    <Row label={t('about.issues')}><a className="text-sm text-accent hover:underline" href={ISSUES_URL} target="_blank" rel="noreferrer">{t('about.issues')}</a></Row></>;
 }
 
 /** `settings` route with tab `vault:<id>` (Home → vault card → settings). There is no rename/edit-vault

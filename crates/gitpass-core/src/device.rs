@@ -65,7 +65,11 @@ impl DeviceRegistry {
     /// Register `id` or refresh its last_seen_at (revoked devices are left untouched).
     pub fn touch(&mut self, id: &str, name: &str, now: &str) {
         match self.devices.iter_mut().find(|d| d.id == id) {
-            Some(d) => { if !d.revoked { d.last_seen_at = now.into(); } }
+            Some(d) => { if !d.revoked {
+                d.last_seen_at = now.into();
+                // relabel records registered before a real hostname was available
+                if (d.name.trim().is_empty() || d.name == UNKNOWN_DEVICE) && !name.trim().is_empty() { d.name = name.trim().into(); }
+            } }
             None => self.devices.push(Device { id: id.into(), name: name.into(), created_at: now.into(),
                 last_seen_at: now.into(), revoked: false, revoked_at: None, public_key: None }),
         }
@@ -162,6 +166,8 @@ pub fn store_device_key(root: &Path, device_id: &str, kek: &Key32, kp: &crate::k
     ensure_ignored(root, LOCAL_DEVICE_KEY_FILE)
 }
 
+pub const UNKNOWN_DEVICE: &str = "unknown-device";
+
 /// Default device name: $GITPASS_DEVICE_NAME, else hostname, else "unknown-device".
 pub fn default_device_name() -> String {
     if let Ok(n) = std::env::var("GITPASS_DEVICE_NAME") { if !n.trim().is_empty() { return n.trim().into(); } }
@@ -170,7 +176,18 @@ pub fn default_device_name() -> String {
         if let Ok(n) = std::fs::read_to_string(f) { if !n.trim().is_empty() { return n.trim().into(); } }
     }
     if let Ok(n) = std::env::var("COMPUTERNAME") { if !n.trim().is_empty() { return n.trim().into(); } }
-    "unknown-device".into()
+    // macOS has no /etc/hostname and GUI apps get no $HOSTNAME: ask the OS.
+    #[cfg(target_os = "macos")]
+    let cmds: &[(&str, &[&str])] = &[("scutil", &["--get", "ComputerName"]), ("hostname", &["-s"])];
+    #[cfg(not(target_os = "macos"))]
+    let cmds: &[(&str, &[&str])] = &[("hostname", &[])];
+    for (c, a) in cmds {
+        if let Ok(o) = std::process::Command::new(c).args(*a).output() {
+            let n = String::from_utf8_lossy(&o.stdout).trim().to_string();
+            if o.status.success() && !n.is_empty() { return n; }
+        }
+    }
+    UNKNOWN_DEVICE.into()
 }
 
 /// Current UTC time as ISO 8601 (`YYYY-MM-DDTHH:MM:SSZ`).

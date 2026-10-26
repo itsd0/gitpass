@@ -159,6 +159,8 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   status: () => delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: unlocked ? 'Demo Family' : null }),
   unlock: (a: { password: string }) => { if (!a.password) return Promise.reject(new Error('password required')); unlocked = true; return delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: 'Demo Family' }, 300); },
   lock: () => { unlocked = false; return delay(undefined); },
+  create_account: (a: { password: string }) => { if ((a.password ?? '').length < 8) return Promise.reject(new Error('master password must be at least 8 characters')); unlocked = true; return delay<T.CreateAccountResult>({ vaultPath: '~/.gitpass (mock)', secretKey: 'A3-MOCK00-000000-00000-00000-00000-00000' }, 300); },
+  unlock_biometric: () => Promise.reject(new Error('biometric unlock is not supported yet on this platform')),
   list_vaults: () => delay(vaultInfo()),
   create_vault: (a: { name: string; description?: string | null; icon?: string | null; color?: string | null }) => {
     const v: T.VaultInfo = { id: uid('v'), name: a.name, description: a.description ?? null, itemCount: 0, shared: false, members: [SELF], icon: a.icon ?? null, color: a.color ?? null };

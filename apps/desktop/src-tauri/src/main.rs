@@ -1,10 +1,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod biometric;
 mod commands;
 use commands as c;
 use std::sync::Arc;
 
 fn main() {
-    let app = gitpass_gui_core::api::App::new(gitpass_gui_core::default_vault_dir(), Arc::new(c::SysClipboard));
+    let app = gitpass_gui_core::api::App::new(gitpass_gui_core::default_vault_dir(), Arc::new(c::SysClipboard)).with_biometric(biometric::platform());
     tauri::Builder::default()
         .manage(app)
         .setup(|h| { c::spawn_idle_watcher(h.handle().clone()); Ok(()) })
@@ -15,7 +16,7 @@ fn main() {
             c::save_attachment, c::list_tags, c::generate_password, c::password_strength, c::watchtower, c::import_file,
             c::identity, c::fingerprint_of, c::list_members, c::share_vault, c::unshare_vault, c::accept_share, c::list_devices,
             c::revoke_device, c::get_settings, c::set_settings, c::change_password, c::rotate_secret_key, c::sync_status,
-            c::sync, c::onboarding, c::set_onboarding, c::emergency_kit, c::favicon_url, c::touch,
+            c::sync, c::onboarding, c::set_onboarding, c::emergency_kit, c::favicon_url, c::touch, c::create_account, c::unlock_biometric,
         ])
         .run(tauri::generate_context!())
         .expect("error while running gitpass desktop");
