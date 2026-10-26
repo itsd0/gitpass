@@ -23,10 +23,29 @@ targets:
     sources:
       - Sources/GitpassApp
       - Generated/gitpass_ios_ffi.swift
+    # XcodeGen rewrites these files from `properties` on every
+    # `xcodegen generate`, so the keys must live here, not only in
+    # the plist/entitlements files (otherwise they are wiped).
     info:
       path: Sources/GitpassApp/Info.plist
+      properties:
+        CFBundleDisplayName: gitpass
+        CFBundleName: gitpass
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSFaceIDUsageDescription: Face ID unlocks your gitpass vault without typing the master password.
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
     entitlements:
       path: Sources/GitpassApp/GitpassApp.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.dev.gitpass.ios
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)dev.gitpass.ios
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gitpass.ios
@@ -34,7 +53,11 @@ targets:
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
     dependencies:
+      # Static library XCFramework: link only, nothing to embed.
       - framework: Frameworks/GitpassCore.xcframework
+        embed: false
+      # Ship the AutoFill extension inside the app (PlugIns/).
+      - target: GitpassAutoFill
         embed: true
   GitpassAutoFill:
     type: app-extension
@@ -44,8 +67,22 @@ targets:
       - Generated/gitpass_ios_ffi.swift
     info:
       path: Sources/AutoFill/Info.plist
+      properties:
+        CFBundleDisplayName: gitpass
+        CFBundleName: gitpass AutoFill
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.authentication-services-credential-provider-ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CredentialProviderViewController
     entitlements:
       path: Sources/AutoFill/GitpassAutoFill.entitlements
+      properties:
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+        com.apple.security.application-groups:
+          - group.dev.gitpass.ios
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)dev.gitpass.ios
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gitpass.ios.autofill
@@ -68,6 +105,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gitpass.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: "5.0"
         TARGETED_DEVICE_FAMILY: "1,2"
     dependencies:
