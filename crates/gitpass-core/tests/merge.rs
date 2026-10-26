@@ -12,7 +12,7 @@ fn base() -> Item {
     Item { title: "GitHub".into(), username: Some("me".into()), password: Some("p1".into()), url: Some("https://github.com".into()),
         notes: None, totp: None, updated_at: "100".into() }
 }
-fn rec(item: Item, c: FieldClocks) -> ItemRecord { ItemRecord { item, clocks: Some(c) } }
+fn rec(item: Item, c: FieldClocks) -> ItemRecord { ItemRecord::with_clocks(item, Some(c)) }
 
 #[test]
 fn non_overlapping_edits_both_survive() {
@@ -101,7 +101,7 @@ fn legacy_items_synthesize_clocks_from_updated_at() {
     assert!(r.clocks.is_none());
     assert_eq!(r.clocks_or_legacy(), FieldClocks::all(1_700_000_000_000));
     // v3 JSON is a superset: still parses as a v2 Item (older readers ignore `clocks`)
-    let v3 = serde_json::to_string(&ItemRecord { item: r.item.clone(), clocks: Some(FieldClocks::all(1)) }).unwrap();
+    let v3 = serde_json::to_string(&ItemRecord::with_clocks(r.item.clone(), Some(FieldClocks::all(1)))).unwrap();
     assert!(v3.contains("\"clocks\""));
     let _: Item = serde_json::from_str(&v3).unwrap();
     // merge_items on plain Items = legacy whole-item LWW
@@ -138,7 +138,7 @@ fn session_round_trip_writes_clocks_and_merges() {
     let mut remote = r1.item.clone(); remote.notes = Some("from laptop".into());
     let mut rc = c1; rc.notes = c2.password + 10;
     let epoch_before = s.epoch().unwrap();
-    let rep = s.merge_item(&vid, &iid, &ItemRecord { item: remote, clocks: Some(rc) }).unwrap();
+    let rep = s.merge_item(&vid, &iid, &ItemRecord::with_clocks(remote, Some(rc))).unwrap();
     assert_eq!(rep.from_remote, vec!["notes"]);
     assert_eq!(rep.from_local, vec!["password"]);
     let (v3, r3) = s.read_record(&vid, &iid).unwrap();
