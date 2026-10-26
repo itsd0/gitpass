@@ -1,14 +1,14 @@
 // Pure view logic for the popup (no DOM, no chrome.*) so it can be unit-tested in node.
 (function (root) {
   'use strict';
-  const CATEGORIES = ['login', 'secure_note', 'credit_card', 'identity', 'api_credential', 'document', 'ssh_key', 'wifi'];
+  const CATEGORIES = ['login', 'secure_note', 'credit_card', 'identity', 'api_credential', 'document', 'ssh_key', 'wifi', 'passkey'];
   const CAT_LABEL = {
     login: 'Logins', secure_note: 'Secure Notes', credit_card: 'Credit Cards', identity: 'Identities',
-    api_credential: 'API Credentials', document: 'Documents', ssh_key: 'SSH Keys', wifi: 'Wi-Fi',
+    api_credential: 'API Credentials', document: 'Documents', ssh_key: 'SSH Keys', wifi: 'Wi-Fi', passkey: 'Passkeys',
   };
   const CAT_KEY = {
     login: 'catLogin', secure_note: 'catNote', credit_card: 'catCard', identity: 'catIdentity',
-    api_credential: 'catApi', document: 'catDocument', ssh_key: 'catSsh', wifi: 'catWifi',
+    api_credential: 'catApi', document: 'catDocument', ssh_key: 'catSsh', wifi: 'catWifi', passkey: 'catPasskey',
   };
 
   /** Filter dropdown entries: suggestions, all, favorites, one per category, one per vault. */

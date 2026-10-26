@@ -10,6 +10,7 @@
     api_credential: ['<path d="M8 7l-5 5 5 5M16 7l5 5-5 5"/>', '<path d="M13.5 5.5l-3 13"/>'],
     document: ['<path d="M14 3H7.5A2.5 2.5 0 0 0 5 5.5v13A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V8z"/><path d="M8.5 13h7M8.5 16.5h5"/>', '<path d="M14 3v5h5" stroke-linejoin="round"/>'],
     ssh_key: ['<rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><path d="M6.5 9.5l3 2.5-3 2.5"/>', '<path d="M12 15h5"/>'],
+    passkey: ['<circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 10.5-4"/>', '<circle cx="17.5" cy="13.5" r="2.5"/><path d="M17.5 16v5M17.5 18.5h2"/>'],
     wifi: [`<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0"/><circle cx="12" cy="19.2" r="1.1" fill="${S}" stroke="none"/>`, '<path d="M8.5 16a5 5 0 0 1 7 0"/>'],
   };
   function categoryIcon(cat, size) {

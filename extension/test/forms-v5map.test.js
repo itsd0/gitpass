@@ -24,8 +24,8 @@ test('identityValues maps v5 identity ids (first, last, address multiline, email
   assert.strictEqual(F.identityValues({ name: 'Solo Name' }).full_name, 'Solo Name');
 });
 
-test('lib/icons.js has all 8 v5 categories', () => {
+test('lib/icons.js has all 9 categories (v5 + passkey)', () => {
   const I = require('../lib/icons.js');
-  assert.deepStrictEqual(I.CATEGORIES.sort(), ['api_credential', 'credit_card', 'document', 'identity', 'login', 'secure_note', 'ssh_key', 'wifi']);
+  assert.deepStrictEqual(I.CATEGORIES.sort(), ['api_credential', 'credit_card', 'document', 'identity', 'login', 'passkey', 'secure_note', 'ssh_key', 'wifi']);
   for (const c of I.CATEGORIES) assert.match(I.categoryIcon(c, 28), /^<svg/);
 });

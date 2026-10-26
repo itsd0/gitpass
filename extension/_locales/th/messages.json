@@ -457,5 +457,43 @@
   "errAppDown": {
     "message": "แอป gitpass ไม่ได้ทำงานอยู่",
     "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+  },
+  "pkCreateTitle": {
+    "message": "บันทึกพาสคีย์ไหม?"
+  },
+  "pkGetTitle": {
+    "message": "ลงชื่อเข้าใช้ด้วยพาสคีย์ไหม?"
+  },
+  "pkFor": {
+    "message": "สำหรับ $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1"
+      }
+    }
+  },
+  "pkSite": {
+    "message": "เว็บไซต์"
+  },
+  "pkAccount": {
+    "message": "บัญชี"
+  },
+  "pkApprove": {
+    "message": "ดำเนินการต่อ"
+  },
+  "pkDeny": {
+    "message": "ยกเลิก"
+  },
+  "pkLocked": {
+    "message": "gitpass ถูกล็อกอยู่ ปลดล็อกแอปเพื่อดำเนินการต่อ"
+  },
+  "pkExpired": {
+    "message": "คำขอนี้ไม่มีผลแล้ว"
+  },
+  "pkDone": {
+    "message": "เสร็จแล้ว ปิดหน้าต่างนี้ได้"
+  },
+  "catPasskey": {
+    "message": "พาสคีย์"
   }
 }

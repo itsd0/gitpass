@@ -403,5 +403,43 @@
   },
   "errAppDown": {
     "message": "The gitpass app is not running."
+  },
+  "pkCreateTitle": {
+    "message": "Save a passkey?"
+  },
+  "pkGetTitle": {
+    "message": "Sign in with a passkey?"
+  },
+  "pkFor": {
+    "message": "for $SITE$",
+    "placeholders": {
+      "site": {
+        "content": "$1"
+      }
+    }
+  },
+  "pkSite": {
+    "message": "Site"
+  },
+  "pkAccount": {
+    "message": "Account"
+  },
+  "pkApprove": {
+    "message": "Continue"
+  },
+  "pkDeny": {
+    "message": "Cancel"
+  },
+  "pkLocked": {
+    "message": "gitpass is locked. Unlock the app to continue."
+  },
+  "pkExpired": {
+    "message": "This request is no longer active."
+  },
+  "pkDone": {
+    "message": "Done. You can close this window."
+  },
+  "catPasskey": {
+    "message": "Passkeys"
   }
 }
