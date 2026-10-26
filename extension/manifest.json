@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "gitpass",
+  "version": "0.4.0",
+  "version_name": "0.4.0",
+  "description": "gitpass autofill. Keys stay in the local gitpass-host process.",
+  "permissions": [
+    "nativeMessaging",
+    "activeTab",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "https://*/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "scripts": [
+      "lib/policy.js",
+      "background.js"
+    ]
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "gitpass"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "lib/policy.js",
+        "content.js"
+      ],
+      "all_frames": false,
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "128": "icons/icon128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "gitpass@gitpass.dev",
+      "strict_min_version": "121.0",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  }
+}
