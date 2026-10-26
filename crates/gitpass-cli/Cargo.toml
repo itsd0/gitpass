@@ -24,3 +24,7 @@ arboard = { version = "3.7", default-features = false, optional = true }
 [features]
 default = ["clipboard"]
 clipboard = ["dep:arboard"]
+
+[dev-dependencies]
+tempfile = "3"
+anyhow = "1"

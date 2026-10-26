@@ -93,6 +93,23 @@ enum Cmd {
     Rm { vault: String, id: String },
     /// Generate a random password
     Gen { #[arg(default_value_t = 24)] len: usize },
+    /// Run a command with secrets from gp://<vault>/<item>/<field> references injected into its
+    /// environment only (never written to disk); resolved values are masked in its stdout/stderr
+    Run {
+        /// dotenv-style file whose values are (or contain) gp:// references; repeatable
+        #[arg(long = "env-file", required = true)] env_file: Vec<PathBuf>,
+        /// Do not mask secrets in the child's output (child then writes straight to the terminal)
+        #[arg(long)] no_masking: bool,
+        /// Command and arguments (after --)
+        #[arg(last = true, required = true)] cmd: Vec<String>,
+    },
+    /// Render a template, replacing {{ gp://<vault>/<item>/<field> }} placeholders (stdout by default)
+    Inject {
+        /// Template file (default: stdin)
+        #[arg(long, short = 'i')] input: Option<PathBuf>,
+        /// Write to this file (mode 0600) instead of stdout. NOTE: this puts plaintext secrets on disk.
+        #[arg(long, short = 'o')] output: Option<PathBuf>,
+    },
     /// Connect the vault folder to a private git remote (GitHub or any git host)
     Remote { #[command(subcommand)] cmd: RemoteCmd },
     /// git add/commit/pull --rebase/push in the vault directory, then verify the manifest
@@ -364,6 +381,35 @@ fn do_copy(val: &str, secs: u64, quiet: bool, label: &str) -> Result<()> {
     Ok(())
 }
 
+struct SessionResolver<'a>(&'a Session);
+impl gitpass_cli::inject::Resolver for SessionResolver<'_> {
+    fn resolve(&self, r: &gitpass_cli::inject::SecretRef) -> Result<Zeroizing<String>> {
+        let s = self.0;
+        let vid = s.resolve_vault(&r.vault).with_context(|| format!("gp://{}/...: vault", r.vault))?;
+        let items = s.list_items(&vid)?;
+        let exact: Vec<&(String, Item)> = items.iter().filter(|(id, it)| *id == r.item || it.title.eq_ignore_ascii_case(&r.item)).collect();
+        let iid = match exact.len() {
+            1 => exact[0].0.clone(),
+            0 => s.resolve_item(&vid, &r.item).with_context(|| format!("gp://{}/{}: item", r.vault, r.item))?,
+            n => bail!("gp://{}/{}: {n} items have that title; use the item id", r.vault, r.item),
+        };
+        let (_, rec) = s.read_record(&vid, &iid)?;
+        let f = r.field.to_ascii_lowercase();
+        let std = match f.as_str() {
+            "password" => Some(Field::Password), "username" => Some(Field::Username), "url" => Some(Field::Url),
+            "notes" => Some(Field::Notes), "title" => Some(Field::Title), "totp" | "otp" => Some(Field::Totp), _ => None,
+        };
+        if let Some(sf) = std { return field_value(&rec.item, sf); }
+        let hits: Vec<&gitpass_core::item::Field> = rec.sections.iter().flat_map(|sec| sec.fields.iter())
+            .filter(|x| !x.removed && (x.label.eq_ignore_ascii_case(&r.field) || x.id == r.field)).collect();
+        match hits.as_slice() {
+            [one] => one.value.clone().map(Zeroizing::new).ok_or_else(|| anyhow::anyhow!("field '{}' is empty", r.field)),
+            [] => bail!("gp://{}/{}/{}: no such field", r.vault, r.item, r.field),
+            _ => bail!("gp://{}/{}/{}: several fields have that label; use the field id", r.vault, r.item, r.field),
+        }
+    }
+}
+
 fn main() {
     if let Err(e) = run() { eprintln!("error: {e:#}"); std::process::exit(1); }
 }
@@ -521,6 +567,41 @@ fn run() -> Result<()> {
             println!("removed {iid}");
         }
         Cmd::Gen { len } => println!("{}", generate_password(*len)),
+        Cmd::Run { env_file, no_masking, cmd } => {
+            use gitpass_cli::inject;
+            let s = unlock(&cli, &root)?;
+            let sr = SessionResolver(&s);
+            let mut res = inject::Resolved::new(&sr);
+            let mut env = vec![];
+            for f in env_file {
+                let text = Zeroizing::new(std::fs::read_to_string(f).with_context(|| format!("reading {}", f.display()))?);
+                env.extend(inject::parse_env_file(&text, &mut res)?);
+            }
+            let secrets = std::mem::take(&mut res.secrets);
+            drop(s);
+            let code = inject::run_child(cmd, &env, &secrets, !*no_masking)?;
+            drop(env); drop(secrets);
+            std::process::exit(code);
+        }
+        Cmd::Inject { input, output } => {
+            use gitpass_cli::inject;
+            use std::io::Read;
+            let text = Zeroizing::new(match input {
+                Some(p) => std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?,
+                None => { let mut b = String::new(); std::io::stdin().read_to_string(&mut b)?; b }
+            });
+            let s = unlock(&cli, &root)?;
+            let sr = SessionResolver(&s);
+            let out = inject::render_template(&text, &mut inject::Resolved::new(&sr))?;
+            match output {
+                Some(p) => {
+                    gitpass_core::fsutil::atomic_write(p, out.as_bytes())?;
+                    #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(p, std::fs::Permissions::from_mode(0o600))?; }
+                    eprintln!("wrote {} (mode 0600; contains plaintext secrets)", p.display());
+                }
+                None => { use std::io::Write; std::io::stdout().write_all(out.as_bytes())?; }
+            }
+        }
         Cmd::Remote { cmd } => match cmd {
             RemoteCmd::Add { url, allow_local } => {
                 print!("{}", gitpass_core::remote::add(&root, url, *allow_local)?);

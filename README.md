@@ -148,6 +148,69 @@ Here's what migration does:
 
 If it's interrupted, `format.json` still says v1. Rerun `gitpass migrate`, and it restores from the backup and starts over. Old (0.1.x) clients refuse version 2. Once one device has migrated, upgrade gitpass on the others too. The KDF auto-upgrade to 256 MiB happens on the first unlock after migration.
 
+## Secrets in commands and config files: `gitpass run` / `gitpass inject`
+
+Reference a field as `gp://<vault>/<item>/<field>`. `<item>` is an item id, an exact title
+(case-insensitive) or a unique fuzzy match; `<field>` is `password`, `username`, `url`, `notes`,
+`title`, `totp` (current code) or the label/id of a custom field. Percent-encode `/` (`%2F`), spaces
+(`%20`) and `%` (`%25`) inside a segment.
+
+```sh
+# .env.gitpass (dotenv syntax; `#` comments, optional quotes, `export ` prefix allowed)
+DB_PASSWORD=gp://Dev/Postgres/password
+DATABASE_URL="postgres://{{ gp://Dev/Postgres/username }}:{{ gp://Dev/Postgres/password }}@db:5432/app"
+LOG_LEVEL=info
+
+gitpass run --env-file .env.gitpass -- ./server --port 8080
+```
+
+* A value that is a whole `gp://` reference is resolved; references embedded in other text must be
+  wrapped as `{{ gp://... }}` (an unwrapped embedded reference is an error).
+* Resolved values go **only** into the child's environment; nothing is written to disk. Any
+  reference that fails to resolve aborts before the child starts.
+* The child's stdout/stderr are piped through a masker that replaces every resolved value with
+  `<concealed by gitpass>` (also when a value is split across writes). To do that the masker holds
+  back up to `len(longest secret) - 1` bytes until more output arrives, so a prompt without a
+  trailing newline may appear slightly late. `--no-masking` connects the child directly to the
+  terminal. stdin is inherited. The child's exit code is returned (128+N for signal N).
+* Limits: masking cannot stop the child from writing a secret to a file, sending it over the
+  network, or printing it transformed (base64, split by characters, etc.). The child's environment
+  is visible to same-user processes (e.g. `ps eww` on some systems).
+
+```sh
+# config.yml.tpl
+#   user: {{ gp://Dev/Postgres/username }}
+#   pass: {{ gp://Dev/Postgres/password }}
+gitpass inject -i config.yml.tpl            # rendered to stdout
+gitpass inject -i config.yml.tpl -o config.yml   # written with mode 0600 (plaintext secrets on disk!)
+```
+`{{ ... }}` blocks that do not contain a `gp://` reference are left untouched.
+
+## Verifying sharing and revocation
+
+`crates/gitpass-core/tests/share_git.rs` (`cargo test -p gitpass-core --test share_git`) runs this
+flow automatically with two accounts in separate temp dirs and a temp bare git repo. By hand:
+
+```sh
+T=$(mktemp -d); git init --bare -q -b main $T/remote.git
+export GITPASS_PASSWORD='fake-master-pw-123'
+A="gitpass --yes --path $T/alice --device-name alice"; B="gitpass --yes --path $T/bob --device-name bob"  # --yes skips confirmations
+$A init --save-secret-key; $B init --save-secret-key
+$A vault create team; GITPASS_ITEM_PASSWORD=s3cret $A add team --title db
+$B identity show             # prints Bob's fingerprint; writes $T/bob/identity.pub
+$A vault share team --to $T/bob/identity.pub   # verify the fingerprint out of band
+$A remote add $T/remote.git --allow-local       # pushes the encrypted vault
+git clone -q $T/remote.git $T/alice-clone
+$B vault accept $T/alice-clone/vaults/<vault-id>/members/<bob-fpr>.enc
+$B get team db --password-only                  # -> s3cret
+$A vault unshare team <bob-fpr>                  # rotates the vault key, drops Bob's member file
+GITPASS_ITEM_PASSWORD=after $A add team --title new; $A sync
+git -C $T/alice-clone pull -q                    # members/<bob-fpr>.enc is gone; items re-encrypted
+```
+After revocation Bob still has his previously accepted snapshot (anything already copied cannot be
+"un-shared"), but his key cannot decrypt the new item, the re-encrypted old items, or the vault meta,
+and the vault's `key_version` has increased.
+
 ## Security notes
 - **Git history is forever.** `passwd` and `rotate-secret-key` only re-wrap `keyset.enc`. The old `keyset.enc` stays in git history. If someone has the old password and the old Secret Key, they can still open the **old Account Key** from history. That key unwraps the old `vault.key.enc` files, and the vault keys inside are unchanged unless you rotate them. **To recover from a leaked password + Secret Key, run `gitpass rotate-account-key --with-vault-keys`** (and change the leaked password). The first part gives you a new Account Key, so old keysets can't unwrap the current `vault.key.enc` files or the manifest. The second part gives you new Vault Keys, so old vault keys from history can't decrypt items written after rotation. Ciphertext that's already in history stays readable to that attacker, so rotate the actual site passwords too.
 - `rotate-account-key` isn't a single atomic step: it rewrites N vault key files plus the keyset. It takes a full backup (`.gitpass-backup-<ts>/`) first. If it's interrupted, restore from that backup. `vault rotate` builds the new vault in a temp dir and swaps the directories.
