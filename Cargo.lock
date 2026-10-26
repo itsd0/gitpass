@@ -625,6 +625,7 @@ dependencies = [
  "gitpass-core",
  "rpassword",
  "serde_json",
+ "tempfile",
  "ureq",
  "zeroize",
 ]
