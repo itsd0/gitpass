@@ -1,0 +1,26 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>gitpass</title>
+<style>
+body{font:13px sans-serif;width:320px;margin:10px}
+input,button{font:inherit} .row{display:flex;gap:6px;margin:6px 0} .row input{flex:1}
+.item{border-bottom:1px solid #ddd;padding:6px 0} .item small{color:#666} .hidden{display:none}
+#err{color:#b00}
+</style></head>
+<body>
+<div id="err"></div>
+<section id="locked" class="hidden">
+  <form id="unlockForm" class="row"><input id="pw" type="password" placeholder="Master password" autocomplete="off" autofocus><button>Unlock</button></form>
+</section>
+<section id="unlocked" class="hidden">
+  <div class="row"><input id="q" placeholder="Search vault"><button id="lock">Lock</button></div>
+  <div><b>For this site</b> <small id="origin"></small></div>
+  <div id="matches"></div>
+  <div><b>Search results</b></div>
+  <div id="results"></div>
+</section>
+<section>
+  <div class="row"><input id="len" type="number" value="20" min="8" max="128" style="max-width:60px"><button id="gen">Generate &amp; copy</button></div>
+  <code id="genOut"></code>
+</section>
+<script src="popup.js"></script>
+</body></html>
