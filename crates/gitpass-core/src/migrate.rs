@@ -149,7 +149,7 @@ pub fn migrate(root: &Path, password: &str, secret: &SecretKey, opts: MigrateOpt
     let salt = B64.decode(&fmt.salt)?;
     let auk = derive_auk(password, secret, &salt, &fmt.account_id, &fmt.kdf)?;
     let keyset_hash = write_json(&tmp.join("keyset.enc"), &wrap_key(&auk, &plain.account_key, &store::keyset_aad(&fmt))?)?;
-    let mut m = Manifest { format: store::FORMAT_VERSION, account_id: fmt.account_id.clone(), epoch: 1, keyset_hash, vaults: BTreeMap::new(), devices_hash: None };
+    let mut m = Manifest { format: store::MANIFEST_FORMAT_V3, account_id: fmt.account_id.clone(), epoch: 1, keyset_hash, vaults: BTreeMap::new(), devices_hash: None, identity: None };
     for (vid, vk, name, items) in &plain.vaults {
         let d = tmp.join("vaults").join(vid);
         fs::create_dir_all(d.join("items"))?;
@@ -157,7 +157,7 @@ pub fn migrate(root: &Path, password: &str, secret: &SecretKey, opts: MigrateOpt
         let mut ve = VaultEntry { key_version: 1, ..Default::default() };
         ve.key_hash = write_json(&d.join("vault.key.enc"),
             &VaultKeyFile { key_version: 1, envelope: wrap_key(&plain.account_key, vk, &store::vault_key_aad(vid, 1))? })?;
-        let mpt = Zeroizing::new(serde_json::to_vec(&VaultMeta { name: name.to_string(), description: None })?);
+        let mpt = Zeroizing::new(serde_json::to_vec(&VaultMeta { name: name.to_string(), description: None, icon: None, color: None })?);
         ve.meta_hash = write_json(&d.join("meta.enc"), &seal(vk, &mpt, &store::meta_aad(vid))?)?;
         for (iid, ver, item) in items {
             let pt = Zeroizing::new(serde_json::to_vec(item)?);

@@ -1,0 +1,10 @@
+secret.key
+*.tmp
+.gitpass.lock
+.gitpass-state.json
+.gitpass-device.json
+.gitpass-device-key.json
+.gitpass-revoke-pending.json
+.gitpass-backup-*/
+.gitpass-migrate-tmp/
+.gitpass-migrating
