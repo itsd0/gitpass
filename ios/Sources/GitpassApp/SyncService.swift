@@ -208,6 +208,11 @@ final class GitHubSyncService {
     ]
 
     static func isSyncable(path: String) -> Bool {
+        // Remote tree paths are untrusted: never let one escape the
+        // vault directory (absolute paths, `..` or empty components).
+        if path.isEmpty || path.hasPrefix("/") { return false }
+        if path.split(separator: "/", omittingEmptySubsequences: false)
+            .contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) { return false }
         if localOnlyFiles.contains(path) { return false }
         if path.contains("backup") { return false }
         if path.hasPrefix(".git/") { return false }

@@ -135,6 +135,9 @@ final class GitpassTests: XCTestCase {
         XCTAssertFalse(GitHubSyncService.isSyncable(path: ".gitpass-state.json"))
         XCTAssertFalse(GitHubSyncService.isSyncable(path: ".gitpass-device.json"))
         XCTAssertFalse(GitHubSyncService.isSyncable(path: ".git/config"))
+        XCTAssertFalse(GitHubSyncService.isSyncable(path: "../escape.json"))
+        XCTAssertFalse(GitHubSyncService.isSyncable(path: "items/../../escape.json"))
+        XCTAssertFalse(GitHubSyncService.isSyncable(path: "/etc/passwd"))
         XCTAssertTrue(GitHubSyncService.isSyncable(path: "format.json"))
         XCTAssertTrue(GitHubSyncService.isSyncable(path: "vaults/abc/items/xyz.enc"))
     }
