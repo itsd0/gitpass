@@ -22,17 +22,18 @@ struct UnlockView: View {
                     VStack(spacing: 8) {
                         ZStack {
                             RoundedRectangle(cornerRadius: 18)
-                                .fill(Color.gitpassOrange.opacity(0.14))
+                                .fill(Color.black)
+                                .overlay(RoundedRectangle(cornerRadius: 18).stroke(Color.gitpassStroke, lineWidth: 1))
                                 .frame(width: 84, height: 84)
                             Text("gp")
                                 .font(.system(size: 34, weight: .bold, design: .rounded))
-                                .foregroundStyle(Color.gitpassOrange)
+                                .foregroundStyle(Color.gitpassPrimary)
                         }
                         Text("gitpass")
                             .font(.largeTitle.bold())
                         Text(String(localized: "End-to-end encrypted passwords in your own Git repository."))
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.gitpassSecondary)
                             .multilineTextAlignment(.center)
                     }
 
@@ -60,7 +61,7 @@ struct UnlockView: View {
                     if let errorMessage {
                         Text(errorMessage)
                             .font(.footnote)
-                            .foregroundStyle(.red)
+                            .foregroundStyle(Color.gitpassPrimary)
                             .multilineTextAlignment(.center)
                     }
 
@@ -72,7 +73,8 @@ struct UnlockView: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .tint(.gitpassOrange)
+                    .tint(.gitpassPrimary)
+                    .foregroundStyle(.black)
                     .disabled(!canUnlock)
                     .frame(maxWidth: .infinity)
 
@@ -87,6 +89,7 @@ struct UnlockView: View {
                             }
                         } label: {
                             Label(String(localized: "Unlock with Face ID"), systemImage: "faceid")
+                                .foregroundStyle(Color.gitpassPrimary)
                         }
                     }
 
@@ -96,7 +99,7 @@ struct UnlockView: View {
                         if store.vaultExists {
                             Text(String(localized: "A vault is already on this device. Unlock it above."))
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.gitpassSecondary)
                         } else {
                             Button(String(localized: "Create a new account on this device")) {
                                 isCreating = true
@@ -104,7 +107,7 @@ struct UnlockView: View {
                             .font(.footnote)
                             Text(String(localized: "Creating an account generates a Secret Key. Save it somewhere offline — there is no recovery."))
                                 .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(Color.gitpassSecondary)
                                 .multilineTextAlignment(.center)
                         }
                         Button(String(localized: "Sync from GitHub first")) {
@@ -115,6 +118,7 @@ struct UnlockView: View {
                 }
                 .padding()
             }
+            .gitpassBackground()
             .sheet(isPresented: $showingSync) {
                 SyncSetupView()
                     .environmentObject(store)
@@ -148,7 +152,11 @@ struct UnlockView: View {
     private func errorDescription(_ error: Error) -> String {
         if let gitpass = error as? GitpassError {
             switch gitpass {
-            case .Generic(let message): return message
+            case .Generic(let message):
+                // Core's CLI hint for a missing format.json; never show
+                // a desktop command on iOS.
+                if message.contains("not initialized") { return VaultStore.noVaultMessage }
+                return message
             }
         }
         return error.localizedDescription

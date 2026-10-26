@@ -52,7 +52,12 @@ final class VaultStore: ObservableObject {
 
     // MARK: - Unlock / lock
 
+    /// Shown instead of core's desktop hint ("run `gitpass init`"),
+    /// which makes no sense on a phone.
+    static let noVaultMessage = String(localized: "No vault on this device yet. Open GitHub Sync and pull your vault first.")
+
     func unlock(password: String, secretKey: String) throws {
+        guard vaultExists else { throw GitpassError.Generic(Self.noVaultMessage) }
         let opened = try openVault(root: vaultRoot.path, password: password, secretKey: secretKey)
         vault = opened
         sessionPassword = password

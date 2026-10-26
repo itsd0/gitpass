@@ -30,7 +30,7 @@ struct SettingsView: View {
                     } else {
                         Text(String(localized: "Face ID is not available on this device or simulator. Unlock with your master password and Secret Key."))
                             .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.gitpassSecondary)
                     }
                     Button(String(localized: "Lock now")) {
                         store.lock()
@@ -40,24 +40,25 @@ struct SettingsView: View {
                 Section(String(localized: "Sync")) {
                     Button(String(localized: "GitHub sync")) { showingSync = true }
                     if let lastSyncMessage = store.lastSyncMessage {
-                        Text(lastSyncMessage).font(.footnote).foregroundStyle(.secondary)
+                        Text(lastSyncMessage).font(.footnote).foregroundStyle(Color.gitpassSecondary)
                     }
                     Text(String(localized: "Sync uses the GitHub API over HTTPS with the desktop's field-level merge rules. Whole-vault creation and deletion still go through desktop git sync."))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.gitpassSecondary)
                 }
                 Section(String(localized: "About")) {
                     Text(String(localized: "gitpass for iOS — a companion to the gitpass desktop app. All cryptography runs in gitpass-core (Rust); Swift never implements it."))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.gitpassSecondary)
                     Text(String(localized: "Vault format v5. If you lose your master password and Secret Key, there is no recovery."))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.gitpassSecondary)
                 }
                 if let message {
                     Section { Text(message).font(.footnote) }
                 }
             }
+            .gitpassBackground()
             .navigationTitle(String(localized: "Settings"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -88,6 +89,37 @@ struct SyncSetupView: View {
     var body: some View {
         NavigationStack {
             Form {
+                if tokenPresent {
+                    // Connected: show what was saved instead of an
+                    // empty form, plus a way to disconnect.
+                    Section(String(localized: "GitHub")) {
+                        HStack {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundStyle(Color.gitpassPrimary)
+                            Text(String(localized: "Connected"))
+                                .font(.headline)
+                                .foregroundStyle(Color.gitpassPrimary)
+                        }
+                        LabeledContent(String(localized: "Client ID")) {
+                            Text(clientId.isEmpty ? String(localized: "Not saved") : clientId)
+                                .font(.footnote.monospaced())
+                                .foregroundStyle(Color.gitpassSecondary)
+                                .textSelection(.enabled)
+                        }
+                        TextField(String(localized: "Vault repository (owner/repo)"), text: $repo)
+                            .autocapitalization(.none)
+                            .disableAutocorrection(true)
+                            .onSubmit { saveSettings() }
+                        Button(role: .destructive) {
+                            KeychainStore.shared.deleteGitHubToken()
+                            tokenPresent = false
+                            status = String(localized: "Disconnected. The client ID is kept so you can reconnect.")
+                        } label: {
+                            Text(String(localized: "Disconnect GitHub"))
+                                .foregroundStyle(Color.gitpassPrimary)
+                        }
+                    }
+                } else {
                 Section(String(localized: "GitHub")) {
                     TextField(String(localized: "OAuth App client ID"), text: $clientId)
                         .autocapitalization(.none)
@@ -97,17 +129,10 @@ struct SyncSetupView: View {
                         .disableAutocorrection(true)
                     Text(String(localized: "The client ID is an OAuth App identifier, not a secret. Create one at github.com/settings/developers (do not enable a client secret flow for a public device app) and paste its client ID here. The token it issues is stored in the Keychain."))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.gitpassSecondary)
                 }
                 Section {
-                    if tokenPresent {
-                        Text(String(localized: "GitHub is connected."))
-                        Button(String(localized: "Disconnect GitHub"), role: .destructive) {
-                            KeychainStore.shared.deleteGitHubToken()
-                            tokenPresent = false
-                            status = String(localized: "Disconnected.")
-                        }
-                    } else if let deviceCode {
+                    if let deviceCode {                    } else if let deviceCode {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(String(localized: "On another device, open:"))
                                 .font(.footnote)
@@ -130,6 +155,7 @@ struct SyncSetupView: View {
                         .disabled(clientId.isEmpty || isWorking)
                     }
                 }
+                }
                 Section(String(localized: "Sync")) {
                     Button(String(localized: "Sync now")) {
                         Task { await runSync() }
@@ -140,10 +166,11 @@ struct SyncSetupView: View {
                     }
                     .disabled(!tokenPresent || isWorking)
                     if !status.isEmpty {
-                        Text(status).font(.footnote).foregroundStyle(.secondary)
+                        Text(status).font(.footnote).foregroundStyle(Color.gitpassSecondary)
                     }
                 }
             }
+            .gitpassBackground()
             .navigationTitle(String(localized: "GitHub Sync"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -154,7 +181,10 @@ struct SyncSetupView: View {
         }
     }
 
+    /// Client ID and repo are not secrets, so UserDefaults is fine; the
+    /// token itself only ever lives in the Keychain.
     private func saveSettings() {
+        clientId = clientId.trimmingCharacters(in: .whitespacesAndNewlines)
         UserDefaults.standard.set(clientId, forKey: "gitpass.github.clientId")
         UserDefaults.standard.set(repo, forKey: "gitpass.github.repo")
     }
@@ -180,6 +210,7 @@ struct SyncSetupView: View {
                 clientId: clientId, deviceCode: deviceCode.deviceCode, initialInterval: deviceCode.interval
             )
             try KeychainStore.shared.saveGitHubToken(token)
+            saveSettings()
             tokenPresent = true
             self.deviceCode = nil
             status = String(localized: "GitHub connected.")
