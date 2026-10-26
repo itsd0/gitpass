@@ -10,6 +10,7 @@ on:
     paths:
       - "ios/**"
       - "crates/gitpass-core/**"
+      - "crates/gitpass-ios-ffi/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/ios.yml"
@@ -17,6 +18,7 @@ on:
     paths:
       - "ios/**"
       - "crates/gitpass-core/**"
+      - "crates/gitpass-ios-ffi/**"
       - "Cargo.toml"
       - "Cargo.lock"
       - ".github/workflows/ios.yml"
@@ -78,12 +80,18 @@ jobs:
             exit 1
           fi
           echo "Testing on simulator $UDID"
+          # Ad-hoc signing ("-", no team, no secrets): a fully unsigned
+          # bundle has no entitlements, so the simulator keychain
+          # rejects it with errSecMissingEntitlement (-34018) and the
+          # Keychain tests fail. Ad-hoc signing is simulator-only.
           xcodebuild test \
             -project Gitpass.xcodeproj \
             -scheme Gitpass \
             -destination "id=$UDID" \
             -configuration Debug \
-            CODE_SIGNING_ALLOWED=NO
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=
       - name: Build unsigned archive for inspection
         working-directory: ios
         run: |
