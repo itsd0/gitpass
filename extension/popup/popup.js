@@ -1,119 +1,374 @@
-/* global chrome, GitpassI18n, GitpassIcons */
+/* global chrome, GitpassI18n, GitpassPopupIcons, GitpassView */
 'use strict';
+// gitpass popup v0.6: 1Password-style 2-pane UI. All host calls go through background.js as `popup:*` messages.
 const $ = (id) => document.getElementById(id);
 const t = (k, f) => GitpassI18n.t(k, f);
-// `window.__gitpassMock` lets the preview page render without Chrome APIs.
+const V = GitpassView;
+const { UI, categoryIcon } = GitpassPopupIcons;
+const ROW_H = 52;
+
 function send(msg) {
   if (window.__gitpassMock) return window.__gitpassMock(msg);
   return new Promise((res, rej) => chrome.runtime.sendMessage(msg, (r) => {
     if (chrome.runtime.lastError) return rej(new Error(chrome.runtime.lastError.message));
-    r && r.ok ? res(r.result) : rej(new Error((r && r.error) || 'error'));
+    if (r && r.ok) return res(r.result);
+    const e = new Error((r && r.error) || 'error'); e.code = r && r.code; rej(e);
   }));
 }
-const ICON = {
-  copy: '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>',
-  clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
-};
-function show(view) { for (const v of ['nohost', 'locked', 'unlocked']) $(v).classList.toggle('hidden', v !== view); }
-function setErr(id, e) { $(id).textContent = e ? String(e.message || e) : ''; }
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function iconBtn(svg, title, onclick) {
+  const b = el('button', 'icon-btn'); b.type = 'button'; b.innerHTML = svg; b.title = title;
+  b.onclick = (e) => { e.stopPropagation(); Promise.resolve(onclick(b)).catch(showErr); }; return b;
+}
 let toastT = null;
-function toast(msg) { const el = $('toast'); el.textContent = msg; el.classList.remove('hidden'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.add('hidden'), 1600); }
-async function copy(text, label) { await navigator.clipboard.writeText(text); toast(label || t('copied', 'Copied')); }
-function isHostError(e) { return /native messaging host|not found|forbidden|disconnected|not allowed/i.test(String(e && e.message)); }
-
-function button(cls, html, title, onclick) {
-  const b = document.createElement('button'); b.className = 'act ' + cls; b.innerHTML = html; b.title = title; b.type = 'button';
-  b.onclick = async (e) => { e.stopPropagation(); try { await onclick(b); } catch (err) { setErr('err', err); } };
-  return b;
+function toast(msg) { const e = $('toast'); if (!e) return; e.textContent = msg; e.classList.remove('hidden'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.add('hidden'), 1600); }
+function showErr(e) { toast(String((e && e.message) || e)); }
+async function copy(text, label) {
+  if (window.__gitpassMock) { toast(label || t('copied', 'Copied')); return; }
+  await navigator.clipboard.writeText(text); toast(label || t('copied', 'Copied'));
 }
-function renderItems(el, items, canFill, emptyMsg) {
-  el.textContent = '';
-  if (!items.length) { const d = document.createElement('div'); d.className = 'empty'; d.textContent = emptyMsg; el.append(d); return; }
-  for (const it of items) {
-    const row = document.createElement('div'); row.className = 'row';
-    const ic = document.createElement('span'); ic.innerHTML = GitpassIcons.categoryIcon(it.category || 'login', 30);
-    const meta = document.createElement('div'); meta.className = 'meta';
-    const ti = document.createElement('div'); ti.className = 't'; ti.textContent = it.title;
-    const un = document.createElement('div'); un.className = 'u'; un.textContent = it.username || '—';
-    meta.append(ti, un);
-    const acts = document.createElement('div'); acts.className = 'acts';
-    if (canFill) {
-      acts.append(button('fill', t('fill', 'Fill'), t('fillTitle', 'Fill on this page'), async () => { await send({ type: 'fillActive', item_id: it.id }); window.close(); }));
-      acts.append(button('', ICON.copy, t('copyPassword', 'Copy password'), async () => { const r = await send({ type: 'copyActive', item_id: it.id }); await copy(r.password, t('passwordCopied', 'Password copied')); }));
-    }
-    if (it.has_totp) {
-      acts.append(button('totp', ICON.clock, t('copyTotp', 'Copy TOTP'), async (b) => {
-        const r = await send({ type: 'totp', item_id: it.id }); await copy(r.code, t('totpCopied', 'TOTP copied'));
-        let left = r.remaining; b.textContent = r.code.slice(0, 3) + ' ' + r.code.slice(3) + ' · ' + left + 's';
-        clearInterval(b._t); b._t = setInterval(() => { left -= 1; if (left <= 0) { clearInterval(b._t); b.innerHTML = ICON.clock; } else b.textContent = r.code.slice(0, 3) + ' ' + r.code.slice(3) + ' · ' + left + 's'; }, 1000);
-      }));
-    }
-    row.append(ic, meta, acts); el.append(row);
-  }
-}
+function show(view) { for (const v of ['nohost', 'locked', 'unlocked']) { const e = $(v); if (e) e.classList.toggle('hidden', v !== view); } }
 
+// ---------- state ----------
+const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpTimer: null, panel: null, view: null };
+
+// ---------- top-level ----------
 async function refresh() {
-  setErr('err'); setErr('unlockErr');
-  let st;
-  try { st = await send({ type: 'status' }); } catch (e) {
-    $('hostErr').textContent = String(e.message || e);
-    $('hostCmd').textContent = 'cd ~/gitpass && cargo build --release -p gitpass-host\n"$HOME/Library/Application Support/gitpass/bin/gitpass-host" install --browser chrome --extension-id ' + (globalThis.chrome && chrome.runtime && chrome.runtime.id || '<id>') + ' --vault ~/.gitpass';
-    show('nohost'); return;
-  }
-  if (!st.unlocked) { $('skRow').classList.toggle('hidden', !!st.secret_key_file); show('locked'); $('pw').focus(); return; }
+  let st = null, err = null;
+  try { st = await send({ type: 'popup:status' }); } catch (e) { err = e; }
+  const view = V.viewFor(st, err);
+  S.view = view;
+  if (view === 'nohost') return showNoHost(err);
+  if (view === 'locked' || view === 'appdown') return showLocked(view, st);
   show('unlocked');
-  try {
-    const m = await send({ type: 'matchActive' });
-    $('origin').textContent = m.origin ? m.origin.replace(/^https:\/\//, '') : t('notHttps', 'not an https page');
-    renderItems($('matches'), m.items, !!m.origin, m.origin ? t('noMatches', 'No saved logins for this site') : t('notFillable', 'Open an https page to fill'));
-  } catch (e) { setErr('err', e); }
+  if (st && st.account) { $('acctName').textContent = st.account.name || 'gitpass'; $('acct').title = st.account.email || ''; }
+  await loadData();
   $('q').focus();
 }
 
-// Eye toggles
-document.querySelectorAll('.eye').forEach((b) => b.addEventListener('click', () => {
-  const i = $(b.dataset.for); const on = i.type === 'password'; i.type = on ? 'text' : 'password'; b.classList.toggle('on', on);
-}));
+function showNoHost(e) {
+  $('hostErr').textContent = String((e && e.message) || '');
+  $('hostCmd').textContent = 'cd ~/gitpass && cargo build --release -p gitpass-host\n"$HOME/Library/Application Support/gitpass/bin/gitpass-host" install --browser chrome --extension-id ' + ((globalThis.chrome && chrome.runtime && chrome.runtime.id) || '<id>');
+  show('nohost');
+}
 
+function showLocked(view, st) {
+  stopTotp();
+  show('locked');
+  $('unlockErr').textContent = '';
+  $('unlockForm').classList.add('hidden'); $('primaryBox').classList.remove('hidden');
+  const appDown = view === 'appdown';
+  $('touchIc').innerHTML = appDown ? UI.external : UI.fingerprint;
+  $('touchLbl').textContent = appDown ? t('openAppToUnlock', 'Open gitpass app to unlock') : t('unlockTouchId', 'Unlock with Touch ID');
+  $('usePw').textContent = appDown ? t('unlockWithPassword', 'Unlock with password') : t('usePassword', 'Use password');
+  $('lockedSub').textContent = appDown ? t('appNotRunning', 'The gitpass app is not running.') : ((st && st.account && st.account.email) || '');
+  // Secret Key is only needed in standalone mode (app not running).
+  $('skRow').classList.toggle('hidden', !appDown || !!(st && st.secret_key_file));
+  $('touchBtn').focus();
+}
+
+$('touchBtn').onclick = async () => {
+  const b = $('touchBtn'); b.disabled = true; $('unlockErr').textContent = '';
+  try {
+    if (S.view === 'appdown') { await send({ type: 'popup:open_in_app' }); $('lockedSub').textContent = t('waitingForApp', 'Waiting for gitpass…'); setTimeout(refresh, 2500); return; }
+    const r = await send({ type: 'popup:request_unlock', reason: t('unlockReason', 'Unlock the gitpass browser extension') });
+    if (r && r.unlocked) await refresh(); else $('unlockErr').textContent = t('unlockCancelled', 'Unlock was cancelled');
+  } catch (e) {
+    if (/app_not_running/.test(e.code || e.message)) return showLocked('appdown');
+    $('unlockErr').textContent = String(e.message || e);
+  } finally { b.disabled = false; }
+};
+$('usePw').onclick = () => { $('primaryBox').classList.add('hidden'); $('unlockForm').classList.remove('hidden'); $('pw').focus(); };
+$('backTouch').onclick = () => { $('unlockForm').classList.add('hidden'); $('primaryBox').classList.remove('hidden'); };
 $('unlockForm').onsubmit = async (e) => {
   e.preventDefault();
   const btn = $('unlockBtn'); if (btn.disabled) return;
-  const msg = { type: 'unlock', password: $('pw').value };
+  const msg = { type: 'popup:unlock', password: $('pw').value };
   const sk = $('sk').value.trim(); if (sk) msg.secret_key = sk;
-  if (!msg.password) { setErr('unlockErr', t('pwRequired', 'Enter your master password')); return; }
-  btn.disabled = true; btn.querySelector('.spinner').classList.remove('hidden'); setErr('unlockErr');
+  if (!msg.password) { $('unlockErr').textContent = t('pwRequired', 'Enter your master password'); return; }
+  const sp = btn.querySelector('.spinner');
+  btn.disabled = true; if (sp) sp.classList.remove('hidden');
   try { await send(msg); $('pw').value = ''; $('sk').value = ''; await refresh(); }
-  catch (err) { setErr('unlockErr', /unlock failed/i.test(err.message) ? t('wrongCreds', 'Wrong master password or Secret Key') : err); $('pw').select(); }
-  finally { btn.disabled = false; btn.querySelector('.spinner').classList.add('hidden'); }
+  catch (err) { $('unlockErr').textContent = /unlock failed|denied/i.test(err.message) ? t('wrongCreds', 'Wrong master password or Secret Key') : String(err.message); $('pw').select(); }
+  finally { btn.disabled = false; if (sp) sp.classList.add('hidden'); }
 };
-$('lock').onclick = async () => { await send({ type: 'lock' }).catch((e) => setErr('err', e)); refresh(); };
+document.querySelectorAll('.eye').forEach((b) => {
+  b.innerHTML = UI.eye;
+  b.addEventListener('click', () => { const i = $(b.dataset.for); const on = i.type === 'password'; i.type = on ? 'text' : 'password'; b.innerHTML = on ? UI.eyeOff : UI.eye; });
+});
 $('retry').onclick = refresh;
+$('lock').onclick = async () => { await send({ type: 'popup:lock' }).catch(showErr); refresh(); };
+
+// ---------- data + list ----------
+async function loadData() {
+  const [vaults, all, match] = await Promise.all([
+    send({ type: 'popup:list_vaults' }).catch(() => ({ vaults: [] })),
+    send({ type: 'popup:list_items' }).catch((e) => { showErr(e); return { items: [] }; }),
+    send({ type: 'popup:match_active' }).catch(() => ({ items: [], origin: null })),
+  ]);
+  S.vaults = vaults.vaults || []; S.all = all.items || []; S.suggested = match.items || []; S.origin = match.origin || null;
+  const want = window.__gitpassMockParams && window.__gitpassMockParams.get('filter');
+  if (want) S.filter = want; else if (S.view !== 'unlocked-loaded' && !S.suggested.length && S.filter === 'suggested') S.filter = 'all';
+  S.view = 'unlocked-loaded';
+  renderFilter(); applyFilter(true);
+  const pre = window.__gitpassMockParams && window.__gitpassMockParams.get('item');
+  if (pre) { const i = S.rows.findIndex((r) => r.id === pre); if (i >= 0) select(i); }
+}
+
+function renderFilter() {
+  const s = $('filter'); s.textContent = '';
+  let group = null, parent = s;
+  for (const f of V.buildFilters(S.vaults)) {
+    if (f.group !== group) { group = f.group; parent = group ? Object.assign(el('optgroup'), { label: group === 'category' ? t('categories', 'Categories') : t('vaults', 'Vaults') }) : s; if (group) s.append(parent); }
+    const o = el('option', null, f.key ? t(f.key, f.label) : f.label); o.value = f.id;
+    if (f.id === 'suggested' && S.origin) o.textContent += ' · ' + V.hostOfUrl(S.origin);
+    parent.append(o);
+  }
+  s.value = S.filter;
+}
+$('filter').onchange = () => { S.filter = $('filter').value; applyFilter(true); };
+
+function applyFilter(selectFirst) {
+  const prevId = S.rows[S.sel] && S.rows[S.sel].id;
+  S.rows = V.filterItems(S.all, S.suggested, S.filter, S.query);
+  let idx = prevId ? S.rows.findIndex((r) => r.id === prevId) : -1;
+  if (idx < 0 && (selectFirst || prevId)) idx = S.rows.length ? 0 : -1;
+  $('list').scrollTop = 0;
+  renderList();
+  select(idx);
+}
+
+function renderList() {
+  const list = $('list'), inner = $('listInner');
+  inner.textContent = '';
+  if (!S.rows.length) {
+    const msg = S.query ? t('noResults', 'No items found') : S.filter === 'suggested' ? (S.origin ? t('noMatches', 'No saved logins for this site') : t('notFillable', 'Open an https page to fill')) : t('noItems', 'No items');
+    inner.append(el('div', 'empty', msg)); return;
+  }
+  const w = V.virtualWindow(list.scrollTop, list.clientHeight || 380, ROW_H, S.rows.length);
+  inner.style.paddingTop = w.padTop + 'px'; inner.style.paddingBottom = w.padBottom + 'px';
+  for (let i = w.start; i < w.end; i++) {
+    const it = S.rows[i];
+    const row = el('div', 'row' + (i === S.sel ? ' sel' : '')); row.setAttribute('role', 'option'); row.dataset.idx = i;
+    const ic = el('span', 'ic'); ic.innerHTML = categoryIcon(it.category, 32);
+    const meta = el('div', 'meta'); meta.append(el('div', 't', it.title), el('div', 'u', it.subtitle || '—'));
+    row.append(ic, meta);
+    if (it.favorite) { const f = el('span', 'fav'); f.innerHTML = UI.star; row.append(f); }
+    row.onclick = () => select(i);
+    row.ondblclick = () => openAndFill();
+    inner.append(row);
+  }
+}
+$('list').addEventListener('scroll', () => renderList(), { passive: true });
 
 let qt = null;
-$('q').oninput = () => {
-  clearTimeout(qt);
-  qt = setTimeout(async () => {
-    const q = $('q').value.trim();
-    $('resultsWrap').classList.toggle('hidden', !q);
-    if (!q) return;
-    try { const r = await send({ type: 'search', query: q }); renderItems($('results'), r.items, false, t('noResults', 'No items found')); } catch (e) { setErr('err', e); }
-  }, 150);
-};
+$('q').oninput = () => { clearTimeout(qt); qt = setTimeout(() => { S.query = $('q').value.trim(); applyFilter(true); }, 80); };
 
-// Generator: local CSPRNG with rejection sampling (no host round-trip, nothing stored).
-function generate() {
-  const len = Number($('len').value);
-  let set = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ';
-  if ($('digits').checked) set += '23456789';
-  if ($('symbols').checked) set += '!@#$%^&*-_=+?';
-  const out = []; const buf = new Uint8Array(1); const lim = 256 - (256 % set.length);
-  while (out.length < len) { crypto.getRandomValues(buf); if (buf[0] < lim) out.push(set[buf[0] % set.length]); }
-  $('genOut').textContent = out.join(''); $('lenV').textContent = len;
+// ---------- detail ----------
+let detailSeq = 0;
+async function select(idx) {
+  S.sel = idx; S.revealed = {}; stopTotp();
+  const list = $('list');
+  if (idx >= 0) list.scrollTop = V.scrollToRow(idx, list.scrollTop, list.clientHeight || 380, ROW_H);
+  renderList();
+  const pane = $('detail'); pane.textContent = '';
+  const it = S.rows[idx];
+  if (!it) { pane.append(el('div', 'empty', t('selectItem', 'Select an item'))); S.detail = null; return; }
+  const seq = ++detailSeq;
+  let d;
+  try { d = (await send({ type: 'popup:get_item', item_id: it.id })).item; } catch (e) { d = { ...it, fields: [], tags: [] }; showErr(e); }
+  if (seq !== detailSeq) return;
+  S.detail = d; renderDetail(d);
 }
-for (const id of ['len', 'digits', 'symbols']) $(id).addEventListener('input', generate);
-$('regen').onclick = generate;
-$('gen').onclick = async () => { try { await copy($('genOut').textContent, t('passwordCopied', 'Password copied')); } catch (e) { setErr('err', e); } };
+
+function renderDetail(d) {
+  const pane = $('detail'); pane.textContent = '';
+  const head = el('div', 'd-head');
+  const ic = el('span', 'ic'); ic.innerHTML = categoryIcon(d.category, 44);
+  const g = el('div', 'grow'); g.append(el('h2', null, d.title), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
+  head.append(ic, g, moreMenu(d));
+  pane.append(head);
+  const acts = el('div', 'd-actions');
+  if (V.fillKind(d.category)) {
+    const b = el('button', 'btn btn-primary', d.category === 'login' && d.url ? t('openFill', 'Open & Fill') : t('fill', 'Fill')); b.onclick = () => openAndFill();
+    acts.append(b);
+  }
+  if (acts.children.length) pane.append(acts);
+  const box = el('div', 'fields');
+  for (const f of d.fields || []) box.append(fieldRow(d, f));
+  if (box.children.length) pane.append(box);
+  if (d.notes) pane.append(el('div', 'notes', d.notes));
+  if (d.tags && d.tags.length) { const tg = el('div', 'tags'); for (const x of d.tags) tg.append(el('span', 'tag', x)); pane.append(tg); }
+  if (d.updated_at) pane.append(el('div', 'meta-line', t('lastEdited', 'Last edited') + ' ' + new Date(d.updated_at).toLocaleString()));
+}
+
+async function secretValue(d, f) {
+  if (S.revealed[f.name] != null) return S.revealed[f.name];
+  if (!f.concealed) return f.value || '';
+  if (f.kind === 'totp') return (await send({ type: 'popup:totp', item_id: d.id })).code;
+  return (await send({ type: 'popup:reveal', item_id: d.id, field: f.name })).value;
+}
+
+function fieldRow(d, f) {
+  const row = el('div', 'f'); const g = el('div', 'grow');
+  g.append(el('div', 'lbl', f.label || f.name));
+  const val = el('div', 'val'); g.append(val); row.append(g);
+  const acts = el('div', 'acts'); row.append(acts);
+  if (f.kind === 'totp') { renderTotp(d, val); }
+  else if (f.concealed) {
+    val.textContent = V.mask(f.kind);
+    acts.append(iconBtn(UI.eye, t('reveal', 'Reveal'), async (b) => {
+      if (S.revealed[f.name] != null) { delete S.revealed[f.name]; val.textContent = V.mask(f.kind); b.innerHTML = UI.eye; return; }
+      const v = await secretValue(d, f); S.revealed[f.name] = v; val.textContent = V.formatValue(f.kind, v); b.innerHTML = UI.eyeOff;
+    }));
+  } else if (f.kind === 'url' && f.value) {
+    const a = el('a', null, f.value); a.href = f.value; a.target = '_blank'; a.rel = 'noopener'; val.append(a); val.classList.add('plain');
+  } else { val.textContent = V.formatValue(f.kind, f.value); if (!/password|card_number/.test(f.kind)) val.classList.add('plain'); }
+  acts.append(iconBtn(UI.copy, t('copy', 'Copy'), async () => copy(await secretValue(d, f), t('copied', 'Copied'))));
+  return row;
+}
+
+// TOTP ring countdown. Fix for v0.5.1 popup.js:45 null classList: the old handler kept a setInterval that
+// touched an element after the list re-rendered. Now there is one timer, guarded by isConnected and cleared on every re-render.
+const RING_C = 2 * Math.PI * 7;
+function renderTotp(d, val) {
+  stopTotp();
+  const wrap = el('div', 'totp'); const code = el('span', null, '••• •••');
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', '0 0 18 18'); svg.setAttribute('class', 'ring');
+  const bg = document.createElementNS(ns, 'circle'), fg = document.createElementNS(ns, 'circle');
+  for (const c of [bg, fg]) { c.setAttribute('cx', '9'); c.setAttribute('cy', '9'); c.setAttribute('r', '7'); }
+  bg.setAttribute('class', 'bg'); fg.setAttribute('class', 'fg'); fg.setAttribute('stroke-dasharray', RING_C.toFixed(3));
+  svg.append(bg, fg); wrap.append(code, svg); val.append(wrap);
+  let st = null, fetching = false;
+  const tick = async () => {
+    if (!wrap.isConnected) return stopTotp();
+    if (!st || st.remaining <= 0) {
+      if (fetching) return; fetching = true;
+      try { const r = await send({ type: 'popup:totp', item_id: d.id }); st = { code: r.code, remaining: r.remaining, period: r.period || 30 }; S.revealed.totp = r.code; }
+      catch (e) { code.textContent = '—'; return stopTotp(); } finally { fetching = false; }
+      if (!wrap.isConnected) return stopTotp();
+      code.textContent = V.formatValue('totp', st.code);
+    } else st.remaining -= 1;
+    fg.setAttribute('stroke-dashoffset', String(V.ringOffset(st.remaining, st.period, RING_C)));
+    svg.classList.toggle('low', st.remaining <= 5);
+  };
+  tick(); S.totpTimer = setInterval(tick, 1000);
+}
+function stopTotp() { if (S.totpTimer) { clearInterval(S.totpTimer); S.totpTimer = null; } }
+
+function moreMenu(d) {
+  const w = el('div', 'menu-wrap');
+  const m = el('div', 'menu hidden');
+  const item = (svg, label, fn) => { const b = el('button'); b.type = 'button'; b.innerHTML = svg; b.append(document.createTextNode(label)); b.onclick = (e) => { e.stopPropagation(); m.classList.add('hidden'); Promise.resolve(fn()).catch(showErr); }; m.append(b); };
+  item(UI.external, t('openInApp', 'Open in gitpass'), () => send({ type: 'popup:open_in_app', item_id: d.id }));
+  item(UI.link, t('copyLink', 'Copy link'), () => copy('gitpass://item/' + encodeURIComponent(d.id), t('linkCopied', 'Link copied')));
+  item(UI.star, d.favorite ? t('unfavorite', 'Remove from Favorites') : t('favorite', 'Add to Favorites'), async () => {
+    await send({ type: 'popup:set_favorite', item_id: d.id, favorite: !d.favorite });
+    d.favorite = !d.favorite; const s = S.all.find((x) => x.id === d.id); if (s) s.favorite = d.favorite; applyFilter(false);
+  });
+  w.append(iconBtn(UI.more, t('more', 'More'), () => m.classList.toggle('hidden')), m);
+  document.addEventListener('click', () => m.classList.add('hidden'));
+  return w;
+}
+
+async function openAndFill() {
+  const d = S.detail; if (!d) return;
+  const kind = V.fillKind(d.category); if (!kind) return;
+  await send({ type: 'popup:open_fill', item_id: d.id, kind, url: d.url || null }).then(() => window.close(), showErr);
+}
+
+async function copyPrimary() {
+  const d = S.detail; const f = V.primarySecretField(d); if (!f) return;
+  await copy(await secretValue(d, f), f.kind === 'password' ? t('passwordCopied', 'Password copied') : t('copied', 'Copied'));
+}
+
+// ---------- panels: generator / new login ----------
+function closePanel() { const p = $('panel'); p.classList.add('hidden'); p.textContent = ''; S.panel = null; $('q').focus(); }
+function panelHead(title) { const h = el('h3', null, title); h.append(iconBtn(UI.close, t('close', 'Close'), closePanel)); return h; }
+
+function localGenerate(len, digits, symbols) {
+  let set = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ';
+  if (digits) set += '23456789'; if (symbols) set += '!@#$%^&*-_=+?';
+  const out = [], buf = new Uint8Array(1), lim = 256 - (256 % set.length);
+  while (out.length < len) { crypto.getRandomValues(buf); if (buf[0] < lim) out.push(set[buf[0] % set.length]); }
+  return out.join('');
+}
+async function generate(len, digits, symbols) {
+  try { return (await send({ type: 'popup:generate', len, digits, symbols })).password; } catch (_) { return localGenerate(len, digits, symbols); }
+}
+
+function openGenerator() {
+  const p = $('panel'); p.textContent = ''; p.classList.remove('hidden'); S.panel = 'gen';
+  p.append(panelHead(t('generator', 'Password generator')));
+  const out = el('div', 'gen-out'); const code = el('code'); out.append(code);
+  const regen = iconBtn(UI.regen, t('regenerate', 'Regenerate'), () => run()); out.append(regen); p.append(out);
+  const r1 = el('div', 'gen-row'); const lab = el('label', null, t('length', 'Length')); const len = Object.assign(el('input'), { type: 'range', min: 8, max: 64, value: 20 }); const lv = el('span', null, '20'); r1.append(lab, len, lv); p.append(r1);
+  const r2 = el('div', 'gen-row');
+  const tog = (key, fb) => { const l = el('label', 'tog'); const c = Object.assign(el('input'), { type: 'checkbox', checked: true }); l.append(c, el('span', null, t(key, fb))); r2.append(l); return c; };
+  const dg = tog('digits', 'Digits'), sy = tog('symbols', 'Symbols'); p.append(r2);
+  const cp = el('button', 'btn btn-primary', t('copy', 'Copy')); cp.onclick = () => copy(code.textContent, t('passwordCopied', 'Password copied')).catch(showErr); p.append(cp);
+  async function run() { lv.textContent = len.value; code.textContent = await generate(Number(len.value), dg.checked, sy.checked); }
+  for (const c of [len, dg, sy]) c.addEventListener('input', run);
+  run();
+}
+
+function openNewLogin() {
+  const p = $('panel'); p.textContent = ''; p.classList.remove('hidden'); S.panel = 'new';
+  p.append(panelHead(t('newLogin', 'New Login')));
+  const f = el('form', 'stack'); f.style.maxWidth = 'none'; f.autocomplete = 'off';
+  const inp = (key, fb, type, val) => { f.append(el('label', null, t(key, fb))); const i = Object.assign(el('input'), { type, value: val || '' }); i.spellcheck = false; f.append(i); return i; };
+  const title = inp('title', 'Title', 'text', S.origin ? V.hostOfUrl(S.origin) : '');
+  const url = inp('website', 'Website', 'url', S.origin || '');
+  const user = inp('username', 'Username', 'text');
+  f.append(el('label', null, t('password', 'Password')));
+  const pwWrap = el('div', 'field'); const pw = Object.assign(el('input'), { type: 'text' }); pw.spellcheck = false;
+  const g = el('button', 'eye'); g.type = 'button'; g.innerHTML = UI.key; g.title = t('generate', 'Generate'); g.onclick = async () => { pw.value = await generate(20, true, true); };
+  pwWrap.append(pw, g); f.append(pwWrap);
+  const vs = el('select'); for (const v of S.vaults) { const o = el('option', null, v.name); o.value = v.id; vs.append(o); }
+  if (S.vaults.length) { f.append(el('label', null, t('vault', 'Vault'))); f.append(vs); }
+  const errEl = el('p', 'err'); f.append(errEl);
+  const save = el('button', 'btn btn-primary', t('save', 'Save')); save.type = 'submit'; f.append(save);
+  f.onsubmit = async (e) => {
+    e.preventDefault(); errEl.textContent = '';
+    if (!url.value || !pw.value) { errEl.textContent = t('needUrlPw', 'Website and password are required'); return; }
+    save.disabled = true;
+    try {
+      await send({ type: 'popup:save_login', origin: url.value, title: title.value || undefined, username: user.value, password: pw.value, vault_id: vs.value || undefined });
+      toast(t('saved', 'Saved')); closePanel(); await loadData();
+    } catch (err) { errEl.textContent = String(err.message || err); } finally { save.disabled = false; }
+  };
+  p.append(f); user.focus();
+  pw.value = ''; generate(20, true, true).then((v) => { if (!pw.value) pw.value = v; });
+}
+
+$('genBtn').innerHTML = UI.key; $('genBtn').onclick = () => (S.panel === 'gen' ? closePanel() : openGenerator());
+$('newBtn').innerHTML = UI.plus; $('newBtn').onclick = () => (S.panel === 'new' ? closePanel() : openNewLogin());
+$('lock').innerHTML = UI.lock; $('searchIc').innerHTML = UI.search;
+
+// ---------- keyboard ----------
+document.addEventListener('keydown', (e) => {
+  if ($('unlocked').classList.contains('hidden')) { if (e.key === 'Escape') window.close(); return; }
+  const a = document.activeElement;
+  const inForm = !!(a && a.closest && a.closest('#panel, select, .menu'));
+  const sel = window.getSelection && String(window.getSelection());
+  const inputSel = a && a.tagName === 'INPUT' && a.selectionStart !== a.selectionEnd;
+  const act = V.keyAction(e, { panel: S.panel, inForm, hasSelection: !!sel || inputSel });
+  if (!act) return;
+  e.preventDefault();
+  if (act === 'close') window.close();
+  else if (act === 'closePanel') closePanel();
+  else if (act === 'down' || act === 'up') select(V.moveSel(S.sel, act === 'down' ? 1 : -1, S.rows.length));
+  else if (act === 'fill') openAndFill();
+  else if (act === 'copyPassword') copyPrimary().catch(showErr);
+});
+
+// ---------- live lock/unlock events ----------
+if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (msg && msg.type === 'popup:event' && (msg.event === 'lock' || msg.event === 'unlock')) refresh();
+  });
+}
 
 GitpassI18n.apply(document);
-generate();
 refresh();

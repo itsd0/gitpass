@@ -106,5 +106,140 @@
  },
  "extDesc": {
   "message": "gitpass autofill. Keys stay in the local gitpass-host process."
+ },
+ "unlockTouchId": {
+  "message": "Unlock with Touch ID"
+ },
+ "usePassword": {
+  "message": "Use password"
+ },
+ "unlockWithPassword": {
+  "message": "Unlock with password"
+ },
+ "openAppToUnlock": {
+  "message": "Open gitpass app to unlock"
+ },
+ "appNotRunning": {
+  "message": "The gitpass app is not running."
+ },
+ "waitingForApp": {
+  "message": "Waiting for gitpass…"
+ },
+ "unlockReason": {
+  "message": "Unlock the gitpass browser extension"
+ },
+ "unlockCancelled": {
+  "message": "Unlock was cancelled"
+ },
+ "back": {
+  "message": "Back"
+ },
+ "newItem": {
+  "message": "New item"
+ },
+ "newLogin": {
+  "message": "New Login"
+ },
+ "filterSuggested": {
+  "message": "Suggestions for this site"
+ },
+ "filterAll": {
+  "message": "All Items"
+ },
+ "filterFavorites": {
+  "message": "Favorites"
+ },
+ "categories": {
+  "message": "Categories"
+ },
+ "vaults": {
+  "message": "Vaults"
+ },
+ "catLogin": {
+  "message": "Logins"
+ },
+ "catNote": {
+  "message": "Secure Notes"
+ },
+ "catCard": {
+  "message": "Credit Cards"
+ },
+ "catIdentity": {
+  "message": "Identities"
+ },
+ "catApi": {
+  "message": "API Credentials"
+ },
+ "catDocument": {
+  "message": "Documents"
+ },
+ "catSsh": {
+  "message": "SSH Keys"
+ },
+ "catWifi": {
+  "message": "Wi-Fi"
+ },
+ "noItems": {
+  "message": "No items"
+ },
+ "selectItem": {
+  "message": "Select an item"
+ },
+ "openFill": {
+  "message": "Open & Fill"
+ },
+ "reveal": {
+  "message": "Reveal"
+ },
+ "lastEdited": {
+  "message": "Last edited"
+ },
+ "openInApp": {
+  "message": "Open in gitpass"
+ },
+ "copyLink": {
+  "message": "Copy link"
+ },
+ "linkCopied": {
+  "message": "Link copied"
+ },
+ "favorite": {
+  "message": "Add to Favorites"
+ },
+ "unfavorite": {
+  "message": "Remove from Favorites"
+ },
+ "more": {
+  "message": "More"
+ },
+ "close": {
+  "message": "Close"
+ },
+ "title": {
+  "message": "Title"
+ },
+ "website": {
+  "message": "Website"
+ },
+ "username": {
+  "message": "Username"
+ },
+ "password": {
+  "message": "Password"
+ },
+ "generate": {
+  "message": "Generate"
+ },
+ "vault": {
+  "message": "Vault"
+ },
+ "save": {
+  "message": "Save"
+ },
+ "saved": {
+  "message": "Saved"
+ },
+ "needUrlPw": {
+  "message": "Website and password are required"
  }
 }

@@ -106,5 +106,140 @@
  },
  "extDesc": {
   "message": "gitpass autofill. Key များသည် local gitpass-host ထဲတွင်သာ ရှိပါသည်။"
+ },
+ "unlockTouchId": {
+  "message": "Touch ID ဖြင့် သော့ဖွင့်ပါ"
+ },
+ "usePassword": {
+  "message": "စကားဝှက် သုံးပါ"
+ },
+ "unlockWithPassword": {
+  "message": "စကားဝှက်ဖြင့် သော့ဖွင့်ပါ"
+ },
+ "openAppToUnlock": {
+  "message": "သော့ဖွင့်ရန် gitpass အက်ပ်ကို ဖွင့်ပါ"
+ },
+ "appNotRunning": {
+  "message": "gitpass အက်ပ် ဖွင့်မထားပါ။"
+ },
+ "waitingForApp": {
+  "message": "gitpass ကို စောင့်နေသည်…"
+ },
+ "unlockReason": {
+  "message": "gitpass browser extension ကို သော့ဖွင့်ရန်"
+ },
+ "unlockCancelled": {
+  "message": "သော့ဖွင့်ခြင်း ပယ်ဖျက်လိုက်သည်"
+ },
+ "back": {
+  "message": "နောက်သို့"
+ },
+ "newItem": {
+  "message": "အသစ်ထည့်ရန်"
+ },
+ "newLogin": {
+  "message": "Login အသစ်"
+ },
+ "filterSuggested": {
+  "message": "ဤဆိုက်အတွက် အကြံပြုချက်များ"
+ },
+ "filterAll": {
+  "message": "အရာအားလုံး"
+ },
+ "filterFavorites": {
+  "message": "အကြိုက်ဆုံးများ"
+ },
+ "categories": {
+  "message": "အမျိုးအစားများ"
+ },
+ "vaults": {
+  "message": "Vault များ"
+ },
+ "catLogin": {
+  "message": "Login များ"
+ },
+ "catNote": {
+  "message": "လုံခြုံသော မှတ်စုများ"
+ },
+ "catCard": {
+  "message": "ခရက်ဒစ်ကတ်များ"
+ },
+ "catIdentity": {
+  "message": "ကိုယ်ရေးအချက်အလက်များ"
+ },
+ "catApi": {
+  "message": "API အထောက်အထားများ"
+ },
+ "catDocument": {
+  "message": "စာရွက်စာတမ်းများ"
+ },
+ "catSsh": {
+  "message": "SSH Key များ"
+ },
+ "catWifi": {
+  "message": "Wi-Fi"
+ },
+ "noItems": {
+  "message": "အရာများ မရှိပါ"
+ },
+ "selectItem": {
+  "message": "အရာတစ်ခု ရွေးပါ"
+ },
+ "openFill": {
+  "message": "ဖွင့်ပြီး ဖြည့်ပါ"
+ },
+ "reveal": {
+  "message": "ပြပါ"
+ },
+ "lastEdited": {
+  "message": "နောက်ဆုံး ပြင်ဆင်ချိန်"
+ },
+ "openInApp": {
+  "message": "gitpass တွင် ဖွင့်ပါ"
+ },
+ "copyLink": {
+  "message": "လင့်ခ် ကူးပါ"
+ },
+ "linkCopied": {
+  "message": "လင့်ခ် ကူးပြီး"
+ },
+ "favorite": {
+  "message": "အကြိုက်ဆုံးသို့ ထည့်ပါ"
+ },
+ "unfavorite": {
+  "message": "အကြိုက်ဆုံးမှ ဖယ်ပါ"
+ },
+ "more": {
+  "message": "နောက်ထပ်"
+ },
+ "close": {
+  "message": "ပိတ်ပါ"
+ },
+ "title": {
+  "message": "ခေါင်းစဉ်"
+ },
+ "website": {
+  "message": "ဝက်ဘ်ဆိုက်"
+ },
+ "username": {
+  "message": "အသုံးပြုသူအမည်"
+ },
+ "password": {
+  "message": "စကားဝှက်"
+ },
+ "generate": {
+  "message": "ထုတ်ပါ"
+ },
+ "vault": {
+  "message": "Vault"
+ },
+ "save": {
+  "message": "သိမ်းပါ"
+ },
+ "saved": {
+  "message": "သိမ်းပြီး"
+ },
+ "needUrlPw": {
+  "message": "ဝက်ဘ်ဆိုက်နှင့် စကားဝှက် လိုအပ်သည်"
  }
 }
