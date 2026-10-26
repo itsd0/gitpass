@@ -3,7 +3,7 @@ import { ArrowLeft, CheckCircle2, FileUp } from 'lucide-react';
 import type { VaultInfo } from '../../api/types';
 import { api } from '../../api/client';
 import { Button, Input } from '../../ui';
-import { IMPORT_FORMATS, canPreview, importReducer, initialImport } from './importWizard';
+import { IMPORT_FORMATS, canPreview, importReducer, initialImport } from './importWizardLogic';
 export function ImportWizard({ onBack, onDone }: { onBack: () => void; onDone: () => void }) {
   const [s, dispatch] = useReducer(importReducer, initialImport());
   const [vaults, setVaults] = useState<VaultInfo[]>([]); const [busy, setBusy] = useState(false);

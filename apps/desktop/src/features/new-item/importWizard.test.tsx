@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { api } from '../../api/client';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { IMPORT_FORMATS, canPreview, importReducer, initialImport } from './importWizard';
+import { IMPORT_FORMATS, canPreview, importReducer, initialImport } from './importWizardLogic';
 import { ImportWizard } from './ImportWizard';
 describe('import wizard reducer', () => {
   it('walks format -> file -> preview -> done and back', () => {
