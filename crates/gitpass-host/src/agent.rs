@@ -18,6 +18,9 @@ use std::time::Duration;
 /// Bundle id of the desktop app (`open -b`).
 pub const APP_BUNDLE_ID: &str = "dev.gitpass.desktop";
 
+/// Planned Windows agent endpoint (named pipe). STUB: neither side speaks it yet.
+pub const WINDOWS_PIPE_NAME: &str = r"\\.\pipe\gitpass-agent";
+
 #[derive(Clone, Debug)]
 pub struct AgentPaths { pub socket: PathBuf, pub token: PathBuf }
 
@@ -26,6 +29,10 @@ impl AgentPaths {
     pub fn default_paths() -> Option<AgentPaths> {
         let dir = if cfg!(target_os = "macos") {
             dirs::home_dir()?.join("Library/Application Support/gitpass")
+        } else if cfg!(windows) {
+            // Windows: the app would listen on the named pipe `WINDOWS_PIPE_NAME`; the client side is not
+            // implemented yet (STUB), so the host always runs standalone there.
+            return None;
         } else {
             PathBuf::from(std::env::var_os("XDG_RUNTIME_DIR")?).join("gitpass")
         };

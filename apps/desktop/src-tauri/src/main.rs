@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 /// Apps launched from Finder get a minimal PATH; add the usual git / gh / credential-helper locations so
 /// `git push` can use the same credentials as the user's Terminal (SSH agent, osxkeychain, `gh auth git-credential`).
+#[cfg(unix)]
 fn extend_path() {
     let cur = std::env::var("PATH").unwrap_or_default();
     let mut parts: Vec<String> = cur.split(':').filter(|s| !s.is_empty()).map(String::from).collect();
@@ -14,10 +15,15 @@ fn extend_path() {
     std::env::set_var("PATH", parts.join(":"));
 }
 
+#[cfg(not(unix))]
+fn extend_path() {}
+
 fn main() {
     extend_path();
     let app = Arc::new(gitpass_gui_core::api::App::new(gitpass_gui_core::default_vault_dir(), Arc::new(c::SysClipboard)).with_biometric(biometric::platform()));
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .manage(app)
         .setup(|h| { c::spawn_idle_watcher(h.handle().clone()); agent_ui::start(h.handle()); Ok(()) })
         .invoke_handler(tauri::generate_handler![

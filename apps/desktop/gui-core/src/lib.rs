@@ -281,11 +281,17 @@ impl GuiState {
 pub fn gen_password(len: usize) -> String { generate_password(len.clamp(8, 128)) }
 
 pub mod api;
+/// UNIX-socket agent (macOS / Linux).
+#[cfg(unix)]
+pub mod agent;
+/// Windows: named-pipe agent is NOT implemented yet (stub; see agent_windows.rs).
+#[cfg(not(unix))]
+#[path = "agent_windows.rs"]
 pub mod agent;
 
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod api_tests;
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod agent_tests;
