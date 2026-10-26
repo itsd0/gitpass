@@ -1,29 +1,49 @@
-# gitpass 0.3.0 — zero-knowledge password manager synced through a private git repo (format v3)
+# gitpass 0.4.0: zero-knowledge password manager synced through a private git repo (format v4)
 
-A clean-room Rust password manager following the publicly documented two-secret model (master password + Secret Key), end-to-end encrypted, synced through git. No proprietary code; only vetted RustCrypto crates.
+A clean-room Rust password manager that follows the publicly documented two-secret model (master password + Secret Key). It is end-to-end encrypted and syncs through git. 0.4.0 adds real device revoke with key rotation, vault sharing (X25519),
+import/export, a security audit with optional HIBP, a Tauri desktop app and a browser extension with a native messaging host.
 
 > **NOT audited.** Don't trust it with real secrets until it has been reviewed independently.
 
 ## Workspace layout
 ```
-Cargo.toml                 # workspace root (version 0.3.0 for all crates)
-crates/gitpass-core/       # headless library: crypto, fsutil, store, merge, device, sync, migrate, totp, search
-  tests/                   # integration, v2, merge, devices, usability, integrated_v3
-crates/gitpass-cli/        # binary `gitpass` (main.rs) + clip.rs (arboard, `clipboard` feature, default on)
-  tests/clip.rs
+Cargo.toml                 # workspace root (version 0.4.0); members: core, cli, host, gui-core; excludes src-tauri
+crates/gitpass-core/       # library: crypto, store (v4), keys (X25519), device, merge, sync, migrate, import, audit, totp, search
+crates/gitpass-cli/        # binary `gitpass` (ureq HIBP client lives here)
+crates/gitpass-host/       # binary `gitpass-host`: native messaging host for the extension
+apps/desktop/gui-core/     # Tauri-free GUI command layer (root workspace member)
+apps/desktop/src-tauri/    # Tauri 2 app (own Cargo.lock + .cargo/config.toml; NOT in root workspace)
+apps/desktop/src/          # React + TypeScript frontend (Vite)
+extension/                 # MV3 browser extension (plain JS, `npm test`)
 ```
-`gitpass-core` is the API for a future GUI (e.g. Tauri): `Session`, `Item`, `ItemRecord`, `merge_items`, `device::*`,
-`totp_now`, `fuzzy_find`, `FORMAT_VERSION`/`MIN_READ_FORMAT`.
 
-## Build
+## Install
+### CLI
 ```bash
-cargo build --release --workspace          # binary: target/release/gitpass
-cargo build -p gitpass-cli --no-default-features   # without clipboard (no arboard)
+cargo build --release -p gitpass-cli      # target/release/gitpass
 cargo test --workspace
 ```
-Toolchain is pinned to Rust 1.85 (`.cargo/config.toml` uses the MSRV-aware resolver fallback).
+### Desktop
+```bash
+# Linux deps: libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev librsvg2-dev pkg-config
+cd apps/desktop && npm ci && npm run build
+npx tauri build --bundles deb             # or: npx tauri dev
+```
+### Browser extension
+```bash
+cargo build --release -p gitpass-host
+# Chromium: chrome://extensions > Developer mode > Load unpacked > extension/, copy the ID, then
+target/release/gitpass-host install --browser chrome --extension-id <id> --vault ~/.gitpass
+# Firefox: about:debugging > Load Temporary Add-on > extension/manifest.json, then
+target/release/gitpass-host install --browser firefox --extension-id gitpass@gitpass.dev
+```
+See `crates/gitpass-host/README.md` and `apps/desktop/README.md` for details, and CHANGELOG.md for the limitations of each feature.
 
-## Format compatibility
+## Format compatibility (0.4.0)
+- Formats 2, 3 and 4 are read (`MIN_READ_FORMAT = 2`, `FORMAT_VERSION = 4`). The manifest becomes 4 only once an identity or vault members exist.
+  0.3.x clients refuse v4 vaults.
+
+## Format compatibility (0.3.0 notes)
 - v2 vaults open unchanged. First unlock creates `devices.enc` and the next write re-seals the manifest as format 3.
 - v2 item payloads have no clocks; clocks are synthesized from `updated_at` and written on the next update/merge.
 - `format.json` stays at 2 until the keyset is re-wrapped (passwd / rotate-secret-key / KDF upgrade / v1 migrate),
