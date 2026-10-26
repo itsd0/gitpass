@@ -1,0 +1,22 @@
+[package]
+name = "gitpass-desktop"
+version = "0.5.0-core"
+edition = "2021"
+rust-version = "1.85"
+license = "MIT"
+description = "gitpass desktop GUI (Tauri 2)"
+
+# Standalone workspace: kept out of the root workspace so `cargo test --workspace` never needs GTK/WebKit.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+gitpass-gui-core = { path = "../gui-core" }
+gitpass-core = { path = "../../../crates/gitpass-core" }
+serde = { version = "1", features = ["derive"] }
+arboard = { version = "3", default-features = false }
+zeroize = "1"
+anyhow = "1"

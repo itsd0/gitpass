@@ -1,0 +1,3 @@
+# Cargo 1.84+: prefer dependency versions whose rust-version fits our toolchain (1.85).
+[resolver]
+incompatible-rust-versions = "fallback"

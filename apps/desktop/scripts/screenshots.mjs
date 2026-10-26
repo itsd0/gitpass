@@ -1,0 +1,33 @@
+// Capture v0.5 screenshots against `vite preview` (mock API). OUT/URL env overridable.
+import { chromium } from 'playwright';
+const out = process.env.OUT || '../../screenshots-v5';
+const url = process.env.URL || 'http://localhost:4173/';
+const b = await chromium.launch();
+const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+const errs = []; p.on('pageerror', (e) => errs.push(String(e)));
+const shot = async (n) => { await p.waitForTimeout(450); await p.screenshot({ path: `${out}/${n}.png` }); console.log('shot', n); };
+const nav = (name) => p.locator('aside, nav').getByRole('button', { name: new RegExp('^' + name) }).first().click();
+const esc = async () => { await p.keyboard.press('Escape'); await p.waitForTimeout(250); };
+await p.goto(url);
+await p.fill('#pw', 'demo'); await p.keyboard.press('Enter');
+await p.waitForSelector('[role=option]');
+await nav('Home'); await p.waitForSelector('[aria-label="Onboarding checklist"]'); await shot('01-home');
+await p.locator('[aria-label="Onboarding checklist"]').scrollIntoViewIfNeeded(); await shot('02-onboarding');
+await nav('All Items'); await p.waitForSelector('[role=option]'); await p.locator('[role=option]').nth(1).click(); await p.waitForSelector('[data-detail-pane]'); await shot('03-items-detail');
+await p.keyboard.press('Control+n'); await p.waitForSelector('[role=dialog]'); await shot('04-new-item-modal'); await esc();
+await nav('Watchtower'); await p.waitForSelector('[data-testid=score]'); await shot('05-watchtower');
+await nav('People'); await p.getByRole('button', { name: /Invite/ }).first().waitFor(); await shot('06-people');
+await p.getByRole('button', { name: /Invite/ }).first().click(); await p.waitForSelector('[role=dialog]');
+await p.locator('[role=dialog] textarea, [role=dialog] input').first().fill('gitpass-x25519:AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=');
+await p.waitForSelector('[data-testid=recipient-fingerprint]'); await shot('07-share-dialog'); await esc();
+await nav('Settings'); await p.getByRole('radio', { name: 'Light' }).waitFor(); await shot('08-settings-en');
+await p.getByRole('radio', { name: /မြန်မာ|Burmese|Myanmar/ }).click(); await shot('09-settings-burmese');
+await p.getByRole('radio', { name: /English/ }).click(); await p.waitForTimeout(300);
+await p.keyboard.press('Control+k'); await p.waitForSelector('[role=dialog]'); await p.keyboard.type('go'); await shot('10-palette');
+await p.keyboard.press('Control+a'); await p.keyboard.type('Quick Access'); await p.waitForTimeout(250); await p.keyboard.press('Enter');
+await p.waitForTimeout(400); await p.keyboard.type('bank'); await shot('11-quick-access');
+await nav('All Items'); await p.waitForSelector('[role=option]'); await p.locator('[role=option]').nth(1).click();
+await p.getByRole('radio', { name: 'Light' }).count(); // noop
+await p.evaluate(() => document.documentElement.classList.remove('dark')); await shot('12-light-theme');
+console.log('page errors:', errs.length ? errs : 'none');
+await b.close();
