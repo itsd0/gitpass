@@ -1,9 +1,9 @@
 import { Logo } from '../../ui/logo';
 import { EmergencyKitFlow } from '../onboarding/EmergencyKit';
 import { useEffect, useState } from 'react';
-import { ExternalLink, Laptop, Lock, Info, RefreshCw, SlidersHorizontal, Smartphone } from 'lucide-react';
+import { Copy, ExternalLink, Laptop, Lock, Info, RefreshCw, SlidersHorizontal, Smartphone, Terminal } from 'lucide-react';
 import { api } from '../../api/client';
-import type { DeviceInfo, VaultInfo } from '../../api/types';
+import type { DeviceInfo, SshAgentInfo, VaultInfo } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { Badge, Button, Modal, Input, Skeleton, toast } from '../../ui';
 import { languages, useT, type Lang } from '../../i18n';
@@ -15,7 +15,7 @@ const errMsg = (e: unknown) => String((e as Error)?.message ?? e);
 export const APP_VERSION = '0.5.0';
 export const REPO_URL = 'https://github.com/itsd0/gitpass';
 export const ISSUES_URL = `${REPO_URL}/issues`;
-const TABS = [{ id: 'general', icon: SlidersHorizontal }, { id: 'security', icon: Lock }, { id: 'devices', icon: Laptop }, { id: 'sync', icon: RefreshCw }, { id: 'about', icon: Info }] as const;
+const TABS = [{ id: 'general', icon: SlidersHorizontal }, { id: 'security', icon: Lock }, { id: 'devices', icon: Laptop }, { id: 'sync', icon: RefreshCw }, { id: 'ssh', icon: Terminal }, { id: 'about', icon: Info }] as const;
 type Tab = (typeof TABS)[number]['id'];
 const Row = ({ label, children, help }: { label: string; children: React.ReactNode; help?: React.ReactNode }) =>
   <div className="flex items-start justify-between gap-6 border-b border-border py-4 last:border-0"><div><div className="text-sm font-medium">{label}</div>{help && <div className="mt-0.5 text-xs text-muted">{help}</div>}</div><div className="shrink-0">{children}</div></div>;
@@ -112,6 +112,24 @@ function Devices() {
 
 const Sync = SyncPanel;
 
+function SshAgent() {
+  const t = useT(); const { settings, save } = useSettings(); const [info, setInfo] = useState<SshAgentInfo | null>(null); const [err, setErr] = useState('');
+  useEffect(() => { api.sshAgentInfo().then(setInfo).catch((e) => setErr(errMsg(e))); }, []);
+  if (!settings) return <Skeleton className="h-24" />;
+  const on = !!settings.sshApproveEachUse;
+  return <>
+    {err && <p role="alert" className="py-3 text-sm text-danger">{t('common.error', { msg: err })}</p>}
+    <Row label={t('ssh.status')} help={info?.socketPath}>{info ? <Badge>{info.running ? t('ssh.running') : t('ssh.stopped')}</Badge> : <Skeleton className="h-5 w-16" />}</Row>
+    <div className="border-b border-border py-4"><div className="text-sm font-medium">{t('ssh.config')}</div><div className="mt-0.5 text-xs text-muted">{t('ssh.configHelp')}</div>
+      <div className="mt-2 flex items-start gap-1"><pre data-testid="ssh-config-line" className="w-full overflow-x-auto rounded-md border border-border bg-panel p-2 font-mono text-xs">{info?.configLine ?? ''}</pre>
+        <Button size="icon" variant="ghost" aria-label={t('ssh.copy')} disabled={!info} onClick={() => info && navigator.clipboard?.writeText(info.configLine).then(() => toast(t('ssh.copied')))}><Copy className="h-4 w-4" /></Button></div></div>
+    <Row label={t('ssh.approve')} help={t('ssh.approveHelp')}>
+      <button role="switch" aria-checked={on} aria-label={t('ssh.approve')} data-testid="ssh-approve-switch" onClick={() => save({ sshApproveEachUse: !on }).then(() => toast(t('common.saved'))).catch((e) => toast(t('common.error', { msg: errMsg(e) }), 'danger'))}
+        className={cn('relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent', on ? 'bg-accent' : 'bg-border')}>
+        <span className={cn('absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform', on ? 'translate-x-5' : 'translate-x-0.5')} /></button></Row>
+    <Row label={t('ssh.cli')} help={t('ssh.cliHelp')}><code className="font-mono text-xs">gitpass ssh config</code></Row></>;
+}
+
 function About() {
   const t = useT();
   return <><div className="flex items-center gap-3 py-4"><Logo size={48} />
@@ -148,7 +166,7 @@ export function SettingsPage({ initialTab }: { initialTab?: string } = {}) {
   const tab: Tab = (TABS.some((x) => x.id === fromRoute) ? fromRoute : 'general') as Tab;
   const [local, setLocal] = useState<Tab>(tab); useEffect(() => setLocal(tab), [tab]);
   useEffect(() => { if (!settings) load(); }, [settings, load]);
-  const body = { general: General, security: Security, devices: Devices, sync: Sync, about: About }[local];
+  const body = { general: General, security: Security, devices: Devices, sync: Sync, ssh: SshAgent, about: About }[local];
   const B = body;
   return <div className="mx-auto flex max-w-4xl gap-8 p-8">
     <nav aria-label={t('settings.title')} className="w-44 shrink-0"><h1 className="mb-4 text-2xl font-semibold">{t('settings.title')}</h1>

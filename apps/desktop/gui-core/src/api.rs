@@ -100,11 +100,13 @@ pub struct Settings {
     /// Opt-in Have I Been Pwned k-anonymity range check in Watchtower. Default off; older settings
     /// files without the field deserialize to off.
     #[serde(default)] pub hibp_check: bool,
+    /// Ask before every SSH agent signature (default off: unlocked vault = keys usable).
+    #[serde(default)] pub ssh_approve_each_use: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
         Settings { auto_lock_minutes: 5, clipboard_clear_secs: crate::CLIPBOARD_CLEAR_SECS, theme: Theme::Dark, language: Language::En,
-            biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false }
+            biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false, ssh_approve_each_use: false }
     }
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -904,4 +906,38 @@ impl App {
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() { return false; }
     a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
+}
+
+// ---------------- SSH keys (v0.7)
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SshKeyCreated { pub item: ItemSummary, pub public_key: String, pub fingerprint: String, pub key_type: String }
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SshAgentInfo { pub socket_path: String, pub config_line: String, pub running: bool, pub approve_each_use: bool }
+
+impl App {
+    fn save_ssh_key(&self, vault_id: &str, title: &str, k: &gitpass_core::ssh::SshKey) -> Result<SshKeyCreated> {
+        let title = if title.trim().is_empty() { if k.info.comment.is_empty() { "SSH Key".to_string() } else { k.info.comment.clone() } } else { title.trim().to_string() };
+        let rec = k.to_record(&title)?;
+        let item = self.write(|u| {
+            let iid = u.session.add_record(vault_id, rec)?;
+            let (_, r) = u.session.read_record(vault_id, &iid)?;
+            Ok(summary(vault_id, &iid, &r))
+        })?;
+        Ok(SshKeyCreated { item, public_key: k.info.public_key.clone(), fingerprint: k.info.fingerprint.clone(), key_type: k.info.key_type.clone() })
+    }
+    /// Generate an Ed25519 key into a new `ssh_key` item.
+    pub fn ssh_generate(&self, vault_id: &str, title: &str, comment: &str) -> Result<SshKeyCreated> {
+        let k = gitpass_core::ssh::SshKey::generate_ed25519(comment)?;
+        self.save_ssh_key(vault_id, title, &k)
+    }
+    /// Import an OpenSSH private key (decrypted with `passphrase` if needed) into a new `ssh_key` item.
+    pub fn ssh_import(&self, vault_id: &str, title: &str, pem: &str, passphrase: Option<&str>) -> Result<SshKeyCreated> {
+        let k = gitpass_core::ssh::SshKey::import_openssh(pem, passphrase)?;
+        self.save_ssh_key(vault_id, title, &k)
+    }
+    pub fn ssh_agent_info(&self, socket: &std::path::Path, running: bool) -> SshAgentInfo {
+        SshAgentInfo { socket_path: socket.display().to_string(), config_line: gitpass_core::ssh::identity_agent_line(socket), running, approve_each_use: self.get_settings().ssh_approve_each_use }
+    }
 }

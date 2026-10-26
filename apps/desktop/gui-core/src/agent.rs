@@ -31,6 +31,9 @@ pub trait AgentUi: Send + Sync {
     fn request_unlock(&self, reason: &str);
     /// Focus the app on an item (`None` = just bring the window forward).
     fn open_item(&self, vault_id: Option<&str>, item_id: Option<&str>);
+    /// Ask the user to allow a sensitive action (SSH signature, passkey). Blocks until answered.
+    /// Default: deny (headless).
+    fn approve(&self, _title: &str, _message: &str) -> bool { false }
 }
 pub struct NoUi;
 impl AgentUi for NoUi { fn request_unlock(&self, _: &str) {} fn open_item(&self, _: Option<&str>, _: Option<&str>) {} }
@@ -365,6 +368,18 @@ impl Agent {
                 let b = |k: &str| q.get(k).and_then(|v| v.as_bool()).unwrap_or(true);
                 Ok(json!({"password": api::generate(len, b("symbols"), b("digits"), false)}))
             }
+            "passkey_create" | "passkey_get" => {
+                let origin = req("origin")?;
+                let approved = gitpass_host::passkey::popup_approved(q) || {
+                    let what = if cmd == "passkey_create" { "Save a passkey for" } else { "Sign in with a passkey on" };
+                    self.ui.approve("Passkey", &format!("{what} {origin}?"))
+                };
+                if !approved { return Err(err("denied", "passkey use was not approved")); }
+                self.app.state.with(|x| {
+                    crate::GuiState::writable(x).map_err(|e| err("denied", e.to_string()))?;
+                    if cmd == "passkey_create" { gitpass_host::passkey::create(&x.session, q) } else { gitpass_host::passkey::get(&x.session, q) }
+                }).map_err(host_err)
+            }
             "open_in_app" => {
                 match s("item_id").filter(|v| !v.is_empty()) {
                     Some(id) => { let (v, i) = split_id(&id)?; self.ui.open_item(Some(&v), Some(&i)); }
@@ -457,4 +472,10 @@ fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
     v["tags"] = json!(r.tags);
     v["created_at"] = json!(r.created_at.map(|c| gitpass_core::device::iso8601(c as i64)).unwrap_or_else(|| ts(&r.item.updated_at)));
     v
+}
+
+/// Keep contract codes from gitpass-host's `CodedError` (e.g. `origin_mismatch`, `exists`).
+fn host_err(e: anyhow::Error) -> anyhow::Error {
+    if let Some(c) = e.downcast_ref::<gitpass_host::handler::CodedError>() { return err(c.code, c.message.clone()); }
+    e
 }

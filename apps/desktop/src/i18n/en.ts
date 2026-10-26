@@ -50,7 +50,11 @@ export const en = {
   'invite.title': 'Accept shared vault', 'invite.desc': 'Pick a share file someone sent you.', 'invite.warning': 'Share files are not authenticated: anyone can create one claiming to be anyone. Only accept files you expected, and confirm with the sender through another channel.',
   'invite.path': 'Share file path', 'invite.pick': 'Choose file…', 'invite.accept': 'Accept share', 'invite.done': 'Added vault “{vault}”', 'invite.empty': 'No pending invitations. When someone sends you a share file, import it here.',
   // settings
-  'settings.title': 'Settings', 'settings.general': 'General', 'settings.security': 'Security', 'settings.devices': 'Devices', 'settings.sync': 'Sync', 'settings.about': 'About',
+  'settings.title': 'Settings', 'settings.general': 'General', 'settings.security': 'Security', 'settings.devices': 'Devices', 'settings.sync': 'Sync', 'settings.about': 'About', 'settings.ssh': 'SSH Agent',
+  'ssh.status': 'Agent status', 'ssh.running': 'Running', 'ssh.stopped': 'Not running', 'ssh.config': 'SSH config',
+  'ssh.configHelp': 'Add this to ~/.ssh/config so ssh and git use keys from gitpass. Keys are only offered while gitpass is unlocked.',
+  'ssh.copy': 'Copy config', 'ssh.copied': 'Copied to clipboard', 'ssh.approve': 'Approve each use', 'ssh.approveHelp': 'Ask before every signature (e.g. each git push or ssh login).',
+  'ssh.cli': 'Command line', 'ssh.cliHelp': 'gitpass ssh generate | import | list | public | config | agent',
   'settings.theme': 'Theme', 'settings.theme.dark': 'Dark', 'settings.theme.light': 'Light', 'settings.theme.system': 'System', 'settings.language': 'Language',
   'settings.autoLock': 'Auto-lock after (minutes)', 'settings.clipboard': 'Clear clipboard after (seconds)', 'settings.biometric': 'Unlock with biometrics',
   'settings.biometricUnsupported': 'Biometric unlock is not supported yet on this device.',

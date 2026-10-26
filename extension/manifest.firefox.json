@@ -20,7 +20,8 @@
       "lib/policy.js",
       "bg-page.js",
       "background.js",
-      "bg-onboard.js"
+      "bg-onboard.js",
+      "bg-passkey.js"
     ]
   },
   "action": {
@@ -28,6 +29,31 @@
     "default_title": "gitpass"
   },
   "content_scripts": [
+    {
+      "matches": [
+        "https://*/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "lib/passkey-main.js"
+      ],
+      "world": "MAIN",
+      "all_frames": false,
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://*/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "lib/passkey-bridge.js"
+      ],
+      "all_frames": false,
+      "run_at": "document_start"
+    },
     {
       "matches": [
         "https://*/*",

@@ -39,6 +39,9 @@ impl AgentUi for TauriUi {
             }
         });
     }
+    /// Native confirmation (blocks the calling agent thread, never the main thread). macOS: an
+    /// AppleScript dialog via `osascript`, auto-denied after 60 s. Other platforms: deny.
+    fn approve(&self, title: &str, message: &str) -> bool { confirm_dialog(title, message) }
     fn open_item(&self, vault_id: Option<&str>, item_id: Option<&str>) {
         let h = self.h.clone();
         let p = serde_json::json!({"vaultId": vault_id, "itemId": item_id});
@@ -55,11 +58,32 @@ impl AgentUi for TauriUi {
     }
 }
 
+fn applescript_str(s: &str) -> String { format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")) }
+
+pub fn confirm_dialog(title: &str, message: &str) -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        let script = format!("display dialog {} with title {} buttons {{\"Deny\", \"Allow\"}} default button \"Allow\" cancel button \"Deny\" giving up after 60",
+            applescript_str(message), applescript_str(&format!("gitpass \u{2014} {title}")));
+        match std::process::Command::new("/usr/bin/osascript").arg("-e").arg(script).output() {
+            Ok(o) => o.status.success() && String::from_utf8_lossy(&o.stdout).contains("button returned:Allow") && !String::from_utf8_lossy(&o.stdout).contains("gave up:true"),
+            Err(_) => false,
+        }
+    }
+    #[cfg(not(target_os = "macos"))]
+    { let _ = (title, message); false }
+}
+
 /// Start the agent server; failures are logged, the GUI keeps working without the extension bridge.
 pub fn start(h: &AppHandle) {
     let app = h.state::<App>().inner().clone();
+    let app_for_ssh = app.clone();
     match Agent::start(app, Arc::new(TauriUi { h: h.clone() }), &default_dir()) {
         Ok(a) => { h.manage(a); }
         Err(e) => eprintln!("gitpass: extension agent not started: {e:#}"),
+    }
+    match gitpass_gui_core::ssh_agent::start(app_for_ssh, Arc::new(TauriUi { h: h.clone() }), &default_dir()) {
+        Ok(a) => { h.manage(a); }
+        Err(e) => eprintln!("gitpass: SSH agent not started: {e:#}"),
     }
 }

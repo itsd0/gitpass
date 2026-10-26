@@ -40,4 +40,13 @@ describe('settings', () => {
     const input = await screen.findByLabelText('Auto-lock after (minutes)'); await u.clear(input); await u.type(input, '25{Enter}');
     await waitFor(() => expect(spy.mock.calls[spy.mock.calls.length - 1]![0].settings.autoLockMinutes).toBe(25));
   });
+  it('SSH Agent tab shows IdentityAgent line and toggles approve-each-use', async () => {
+    vi.spyOn(api, 'sshAgentInfo').mockResolvedValue({ socketPath: '/x/ssh-agent.sock', configLine: 'Host *\n  IdentityAgent "/x/ssh-agent.sock"', running: true, approveEachUse: false });
+    const spy = vi.spyOn(api, 'setSettings').mockImplementation(async (a) => a.settings); const u = userEvent.setup();
+    render(<SettingsPage initialTab="ssh" />);
+    expect((await screen.findByTestId('ssh-config-line')).textContent).toContain('IdentityAgent "/x/ssh-agent.sock"');
+    expect(screen.getByText('Running')).toBeTruthy();
+    await u.click(screen.getByRole('switch', { name: 'Approve each use' }));
+    await waitFor(() => expect(spy.mock.calls[0]![0].settings).toMatchObject({ sshApproveEachUse: true, hibpCheck: false }));
+  });
 });

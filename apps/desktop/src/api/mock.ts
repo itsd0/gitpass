@@ -109,6 +109,7 @@ cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_ca
 // a couple archived / deleted for those views
 { const a = [...db.values()][5].detail; a.archived = true; const b = [...db.values()][22].detail; b.deletedAt = new Date('2026-10-20T08:00:00Z').toISOString(); }
 
+add('v_private', 'passkey', 'webauthn.example.invalid', 'demo@example.invalid', 6, [['site', 'text', 'webauthn.example.invalid'], ['user name', 'text', 'demo@example.invalid'], ['credential id', 'text', 'FAKE-cred-id'], ['private key', 'concealed', 'FAKE'], ['sign count', 'text', '3']]);
 let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false };
 let onboarding: T.Onboarding = { extensionInstalled: false, emergencyKitSaved: false, repoConnected: true, imported: false, dismissed: false };
 let unlocked = false;
@@ -230,6 +231,18 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   import_file: (a: { dryRun: boolean }) => { if (!a.dryRun) onboarding = { ...onboarding, imported: true }; return delay<T.ImportResult>({ parsed: 12, added: a.dryRun ? 0 : 10, duplicates: 2, duplicateTitles: ['Example Mail', 'Example Mail'], warnings: ['row 4: skipped empty row'], categories: { login: 10, credit_card: 1, secure_note: 1 },
     preview: [{ title: 'Example Mail', category: 'login', username: 'alice@example.invalid', url: 'https://mail.example.invalid', hasPassword: true, hasTotp: true, tags: ['Work'], fields: 4, archived: false },
       { title: 'Fake Visa', category: 'credit_card', username: null, url: null, hasPassword: false, hasTotp: false, tags: [], fields: 5, archived: false }] }, 300); },
+  ssh_generate: (a: { vaultId: string; title: string; comment?: string | null }) => {
+    const n = Math.floor(Math.random() * 1e6); const pub = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5FAKE${n} ${a.comment || a.title}`; const fp = `SHA256:FAKE${n}`;
+    return (mock.create_item({ input: { vaultId: a.vaultId, category: 'ssh_key', title: a.title || 'SSH Key', sections: [{ id: 'main', title: null, fields: [
+      { id: 'private_key', label: 'private key', kind: 'concealed', value: '-----BEGIN OPENSSH PRIVATE KEY-----\nFAKE\n-----END OPENSSH PRIVATE KEY-----' },
+      { id: 'public_key', label: 'public key', kind: 'multiline', value: pub }, { id: 'fingerprint', label: 'fingerprint', kind: 'text', value: fp }, { id: 'key_type', label: 'key type', kind: 'text', value: 'ssh-ed25519' }] }] } }) as Promise<T.ItemSummary>)
+      .then((item) => ({ item, publicKey: pub, fingerprint: fp, keyType: 'ssh-ed25519' }));
+  },
+  ssh_import: (a: { vaultId: string; title: string; privateKey: string; passphrase?: string | null }) => {
+    if (!/-----BEGIN OPENSSH PRIVATE KEY-----/.test(a.privateKey)) return Promise.reject(new Error('not an OpenSSH private key'));
+    return mock.ssh_generate({ vaultId: a.vaultId, title: a.title || 'Imported key', comment: 'imported' });
+  },
+  ssh_agent_info: () => delay<T.SshAgentInfo>({ socketPath: '/Users/demo/Library/Application Support/gitpass/ssh-agent.sock', configLine: 'Host *\n  IdentityAgent "~/Library/Application Support/gitpass/ssh-agent.sock"', running: true, approveEachUse: !!settings.sshApproveEachUse }),
   identity: () => delay<T.Identity>({ publicKey: SELF_KEY, fingerprint: SELF.fingerprint }),
   fingerprint_of: (a: { publicKey: string }) => (PUB_RE.test(a.publicKey.trim()) ? delay(mockFingerprint(a.publicKey), 20) : Promise.reject(new Error('public key is not valid base64'))),
   list_members: (a: { vaultId: string }) => delay(vaults.find((v) => v.id === a.vaultId)?.members ?? []),

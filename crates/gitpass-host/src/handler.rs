@@ -424,6 +424,11 @@ impl Host {
                 }
                 Ok(json!({"vaults": out}))
             }
+            "passkey_create" | "passkey_get" => {
+                if !crate::passkey::popup_approved(req) { return Err(coded(code::DENIED, format!("{cmd} needs approval in the gitpass popup"))); }
+                let s = self.sess()?;
+                if cmd == "passkey_create" { crate::passkey::create(s, req) } else { crate::passkey::get(s, req) }
+            }
             "open_in_app" => {
                 crate::agent::launch_app().map_err(|e| coded(code::APP_NOT_RUNNING, format!("could not launch the gitpass app: {e:#}")))?;
                 Ok(json!({"launched": true}))

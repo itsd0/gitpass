@@ -7,7 +7,7 @@ license.workspace = true
 description = "Tauri-free command layer for the gitpass desktop GUI (session state, DTOs, auto-lock)"
 
 [dependencies]
-gitpass-core = { path = "../../../crates/gitpass-core" }
+gitpass-core = { version = "0.5.0-core", path = "../../../crates/gitpass-core" }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 zeroize = { version = "1", features = ["derive"] }

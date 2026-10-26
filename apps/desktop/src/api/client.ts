@@ -35,6 +35,11 @@ export const api = {
   watchtower: (a:{hibp:boolean}) => call<T.WatchtowerReport>('watchtower', a),
   importFile: (a:{vaultId:string; format:string; path:string; dryRun:boolean}) => call<T.ImportResult>('import_file', a),
   identity: () => call<T.Identity>('identity'),
+  /** v0.7: new Ed25519 key in a new SSH Key item (private key never reaches the webview) */
+  sshGenerate: (a:{vaultId:string; title:string; comment?:string|null}) => call<T.SshKeyCreated>('ssh_generate', a),
+  /** v0.7: import an OpenSSH private key (decrypted with passphrase if encrypted) */
+  sshImport: (a:{vaultId:string; title:string; privateKey:string; passphrase?:string|null}) => call<T.SshKeyCreated>('ssh_import', a),
+  sshAgentInfo: () => call<T.SshAgentInfo>('ssh_agent_info'),
   /** fingerprint of a pasted recipient key (same parser as share_vault); for out-of-band verification */
   fingerprintOf: (a:{publicKey:string}) => call<string>('fingerprint_of', a),
   listMembers: (a:{vaultId:string}) => call<T.Member[]>('list_members', a),

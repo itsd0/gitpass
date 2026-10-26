@@ -22,6 +22,9 @@ const ITEMS = [
   { id: 'v1:i5', category: 'identity', title: 'Home Identity', subtitle: 'Naing Oo', has_totp: false, favorite: false },
   { id: 'v1:i4', category: 'secure_note', title: 'Wi-Fi notes', subtitle: '', has_totp: false, favorite: false },
 ].map((i) => ({ vault_id: V.id, vault_name: V.name, updated_at: now, ...i }));
+const authn = require('./passkey-authn');
+const PKS = path.join(DIR, 'passkeys.json');
+const pkStore = { list: () => readJson(PKS, []), put: (pk) => { const l = readJson(PKS, []).filter((x) => x.credential_id !== pk.credential_id); l.push(pk); fs.writeFileSync(PKS, JSON.stringify(l)); } };
 const pub = (i) => { const o = { ...i }; delete o._u; delete o._p; return o; };
 const host = (s) => { try { return new URL(s).hostname; } catch { return ''; } };
 const matches = (o) => ITEMS.filter((i) => i.url && host(i.url) && host(i.url) === host(o));
@@ -61,6 +64,9 @@ function handle(m) {
       // gitpass-core v5 template field ids (fake test data).
       return want === 'credit_card' ? { cardholder: 'ALICE TESTER', number: '4111 1111 1111 1111', expiry: '12/2028', cvv: '737', type: 'visa' }
         : { first: 'Naing', last: 'Oo', address: '99 Test Road\nBangkok', email: 'naing@example.com', phone: '+66812345678' }; }
+    case 'passkey_create': case 'passkey_get': needUnlock();
+      if (!(m.source === 'popup' && m.approved === true)) throw Object.assign(new Error('approval required'), { code: 'denied' });
+      return m.cmd === 'passkey_create' ? authn.create(pkStore, m) : authn.get(pkStore, m);
   }
   throw Object.assign(new Error('unknown cmd ' + m.cmd), { code: 'bad_request' });
 }

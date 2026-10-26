@@ -15,6 +15,8 @@ pub mod merge;
 pub mod remote;
 pub mod migrate;
 pub mod search;
+pub mod ssh;
+pub mod passkey;
 pub mod store;
 pub mod sync;
 pub mod totp;

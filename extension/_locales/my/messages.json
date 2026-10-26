@@ -457,5 +457,43 @@
   "errAppDown": {
     "message": "gitpass အက်ပ် ဖွင့်မထားပါ။",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "pkCreateTitle": {
+    "message": "passkey ကို သိမ်းမလား?"
+  },
+  "pkGetTitle": {
+    "message": "passkey ဖြင့် ဝင်မလား?"
+  },
+  "pkFor": {
+    "message": "$SITE$ အတွက်",
+    "placeholders": {
+      "site": {
+        "content": "$1"
+      }
+    }
+  },
+  "pkSite": {
+    "message": "ဆိုက်"
+  },
+  "pkAccount": {
+    "message": "အကောင့်"
+  },
+  "pkApprove": {
+    "message": "ဆက်လုပ်ရန်"
+  },
+  "pkDeny": {
+    "message": "မလုပ်တော့ပါ"
+  },
+  "pkLocked": {
+    "message": "gitpass ကို လော့ခ်ချထားသည်။ ဆက်လုပ်ရန် app ကို ဖွင့်ပါ။"
+  },
+  "pkExpired": {
+    "message": "ဤတောင်းဆိုမှု မရှိတော့ပါ။"
+  },
+  "pkDone": {
+    "message": "ပြီးပါပြီ။ ဤဝင်းဒိုးကို ပိတ်နိုင်ပါသည်။"
+  },
+  "catPasskey": {
+    "message": "Passkey များ"
   }
 }

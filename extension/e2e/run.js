@@ -121,7 +121,7 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
   // Linux Chromium reads the per-profile dir too; also set via env for safety on Linux CI.
   console.log(`tmp: ${tmp}\nextension id (expected): ${id}`);
 
-  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/card') ? CARD_HTML : LOGIN_HTML); });
+  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const LOGIN = `http://localhost:${server.address().port}/login`;
   if (realSetup) realSetup(server.address().port); // real host matches loopback origins incl. port
@@ -253,6 +253,38 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     rec('card fill via popup Fill', ...await viaPop('Visa', CARD_IDS, CARD_WANT, 'fill_card'));
     rec('identity fill via popup Fill', ...await viaPop('Home Identity', ID_IDS, ID_WANT, 'fill_identity'));
     await cardPage.close();
+
+    // --- Passkeys: local WebAuthn RP page verifies with WebCrypto; approval window must be clicked.
+    {
+      const WA = `http://localhost:${server.address().port}/webauthn`;
+      const wa = await ctx.newPage(); await wa.goto(WA); await sleep(500);
+      const outJson = async () => { try { return JSON.parse((await wa.locator('#out').textContent()) || 'null'); } catch { return null; } };
+      const seen = new Set();
+      const approvalWin = () => until(() => { const w = ctx.pages().find((p) => p.url().startsWith(`${EXT}/popup/passkey.html`) && !p.isClosed() && !seen.has(p)); if (w) seen.add(w); return w; }, T(6000));
+      const step = async (btn, decide) => {
+        await wa.evaluate(() => { document.getElementById('out').textContent = ''; });
+        await wa.click(btn); const w = await approvalWin(); if (!w) return { error: 'no approval window' };
+        const title = await until(async () => (await w.locator('#title').textContent()) || '', T(3000));
+        const site = await w.locator('#site').textContent().catch(() => '');
+        await w.click(decide, { noWaitAfter: true }).catch(() => {}); const r = await until(outJson, T(6000)); return { ...(r || { error: 'no result' }), _title: title, _site: site };
+      };
+      const before = cmdsIn(mockDir).length;
+      const reg = await step('#reg', '#approve');
+      rec('passkey create: approval window -> credential verified by RP page', reg.registered === true, JSON.stringify(reg));
+      const pkCmds = cmdsIn(mockDir).slice(before).filter((m) => /^passkey_/.test(m.cmd));
+      rec('passkey_create sent with browser origin + popup approval', pkCmds.some((m) => m.cmd === 'passkey_create' && m.origin === new URL(WA).origin && m.source === 'popup' && m.approved === true),
+        JSON.stringify(pkCmds.map((m) => ({ cmd: m.cmd, origin: m.origin, source: m.source, approved: m.approved }))));
+      const g1 = await step('#login', '#approve');
+      rec('passkey get: ES256 signature verified by RP page (signCount 1)', g1.verified === true && g1.signCount === 1 && g1.userHandle === 'user-42', JSON.stringify(g1));
+      const g2 = await step('#login', '#approve');
+      rec('passkey get again: signCount increments', g2.verified === true && g2.signCount === 2, JSON.stringify(g2));
+      const n0 = cmdsIn(mockDir).filter((m) => m.cmd === 'passkey_get').length;
+      const den = await step('#login', '#deny');
+      rec('passkey get denied in approval window -> NotAllowedError, host not called', den.error === 'NotAllowedError' && cmdsIn(mockDir).filter((m) => m.cmd === 'passkey_get').length === n0, JSON.stringify(den));
+      const dup = await step('#reg', '#approve');
+      rec('passkey create with excludeCredentials match -> InvalidStateError', dup.error === 'InvalidStateError', JSON.stringify(dup));
+      await wa.close();
+    }
 
     // --- Options page
     const popup = await ctx.newPage();

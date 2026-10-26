@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — feat/keys (SSH keys, SSH agent, passkeys)
+- SSH Key items: generate Ed25519, import OpenSSH private keys (ed25519 / ECDSA P-256, passphrase-protected OK), public key + SHA256 fingerprint stored.
+- Desktop SSH agent at `~/Library/Application Support/gitpass/ssh-agent.sock` (identities + sign, only while unlocked, optional approve-each-use). Settings → SSH Agent shows the `IdentityAgent` line.
+- CLI: `gitpass ssh generate|import|list|public|config|agent`.
+- New `passkey` item type; extension intercepts `navigator.credentials.create/get` (MAIN world) and asks for approval; host/broker `passkey_create` / `passkey_get` (ES256, none attestation).
+
 ## 0.4.0 — integrated release (keys + data + ext + gui)
 
 Merged from four parallel workspaces on top of 0.3.0. All crates, the desktop app and the extension are versioned 0.4.0.

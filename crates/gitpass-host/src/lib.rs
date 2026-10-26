@@ -11,6 +11,7 @@ pub mod framing;
 pub mod handler;
 pub mod install;
 pub mod origin;
+pub mod passkey;
 
 /// Native messaging host name (must match `chrome.runtime.connectNative(...)`).
 pub const HOST_NAME: &str = "com.gitpass.host";

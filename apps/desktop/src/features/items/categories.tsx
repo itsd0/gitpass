@@ -1,4 +1,4 @@
-import { CreditCard, FileText, Fingerprint, KeyRound, Code2, StickyNote, UserSquare, Wifi, Terminal } from 'lucide-react';
+import { CreditCard, FileText, Fingerprint, KeyRound, Code2, StickyNote, UserSquare, Wifi, Terminal, ShieldCheck } from 'lucide-react';
 import type { ItemCategory, ItemSummary } from '../../api/types';
 import { CategoryIcon } from '../../components/CategoryIcon';
 
@@ -11,6 +11,7 @@ export const CATEGORIES: { id: ItemCategory; label: string; icon: typeof KeyRoun
   { id: 'document', label: 'Document', icon: FileText, color: '#64748b' },
   { id: 'ssh_key', label: 'SSH Key', icon: Terminal, color: '#a855f7' },
   { id: 'wifi', label: 'Wireless Router', icon: Wifi, color: '#0ea5e9' },
+  { id: 'passkey', label: 'Passkey', icon: ShieldCheck, color: '#f97316' },
 ];
 export const catMeta = (c: ItemCategory) => CATEGORIES.find((x) => x.id === c) ?? { id: c, label: c, icon: Fingerprint, color: '#64748b' };
 
