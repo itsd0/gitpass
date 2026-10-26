@@ -165,6 +165,8 @@ struct ItemDetailView: View {
                     ForEach(section.fields, id: \.id) { field in
                         FieldRow(
                             field: field,
+                            isCardNumber: detail.category == "credit_card"
+                                && (field.id == "number" || field.label == "number"),
                             isRevealed: revealedFields.contains(field.id),
                             onToggleReveal: { revealedFields.formSymmetricDifference([field.id]) },
                             onCopy: { value in
@@ -200,12 +202,22 @@ struct ItemDetailView: View {
 struct FieldRow: View {
     @EnvironmentObject private var store: VaultStore
     var field: FfiField
+    /// Credit-card number: masked as "•••• •••• •••• 7575" (like
+    /// desktop) instead of dots only. Other secrets, e.g. the CVV,
+    /// stay fully hidden.
+    var isCardNumber: Bool = false
     var isRevealed: Bool
     var onToggleReveal: () -> Void
     var onCopy: (String) -> Void
     @State private var liveCode: TotpCode?
 
     private var isSecret: Bool { field.kind == "concealed" || field.kind == "totp" }
+
+    static func cardMask(_ value: String) -> String {
+        let digits = value.filter(\.isASCII).filter(\.isNumber)
+        guard digits.count >= 8 else { return "••••••••" }
+        return "•••• •••• •••• \(digits.suffix(4))"
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -219,7 +231,8 @@ struct FieldRow: View {
                         Text("••••••").font(.headline.monospaced())
                     }
                 } else if isSecret && !isRevealed {
-                    Text("••••••••").font(.headline)
+                    Text(isCardNumber ? Self.cardMask(field.value ?? "") : "••••••••")
+                        .font(.headline.monospaced())
                 } else {
                     Text(field.value ?? "").font(.headline)
                 }
