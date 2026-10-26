@@ -8,10 +8,13 @@ import { cn } from '../../lib/utils';
 import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, Skeleton, toast } from '../../ui';
 import { CATEGORIES, ItemIcon, catMeta } from './categories';
 import { CategoryIcon } from '../../components/CategoryIcon';
-import { groupRows } from './grouping';
+import { groupRows, type Row } from './grouping';
 import { useItemsUI } from './state';
 import { copyPrimarySecret, errText } from './actions';
 
+/** Every row has a fixed, explicit height (the DOM enforces it), so virtual offsets are exact: no overlap, no stray gaps. */
+export const HEADER_H = 32, ITEM_H = 54;
+export const rowHeight = (r: Row) => (r.type === 'header' ? HEADER_H : ITEM_H);
 const SORTS: { id: NonNullable<Filter['sort']>; label: string }[] = [
   { id: 'updated', label: 'Date Edited' }, { id: 'created', label: 'Date Created' }, { id: 'title', label: 'Title' },
 ];
@@ -36,7 +39,7 @@ export function ItemList() {
 
   const rows = useMemo(() => groupRows(items, sort), [items, sort]);
   const parentRef = useRef<HTMLDivElement>(null);
-  const virt = useVirtualizer({ count: rows.length, getScrollElement: () => parentRef.current, estimateSize: (i) => (rows[i].type === 'header' ? 36 : 52), overscan: 8, initialRect: { width: 320, height: 700 } });
+  const virt = useVirtualizer({ count: rows.length, getScrollElement: () => parentRef.current, estimateSize: (i) => rowHeight(rows[i]), getItemKey: (i) => rows[i].key, overscan: 8, initialRect: { width: 320, height: 700 } });
 
   // auto-select first item when nothing selected
   useEffect(() => { if (!selectedItemId && items[0]) selectItem(items[0].id); }, [items, selectedItemId, selectItem]);
@@ -84,16 +87,16 @@ export function ItemList() {
             {virt.getVirtualItems().map((v) => {
               const r = rows[v.index];
               return (
-                <div key={r.key} data-index={v.index} ref={virt.measureElement} style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${v.start}px)` }}>
+                <div key={r.key} data-index={v.index} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: v.size, transform: `translateY(${v.start}px)` }}>
                   {r.type === 'header' ? (
-                    <div className="px-4 pb-1.5 pt-4 text-[11px] font-semibold tracking-wider text-muted" data-testid="group-header">{r.label}</div>
+                    <div style={{ height: HEADER_H }} className="flex items-end px-4 pb-1.5 text-[11px] font-semibold tracking-wider text-muted" data-testid="group-header">{r.label}</div>
                   ) : (
                     <div role="option" aria-selected={r.item.id === selectedItemId} onClick={() => { selectItem(r.item.id); parentRef.current?.focus(); }}
-                      className={cn('mx-1.5 flex cursor-default items-center gap-3 rounded-md px-2.5 py-2', r.item.id === selectedItemId ? 'bg-active' : 'hover:bg-hover')}>
+                      style={{ height: ITEM_H - 2 }} className={cn('mx-1.5 my-px box-border flex cursor-default items-center gap-3 overflow-hidden rounded-md px-2.5', r.item.id === selectedItemId ? 'bg-active' : 'hover:bg-hover')}>
                       <ItemIcon item={r.item} />
                       <div className="min-w-0 flex-1">
-                        <div className="truncate text-[14px] font-medium">{r.item.title}</div>
-                        <div className="truncate text-xs text-muted">{r.item.subtitle}</div>
+                        <div className="truncate text-[14px] font-medium leading-5">{r.item.title}</div>
+                        {r.item.subtitle ? <div className="truncate text-xs leading-4 text-muted">{r.item.subtitle}</div> : null}
                       </div>
                       {r.item.favorite && <Star size={12} className="shrink-0 fill-warn text-warn" />}
                     </div>

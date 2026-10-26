@@ -164,6 +164,20 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   create_account: (a: { password: string }) => { if ((a.password ?? '').length < 8) return Promise.reject(new Error('master password must be at least 8 characters')); unlocked = true; return delay<T.CreateAccountResult>({ vaultPath: '~/.gitpass (mock)', secretKey: 'A3-MOCK00-000000-00000-00000-00000-00000' }, 300); },
   unlock_biometric: () => Promise.reject(new Error('biometric unlock is not supported yet on this platform')),
   list_vaults: () => delay(vaultInfo()),
+  update_vault: (a: { vaultId: string; name: string; description?: string | null; icon?: string | null; color?: string | null }) => {
+    const v = vaults.find((x) => x.id === a.vaultId); if (!v) throw new Error('no vault');
+    const name = a.name.trim(); if (!name) throw new Error('vault name is empty');
+    if (vaults.some((x) => x.id !== a.vaultId && x.name === name)) throw new Error(`vault '${name}' already exists`);
+    Object.assign(v, { name, description: a.description || null, icon: a.icon || null, color: a.color || null });
+    return delay(vaultInfo().find((x) => x.id === v.id)!);
+  },
+  delete_vault: (a: { vaultId: string; confirmName: string }) => {
+    const i = vaults.findIndex((x) => x.id === a.vaultId); if (i < 0) throw new Error('no vault');
+    if (vaults.length <= 1) throw new Error("can't delete the last vault");
+    if (vaults[i].name !== a.confirmName) throw new Error('confirmation name does not match');
+    vaults.splice(i, 1); for (const [k, r] of db) if (r.detail.vaultId === a.vaultId) db.delete(k);
+    return delay(undefined);
+  },
   create_vault: (a: { name: string; description?: string | null; icon?: string | null; color?: string | null }) => {
     const v: T.VaultInfo = { id: uid('v'), name: a.name, description: a.description ?? null, itemCount: 0, shared: false, members: [SELF], icon: a.icon ?? null, color: a.color ?? null };
     vaults.push(v); return delay(v);

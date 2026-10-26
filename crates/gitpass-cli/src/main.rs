@@ -262,6 +262,11 @@ enum VaultCmd {
     Unshare { vault: String, member: String },
     /// List members a vault is shared with
     Members { vault: String },
+    /// Rename a vault (name or id)
+    Rename { vault: String, new_name: String },
+    /// Permanently delete a vault and all its items (asks to type the vault name unless --yes)
+    #[command(alias = "delete")]
+    Rm { vault: String, #[arg(long)] yes: bool },
 }
 
 fn root(cli: &Cli) -> Result<PathBuf> {
@@ -455,6 +460,27 @@ fn run() -> Result<()> {
         }
         Cmd::Vault { cmd: VaultCmd::Create { name, description } } => {
             let s = unlock(&cli, &root)?; println!("created vault {name} ({})", s.create_vault_with(name, description.clone())?);
+        }
+        Cmd::Vault { cmd: VaultCmd::Rename { vault, new_name } } => {
+            let s = unlock(&cli, &root)?;
+            let vid = s.resolve_vault(vault)?;
+            let mut m = s.vault_meta(&vid)?; m.name = new_name.clone();
+            s.update_vault_meta(&vid, m)?;
+            println!("renamed vault {vault} -> {} ({vid})", new_name.trim());
+        }
+        Cmd::Vault { cmd: VaultCmd::Rm { vault, yes } } => {
+            let s = unlock(&cli, &root)?;
+            let vid = s.resolve_vault(vault)?;
+            let name = s.vault_meta(&vid)?.name.clone();
+            let n = s.list_records(&vid)?.len();
+            if !yes {
+                eprintln!("This permanently deletes vault '{name}' and its {n} item(s), attachments, history and shares.");
+                eprint!("Type the vault name to confirm: ");
+                let mut l = String::new(); std::io::stdin().read_line(&mut l)?;
+                if l.trim() != name { bail!("name did not match; nothing deleted"); }
+            }
+            s.delete_vault(&vid)?;
+            println!("deleted vault {name} ({vid}, {n} item(s))");
         }
         Cmd::Vault { cmd: VaultCmd::Rotate { vault } } => {
             let s = unlock(&cli, &root)?;

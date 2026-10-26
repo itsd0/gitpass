@@ -32,6 +32,8 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command(async)] pub fn unlock_biometric(s: State<'_, App>, vault_path: String) -> R<a::UnlockState> { s.unlock_biometric(&vault_path).map_err(e) }
 #[tauri::command] pub fn lock(s: State<App>) { s.lock() }
 #[tauri::command] pub fn list_vaults(s: State<App>) -> R<Vec<a::VaultInfo>> { s.list_vaults().map_err(e) }
+#[tauri::command] pub fn update_vault(s: State<App>, vault_id: String, name: String, description: Option<String>, icon: Option<String>, color: Option<String>) -> R<a::VaultInfo> { s.update_vault(&vault_id, &name, description, icon, color).map_err(e) }
+#[tauri::command] pub fn delete_vault(s: State<App>, vault_id: String, confirm_name: String) -> R<()> { s.delete_vault(&vault_id, &confirm_name).map_err(e) }
 #[tauri::command] pub fn create_vault(s: State<App>, name: String, description: Option<String>, icon: Option<String>, color: Option<String>) -> R<a::VaultInfo> { s.create_vault(&name, description, icon, color).map_err(e) }
 #[tauri::command] pub fn list_items(s: State<App>, filter: a::Filter) -> R<Vec<a::ItemSummary>> { s.list_items(&filter).map_err(e) }
 #[tauri::command] pub fn get_item(s: State<App>, vault_id: String, item_id: String) -> R<a::ItemDetail> { s.get_item(&vault_id, &item_id).map_err(e) }

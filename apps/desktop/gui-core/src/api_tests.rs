@@ -540,3 +540,17 @@ fn sync_twice_leaves_working_tree_clean() {
     e.app.unlock(&vp, "correct horse", Some(&e.sk)).unwrap();
     assert_eq!(porcelain(&vp), "", "unlock rewrote files");
 }
+
+#[test]
+fn vault_update_and_delete() {
+    let e = env();
+    assert!(e.app.delete_vault(&e.vault, "whatever").is_err()); // last vault / wrong name
+    let v2 = e.app.create_vault("Temp", None, None, None).unwrap();
+    let u = e.app.update_vault(&v2.id, "Renamed", Some("d".into()), Some("work".into()), Some("#ff0000".into())).unwrap();
+    assert_eq!((u.name.as_str(), u.icon.as_deref(), u.color.as_deref()), ("Renamed", Some("work"), Some("#ff0000")));
+    assert!(e.app.delete_vault(&v2.id, "Temp").is_err());
+    e.app.delete_vault(&v2.id, "Renamed").unwrap();
+    let vs = e.app.list_vaults().unwrap();
+    assert_eq!(vs.len(), 1);
+    assert!(e.app.delete_vault(&vs[0].id, &vs[0].name).is_err());
+}

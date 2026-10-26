@@ -1,7 +1,9 @@
 import type * as React from "react";
 import { useState } from 'react';
-import { Archive, Check, ChevronDown, LayoutGrid, Lock, Moon, PanelLeftClose, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
+import { Archive, Check, ChevronDown, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
 import { VaultIcon } from '../features/home/vaultIcons';
+import { DeleteVaultDialog, EditVaultDialog } from '../features/home/VaultDialogs';
+import type { VaultInfo } from '../api/types';
 import { api } from '../api/client';
 import type { Filter } from '../api/types';
 import { features } from '../features/registry';
@@ -37,6 +39,8 @@ export function Sidebar() {
   const accountName = vaults.find((v) => v.name === 'Personal')?.name ?? vaults[0]?.name ?? 'Personal';
   void account;
   const [vName, setVName] = useState('');
+  const [editV, setEditV] = useState<VaultInfo | null>(null); const [delV, setDelV] = useState<VaultInfo | null>(null);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const extraTop = features.filter((f) => f.sidebar?.section === 'top' && f.id !== 'items' && f.route);
   const extraBottom = features.filter((f) => f.sidebar?.section === 'bottom' && f.route);
 
@@ -72,10 +76,21 @@ export function Sidebar() {
 
         <SectionHeader label={t('nav.vaults').toUpperCase()} action={<Tooltip content="New vault"><button aria-label="New vault" className="rounded p-0.5 hover:bg-hover" onClick={() => setNewVault(true)}><Plus size={14} /></button></Tooltip>} />
         {vaults.map((v) => (
-          <NavItem key={v.id} active={same(route, { kind: 'vault', vaultId: v.id })} label={v.name}
-            icon={<VaultIcon icon={v.icon} color={v.color} size={16} />}
-            onClick={() => go({ kind: 'vault', vaultId: v.id })}
-            right={v.shared ? <Users size={13} className="text-muted" aria-label="Shared vault" /> : <span className="text-xs text-muted opacity-0 group-hover:opacity-100">{v.itemCount}</span>} />
+          <div key={v.id} className="group/vault relative" data-testid="sidebar-vault" onContextMenu={(e) => { e.preventDefault(); setMenuFor(v.id); }}>
+            <NavItem active={same(route, { kind: 'vault', vaultId: v.id })} label={v.name}
+              icon={<VaultIcon icon={v.icon} color={v.color} size={16} />}
+              onClick={() => go({ kind: 'vault', vaultId: v.id })}
+              right={<span className="flex w-8 justify-end group-hover/vault:invisible">{v.shared ? <Users size={13} className="text-muted" aria-label="Shared vault" /> : <span className="text-xs text-muted">{v.itemCount}</span>}</span>} />
+            <DropdownMenu open={menuFor === v.id} onOpenChange={(o) => setMenuFor(o ? v.id : null)}>
+              <DropdownMenuTrigger asChild><button aria-label={`${t('vault.more')}: ${v.name}`} className={cn('absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:bg-active hover:text-fg', menuFor === v.id ? 'visible' : 'invisible group-hover/vault:visible')}><MoreHorizontal size={14} /></button></DropdownMenuTrigger>
+              <DropdownMenuContent align="start">
+                <DropdownMenuItem onSelect={() => setEditV(v)}><Pencil size={14} />{t('vault.edit')}</DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setRoute({ name: 'settings', tab: `vault:${v.id}` })}><SettingsIcon size={14} />{t('nav.settings')}…</DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem className="text-danger" onSelect={() => setDelV(v)}><Trash2 size={14} />{t('vault.delete')}</DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         ))}
 
         {tags.length > 0 && <SectionHeader label={t('nav.tags').toUpperCase()} />}
@@ -96,6 +111,9 @@ export function Sidebar() {
           </form>
         </DialogContent>
       </Dialog>
+      <EditVaultDialog vault={editV} onOpenChange={(o) => !o && setEditV(null)} onSaved={() => { toast(t('vault.saved')); refreshItems(); }} />
+      <DeleteVaultDialog vault={delV} isLast={vaults.length <= 1} onOpenChange={(o) => !o && setDelV(null)}
+        onDeleted={(id) => { toast(t('vault.deleted', { vault: delV?.name ?? '' })); if (same(route, { kind: 'vault', vaultId: id })) go({ kind: 'all' }); useApp.getState().selectItem(null); refreshItems(); }} />
     </aside>
   );
 }

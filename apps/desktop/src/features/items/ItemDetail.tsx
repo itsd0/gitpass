@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Archive, ArchiveRestore, ChevronRight, Copy, Download, FolderInput, MoreVertical, Paperclip, Pencil, RotateCcw, Share2, Star, Trash2, Users } from 'lucide-react';
+import { Archive, ArchiveRestore, ChevronRight, Copy, Download, FolderInput, MoreVertical, Paperclip, Pencil, Plus, RotateCcw, Share2, Star, Trash2, Users } from 'lucide-react';
 import { api } from '../../api/client';
 import type { ItemDetail as Detail, VaultInfo } from '../../api/types';
 import { useApp } from '../../lib/store';
@@ -12,6 +12,7 @@ import { ItemEditor } from './ItemEditor';
 import { errText } from './actions';
 import { EmptyIllustration } from './EmptyIllustration';
 import { useItemsUI } from './state';
+import { useT } from '../../i18n';
 
 export function ItemDetailPane() {
   const id = useApp((s) => s.selectedItemId);
@@ -29,7 +30,7 @@ export function ItemDetailPane() {
     return () => { on = false; };
   }, [id, item?.vaultId, version]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!id) return <EmptyState />;
+  if (!id || !item) return <EmptyState />;
   if (err) return <div className="p-8 text-danger">{err}</div>;
   if (!detail || detail.id !== id) return <div className="space-y-4 p-6"><Skeleton className="h-12 w-64" /><Skeleton className="h-40 w-full" /></div>;
   const vault = vaults.find((v) => v.id === detail.vaultId);
@@ -43,16 +44,27 @@ function useSelectedSummary(id: string | null) {
 }
 
 function EmptyState() {
+  const t = useT();
+  const items = useItemsUI((s) => s.items); const loading = useItemsUI((s) => s.loading);
+  const route = useApp((s) => s.route);
+  const vaultEmpty = !loading && items.length === 0 && route.name === 'items' && route.filter.kind === 'vault' && !route.filter.query;
+  if (vaultEmpty) return (
+    <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center text-muted" data-testid="empty-vault">
+      <EmptyIllustration />
+      <div><div className="text-base font-medium text-fg">{t('detail.emptyTitle')}</div><div className="mt-1 text-sm">{t('detail.emptyBody')}</div></div>
+      <Button onClick={() => useApp.getState().openModal('new-item', route.name === 'items' ? { vaultId: route.filter.vaultId } : undefined)}><Plus size={15} />{t('detail.newItem')}</Button>
+    </div>
+  );
   return (
     <div className="flex h-full flex-col items-center justify-center gap-4 p-8 text-center text-muted" data-testid="empty-detail">
       <EmptyIllustration />
-      <div><div className="text-base font-medium text-fg">Select an item</div><div className="mt-1 text-sm">Pick something from the list, or create a new item.</div></div>
+      <div><div className="text-base font-medium text-fg">{t('detail.selectTitle')}</div><div className="mt-1 text-sm">{t('detail.selectBody')}</div></div>
     </div>
   );
 }
 
 function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultInfo; vaults: VaultInfo[] }) {
-  const { setEditing, refreshItems, selectItem, account } = useApp();
+  const { setEditing, refreshItems, selectItem } = useApp();
   const ctx = { vaultId: detail.vaultId, itemId: detail.id };
   const deleted = !!detail.deletedAt;
   const run = (p: Promise<unknown>, msg: string, deselect = false) => p.then(() => { toast(msg); if (deselect) selectItem(null); refreshItems(); }, (e) => toast(errText(e), 'danger'));
@@ -62,9 +74,9 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
     <div className="flex h-full flex-col outline-none" tabIndex={-1} data-detail-pane>
       <div className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-sm">
         <div className="flex min-w-0 flex-1 items-center gap-1.5 text-fg/90">
-          <span className="truncate">{account ?? 'gitpass'}</span><ChevronRight size={13} className="text-muted" />
-          <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: vault?.color ?? '#888' }} />
-          <span className="truncate">{vault?.name ?? '…'}</span>
+          <span className="inline-block h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: vault?.color ?? '#888' }} />
+          <span className="shrink-0 truncate" data-testid="crumb-vault">{vault?.name ?? '…'}</span><ChevronRight size={13} className="shrink-0 text-muted" />
+          <span className="truncate font-medium" data-testid="crumb-item">{detail.title || detail.subtitle || '—'}</span>
           {vault && <span className="ml-2 flex items-center gap-1 text-muted"><Users size={13} />{vault.members.length}</span>}
         </div>
         {!deleted && <>

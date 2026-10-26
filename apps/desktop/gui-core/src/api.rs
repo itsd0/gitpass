@@ -466,6 +466,23 @@ impl App {
         })
     }
 
+    /// Rename / re-describe / re-style a vault. `None` description/icon/color clears them.
+    pub fn update_vault(&self, vault_id: &str, name: &str, description: Option<String>, icon: Option<String>, color: Option<String>) -> Result<VaultInfo> {
+        let labels = self.read_local().member_labels;
+        self.write(|u| {
+            u.session.update_vault_meta(vault_id, gitpass_core::store::VaultMeta { name: name.trim().into(), description: nonempty(description), icon: nonempty(icon), color: nonempty(color) })?;
+            Self::vault_info(&u.session, vault_id, &labels)
+        })
+    }
+    /// Permanently delete a vault. `confirm_name` must equal the vault's current name (typed by the user).
+    pub fn delete_vault(&self, vault_id: &str, confirm_name: &str) -> Result<()> {
+        self.write(|u| {
+            let name = u.session.vault_meta(vault_id)?.name.clone();
+            if confirm_name != name { bail!("confirmation name does not match"); }
+            u.session.delete_vault(vault_id)
+        })
+    }
+
     // ---------------- items
     fn all_records(s: &Session) -> Result<Vec<(String, String, ItemRecord)>> {
         let mut out = vec![];

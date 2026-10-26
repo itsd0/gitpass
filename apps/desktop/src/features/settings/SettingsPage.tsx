@@ -1,7 +1,7 @@
 import { Logo } from '../../ui/logo';
 import { EmergencyKitFlow } from '../onboarding/EmergencyKit';
 import { useEffect, useState } from 'react';
-import { Copy, ExternalLink, Laptop, Lock, Info, RefreshCw, SlidersHorizontal, Smartphone, Terminal } from 'lucide-react';
+import { Archive as VaultsTabIcon, Copy, ExternalLink, Pencil, Trash2, Laptop, Lock, Info, RefreshCw, SlidersHorizontal, Smartphone, Terminal } from 'lucide-react';
 import { api } from '../../api/client';
 import type { DeviceInfo, SshAgentInfo, VaultInfo } from '../../api/types';
 import { cn } from '../../lib/utils';
@@ -12,13 +12,15 @@ import { useSettings } from './useSettings';
 import { SyncPanel } from './SyncPanel';
 import { UpdateRow } from './UpdateRow';
 import { getAppVersion } from '../../lib/updater';
+import { VaultIcon } from '../home/vaultIcons';
+import { DeleteVaultDialog, EditVaultDialog } from '../home/VaultDialogs';
 
 const errMsg = (e: unknown) => String((e as Error)?.message ?? e);
 /** Build-time fallback; About shows the running app's version from getAppVersion(). */
 export const APP_VERSION = __APP_VERSION__;
 export const REPO_URL = 'https://github.com/itsd0/gitpass';
 export const ISSUES_URL = `${REPO_URL}/issues`;
-const TABS = [{ id: 'general', icon: SlidersHorizontal }, { id: 'security', icon: Lock }, { id: 'devices', icon: Laptop }, { id: 'sync', icon: RefreshCw }, { id: 'ssh', icon: Terminal }, { id: 'about', icon: Info }] as const;
+const TABS = [{ id: 'general', icon: SlidersHorizontal }, { id: 'security', icon: Lock }, { id: 'vaults', icon: VaultsTabIcon }, { id: 'devices', icon: Laptop }, { id: 'sync', icon: RefreshCw }, { id: 'ssh', icon: Terminal }, { id: 'about', icon: Info }] as const;
 type Tab = (typeof TABS)[number]['id'];
 const Row = ({ label, children, help }: { label: string; children: React.ReactNode; help?: React.ReactNode }) =>
   <div className="flex items-start justify-between gap-6 border-b border-border py-4 last:border-0"><div><div className="text-sm font-medium">{label}</div>{help && <div className="mt-0.5 text-xs text-muted">{help}</div>}</div><div className="shrink-0">{children}</div></div>;
@@ -144,11 +146,35 @@ function About() {
     <Row label={t('about.issues')}><a className="text-sm text-accent hover:underline" href={ISSUES_URL} target="_blank" rel="noreferrer">{t('about.issues')}</a></Row></>;
 }
 
+/** Settings → Vaults: rename / restyle / delete every vault. */
+function Vaults() {
+  const t = useT(); const [vs, setVs] = useState<VaultInfo[] | null>(null); const [err, setErr] = useState<string | null>(null);
+  const [editV, setEditV] = useState<VaultInfo | null>(null); const [delV, setDelV] = useState<VaultInfo | null>(null);
+  const reload = () => api.listVaults().then(setVs, (e) => setErr(errMsg(e)));
+  useEffect(() => { void reload(); }, []);
+  if (err) return <p role="alert" className="py-4 text-sm text-danger">{err}</p>;
+  if (!vs) return <Skeleton className="my-4 h-24" />;
+  const done = () => { void reload(); useApp.getState().refreshItems(); };
+  return <div data-testid="vaults-settings">
+    <p className="py-3 text-xs text-muted">{t('vault.manageHelp')}</p>
+    {vs.map((v) => <div key={v.id} className="flex items-center gap-3 border-b border-border py-3 last:border-0">
+      <VaultIcon icon={v.icon} color={v.color} size={28} />
+      <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{v.name}</div><div className="truncate text-xs text-muted">{v.description ? `${v.description} · ` : ''}{t('settings.vaultItems')}: {v.itemCount}</div></div>
+      <Button variant="ghost" size="sm" aria-label={`${t('vault.edit')} ${v.name}`} onClick={() => setEditV(v)}><Pencil size={14} /></Button>
+      <Button variant="ghost" size="sm" aria-label={`${t('vault.delete')} ${v.name}`} disabled={vs.length <= 1} title={vs.length <= 1 ? t('vault.lastVault') : undefined} onClick={() => setDelV(v)}><Trash2 size={14} className="text-danger" /></Button>
+    </div>)}
+    <EditVaultDialog vault={editV} onOpenChange={(o) => !o && setEditV(null)} onSaved={() => { toast(t('vault.saved')); done(); }} />
+    <DeleteVaultDialog vault={delV} isLast={vs.length <= 1} onOpenChange={(o) => !o && setDelV(null)} onDeleted={() => { toast(t('vault.deleted', { vault: delV?.name ?? '' })); useApp.getState().selectItem(null); done(); }} />
+  </div>;
+}
+
 /** `settings` route with tab `vault:<id>` (Home → vault card → settings). There is no rename/edit-vault
  * command in the contract, so this is a read-only overview with links to items and sharing. */
 function VaultPanel({ vaultId }: { vaultId: string }) {
-  const t = useT(); const [v, setV] = useState<VaultInfo | null | undefined>(undefined);
-  useEffect(() => { api.listVaults().then((vs) => setV(vs.find((x) => x.id === vaultId) ?? null)).catch(() => setV(null)); }, [vaultId]);
+  const t = useT(); const [v, setV] = useState<VaultInfo | null | undefined>(undefined); const [count, setCount] = useState(0);
+  const [edit, setEdit] = useState(false); const [del, setDel] = useState(false);
+  const reload = () => api.listVaults().then((vs) => { setCount(vs.length); setV(vs.find((x) => x.id === vaultId) ?? null); }).catch(() => setV(null));
+  useEffect(() => { void reload(); }, [vaultId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (v === undefined) return <Skeleton className="h-24" />;
   if (v === null) return <p role="alert" className="py-4 text-sm text-danger">{t('settings.vaultMissing')}</p>;
   const app = useApp.getState();
@@ -158,8 +184,12 @@ function VaultPanel({ vaultId }: { vaultId: string }) {
     <Row label={t('settings.vaultItems')}><span className="text-sm">{v.itemCount}</span></Row>
     <Row label={t('people.vaultMembers')}><span className="text-sm">{v.members.length}</span></Row>
     <div className="flex gap-2 py-4"><Button variant="default" onClick={() => app.setRoute({ name: 'items', filter: { kind: 'vault', vaultId: v.id } })}>{t('settings.vaultOpen')}</Button>
-      <Button variant="outline" onClick={() => app.openModal('people', { vaultId: v.id })}>{t('people.invite')}</Button></div>
-    <p className="pb-3 text-xs text-muted">{t('settings.vaultEditHint')}</p></>;
+      <Button variant="outline" onClick={() => app.openModal('people', { vaultId: v.id })}>{t('people.invite')}</Button>
+      <Button variant="outline" onClick={() => setEdit(true)}><Pencil size={14} />{t('vault.edit')}</Button>
+      <Button variant="outline" className="text-danger" disabled={count <= 1} title={count <= 1 ? t('vault.lastVault') : undefined} onClick={() => setDel(true)}><Trash2 size={14} />{t('vault.delete')}</Button></div>
+    <EditVaultDialog vault={edit ? v : null} onOpenChange={setEdit} onSaved={(nv) => { toast(t('vault.saved')); setV(nv); app.refreshItems(); }} />
+    <DeleteVaultDialog vault={del ? v : null} isLast={count <= 1} onOpenChange={setDel} onDeleted={() => { toast(t('vault.deleted', { vault: v.name })); app.selectItem(null); app.refreshItems(); app.setRoute({ name: 'settings', tab: 'vaults' }); }} />
+  </>;
 }
 
 export function SettingsPage({ initialTab }: { initialTab?: string } = {}) {
@@ -171,7 +201,7 @@ export function SettingsPage({ initialTab }: { initialTab?: string } = {}) {
   const tab: Tab = (TABS.some((x) => x.id === fromRoute) ? fromRoute : 'general') as Tab;
   const [local, setLocal] = useState<Tab>(tab); useEffect(() => setLocal(tab), [tab]);
   useEffect(() => { if (!settings) load(); }, [settings, load]);
-  const body = { general: General, security: Security, devices: Devices, sync: Sync, ssh: SshAgent, about: About }[local];
+  const body = { general: General, security: Security, vaults: Vaults, devices: Devices, sync: Sync, ssh: SshAgent, about: About }[local];
   const B = body;
   return <div className="mx-auto flex max-w-4xl gap-8 p-8">
     <nav aria-label={t('settings.title')} className="w-44 shrink-0"><h1 className="mb-4 text-2xl font-semibold">{t('settings.title')}</h1>

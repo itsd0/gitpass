@@ -10,6 +10,9 @@ export const api = {
   createAccount: (a:{vaultPath:string; password:string; saveSecretKey:boolean}) => call<T.CreateAccountResult>('create_account', a),
   unlockBiometric: (a:{vaultPath:string}) => call<T.UnlockState>('unlock_biometric', a),
   listVaults: () => call<T.VaultInfo[]>('list_vaults'),
+  updateVault: (a:{vaultId:string; name:string; description?:string|null; icon?:string|null; color?:string|null}) => call<T.VaultInfo>('update_vault', a),
+  /** permanent; confirmName must equal the vault's name */
+  deleteVault: (a:{vaultId:string; confirmName:string}) => call<void>('delete_vault', a),
   createVault: (a:{name:string; description?:string|null; icon?:string|null; color?:string|null}) => call<T.VaultInfo>('create_vault', a),
   showQuickAccess: () => call<void>('show_quick_access', {}),
   listItems: (a:{filter:T.Filter}) => call<T.ItemSummary[]>('list_items', a),

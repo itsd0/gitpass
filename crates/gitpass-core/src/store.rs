@@ -567,6 +567,42 @@ impl Session {
         Ok(id)
     }
 
+    /// Rename a vault and/or change its description, icon and color (re-seals the encrypted meta).
+    pub fn update_vault_meta(&self, vid: &str, meta: VaultMeta) -> Result<()> {
+        self.ensure_not_revoked()?;
+        let name = meta.name.trim().to_string();
+        if name.is_empty() { bail!("vault name is empty"); }
+        if self.list_vaults()?.iter().any(|(id, m)| id != vid && m.name == name) { bail!("vault '{name}' already exists"); }
+        let vk = self.vault_key(vid)?;
+        let meta = VaultMeta { name, description: meta.description.clone(), icon: meta.icon.clone(), color: meta.color.clone() };
+        self.commit(|m| {
+            let ve = m.vaults.get_mut(vid).ok_or_else(|| anyhow!("no vault {vid}"))?;
+            let mut pt = serde_json::to_vec(&meta)?;
+            let env = seal(&vk, &pt, &meta_aad(vid));
+            pt.zeroize();
+            ve.meta_hash = write_json(&self.vdir(vid).join("meta.enc"), &env?)?;
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    /// Permanently delete a vault: its items, attachments, history, key and member (share) envelopes.
+    /// Not recoverable except from git history / backups. The last remaining vault can't be deleted.
+    pub fn delete_vault(&self, vid: &str) -> Result<()> {
+        self.ensure_not_revoked()?;
+        let vaults = self.list_vaults()?;
+        if !vaults.iter().any(|(id, _)| id == vid) { bail!("no vault {vid}"); }
+        if vaults.len() <= 1 { bail!("can't delete the last vault"); }
+        let d = self.vdir(vid);
+        self.commit(|m| {
+            m.vaults.remove(vid);
+            if d.exists() { fs::remove_dir_all(&d)?; }
+            fsutil::fsync_dir(&self.root.join("vaults"));
+            Ok(())
+        })?;
+        Ok(())
+    }
+
     pub fn list_vaults(&self) -> Result<Vec<(String, VaultMeta)>> {
         let m = self.load_manifest()?;
         let mut out = vec![];

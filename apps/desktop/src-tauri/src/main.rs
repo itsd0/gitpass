@@ -27,7 +27,7 @@ fn main() {
         .manage(app)
         .setup(|h| { c::spawn_idle_watcher(h.handle().clone()); agent_ui::start(h.handle()); Ok(()) })
         .invoke_handler(tauri::generate_handler![
-            c::status, c::show_quick_access, c::unlock, c::lock, c::list_vaults, c::create_vault, c::list_items, c::get_item, c::reveal_field,
+            c::status, c::show_quick_access, c::unlock, c::lock, c::list_vaults, c::create_vault, c::update_vault, c::delete_vault, c::list_items, c::get_item, c::reveal_field,
             c::copy_field, c::totp_now, c::create_item, c::update_item, c::set_favorite, c::archive_item, c::delete_item,
             c::restore_item, c::purge_item, c::move_item, c::duplicate_item, c::item_version, c::add_attachment,
             c::save_attachment, c::list_tags, c::generate_password, c::password_strength, c::watchtower, c::import_file,
