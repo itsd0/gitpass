@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/gitpass-core", "crates/gitpass-cli", "crates/gitpass-host", "apps/desktop/gui-core"]
+members = ["crates/gitpass-core", "crates/gitpass-cli", "crates/gitpass-host", "apps/desktop/gui-core", "ios/rust/gitpass-ios-ffi"]
 exclude = ["apps/desktop/src-tauri"]
 
 [workspace.package]
