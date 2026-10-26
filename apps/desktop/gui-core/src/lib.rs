@@ -97,6 +97,14 @@ impl GuiState {
         let u = g.unlocked.as_mut().ok_or_else(|| anyhow!("vault is locked"))?;
         f(u)
     }
+    /// Like `with`, but does NOT count as user activity (SSH agent / background reads must not keep the
+    /// vault unlocked forever).
+    pub(crate) fn peek<T>(&self, f: impl FnOnce(&mut Unlocked) -> Result<T>) -> Result<T> {
+        let mut g = self.inner.lock().map_err(|_| anyhow!("state poisoned"))?;
+        Self::expire(&mut g);
+        let u = g.unlocked.as_mut().ok_or_else(|| anyhow!("vault is locked"))?;
+        f(u)
+    }
     fn expire(g: &mut Inner) -> bool {
         if g.unlocked.is_some() && !g.auto_lock.is_zero() && g.last_activity.elapsed() >= g.auto_lock { g.unlocked = None; return true; }
         false
@@ -282,6 +290,7 @@ pub fn gen_password(len: usize) -> String { generate_password(len.clamp(8, 128))
 
 pub mod api;
 pub mod agent;
+pub mod ssh_agent;
 
 #[cfg(test)]
 mod tests;
@@ -289,3 +298,5 @@ mod tests;
 mod api_tests;
 #[cfg(test)]
 mod agent_tests;
+#[cfg(test)]
+mod ssh_tests;

@@ -112,3 +112,19 @@ pub fn spawn_idle_watcher(app: AppHandle) {
     let w = app.get_webview_window("quick-access").ok_or_else(|| "quick-access window missing".to_string())?;
     w.show().map_err(|x| x.to_string())?; w.set_focus().map_err(|x| x.to_string())
 }
+
+// ---- v0.7 SSH keys
+#[tauri::command] pub fn ssh_generate(s: State<App>, vault_id: String, title: String, comment: Option<String>) -> R<a::SshKeyCreated> {
+    let c = comment.filter(|c| !c.trim().is_empty()).unwrap_or_else(|| title.clone());
+    s.ssh_generate(&vault_id, &title, &c).map_err(e)
+}
+#[tauri::command] pub fn ssh_import(s: State<App>, vault_id: String, title: String, private_key: String, passphrase: Option<String>) -> R<a::SshKeyCreated> {
+    let pem = Zeroizing::new(private_key);
+    let pp = passphrase.map(Zeroizing::new);
+    s.ssh_import(&vault_id, &title, &pem, pp.as_deref().map(|x| x.as_str())).map_err(e)
+}
+#[tauri::command] pub fn ssh_agent_info(h: AppHandle, s: State<App>) -> a::SshAgentInfo {
+    let running = h.try_state::<std::sync::Arc<gitpass_gui_core::ssh_agent::SshAgent>>();
+    let path = running.as_ref().map(|a| a.socket_path.clone()).unwrap_or_else(|| gitpass_gui_core::agent::default_dir().join(gitpass_gui_core::ssh_agent::SOCKET_NAME));
+    s.ssh_agent_info(&path, running.is_some())
+}
