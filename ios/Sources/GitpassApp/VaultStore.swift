@@ -62,9 +62,9 @@ final class VaultStore: ObservableObject {
 
     func createAccount(password: String) throws -> String {
         guard password.count >= 10 else {
-            throw GitpassError.Generic("Use at least 10 characters for the master password."))
+            throw GitpassError.Generic("Use at least 10 characters for the master password.")
         }
-        let secret = try createAccount(root: vaultRoot.path, password: password)
+        let secret = try ffiCreateAccount(root: vaultRoot.path, password: password)
         try unlock(password: password, secretKey: secret)
         // Create a first vault so the item list is never empty on a
         // fresh account; the user can rename it on desktop later
@@ -162,7 +162,7 @@ final class VaultStore: ObservableObject {
     }
 
     func totpCode(for secret: String) throws -> TotpCode {
-        try totpCode(secret: secret)
+        try ffiTotpCode(secret: secret)
     }
 
     // MARK: - Clipboard (auto-clearing, like desktop)
@@ -193,4 +193,16 @@ final class VaultStore: ObservableObject {
         clipboardToken = nil
         clipboardClearWork?.cancel()
     }
+}
+
+// VaultStore has instance methods named `createAccount` and `totpCode`
+// that shadow the UniFFI free functions inside the class, and the
+// module name `GitpassApp` is shadowed by the `@main struct GitpassApp`,
+// so the free functions are reached through these file-scope forwarders.
+private func ffiCreateAccount(root: String, password: String) throws -> String {
+    try createAccount(root: root, password: password)
+}
+
+private func ffiTotpCode(secret: String) throws -> TotpCode {
+    try totpCode(secret: secret)
 }
