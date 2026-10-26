@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "gitpass core library: crypto, store (format v3), field merge, devices, sync, TOTP, fuzzy search"
+description = "gitpass core library: crypto, store (format v4: X25519 identity, sharing, rotating device revocation), field merge, devices, sync, TOTP, fuzzy search"
 
 [dependencies]
 argon2 = "0.5"
@@ -24,6 +24,8 @@ fs2 = "0.4.3"
 tempfile = "3"
 hmac = "0.12"
 sha1 = "0.10"
+x25519-dalek = { version = "2.0.1", features = ["static_secrets", "zeroize"] }
+csv = "1.3"
 
 [dev-dependencies]
 hex = "0.4.3"

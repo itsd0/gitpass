@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
 #[derive(Parser)]
-#[command(name = "gitpass", version, about = "Zero-knowledge password manager synced via a private git repo (MVP)")]
+#[command(name = "gitpass", version, about = "Zero-knowledge password manager synced via a private git repo")]
 struct Cli {
     /// Vault directory (default ~/.gitpass, or $GITPASS_PATH)
     #[arg(long, global = true, env = "GITPASS_PATH")]
@@ -14,7 +14,7 @@ struct Cli {
     /// Accept a failed integrity/rollback check and re-seal the manifest from what is on disk (dangerous)
     #[arg(long, global = true)]
     accept_rollback: bool,
-    /// Answer yes to the v1 -> v2 migration prompt
+    /// Answer yes to confirmation prompts (v1 migration, share, revoke, plaintext export)
     #[arg(long, global = true)]
     yes: bool,
     /// Name to register this device under (default: $GITPASS_DEVICE_NAME, else hostname)
@@ -112,10 +112,52 @@ enum Cmd {
         #[arg(long)]
         with_vault_keys: bool,
     },
-    /// Migrate a format v1 vault directory to format v2
+    /// Migrate a format v1 vault directory to the current format
     Migrate,
-    /// Device registry: list, rename, revoke (format v3)
+    /// Device registry: list, rename, revoke (v4: revoke rotates keys)
     Device { #[command(subcommand)] cmd: DeviceCmd },
+    /// Account identity (X25519) used for vault sharing
+    Identity { #[command(subcommand)] cmd: IdentityCmd },
+    /// Import items from another password manager's export file
+    Import {
+        vault: String,
+        /// bitwarden-json | bitwarden-csv | 1password-csv | keepass-csv | chrome-csv | gitpass-json
+        #[arg(long = "from")] from: String,
+        file: PathBuf,
+        /// Parse and count only; write nothing
+        #[arg(long)] dry_run: bool,
+        /// Import items even if title+username+url already exist
+        #[arg(long)] allow_duplicates: bool,
+    },
+    /// Export a vault (PLAINTEXT unless --encrypted; requires --yes for plaintext)
+    Export {
+        vault: String,
+        #[arg(long, value_enum, default_value_t = ExportFmt::GitpassJson)] format: ExportFmt,
+        #[arg(long)] out: PathBuf,
+        /// Passphrase-protected gitpass-json (Argon2id + XChaCha20-Poly1305); passphrase from $GITPASS_EXPORT_PASSPHRASE or prompt
+        #[arg(long)] encrypted: bool,
+    },
+    /// Security audit: weak / reused / old passwords, missing TOTP, optional HIBP check
+    Audit {
+        /// Vault (default: all vaults)
+        vault: Option<String>,
+        /// Check passwords against Have I Been Pwned (k-anonymity; only 5 hex chars of SHA-1 are sent)
+        #[arg(long)] hibp: bool,
+        #[arg(long, default_value_t = 365)] max_age_days: u64,
+    },
+}
+
+#[derive(Clone, Copy, PartialEq, clap::ValueEnum)]
+enum ExportFmt { GitpassJson, Csv }
+
+struct UreqHibp(ureq::Agent);
+impl gitpass_core::audit::PwnedRangeClient for UreqHibp {
+    fn range(&self, prefix: &str) -> Result<String> {
+        let r = self.0.get(&format!("{}{prefix}", gitpass_core::audit::HIBP_RANGE_URL))
+            .set("Add-Padding", "true").set("User-Agent", concat!("gitpass/", env!("CARGO_PKG_VERSION"))).call()
+            .map_err(|e| anyhow::anyhow!("HIBP request failed: {e}"))?;
+        Ok(r.into_string()?)
+    }
 }
 
 #[derive(Subcommand)]
@@ -124,10 +166,28 @@ enum DeviceCmd {
     List,
     /// Rename a device (id or unique id prefix)
     Rename { id: String, name: String },
-    /// Mark a device revoked. Does NOT re-encrypt keys; run `rotate-account-key --with-vault-keys` afterwards
-    Revoke { id: String },
+    /// Revoke a device: marks it revoked AND rotates the Account Key + every Vault Key (re-encrypts items),
+    /// so it cannot read FUTURE changes. Data it already copied cannot be recalled.
+    Revoke {
+        id: String,
+        /// Only set the v3 revocation marker (no key rotation)
+        #[arg(long)]
+        marker_only: bool,
+        /// Also change the master password and generate a new Secret Key (do this if the device knew them)
+        #[arg(long)]
+        rotate_credentials: bool,
+        /// With --rotate-credentials: overwrite <path>/secret.key with the new key
+        #[arg(long)]
+        save_secret_key: bool,
+    },
     /// Clear a revocation marker (run from another, non-revoked device)
     Unrevoke { id: String },
+}
+
+#[derive(Subcommand)]
+enum IdentityCmd {
+    /// Print this account's public key + fingerprint (creates the identity on first use; upgrades to format v4)
+    Show,
 }
 
 #[derive(Clone, Copy, clap::ValueEnum)]
@@ -139,6 +199,14 @@ enum VaultCmd {
     List,
     /// New Vault Key; re-encrypt every item in the vault
     Rotate { vault: String },
+    /// Seal the vault key to another account's identity (public key file such as identity.pub, or base64)
+    Share { vault: String, #[arg(long)] to: String },
+    /// Import a vault shared with you (path to vaults/<id>/members/<your-fpr>.enc in the sharer's checkout)
+    Accept { share: PathBuf },
+    /// Remove a member (fingerprint or prefix) and rotate the vault key
+    Unshare { vault: String, member: String },
+    /// List members a vault is shared with
+    Members { vault: String },
 }
 
 fn root(cli: &Cli) -> Result<PathBuf> {
@@ -171,15 +239,15 @@ fn confirm(prompt: &str) -> Result<bool> {
 
 fn do_migrate(root: &Path, pw: &str, sk: &SecretKey) -> Result<()> {
     let b = gitpass_core::migrate::migrate(root, pw, sk, Default::default())?;
-    eprintln!("migrated to format v2 (v1 backup: {})", b.display());
+    eprintln!("migrated format v1 vault to the current format (v1 backup: {})", b.display());
     Ok(())
 }
 
 fn unlock_full(cli: &Cli, root: &Path) -> Result<(Session, Zeroizing<String>, SecretKey)> {
     let pw = prompt_secret("GITPASS_PASSWORD", "Master password: ")?;
     let sk = load_secret_key(root)?;
-    if store::read_format(root)?.version < store::FORMAT_VERSION {
-        if cli.yes || confirm("This vault uses format v1. Migrate to format v2 now (a backup is made first)?")? {
+    if store::read_format(root)?.version < store::MIN_READ_FORMAT {
+        if cli.yes || confirm("This vault uses format v1. Migrate to the current format now (a backup is made first)?")? {
             do_migrate(root, &pw, &sk)?;
         } else {
             bail!("format v1 vault: run `gitpass migrate`");
@@ -309,6 +377,45 @@ fn run() -> Result<()> {
             let vid = s.resolve_vault(vault)?;
             s.rotate_vault(&vid)?;
             println!("rotated vault key for {vault} ({vid})");
+        }
+        Cmd::Vault { cmd: VaultCmd::Share { vault, to } } => {
+            let s = unlock(&cli, &root)?;
+            let vid = s.resolve_vault(vault)?;
+            let pk = gitpass_core::keys::load_pub(to)?;
+            let fpr = gitpass_core::keys::fingerprint(&pk);
+            if !cli.yes && !confirm(&format!("Share vault '{vault}' with fingerprint {fpr}? Verify this fingerprint with the recipient out of band."))? { bail!("aborted"); }
+            let p = s.share_vault(&vid, &pk)?;
+            println!("shared {vault} ({vid}) with {fpr}");
+            println!("member file: {}", p.display());
+            eprintln!("Commit + push, then the recipient runs: gitpass vault accept <checkout>/vaults/{vid}/members/{fpr}.enc");
+        }
+        Cmd::Vault { cmd: VaultCmd::Accept { share } } => {
+            let s = unlock(&cli, &root)?;
+            if let Ok(b) = std::fs::read(share) {
+                if let Ok(mf) = serde_json::from_slice::<store::MemberFile>(&b) {
+                    eprintln!("share claims to be from fingerprint {} (NOT authenticated: verify out of band)", mf.sender_fpr);
+                }
+            }
+            let vid = s.accept_share(share)?;
+            println!("imported shared vault {} ({vid}) as a snapshot", s.vault_meta(&vid)?.name);
+        }
+        Cmd::Vault { cmd: VaultCmd::Unshare { vault, member } } => {
+            let s = unlock(&cli, &root)?;
+            let vid = s.resolve_vault(vault)?;
+            let f = s.unshare_vault(&vid, member)?;
+            println!("removed member {f} from {vault}; vault key rotated (they keep anything they already copied)");
+        }
+        Cmd::Vault { cmd: VaultCmd::Members { vault } } => {
+            let s = unlock(&cli, &root)?;
+            let vid = s.resolve_vault(vault)?;
+            for (f, p) in s.members(&vid)? { println!("{f}  {}{p}", gitpass_core::keys::PUB_PREFIX); }
+        }
+        Cmd::Identity { cmd: IdentityCmd::Show } => {
+            let s = unlock(&cli, &root)?;
+            let (pk, fpr) = s.identity()?;
+            println!("public key:  {}", gitpass_core::keys::encode_pub(&pk));
+            println!("fingerprint: {fpr}");
+            println!("file:        {}", root.join(store::IDENTITY_PUB_FILE).display());
         }
         Cmd::Vault { cmd: VaultCmd::List } => {
             let s = unlock(&cli, &root)?;
@@ -440,7 +547,7 @@ fn run() -> Result<()> {
             }
         }
         Cmd::Device { cmd } => {
-            let (mut s, _pw, _sk) = unlock_full(&cli, &root)?;
+            let (mut s, pw, sk) = unlock_full(&cli, &root)?;
             match cmd {
                 DeviceCmd::List => {
                     let reg = s.devices()?;
@@ -452,19 +559,97 @@ fn run() -> Result<()> {
                     }
                 }
                 DeviceCmd::Rename { id, name } => { let id = s.rename_device(id, name)?; println!("renamed {id} -> {name}"); }
-                DeviceCmd::Revoke { id } => {
+                DeviceCmd::Revoke { id, marker_only, rotate_credentials, save_secret_key } => {
                     let reg = s.devices()?;
                     let full = reg.resolve(id)?;
                     let d = reg.get(&full).unwrap();
                     let this = if full == s.device_id { " (THIS device)" } else { "" };
                     if !cli.yes && !confirm(&format!("Revoke device {} '{}'{this}?", d.id, d.name))? { bail!("aborted"); }
-                    s.revoke_device(&full)?;
-                    println!("revoked {full}");
-                    eprintln!("NOTE: revoke is a trust marker only; it does NOT re-encrypt vault keys.");
-                    eprintln!("If the device may be compromised, run: gitpass rotate-account-key --with-vault-keys");
-                    eprintln!("and also change the master password (`gitpass passwd`) and Secret Key (`gitpass rotate-secret-key`).");
+                    if *marker_only {
+                        s.revoke_device(&full)?;
+                        println!("revoked {full} (marker only; no keys rotated)");
+                    } else {
+                        let rep = s.revoke_device_and_rotate(&full, &pw, &sk)?;
+                        println!("revoked {full}; rotated account key and {} vault key(s) (backup: {})", rep.vaults_rotated.len(), rep.account_key_backup.display());
+                        eprintln!("NOTE: the revoked device cannot decrypt changes made from now on, but it KEEPS anything it already");
+                        eprintln!("copied (old repo clone, items, old keys). Push now so other devices pick up the new keys.");
+                    }
+                    if *rotate_credentials {
+                        let npw = new_password()?;
+                        let k = s.fmt.kdf.max_with(&KdfParams::default());
+                        let nsk = s.rotate_credentials(&npw, k)?;
+                        let enc = Zeroizing::new(nsk.encode());
+                        if *save_secret_key || root.join("secret.key").exists() { save_sk(&root, &enc)?; }
+                        print_kit(&root, &enc);
+                        println!("master password and Secret Key rotated.");
+                    } else {
+                        eprintln!("If the revoked device knew your master password + Secret Key it can still derive the new keys:");
+                        eprintln!("rerun with --rotate-credentials, or run `gitpass passwd` and `gitpass rotate-secret-key`.");
+                    }
                 }
                 DeviceCmd::Unrevoke { id } => { let id = s.unrevoke_device(id)?; println!("unrevoked {id}"); }
+            }
+        }
+        Cmd::Import { vault, from, file, dry_run, allow_duplicates } => {
+            use gitpass_core::import;
+            let fmt: import::ImportFormat = from.parse()?;
+            let data = Zeroizing::new(std::fs::read_to_string(file).with_context(|| format!("reading {}", file.display()))?);
+            let pass = if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&data) {
+                Some(prompt_secret("GITPASS_EXPORT_PASSPHRASE", "Export passphrase: ")?) } else { None };
+            let parsed = import::parse(fmt, &data, pass.as_deref().map(|s| s.as_str()))?;
+            let s = unlock(&cli, &root)?;
+            let vid = s.resolve_vault(vault)?;
+            let r = import::import_items(&s, &vid, parsed, import::ImportOpts { dry_run: *dry_run, allow_duplicates: *allow_duplicates })?;
+            for w in &r.warnings { eprintln!("warning: {w}"); }
+            for d in &r.duplicates { eprintln!("duplicate skipped: {d}"); }
+            println!("{}parsed {}, {} {}, {} duplicate(s) skipped", if *dry_run { "[dry run] " } else { "" },
+                r.parsed, if *dry_run { "would add" } else { "added" }, r.added, r.duplicates.len());
+        }
+        Cmd::Export { vault, format, out, encrypted } => {
+            use gitpass_core::import;
+            let out = &std::path::absolute(out)?;
+            if *encrypted && *format == ExportFmt::Csv { bail!("--encrypted only supports --format gitpass-json"); }
+            let s = unlock(&cli, &root)?;
+            let vid = s.resolve_vault(vault)?;
+            let items: Vec<Item> = s.list_items(&vid)?.into_iter().map(|(_, it)| it).collect();
+            let body = if *encrypted {
+                let p = prompt_secret("GITPASS_EXPORT_PASSPHRASE", "Export passphrase: ")?;
+                if std::env::var("GITPASS_EXPORT_PASSPHRASE").is_err() {
+                    let p2 = prompt_secret("__none__", "Confirm export passphrase: ")?;
+                    if *p != *p2 { bail!("passphrases do not match"); }
+                }
+                Zeroizing::new(import::export_encrypted(&items, &p, &import::export_kdf_default())?)
+            } else {
+                eprintln!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                eprintln!("!! WARNING: PLAINTEXT EXPORT. {} will contain ALL passwords,", out.display());
+                eprintln!("!! TOTP secrets and notes UNENCRYPTED. Anyone who reads the file owns");
+                eprintln!("!! these accounts. Prefer --encrypted. Delete the file when done.");
+                eprintln!("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+                if !cli.yes && !confirm("Write plaintext export?")? { bail!("aborted (pass --yes to confirm)"); }
+                Zeroizing::new(match format { ExportFmt::GitpassJson => import::export_json(&items)?, ExportFmt::Csv => import::export_csv(&items)? })
+            };
+            gitpass_core::fsutil::atomic_write(out, body.as_bytes())?;
+            #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(out, std::fs::Permissions::from_mode(0o600))?; }
+            println!("exported {} item(s) to {}{}", items.len(), out.display(), if *encrypted { " (encrypted)" } else { " (PLAINTEXT)" });
+        }
+        Cmd::Audit { vault, hibp, max_age_days } => {
+            use gitpass_core::audit;
+            let s = unlock(&cli, &root)?;
+            let vids: Vec<(String, String)> = match vault {
+                Some(v) => { let id = s.resolve_vault(v)?; vec![(id.clone(), s.vault_meta(&id)?.name.clone())] }
+                None => s.list_vaults()?.into_iter().map(|(id, m)| (id, m.name.clone())).collect(),
+            };
+            let mut all = vec![];
+            for (vid, name) in &vids { for (iid, it) in s.list_items(vid)? { all.push((name.clone(), iid, it)); } }
+            let client = UreqHibp(ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(15)).build());
+            let opts = audit::AuditOpts { max_age_days: *max_age_days, ..Default::default() };
+            let r = audit::audit(&all, &opts, if *hibp { Some(&client) } else { None })?;
+            println!("audited {} item(s) in {} vault(s){}", r.items_checked, vids.len(), if *hibp { " (with HIBP)" } else { "" });
+            println!("  weak: {}  reused: {} ({} group(s))  old (>{max_age_days}d): {}  missing TOTP: {}{}",
+                r.weak, r.reused, r.reused_groups, r.old, r.missing_totp, if *hibp { format!("  pwned: {}", r.pwned) } else { String::new() });
+            for f in &r.per_item {
+                println!("\n[{}] {} ({})", f.vault, f.title, &f.id[..f.id.len().min(8)]);
+                for x in &f.findings { println!("  - {x}"); }
             }
         }
         Cmd::Migrate => {
