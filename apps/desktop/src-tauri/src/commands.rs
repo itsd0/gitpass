@@ -1,7 +1,9 @@
 //! Thin Tauri 2 wrappers over `gitpass_gui_core::api::App`, one per contract `client.ts` command.
 //! Command names are snake_case; Tauri 2 maps the frontend's camelCase args to these snake_case params.
 //! Errors are returned to the frontend as strings.
-use gitpass_gui_core::api::{self as a, App};
+use gitpass_gui_core::api as a;
+/// Shared with the extension agent server (`agent_ui`), hence the Arc.
+pub type App = std::sync::Arc<a::App>;
 use tauri::{AppHandle, Emitter, Manager, State};
 use zeroize::Zeroizing;
 

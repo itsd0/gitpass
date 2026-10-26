@@ -1,4 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod agent_ui;
 mod biometric;
 mod commands;
 use commands as c;
@@ -15,10 +16,10 @@ fn extend_path() {
 
 fn main() {
     extend_path();
-    let app = gitpass_gui_core::api::App::new(gitpass_gui_core::default_vault_dir(), Arc::new(c::SysClipboard)).with_biometric(biometric::platform());
+    let app = Arc::new(gitpass_gui_core::api::App::new(gitpass_gui_core::default_vault_dir(), Arc::new(c::SysClipboard)).with_biometric(biometric::platform()));
     tauri::Builder::default()
         .manage(app)
-        .setup(|h| { c::spawn_idle_watcher(h.handle().clone()); Ok(()) })
+        .setup(|h| { c::spawn_idle_watcher(h.handle().clone()); agent_ui::start(h.handle()); Ok(()) })
         .invoke_handler(tauri::generate_handler![
             c::status, c::show_quick_access, c::unlock, c::lock, c::list_vaults, c::create_vault, c::list_items, c::get_item, c::reveal_field,
             c::copy_field, c::totp_now, c::create_item, c::update_item, c::set_favorite, c::archive_item, c::delete_item,

@@ -665,11 +665,14 @@ dependencies = [
  "base64",
  "dirs",
  "gitpass-core",
+ "gitpass-host",
+ "libc",
  "rand 0.8.8",
  "serde",
  "serde_json",
  "tempfile",
  "ureq",
+ "url",
  "zeroize",
 ]
 

@@ -281,8 +281,11 @@ impl GuiState {
 pub fn gen_password(len: usize) -> String { generate_password(len.clamp(8, 128)) }
 
 pub mod api;
+pub mod agent;
 
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod api_tests;
+#[cfg(test)]
+mod agent_tests;

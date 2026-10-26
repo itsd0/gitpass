@@ -1,0 +1,251 @@
+//! Agent socket tests: a real UNIX-socket client against a temp vault. All data is FAKE.
+use crate::agent::*;
+use crate::api::*;
+use gitpass_core::crypto::KdfParams;
+use gitpass_core::item::{Category, FieldKind};
+use gitpass_core::store::{self, UnlockOpts};
+use serde_json::{json, Value};
+use std::os::unix::net::UnixStream;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+fn fast() -> KdfParams { KdfParams { alg: "argon2id".into(), m_kib: 8192, t: 1, p: 1 } }
+
+/// Test UI: request_unlock unlocks the vault from another thread (stands in for Touch ID / password).
+struct TestUi { app: Mutex<Option<(Arc<App>, String, String)>>, opened: Mutex<Vec<(Option<String>, Option<String>)>> }
+impl AgentUi for TestUi {
+    fn request_unlock(&self, _reason: &str) {
+        if let Some((app, dir, sk)) = self.app.lock().unwrap().clone() {
+            std::thread::spawn(move || { std::thread::sleep(Duration::from_millis(300)); app.unlock(&dir, "correct horse", Some(&sk)).unwrap(); });
+        }
+    }
+    fn open_item(&self, v: Option<&str>, i: Option<&str>) { self.opened.lock().unwrap().push((v.map(Into::into), i.map(Into::into))); }
+}
+
+struct Env { _vault: tempfile::TempDir, _cfg: tempfile::TempDir, _sock: tempfile::TempDir, app: Arc<App>, agent: Arc<Agent>, ui: Arc<TestUi>, vault: String }
+
+fn env() -> Env {
+    let d = tempfile::tempdir().unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let sockdir = tempfile::Builder::new().prefix("gpa").tempdir_in("/tmp").unwrap(); // short path (sun_path limit)
+    let sk = store::init(d.path(), "correct horse", fast()).unwrap().encode();
+    let app = Arc::new(App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default())));
+    app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
+    app.unlock(&d.path().display().to_string(), "correct horse", Some(&sk)).unwrap();
+    let vault = app.list_vaults().unwrap()[0].id.clone();
+    let ui = Arc::new(TestUi { app: Mutex::new(Some((app.clone(), d.path().display().to_string(), sk))), opened: Mutex::new(vec![]) });
+    let agent = Agent::start(app.clone(), ui.clone(), &sockdir.path().join("gitpass")).unwrap();
+    Env { _vault: d, _cfg: cfg, _sock: sockdir, app, agent, ui, vault }
+}
+
+struct Client { s: UnixStream, n: u64, events: Vec<Value> }
+impl Client {
+    fn raw(e: &Env) -> Client {
+        let s = UnixStream::connect(&e.agent.socket_path).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        Client { s, n: 0, events: vec![] }
+    }
+    fn connect(e: &Env) -> (Client, Value) {
+        let mut c = Client::raw(e);
+        let token = std::fs::read_to_string(e.agent.socket_path.with_file_name("agent.token")).unwrap();
+        let r = c.call("hello", json!({"client": "gitpass-host", "version": "0.6.0", "token": token}));
+        (c, r)
+    }
+    fn call(&mut self, cmd: &str, args: Value) -> Value {
+        self.n += 1;
+        let mut q = args.as_object().cloned().unwrap_or_default();
+        q.insert("id".into(), json!(self.n)); q.insert("cmd".into(), json!(cmd));
+        write_frame(&mut self.s, &Value::Object(q)).unwrap();
+        loop {
+            let v = read_frame(&mut self.s).unwrap().expect("connection closed");
+            if v.get("event").is_some() { self.events.push(v); continue; }
+            assert_eq!(v["id"], json!(self.n), "{v}");
+            return v;
+        }
+    }
+    fn ok(&mut self, cmd: &str, args: Value) -> Value { let r = self.call(cmd, args); assert_eq!(r["ok"], json!(true), "{cmd}: {r}"); r["result"].clone() }
+    fn err(&mut self, cmd: &str, args: Value) -> String { let r = self.call(cmd, args); assert_eq!(r["ok"], json!(false), "{cmd}: {r}"); r["error"].as_str().unwrap().to_string() }
+    fn wait_event(&mut self, name: &str) {
+        if let Some(i) = self.events.iter().position(|e| e["event"] == json!(name)) { self.events.remove(i); return; }
+        loop { let v = read_frame(&mut self.s).unwrap().expect("closed"); if v["event"] == json!(name) { return; } }
+    }
+}
+
+fn fld(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), label: id.into(), kind, value: Some(v.into()) } }
+fn add_login(e: &Env, title: &str, url: &str, user: &str, pw: &str) -> String {
+    let s = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some(url.into()),
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, user), fld("password", FieldKind::Concealed, pw)] }],
+        notes: None, tags: None, favorite: None }).unwrap();
+    format!("{}:{}", e.vault, s.id)
+}
+fn add_card(e: &Env) -> String {
+    let s = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "Example Bank".into(), url: None,
+        sections: vec![Section { id: "card".into(), title: Some("Card".into()), fields: vec![fld("number", FieldKind::Concealed, "4111 1111 1111 1111"), fld("cvv", FieldKind::Concealed, "123")] }],
+        notes: None, tags: None, favorite: Some(true) }).unwrap();
+    format!("{}:{}", e.vault, s.id)
+}
+
+#[test]
+fn socket_and_token_permissions_and_peer_uid() {
+    use std::os::unix::fs::PermissionsExt;
+    let e = env();
+    let mode = |p: &std::path::Path| std::fs::metadata(p).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode(&e.agent.socket_path), 0o600);
+    assert_eq!(mode(e.agent.socket_path.parent().unwrap()), 0o700);
+    assert_eq!(mode(&e.agent.socket_path.with_file_name("agent.token")), 0o600);
+    assert_eq!(e.agent.token().len(), 64);
+    let c = Client::raw(&e);
+    assert_eq!(peer_uid(&c.s).unwrap(), unsafe { libc::getuid() });
+}
+
+#[test]
+fn auth_rejects_bad_token_and_commands_before_hello() {
+    let e = env();
+    let mut c = Client::raw(&e);
+    assert_eq!(c.err("hello", json!({"client": "gitpass-host", "token": "00".repeat(32)})), "denied");
+    assert!(read_frame(&mut c.s).unwrap().is_none(), "connection closed after reject");
+    let mut c = Client::raw(&e);
+    assert_eq!(c.err("hello", json!({"client": "gitpass-host"})), "denied");
+    let mut c = Client::raw(&e);
+    assert_eq!(c.err("list_items", json!({"token": e.agent.token()})), "denied");
+    assert!(read_frame(&mut c.s).unwrap().is_none());
+    let (_, h) = Client::connect(&e);
+    assert_eq!(h["ok"], json!(true), "{h}");
+    assert_eq!(h["result"]["unlocked"], json!(true));
+    assert_eq!(h["result"]["account"]["vault_count"], json!(1));
+}
+
+#[test]
+fn locked_responses() {
+    let e = env();
+    add_login(&e, "GitHub", "https://github.com", "octo", "pw1");
+    e.app.lock();
+    let (mut c, h) = Client::connect(&e);
+    assert_eq!(h["result"]["unlocked"], json!(false));
+    let st = c.ok("status", json!({}));
+    assert_eq!((st["unlocked"].clone(), st["app_running"].clone(), st["idle_timeout_secs"].clone()), (json!(false), json!(true), json!(300)));
+    for (cmd, a) in [("list_items", json!({})), ("match", json!({"origin": "https://github.com"})), ("list_vaults", json!({})),
+        ("fill", json!({"item_id": "a:b", "origin": "https://github.com"})), ("save_login", json!({"origin": "https://x.com", "username": "u", "password": "p"}))] {
+        assert_eq!(c.err(cmd, a), "locked", "{cmd}");
+    }
+    assert_eq!(c.err("nope", json!({})), "bad_request");
+    assert!(c.ok("generate", json!({"len": 24, "digits": true, "symbols": false}))["password"].as_str().unwrap().len() == 24);
+}
+
+#[test]
+fn match_fill_reveal_origin_rules_and_categories() {
+    let e = env();
+    let gh = add_login(&e, "GitHub", "https://github.com/login", "octo", "pw-gh");
+    let _other = add_login(&e, "Example", "https://example.org", "ex", "pw-ex");
+    let card = add_card(&e);
+    let (mut c, _) = Client::connect(&e);
+    let m = c.ok("match", json!({"origin": "https://www.github.com"}));
+    let ids: Vec<&str> = m["items"].as_array().unwrap().iter().map(|i| i["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, vec![gh.as_str()]);
+    assert_eq!(m["items"][0]["subtitle"], json!("octo"));
+    assert_eq!(m["items"][0]["vault_name"], json!("Personal"));
+    assert_eq!(m["items"][0]["favicon_host"], json!("github.com"));
+    assert!(c.ok("match", json!({"origin": "https://github.com.evil.io"}))["items"].as_array().unwrap().is_empty());
+    assert_eq!(c.err("match", json!({"origin": "http://github.com"})), "origin_mismatch");
+
+    let f = c.ok("fill", json!({"item_id": gh, "origin": "https://github.com"}));
+    assert_eq!((f["username"].clone(), f["password"].clone()), (json!("octo"), json!("pw-gh")));
+    assert_eq!(c.err("fill", json!({"item_id": gh, "origin": "https://github.com.evil.io"})), "origin_mismatch");
+    assert_eq!(c.err("fill", json!({"item_id": gh, "origin": "https://example.org"})), "origin_mismatch");
+    assert_eq!(c.err("fill", json!({"item_id": format!("{}:nope", e.vault), "origin": "https://github.com"})), "not_found");
+
+    // reveal: popup only
+    assert_eq!(c.err("reveal", json!({"item_id": gh, "field": "password"})), "denied");
+    assert_eq!(c.err("reveal", json!({"item_id": gh, "field": "password", "source": "content"})), "denied");
+    assert_eq!(c.ok("reveal", json!({"item_id": gh, "field": "password", "source": "popup"}))["value"], json!("pw-gh"));
+
+    // get_item: secrets omitted, flagged concealed
+    let d = c.ok("get_item", json!({"item_id": gh}))["item"].clone();
+    let pw = d["fields"].as_array().unwrap().iter().find(|f| f["name"] == json!("password")).unwrap().clone();
+    assert_eq!(pw["concealed"], json!(true)); assert!(pw.get("value").is_none()); assert_eq!(pw["kind"], json!("password"));
+    assert!(!d.to_string().contains("pw-gh"));
+
+    // real v5 categories
+    let all = c.ok("list_items", json!({}))["items"].clone();
+    let cat = |id: &str| all.as_array().unwrap().iter().find(|i| i["id"] == json!(id)).unwrap()["category"].clone();
+    assert_eq!(cat(&gh), json!("login")); assert_eq!(cat(&card), json!("credit_card"));
+    let cards = c.ok("list_items", json!({"category": "credit_card"}))["items"].clone();
+    assert_eq!(cards.as_array().unwrap().len(), 1);
+    assert_eq!(cards[0]["subtitle"], json!("•••• 1111"));
+    let cd = c.ok("get_item", json!({"item_id": card}))["item"].clone();
+    assert_eq!(cd["fields"][0]["kind"], json!("card_number"));
+    assert!(!cd.to_string().contains("4111 1111"));
+    assert_eq!(c.ok("list_items", json!({"query": "exam", "limit": 5}))["items"].as_array().unwrap().len(), 2);
+    assert_eq!(c.ok("list_items", json!({"limit": 1}))["items"].as_array().unwrap().len(), 1);
+
+    // fill_card: popup or in-page click only
+    assert_eq!(c.err("fill_card", json!({"item_id": card})), "denied");
+    assert_eq!(c.ok("fill_card", json!({"item_id": card, "source": "popup"}))["number"], json!("4111 1111 1111 1111"));
+    assert_eq!(c.err("fill_identity", json!({"item_id": card, "source": "popup"})), "bad_request");
+
+    let v = c.ok("list_vaults", json!({}));
+    assert_eq!(v["vaults"][0]["item_count"], json!(3));
+    c.ok("open_in_app", json!({"item_id": gh}));
+    let (v, i) = gh.split_once(':').unwrap();
+    assert_eq!(e.ui.opened.lock().unwrap()[0], (Some(v.to_string()), Some(i.to_string())));
+}
+
+#[test]
+fn save_login_and_update_password_write_real_items() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+    assert_eq!(c.err("save_login", json!({"origin": "http://evil.example", "username": "u", "password": "p"})), "origin_mismatch");
+    let id = c.ok("save_login", json!({"origin": "https://accounts.example.com", "username": "alice", "password": "s3cret-1"}))["item_id"].as_str().unwrap().to_string();
+    let (vid, iid) = id.split_once(':').unwrap();
+    assert_eq!(vid, e.vault);
+    // a real item in the vault, visible to the GUI API
+    let d = e.app.get_item(vid, iid).unwrap();
+    assert_eq!((d.summary.category, d.summary.title.as_str(), d.summary.subtitle.as_str(), d.summary.url.as_deref()),
+        (Category::Login, "accounts.example.com", "alice", Some("https://accounts.example.com")));
+    assert_eq!(e.app.reveal_field(vid, iid, "password").unwrap().as_str(), "s3cret-1");
+    assert_eq!(c.ok("fill", json!({"item_id": id, "origin": "https://www.example.com"}))["password"], json!("s3cret-1"));
+    assert_eq!(c.ok("match", json!({"origin": "https://example.com"}))["items"].as_array().unwrap().len(), 1);
+    assert_eq!(c.ok("update_password", json!({"item_id": id, "password": "n3w-pass"}))["ok"], json!(true));
+    assert_eq!(e.app.reveal_field(vid, iid, "password").unwrap().as_str(), "n3w-pass");
+    assert!(e.app.get_item(vid, iid).unwrap().history.len() >= 1, "old version kept in history");
+    let t = c.ok("save_login", json!({"origin": "https://x.example.net", "title": "My X", "username": "", "password": "p", "vault_id": e.vault}));
+    assert!(t["item_id"].as_str().unwrap().starts_with(&e.vault));
+}
+
+#[test]
+fn lock_unlock_events_and_request_unlock() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+    let (mut c2, _) = Client::connect(&e);
+    // lock from the GUI side -> pushed to every connection
+    e.app.lock();
+    c.wait_event("lock");
+    c2.wait_event("lock");
+    // request_unlock: UI is asked, result arrives when unlocked
+    let r = c.ok("request_unlock", json!({"reason": "fill github.com"}));
+    assert_eq!(r["unlocked"], json!(true));
+    c.wait_event("unlock");
+    c2.wait_event("unlock");
+    assert_eq!(c.ok("status", json!({}))["unlocked"], json!(true));
+    // lock via the agent
+    assert_eq!(c.ok("lock", json!({}))["unlocked"], json!(false));
+    assert!(!e.app.state.is_unlocked());
+    c2.wait_event("lock");
+    // idle auto-lock (app's own setting) also emits lock
+    let r = c.ok("request_unlock", json!({}));
+    assert_eq!(r["unlocked"], json!(true));
+    c2.wait_event("unlock");
+    e.app.state.set_auto_lock_duration(Duration::from_millis(50));
+    std::thread::sleep(Duration::from_millis(100));
+    c2.wait_event("lock");
+}
+
+#[test]
+fn request_unlock_times_out() {
+    let e = env();
+    *e.ui.app.lock().unwrap() = None; // user ignores the prompt
+    e.app.lock();
+    e.agent.set_unlock_timeout(Duration::from_millis(600));
+    let (mut c, _) = Client::connect(&e);
+    assert_eq!(c.ok("request_unlock", json!({"reason": "x"}))["unlocked"], json!(false));
+}
