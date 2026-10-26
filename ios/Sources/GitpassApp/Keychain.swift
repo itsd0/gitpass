@@ -66,30 +66,29 @@ final class KeychainStore {
         } else {
             query[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         }
-        var status = SecItemAdd(query as CFDictionary, nil)
-        if status == errSecDuplicateItem {
-            let updateQuery: [String: Any] = [
-                kSecClass as String: kSecClassGenericPassword,
-                kSecAttrService as String: service,
-                kSecAttrAccount as String: unlockAccount,
-            ]
-            let attributes: [String: Any] = [kSecValueData as String: data]
-            status = SecItemUpdate(updateQuery as CFDictionary, attributes as CFDictionary)
-        }
+        // Delete-then-add instead of SecItemUpdate: an update only
+        // replaces the data and would keep an existing item's old
+        // access control, so turning Face ID on after a save without
+        // biometry would silently leave the credentials unprotected.
+        deleteUnlockCredentials()
+        let status = SecItemAdd(query as CFDictionary, nil)
         guard status == errSecSuccess else { throw KeychainError.unavailable(status) }
     }
 
-    func loadUnlockCredentials() throws -> UnlockCredentials {
+    func loadUnlockCredentials(context: LAContext? = nil) throws -> UnlockCredentials {
         // Presenting a Face ID prompt is the caller's job (LAContext);
         // the biometry access control on the item itself is the second
         // gate if the item was saved with requireBiometry.
-        let query: [String: Any] = [
+        var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: unlockAccount,
             kSecReturnData as String: true,
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
+        // Reuse the already-evaluated LAContext so the biometry ACL is
+        // satisfied by the same Face ID match (no second prompt).
+        if let context { query[kSecUseAuthenticationContext as String] = context }
         var item: CFTypeRef?
         let status = SecItemCopyMatching(query as CFDictionary, &item)
         guard status == errSecSuccess else {
@@ -169,12 +168,15 @@ final class KeychainStore {
         return context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
-    static func evaluateBiometrics(reason: String) async throws -> Bool {
+    /// Evaluates Face ID / Touch ID and returns the authenticated
+    /// context, to be passed to `loadUnlockCredentials(context:)`.
+    static func evaluateBiometrics(reason: String) async throws -> LAContext {
         let context = LAContext()
         context.localizedCancelTitle = String(localized: "Enter password instead")
-        return try await context.evaluatePolicy(
+        try await context.evaluatePolicy(
             .deviceOwnerAuthenticationWithBiometrics,
             localizedReason: reason
         )
+        return context
     }
 }
