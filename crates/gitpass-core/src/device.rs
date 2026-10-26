@@ -62,6 +62,20 @@ impl DeviceRegistry {
             n => bail!("{n} devices match '{q}'; use a longer prefix"),
         }
     }
+    /// Would [`touch`](Self::touch) change anything at time `now`? (new device, relabel, or last_seen older than the throttle)
+    pub fn needs_touch(&self, id: &str, name: &str, now: &str) -> bool {
+        match self.devices.iter().find(|d| d.id == id) {
+            None => true,
+            Some(d) if d.revoked => false,
+            Some(d) => {
+                if (d.name.trim().is_empty() || d.name == UNKNOWN_DEVICE) && !name.trim().is_empty() { return true; }
+                match (parse_iso8601(&d.last_seen_at), parse_iso8601(now)) {
+                    (Some(a), Some(b)) => b - a >= LAST_SEEN_THROTTLE_SECS || b < a,
+                    _ => true,
+                }
+            }
+        }
+    }
     /// Register `id` or refresh its last_seen_at (revoked devices are left untouched).
     pub fn touch(&mut self, id: &str, name: &str, now: &str) {
         match self.devices.iter_mut().find(|d| d.id == id) {
@@ -195,6 +209,27 @@ pub fn now_iso8601() -> String {
     let s = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) as i64;
     iso8601(s)
 }
+/// Parse `YYYY-MM-DDTHH:MM:SSZ` (as written by [`iso8601`]) back to Unix seconds.
+pub fn parse_iso8601(t: &str) -> Option<i64> {
+    let b = t.as_bytes();
+    if b.len() != 20 || b[4] != b'-' || b[7] != b'-' || b[10] != b'T' || b[13] != b':' || b[16] != b':' || b[19] != b'Z' { return None; }
+    let n = |r: std::ops::Range<usize>| t.get(r)?.parse::<i64>().ok();
+    let (y, m, d, hh, mm, ss) = (n(0..4)?, n(5..7)?, n(8..10)?, n(11..13)?, n(14..16)?, n(17..19)?);
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) { return None; }
+    // Howard Hinnant's days_from_civil
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    Some((era * 146097 + doe - 719468) * 86400 + hh * 3600 + mm * 60 + ss)
+}
+
+/// last_seen_at is refreshed at most this often, so an unlock (or a post-sync re-unlock) does not
+/// rewrite devices.enc + manifest.enc every time.
+pub const LAST_SEEN_THROTTLE_SECS: i64 = 3600;
+
 pub fn iso8601(secs: i64) -> String {
     let (days, rem) = (secs.div_euclid(86400), secs.rem_euclid(86400));
     // Howard Hinnant's civil_from_days
@@ -208,4 +243,24 @@ pub fn iso8601(secs: i64) -> String {
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     let y = yoe + era * 400 + if m <= 2 { 1 } else { 0 };
     format!("{y:04}-{m:02}-{d:02}T{:02}:{:02}:{:02}Z", rem / 3600, rem % 3600 / 60, rem % 60)
+}
+
+#[cfg(test)]
+mod throttle_tests {
+    use super::*;
+    #[test]
+    fn iso_roundtrip() {
+        for t in [0i64, 1_793_013_555, 951_782_400, 4_102_444_800] { assert_eq!(parse_iso8601(&iso8601(t)), Some(t)); }
+        assert_eq!(parse_iso8601("garbage"), None);
+    }
+    #[test]
+    fn last_seen_throttled() {
+        let t0 = 1_793_000_000;
+        let mut r = DeviceRegistry::default();
+        assert!(r.needs_touch("a", "Mac", &iso8601(t0)));
+        r.touch("a", "Mac", &iso8601(t0));
+        assert!(!r.needs_touch("a", "Mac", &iso8601(t0 + 60)));
+        assert!(!r.needs_touch("a", "Mac", &iso8601(t0 + LAST_SEEN_THROTTLE_SECS - 1)));
+        assert!(r.needs_touch("a", "Mac", &iso8601(t0 + LAST_SEEN_THROTTLE_SECS)));
+    }
 }

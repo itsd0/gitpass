@@ -245,8 +245,13 @@ impl GuiState {
     pub fn sync_with_target(&self, merge: bool, target_kdf: Option<gitpass_core::crypto::KdfParams>) -> Result<SyncDto> {
         self.with(|u| {
             let root = u.session.root.clone();
-            let mut opts = UnlockOpts { accept_rollback: u.opts_accept_rollback, ..Default::default() };
-            if let Some(k) = target_kdf.clone() { opts.target_kdf = k; }
+            // Keep the vault's existing KDF params: sync must never re-wrap keyset.enc / rewrite format.json.
+            // (`target_kdf` is accepted for API compatibility but sync never upgrades the KDF.)
+            let _ = &target_kdf;
+            let opts = UnlockOpts { accept_rollback: u.opts_accept_rollback, target_kdf: u.session.fmt.kdf.clone() };
+            // Device last-seen refresh (throttled) happens BEFORE the sync commit so it is pushed, not left dirty.
+            let name = u.device_name.clone().unwrap_or_else(gitpass_core::device::default_device_name);
+            u.session.touch_device(&name)?;
             let mut dto = SyncDto { log: String::new(), merged: vec![], reapplied: vec![], epoch: 0 };
             if merge {
                 let r = gitpass_core::sync::sync_merge(&root, &u.password, &u.secret, &opts)?;
@@ -261,7 +266,8 @@ impl GuiState {
                 dto.log = gitpass_core::sync::sync(&root)?;
             }
             // Re-unlock: post-pull integrity/rollback check, refresh session.
-            let s = Session::unlock_device(&root, &u.password, &u.secret, &opts, u.device_name.as_deref())
+            // Verify-only reopen: integrity/rollback checks, no device/KDF/purge writes after the push.
+            let s = Session::reopen_verify(&root, &u.password, &u.secret, opts.accept_rollback)
                 .map_err(|e| anyhow!("post-pull integrity check failed (pre-pull backup in .gitpass-backup-*/): {e}"))?;
             dto.epoch = s.epoch()?;
             dto.log.push_str(&format!("post-pull integrity verified (manifest epoch {})\n", dto.epoch));

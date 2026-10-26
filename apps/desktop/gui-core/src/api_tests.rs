@@ -498,11 +498,45 @@ fn remote_connect_sync_disconnect_with_local_bare_repo() {
     let vp = e.app.status().unwrap().vault_path;
     let por = std::process::Command::new("git").args(["-C", &vp, "status", "--porcelain"]).output().unwrap();
     eprintln!("after sync porcelain: {}", String::from_utf8_lossy(&por.stdout));
-    assert!(st.ahead == 0 && st.behind == 0 && st.last_sync.is_some(), "{st:?}");
+    assert!(!st.dirty && st.ahead == 0 && st.behind == 0 && st.last_sync.is_some(), "{st:?}");
     let o = std::process::Command::new("git").arg("-C").arg(bare.path()).args(["ls-tree", "-r", "--name-only", "main"]).output().unwrap();
     let files = String::from_utf8_lossy(&o.stdout).to_string();
     assert!(!files.contains("secret.key") && !files.contains(".gitpass-"), "{files}");
     let st = e.app.remote_disconnect().unwrap();
     assert!(st.remote.is_none());
     assert!(!e.app.onboarding().repo_connected);
+}
+
+fn porcelain(p: &str) -> String {
+    let o = std::process::Command::new("git").args(["-C", p, "status", "--porcelain"]).output().unwrap();
+    String::from_utf8_lossy(&o.stdout).to_string()
+}
+fn file_hash(p: &std::path::Path) -> String { gitpass_core::store::hash_file(p).unwrap() }
+
+#[test]
+fn sync_twice_leaves_working_tree_clean() {
+    let e = env();
+    let bare = tempfile::tempdir().unwrap();
+    let ok = std::process::Command::new("git").args(["init", "--bare", "-q", "-b", "main"]).arg(bare.path()).status().map(|s| s.success()).unwrap_or(false);
+    if !ok { eprintln!("git unavailable; skipping"); return; }
+    let vp = e.app.status().unwrap().vault_path;
+    let root = std::path::PathBuf::from(&vp);
+    e.app.remote_connect_opts(&bare.path().display().to_string(), true).unwrap();
+    login(&e, "Clean tree", "me", "FAKE-pw-2");
+    let (fmt0, ks0) = (file_hash(&root.join("format.json")), file_hash(&root.join("keyset.enc")));
+    for round in 1..=2 {
+        let r = e.app.sync(false).unwrap();
+        assert_eq!(porcelain(&vp), "", "dirty after sync #{round}: {}", r.message);
+        let st = e.app.sync_status().unwrap();
+        assert!(!st.dirty && st.ahead == 0 && st.behind == 0, "round {round}: {st:?}");
+    }
+    // merge sync too
+    e.app.sync(true).unwrap();
+    assert_eq!(porcelain(&vp), "");
+    // sync never re-wraps the keyset with default KDF params
+    assert_eq!((file_hash(&root.join("format.json")), file_hash(&root.join("keyset.enc"))), (fmt0, ks0));
+    // a no-op unlock does not rewrite anything either
+    e.app.lock();
+    e.app.unlock(&vp, "correct horse", Some(&e.sk)).unwrap();
+    assert_eq!(porcelain(&vp), "", "unlock rewrote files");
 }

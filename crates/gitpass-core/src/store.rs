@@ -396,6 +396,16 @@ impl Session {
 
     /// Unlock and register/refresh this device in the registry (`device_name` None => env/hostname).
     pub fn unlock_device(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>) -> Result<Self> {
+        Self::unlock_device_inner(root, password, secret, opts, device_name, true)
+    }
+    /// Verify-only re-unlock used after a sync pull: same integrity/rollback checks, but never touches the
+    /// device registry or upgrades the KDF, so the working tree stays exactly as committed/pulled.
+    pub fn reopen_verify(root: &Path, password: &str, secret: &SecretKey, accept_rollback: bool) -> Result<Self> {
+        let fmt = read_format(root)?;
+        let opts = UnlockOpts { accept_rollback, target_kdf: fmt.kdf.clone() };
+        Self::unlock_device_inner(root, password, secret, &opts, None, false)
+    }
+    fn unlock_device_inner(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>, touch: bool) -> Result<Self> {
         let recovered = {
             let _g = fsutil::lock(root)?;
             finish_pending_rewrap(root, password, secret)?
@@ -429,13 +439,17 @@ impl Session {
             s.rewrap_keyset(password, secret, k)?;
             s.kdf_upgraded = true;
         }
-        let name = device_name.map(str::to_string).unwrap_or_else(crate::device::default_device_name);
-        s.touch_device(&name)?;
-        // v5: purge soft-deleted items older than 30 days (best effort; never blocks unlock).
-        if !s.device_revoked { let _ = s.purge_expired(now_secs()); }
+        if touch {
+            let name = device_name.map(str::to_string).unwrap_or_else(crate::device::default_device_name);
+            s.touch_device(&name)?;
+        } else if let Some(d) = s.devices()?.get(&s.device_id) {
+            if d.revoked { s.device_revoked = true; }
+        }
+        // v5: purge soft-deleted items older than 30 days (best effort; never blocks unlock). Skipped on verify-only reopen.
+        if touch && !s.device_revoked { let _ = s.purge_expired(now_secs()); }
         // Roll forward an interrupted `device revoke` (marker + key rotation) from this device.
         if let Ok(p) = read_json::<RevokePending>(&root.join(REVOKE_PENDING_FILE)) {
-            if !s.device_revoked && p.device_id != s.device_id {
+            if touch && !s.device_revoked && p.device_id != s.device_id {
                 s.revoke_device_and_rotate(&p.device_id, password, secret)?;
             }
         }
@@ -877,7 +891,10 @@ impl Session {
             if d.revoked { self.device_revoked = true; return Ok(()); }
         }
         let (id, now) = (self.device_id.clone(), crate::device::now_iso8601());
-        self.mutate_devices(|r| { r.touch(&id, name, &now); Ok(()) })?;
+        // Throttled: a no-op unlock must not rewrite devices.enc / manifest.enc.
+        if reg.needs_touch(&id, name, &now) {
+            self.mutate_devices(|r| { r.touch(&id, name, &now); Ok(()) })?;
+        }
         if self.has_identity() { self.record_device_key()?; }
         Ok(())
     }

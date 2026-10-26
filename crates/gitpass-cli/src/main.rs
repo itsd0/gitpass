@@ -539,7 +539,7 @@ fn run() -> Result<()> {
             let (_s, pw, sk) = unlock_full(&cli, &root)?;
             if *merge {
                 drop(_s);
-                let opts = UnlockOpts { accept_rollback: cli.accept_rollback, ..Default::default() };
+                let opts = UnlockOpts { accept_rollback: cli.accept_rollback, target_kdf: gitpass_core::store::read_format(&root)?.kdf };
                 let r = gitpass_core::sync::sync_merge(&root, &pw, &sk, &opts)?;
                 print!("{}", r.log);
                 for (vid, iid, m) in &r.merged {
@@ -550,8 +550,8 @@ fn run() -> Result<()> {
             } else {
                 print!("{}", gitpass_core::sync::sync(&root)?);
             }
-            let opts = UnlockOpts { accept_rollback: cli.accept_rollback, ..Default::default() };
-            let s = Session::unlock_device(&root, &pw, &sk, &opts, cli.device_name.as_deref())
+            // verify-only: no device/KDF writes after the push (keeps the working tree clean)
+            let s = Session::reopen_verify(&root, &pw, &sk, cli.accept_rollback)
                 .context("post-pull integrity check failed; the pre-pull backup is in .gitpass-backup-*/")?;
             println!("post-pull integrity verified (manifest epoch {})", s.epoch()?);
         }
