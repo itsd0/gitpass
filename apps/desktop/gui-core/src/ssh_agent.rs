@@ -4,10 +4,13 @@
 //! * Locked vault: REQUEST_IDENTITIES answers an empty list and SIGN_REQUEST fails.
 //! * Agent use does NOT refresh the idle auto-lock timer.
 //! * Settings `sshApproveEachUse`: every signature asks [`AgentUi::approve`] first (denied = failure).
-use crate::agent::{peer_uid, AgentUi};
+#[cfg(unix)]
+use crate::agent::peer_uid;
+use crate::agent::AgentUi;
 use crate::api::App;
 use anyhow::{anyhow, bail, Result};
 use gitpass_core::ssh::{handle_message, session_identities, KeyProvider};
+#[cfg(unix)]
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -31,9 +34,17 @@ impl KeyProvider for AppKeys {
 
 pub struct SshAgent { pub socket_path: PathBuf }
 
+#[cfg(unix)]
 fn my_uid() -> u32 { unsafe { libc::getuid() } }
 
+/// Windows: the SSH agent (named pipe / OpenSSH agent protocol) is not implemented yet (STUB).
+#[cfg(not(unix))]
+pub fn start(_app: Arc<App>, _ui: Arc<dyn AgentUi>, _dir: &Path) -> Result<Arc<SshAgent>> {
+    bail!("SSH agent is not implemented on Windows yet")
+}
+
 /// Bind `<dir>/ssh-agent.sock` and serve until the process exits.
+#[cfg(unix)]
 pub fn start(app: Arc<App>, ui: Arc<dyn AgentUi>, dir: &Path) -> Result<Arc<SshAgent>> {
     use std::os::unix::fs::PermissionsExt;
     std::fs::create_dir_all(dir)?;

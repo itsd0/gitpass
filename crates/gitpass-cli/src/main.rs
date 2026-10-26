@@ -848,6 +848,10 @@ fn ssh_cmd(cli: &Cli, root: &Path, cmd: &SshCmd) -> Result<()> {
             println!("{}", k.info.public_key);
         }
         SshCmd::Agent { socket } => {
+            #[cfg(not(unix))]
+            { let _ = socket; bail!("`gitpass ssh agent` is not supported on Windows yet"); }
+            #[cfg(unix)]
+            {
             use std::os::unix::fs::PermissionsExt;
             use std::os::unix::net::{UnixListener, UnixStream};
             let sp = socket.clone().unwrap_or_else(default_ssh_socket);
@@ -868,6 +872,7 @@ fn ssh_cmd(cli: &Cli, root: &Path, cmd: &SshCmd) -> Result<()> {
                 let Ok(mut c) = c else { continue };
                 let k = keys.clone();
                 std::thread::spawn(move || { let _ = ssh::serve_stream(&mut c, &*k); });
+            }
             }
         }
     }

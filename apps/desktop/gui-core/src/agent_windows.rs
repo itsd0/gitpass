@@ -16,6 +16,8 @@ pub const PIPE_NAME: &str = r"\\.\pipe\gitpass-agent";
 pub trait AgentUi: Send + Sync {
     fn request_unlock(&self, reason: &str);
     fn open_item(&self, vault_id: Option<&str>, item_id: Option<&str>);
+    /// Ask the user to allow a sensitive action (SSH signature, passkey). Default: deny.
+    fn approve(&self, _title: &str, _message: &str) -> bool { false }
 }
 pub struct NoUi;
 impl AgentUi for NoUi { fn request_unlock(&self, _: &str) {} fn open_item(&self, _: Option<&str>, _: Option<&str>) {} }
