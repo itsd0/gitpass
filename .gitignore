@@ -1,2 +1,9 @@
-/target
+target/
+node_modules/
+dist/
 secret.key
+.gitpass-state.json
+.gitpass-device.json
+.gitpass-device-key.json
+.gitpass-revoke-pending.json
+.gitpass-backup-*

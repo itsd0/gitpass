@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.4.0 — integrated release (keys + data + ext + gui)
+
+Merged from four parallel workspaces on top of 0.3.0. All crates, the desktop app and the extension are versioned 0.4.0.
+
+### Format story
+- `FORMAT_VERSION = 4`, `MIN_READ_FORMAT = 2`. v2 and v3 vaults still open; `init` still writes format 2.
+  The manifest only becomes format 4 when an identity or vault members exist (`identity show`, `vault share/accept`).
+  Vaults that never use sharing keep a v3 manifest. Clients older than 0.4.0 refuse a v4 manifest, so upgrade every device first.
+- CLI fix (found separately in the keys, data and ext workspaces, kept once): `unlock_full` now checks `format.json` against
+  `MIN_READ_FORMAT` instead of `FORMAT_VERSION` before it offers the v1 migration. Earlier, every v2/v3 vault got the
+  "migrate" prompt.
+
+### Real device revoke (keys)
+- `device revoke <id>` now sets the revocation marker and also rotates the Account Key and every Vault Key, re-encrypting
+  all items. The revoked device can no longer read changes made after that point.
+- `--rotate-credentials` also changes the master password and generates a new Secret Key (`--save-secret-key` writes it to
+  `<path>/secret.key`). `--marker-only` keeps the old v3 behaviour (marker only, no rotation). Core: `rotate_credentials`.
+- A crash during rotation can be recovered: progress is journaled in the git-ignored `.gitpass-revoke-pending.json`.
+- `device.rs` gives each device its own keypair (git-ignored `.gitpass-device-key.json`).
+- **Limitation:** data the device already pulled or copied cannot be recalled. If the device knew the master password and
+  Secret Key, you have to use `--rotate-credentials`.
+
+### Vault sharing (keys)
+- New `keys.rs`: X25519 identity (`x25519-dalek`), fingerprints, and an anonymous sealed box (ephemeral X25519 + HKDF-SHA256 + XChaCha20-Poly1305).
+- CLI: `identity show`, `vault share <vault> --to <pubkey|file>`, `vault accept <member file>`, `vault unshare <vault> <member>`
+  (removes the member and rotates the vault key), `vault members <vault>`.
+- **Limitations:** the sealed box does not authenticate the sender, so check fingerprints out of band.
+  `accept` imports a one-time snapshot: there is no live two-way shared vault. `unshare` cannot take back what the member already copied.
+
+### Import / export (data)
+- New `import.rs`: importers for `bitwarden-json`, `bitwarden-csv`, `1password-csv`, `keepass-csv`, `chrome-csv` and `gitpass-json`.
+  CSV column matching is case-insensitive and accepts aliases. Unmapped columns are added to the notes. Duplicates
+  (same title+username+url) are skipped unless `--allow-duplicates` is passed. `--dry-run` writes nothing.
+- `export --format gitpass-json|csv` writes PLAINTEXT and needs `--yes`. `--encrypted` writes passphrase-protected gitpass-json
+  (Argon2id + XChaCha20-Poly1305, passphrase from `$GITPASS_EXPORT_PASSPHRASE` or a prompt).
+- **Limitations:** the column mappings come from vendor documentation and samples, so vendor format changes may need new aliases.
+  Fields that don't map (folders and extra columns, for example) end up as text in the notes, not structured data.
+  Plaintext exports are only as safe as wherever you store the file.
+
+### Audit / HIBP (data)
+- New `audit.rs` (core, `csv` dep): finds weak, reused and old (`--max-age-days`, default 365) passwords and items without TOTP.
+  Findings list titles/ids only, never passwords.
+- `audit --hibp` checks Pwned Passwords with k-anonymity: only the first 5 hex characters of the SHA-1 are sent, with
+  `Add-Padding`. The HTTP client (`ureq`) lives only in the CLI. Core defines a `PwnedRangeClient` trait.
+- **Limitations:** the weak-password check is a naive entropy estimate (length x log2 of the character pool), not a dictionary or pattern check. `--hibp` needs network access and reveals to HIBP that you ran a check.
+
+### Desktop GUI (gui)
+- `apps/desktop/`: a Tauri 2 app with a React + TypeScript (Vite) frontend. `gui-core` (the Tauri-free command layer, auto-lock,
+  secret-free DTOs) is a member of the root workspace. `src-tauri` is excluded from it, with its own `Cargo.lock` and `.cargo/config.toml`.
+- Secrets stay in Rust state and are zeroized on lock. Copying is done in Rust with a 30 s clipboard clear.
+  `@tauri-apps/api` is pinned to `~2.11`.
+- **Limitations:** the GUI does not expose the 0.4.0 sharing, import/export, audit or revoke-rotation features (use the CLI).
+  A revoked device is read-only. While unlocked, sync keeps the password and Secret Key in memory. It has only been build-tested on Linux.
+
+### Browser extension (ext)
+- New crate `crates/gitpass-host`: a native messaging host (`com.gitpass.host`). It holds the Session and auto-locks after idle,
+  and offers `status`, `unlock`, `lock`, `match`, `search`, `fill`, `totp` and `generate`. Origins are matched by eTLD+1 (`psl` + `url` crates).
+  Callers are checked against `allowed_callers`. `gitpass-host install` writes the host manifests for Chrome, Chromium, Brave and Firefox.
+- `extension/`: MV3 in plain JS with no build step (background, content script, popup). Tests run with `npm test`.
+- **Limitations:** any subdomain of the same site matches. The extension is not published to any store (load it unpacked).
+  The host is read-only: it has no add or edit command, so new logins cannot be saved from the browser.
+
 ## 0.3.0 — integrated release (merge + devices + usability + gitpass-core split)
 
 ### Workspace split
