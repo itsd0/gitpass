@@ -4,6 +4,8 @@
 if (typeof importScripts === 'function' && !globalThis.GitpassPolicy) importScripts('lib/policy.js');
 // ws4 (in-page): page:* routing lives in bg-page.js
 if (typeof importScripts === 'function' && !globalThis.GitpassPage) importScripts('bg-page.js');
+// onboarding (welcome/options/commands); Firefox loads it via manifest.firefox.json background.scripts
+if (typeof importScripts === 'function') importScripts('bg-onboard.js');
 
 const HOST = 'com.gitpass.host';
 let port = null;

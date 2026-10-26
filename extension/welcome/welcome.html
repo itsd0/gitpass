@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Welcome to gitpass</title><link rel="stylesheet" href="welcome.css"></head>
+<body><div class="wrap">
+<header><img src="../icons/icon128.png" alt=""><div><h1 data-i18n="welcomeTitle">Welcome to gitpass</h1><div class="mut" data-i18n="welcomeSub">Unlock the gitpass app once and the extension unlocks too.</div></div><span class="left" id="left">3 steps left</span></header>
+
+<section class="step" id="s-connect"><h2><span class="dot">1</span><span data-i18n="stepConnect">Connect to the gitpass app</span></h2>
+<div class="mut" data-i18n="stepConnectBody">The extension talks to the gitpass desktop app through a small local helper (gitpass-host).</div>
+<div class="status" id="connect-status">Checking…</div>
+<div class="mut" id="connect-help" hidden></div>
+<div class="row"><button id="retry" data-i18n="retry">Retry</button><button class="sec" id="open-app" data-i18n="openApp">Open gitpass app</button></div></section>
+
+<section class="step" id="s-pin"><h2><span class="dot">2</span><span data-i18n="stepPin">Pin the extension</span></h2>
+<div class="mut" data-i18n="stepPinBody">Click the puzzle-piece icon in the toolbar, then the pin next to gitpass. You can also open it any time with</div>
+<div class="row"><kbd id="shortcut">⌘⇧X</kbd><button class="sec" id="pin-done" data-i18n="pinDone">I pinned it</button></div><div class="status" id="pin-status"></div></section>
+
+<section class="step" id="s-try"><h2><span class="dot">3</span><span data-i18n="stepTry">Try autofill</span></h2>
+<div class="mut" data-i18n="stepTryBody">This is a demo form. Click the username field and pick a login from the gitpass menu, or open the popup and press Fill. Nothing is submitted anywhere.</div>
+<form id="demo" autocomplete="on"><input id="demo-user" name="username" type="text" autocomplete="username" placeholder="Username"><input id="demo-pass" name="password" type="password" autocomplete="current-password" placeholder="Password"><button type="submit" data-i18n="demoSignIn">Sign in</button></form>
+<div class="status" id="try-status"></div></section>
+
+<div class="row"><a href="../options/options.html" style="color:var(--acc)" data-i18n="openSettings">Settings</a></div>
+</div>
+<script src="../lib/i18n.js"></script><script src="../lib/onboard-common.js"></script><script src="welcome.js"></script></body></html>

@@ -1,0 +1,24 @@
+// Shared helpers for welcome/options pages.
+/* global chrome */
+'use strict';
+(function (root) {
+  let port = null, rid = 0; const waiting = new Map();
+  function getPort() {
+    if (port) return port;
+    port = chrome.runtime.connect({ name: 'gitpass-onboard' });
+    port.onMessage.addListener((r) => { const w = waiting.get(r.rid); if (!w) return; waiting.delete(r.rid); r.ok ? w.res(r.result) : w.rej(new Error(r.error)); });
+    port.onDisconnect.addListener(() => { void chrome.runtime.lastError; for (const w of waiting.values()) w.rej(new Error('disconnected (is bg-onboard.js loaded?)')); waiting.clear(); port = null; });
+    return port;
+  }
+  function send(msg) {
+    return new Promise((res, rej) => {
+      const id = ++rid; waiting.set(id, { res, rej });
+      setTimeout(() => { if (waiting.delete(id)) rej(new Error('timeout (is bg-onboard.js loaded?)')); }, 8000);
+      try { getPort().postMessage({ ...msg, rid: id }); } catch (e) { waiting.delete(id); rej(e); }
+    });
+  }
+  const DEFAULTS = { autolockFollowsApp: true, autofill: true, savePrompts: true };
+  function getSettings() { return new Promise((res) => chrome.storage.local.get('settings', (r) => res(Object.assign({}, DEFAULTS, (r && r.settings) || {})))); }
+  function setSettings(patch) { return getSettings().then((s) => new Promise((res) => { const n = Object.assign(s, patch); chrome.storage.local.set({ settings: n }, () => res(n)); })); }
+  root.GitpassOnboard = { send, getSettings, setSettings, DEFAULTS };
+})(globalThis);
