@@ -17,3 +17,21 @@
 html, body, #root { height: 100%; }
 body { @apply bg-bg text-fg font-sans antialiased text-sm; margin: 0; }
 * { scrollbar-width: thin; scrollbar-color: rgb(var(--active)) transparent; }
+
+/* ---- Emergency Kit (printable A4) ---- */
+.ek-sheet { width: 210mm; min-height: 297mm; padding: 16mm 16mm 12mm; box-shadow: 0 1px 4px rgba(0,0,0,.12); box-sizing: border-box; font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Noto Sans Thai", sans-serif; }
+.ek-label { font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: #9a3412; }
+.ek-btn { white-space: nowrap; display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid #d4d4d4; background: #fff; color: #111; font-size: 13px; cursor: pointer; }
+.ek-btn:hover { background: #f5f5f5; } .ek-btn:disabled { opacity: .5; cursor: default; }
+.ek-btn-primary { background: #f97316; border-color: #f97316; color: #fff; } .ek-btn-primary:hover { background: #ea580c; }
+@media print {
+  @page { size: A4; margin: 0; }
+  html, body { background: #fff !important; }
+  body:has(.ek-root) #root > *:not(:has(.ek-root)) { display: none !important; }
+  body:has(.ek-root) * { visibility: hidden; }
+  .ek-root, .ek-root * { visibility: visible; }
+  .ek-root { position: absolute !important; inset: 0 !important; overflow: visible !important; background: #fff !important; }
+  .ek-root > .py-8 { padding: 0 !important; }
+  .ek-no-print { display: none !important; }
+  .ek-sheet { box-shadow: none !important; width: 210mm; min-height: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

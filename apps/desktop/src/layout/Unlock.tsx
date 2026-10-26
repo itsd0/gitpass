@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { ChevronRight, Copy, Fingerprint, KeyRound, Loader2, PlusCircle } from 'lucide-react';
+import { ChevronRight, Copy, Fingerprint, KeyRound, Loader2, PlusCircle, Printer } from 'lucide-react';
 import { api } from '../api/client';
 import { useApp } from '../lib/store';
 import { Button, Input, Logo } from '../ui';
+import { EmergencyKitFlow } from '../features/onboarding/EmergencyKit';
 
 const msg = (x: unknown) => (x instanceof Error ? x.message : String(x));
 
@@ -19,7 +20,7 @@ export function Unlock() {
   const [bio, setBio] = useState(false);
   const [mode, setMode] = useState<'unlock' | 'create'>('unlock');
   const [saveSk, setSaveSk] = useState(false);
-  const [created, setCreated] = useState<{ secretKey: string; account: string | null } | null>(null);
+  const [created, setCreated] = useState<{ secretKey: string; account: string | null } | null>(null); const [showKit, setShowKit] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
@@ -67,6 +68,8 @@ export function Unlock() {
           <span className="flex-1 select-all">{created.secretKey}</span>
           <Button variant="ghost" size="iconSm" aria-label="Copy Secret Key" onClick={() => void navigator.clipboard?.writeText(created.secretKey)}><Copy size={14} /></Button>
         </div>
+        <Button variant="outline" className="mt-3 w-full" onClick={() => setShowKit(true)}><Printer size={14} /> Print Emergency Kit</Button>
+        {showKit && <EmergencyKitFlow onClose={() => setShowKit(false)} onPrinted={() => setSaved(true)} />}
         <label className="mt-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={saved} onChange={(e) => setSaved(e.target.checked)} />I saved my Secret Key somewhere safe</label>
         <Button size="lg" className="mt-6 w-full" disabled={!saved} onClick={() => { setAccount(created.account); setCreated(null); unlock(); }}>Continue</Button>
       </div>

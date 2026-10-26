@@ -154,10 +154,26 @@ impl BiometricStore for NoBiometrics {
 pub struct TotpNow { pub code: String, pub remaining: u64, pub period: u64 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct ImportResult { pub parsed: usize, pub added: usize, pub duplicates: usize }
+pub struct ImportResult { pub parsed: usize, pub added: usize, pub duplicates: usize,
+    /// Titles of skipped duplicates and parser warnings (skipped rows, trashed items...).
+    #[serde(default)] pub duplicate_titles: Vec<String>, #[serde(default)] pub warnings: Vec<String>,
+    /// Item count per category (e.g. {"login": 3, "credit_card": 1}).
+    #[serde(default)] pub categories: BTreeMap<String, usize>,
+    /// First items of the file as they will be stored (no secrets: only whether a password / TOTP is present).
+    #[serde(default)] pub preview: Vec<ImportPreviewItem> }
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ImportPreviewItem { pub title: String, pub category: Category, pub username: Option<String>, pub url: Option<String>,
+    pub has_password: bool, pub has_totp: bool, pub tags: Vec<String>, pub fields: usize, pub archived: bool }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RotateResult { pub emergency_kit: String }
+/// Structured Emergency Kit for the printable kit page. `secret_key` is only filled right after
+/// create_account / rotate_secret_key, or after the master password was re-entered (`reveal`).
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct EmergencyKitData { pub account_id: String, pub vault_path: String, pub remote: Option<String>, pub device_name: Option<String>,
+    pub created_at: String, pub secret_key_available: bool, pub secret_key: Option<String> }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncResult { pub message: String }
@@ -214,6 +230,8 @@ pub struct App {
     unlock_opts: Mutex<UnlockOpts>,
     /// Emergency kit text with the NEW Secret Key, kept only right after rotate_secret_key (until lock).
     fresh_kit: Mutex<Option<Zeroizing<String>>>,
+    /// (account id, encoded Secret Key) right after create_account / rotate_secret_key (until lock).
+    fresh_secret: Mutex<Option<(String, Zeroizing<String>)>>,
     biometric: Box<dyn BiometricStore>,
     file_lock: Mutex<()>,
 }
@@ -325,7 +343,7 @@ impl App {
     /// `settings_dir`: where `.gitpass-settings.json` lives (the desktop app uses the default vault dir).
     pub fn new(settings_dir: PathBuf, clipboard: Arc<dyn Clipboard>) -> Self {
         let app = App { state: GuiState::new(5), settings_dir, clipboard, clip_gen: Arc::new(AtomicU64::new(0)), hibp: Box::new(UreqHibp),
-            unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), biometric: Box::new(NoBiometrics), file_lock: Mutex::new(()) };
+            unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), fresh_secret: Mutex::new(None), biometric: Box::new(NoBiometrics), file_lock: Mutex::new(()) };
         let s = app.get_settings();
         app.state.set_auto_lock_minutes(s.auto_lock_minutes);
         app
@@ -402,6 +420,9 @@ impl App {
             #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(dir.join("secret.key"), std::fs::Permissions::from_mode(0o600))?; }
         }
         self.unlock(&dir.display().to_string(), password, Some(&enc))?;
+        if let Ok(acc) = self.with(|u| Ok(u.session.fmt.account_id.clone())) {
+            *self.fresh_secret.lock().map_err(|_| anyhow!("poisoned"))? = Some((acc, enc.clone()));
+        }
         Ok(CreateAccountResult { vault_path: dir.display().to_string(), secret_key: enc.to_string() })
     }
     /// Unlock with credentials released by the platform biometric store (Touch ID on macOS).
@@ -411,7 +432,7 @@ impl App {
         let (pw, sk) = self.biometric.load(&vp, "unlock gitpass")?;
         self.unlock(&vp, &pw, Some(&sk))
     }
-    pub fn lock(&self) { self.state.lock(); if let Ok(mut k) = self.fresh_kit.lock() { *k = None; } }
+    pub fn lock(&self) { self.state.lock(); if let Ok(mut k) = self.fresh_kit.lock() { *k = None; } if let Ok(mut k) = self.fresh_secret.lock() { *k = None; } }
 
     // ---------------- vaults
     fn members_of(s: &Session, vid: &str, labels: &BTreeMap<String, String>) -> Result<Vec<Member>> {
@@ -672,12 +693,20 @@ impl App {
     }
     pub fn import_file(&self, vault_id: &str, format: &str, path: &str, dry_run: bool) -> Result<ImportResult> {
         let fmt: import::ImportFormat = format.parse()?;
-        let data = Zeroizing::new(std::fs::read_to_string(path).with_context(|| format!("cannot read {path}"))?);
-        if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&data) { bail!("encrypted gitpass exports need a passphrase; import them with the CLI"); }
-        let parsed = import::parse(fmt, &data, None)?;
-        let f = |u: &mut Unlocked| {
+        let path = path.trim();
+        let path = if let Some(rest) = path.strip_prefix("~/") { dirs::home_dir().map(|h| h.join(rest).display().to_string()).unwrap_or_else(|| path.to_string()) } else { path.to_string() };
+        let path = path.as_str();
+        let data = Zeroizing::new(std::fs::read(path).with_context(|| format!("cannot read {path}"))?);
+        if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&String::from_utf8_lossy(&data)) { bail!("encrypted gitpass exports need a passphrase; import them with the CLI"); }
+        let parsed = import::parse_bytes(fmt, &data, None)?;
+        let mut categories = BTreeMap::new();
+        for r in &parsed.items { *categories.entry(r.category.as_str().to_string()).or_insert(0) += 1; }
+        let preview = parsed.items.iter().take(50).map(|r| ImportPreviewItem { title: r.item.title.clone(), category: r.category,
+            username: r.item.username.clone(), url: r.item.url.clone(), has_password: r.item.password.is_some() || r.view_sections().iter().flat_map(|s| s.fields.iter()).any(|f| f.kind == FieldKind::Concealed),
+            has_totp: has_totp(r), tags: r.tags.clone(), fields: r.view_sections().iter().map(|s| s.fields.len()).sum(), archived: r.archived }).collect();
+        let f = move |u: &mut Unlocked| {
             let r = import::import_items(&u.session, vault_id, parsed, import::ImportOpts { dry_run, allow_duplicates: false })?;
-            Ok(ImportResult { parsed: r.parsed, added: r.added, duplicates: r.duplicates.len() })
+            Ok(ImportResult { parsed: r.parsed, added: r.added, duplicates: r.duplicates.len(), duplicate_titles: r.duplicates, warnings: r.warnings, categories, preview })
         };
         let r = if dry_run { self.with(f) } else { self.write(f) }?;
         if !dry_run && r.added > 0 { let _ = self.update_local(|l| l.onboarding.imported = true); }
@@ -792,10 +821,32 @@ impl App {
             let sk = u.session.rotate_secret_key(&pw, k)?;
             let enc = Zeroizing::new(sk.encode());
             u.secret = sk;
-            Ok(Zeroizing::new(Self::kit_text(&u.session.fmt.account_id, &u.session.root.display().to_string(), Some(&enc))))
+            Ok((u.session.fmt.account_id.clone(), enc.clone(), Zeroizing::new(Self::kit_text(&u.session.fmt.account_id, &u.session.root.display().to_string(), Some(&enc)))))
         })?;
+        let (acc, enc, kit) = kit;
+        *self.fresh_secret.lock().map_err(|_| anyhow!("poisoned"))? = Some((acc, enc));
         *self.fresh_kit.lock().map_err(|_| anyhow!("poisoned"))? = Some(kit.clone());
         Ok(RotateResult { emergency_kit: kit.to_string() })
+    }
+    /// Structured kit. The Secret Key is included only (a) right after create_account / rotate_secret_key
+    /// in this session, or (b) when `password` is given and matches the master password of the unlocked
+    /// session (the key is then taken from the unlocked session, where it already lives in memory).
+    pub fn emergency_kit_data(&self, password: Option<&str>) -> Result<EmergencyKitData> {
+        let fresh = self.fresh_secret.lock().map_err(|_| anyhow!("poisoned"))?.clone();
+        let (mut d, root) = self.with(|u| {
+            let acc = u.session.fmt.account_id.clone();
+            let mut secret = fresh.filter(|(a, _)| *a == acc).map(|(_, k)| k.to_string());
+            if let Some(pw) = password {
+                if !ct_eq(pw.as_bytes(), u.password.as_bytes()) { bail!("wrong master password"); }
+                secret = Some(u.secret.encode().to_string());
+            }
+            let device_name = u.session.devices().ok().and_then(|r| r.devices.into_iter().find(|d| d.id == u.session.device_id).map(|d| d.name))
+                .or_else(|| u.device_name.clone());
+            Ok((EmergencyKitData { account_id: acc, vault_path: u.session.root.display().to_string(), remote: None, device_name,
+                created_at: gitpass_core::device::now_iso8601(), secret_key_available: true, secret_key: secret }, u.session.root.clone()))
+        })?;
+        d.remote = git(&root, &["remote", "get-url", "origin"]).filter(|s| !s.is_empty());
+        Ok(d)
     }
     /// Kit text; contains the Secret Key only right after rotate_secret_key (until lock).
     pub fn emergency_kit(&self) -> Result<String> {

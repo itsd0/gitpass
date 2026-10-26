@@ -1,6 +1,15 @@
 import type { Key } from './en';
 // Thai. Missing keys fall back to English. TODO(i18n-review): native Thai speaker review of security wording.
 export const th: Partial<Record<Key, string>> = {
+  // emergency kit (partial; other kit.* keys fall back to English — TODO translate)
+  'kit.title': 'gitpass Emergency Kit',
+  'kit.created': 'สร้างเมื่อ',
+  'kit.device': 'อุปกรณ์',
+  'kit.accountId': 'รหัสบัญชี',
+  'kit.secretKey': 'Secret Key',
+  'kit.masterPassword': 'รหัสผ่านหลัก',
+  'kit.print': 'พิมพ์ / บันทึกเป็น PDF',
+  'kit.close': 'ปิด',
   'nav.home': 'หน้าแรก', 'nav.allItems': 'รายการทั้งหมด', 'nav.favorites': 'รายการโปรด', 'nav.watchtower': 'Watchtower', 'nav.vaults': 'ห้องนิรภัย', 'nav.tags': 'แท็ก',
   'nav.archive': 'เก็บถาวร', 'nav.deleted': 'ลบล่าสุด', 'nav.newItem': 'รายการใหม่', 'nav.search': 'ค้นหา', 'nav.lock': 'ล็อก', 'nav.settings': 'การตั้งค่า', 'nav.people': 'บุคคล',
   'common.cancel': 'ยกเลิก', 'common.save': 'บันทึก', 'common.close': 'ปิด', 'common.copy': 'คัดลอก', 'common.copied': 'คัดลอกแล้ว', 'common.loading': 'กำลังโหลด…', 'common.error': 'เกิดข้อผิดพลาด: {msg}', 'common.saved': 'บันทึกแล้ว',

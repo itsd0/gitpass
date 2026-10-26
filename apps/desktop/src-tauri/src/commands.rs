@@ -76,6 +76,11 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn onboarding(s: State<App>) -> a::Onboarding { s.onboarding() }
 #[tauri::command] pub fn set_onboarding(s: State<App>, patch: a::OnboardingPatch) -> R<a::Onboarding> { s.set_onboarding(patch).map_err(e) }
 #[tauri::command] pub fn emergency_kit(s: State<App>) -> R<String> { s.emergency_kit().map_err(e) }
+/// Structured kit for the printable page; pass the master password to reveal the Secret Key.
+#[tauri::command(async)] pub fn emergency_kit_data(s: State<'_, App>, password: Option<String>) -> R<a::EmergencyKitData> {
+    let pw = password.map(Zeroizing::new);
+    s.emergency_kit_data(pw.as_deref().map(|x| x.as_str())).map_err(e)
+}
 /// Always null in v0.5.0 (no network favicon fetch; avoids leaking which sites are in the vault).
 #[tauri::command] pub fn favicon_url(s: State<App>, url: String) -> Option<String> { s.favicon_url(&url) }
 /// Not in the contract: resets the idle timer (harmless extra; the contract UI may ignore it).

@@ -33,7 +33,7 @@ export const api = {
   generatePassword: (a:{length:number; symbols:boolean; digits:boolean; words?:boolean}) => call<string>('generate_password', a),
   passwordStrength: (a:{password:string}) => call<number>('password_strength', a),
   watchtower: (a:{hibp:boolean}) => call<T.WatchtowerReport>('watchtower', a),
-  importFile: (a:{vaultId:string; format:string; path:string; dryRun:boolean}) => call<{parsed:number; added:number; duplicates:number}>('import_file', a),
+  importFile: (a:{vaultId:string; format:string; path:string; dryRun:boolean}) => call<T.ImportResult>('import_file', a),
   identity: () => call<T.Identity>('identity'),
   /** fingerprint of a pasted recipient key (same parser as share_vault); for out-of-band verification */
   fingerprintOf: (a:{publicKey:string}) => call<string>('fingerprint_of', a),
@@ -51,6 +51,8 @@ export const api = {
   sync: (a:{merge:boolean}) => call<{message:string}>('sync', a),
   onboarding: () => call<T.Onboarding>('onboarding'),
   setOnboarding: (a:{patch:Partial<T.Onboarding>}) => call<T.Onboarding>('set_onboarding', a),
-  emergencyKit: () => call<string>('emergency_kit'),   // returns HTML/text kit WITHOUT secret key unless user just rotated
+  emergencyKit: () => call<string>('emergency_kit'),
+  /** Structured kit; secretKey is null unless just created/rotated or `password` (master password) is given. */
+  emergencyKitData: (a: { password?: string } = {}) => call<T.EmergencyKitData>('emergency_kit_data', a),   // returns HTML/text kit WITHOUT secret key unless user just rotated
   faviconUrl: (a:{url:string}) => call<string|null>('favicon_url', a), // local cache/data URL; never leaks vault data
 };

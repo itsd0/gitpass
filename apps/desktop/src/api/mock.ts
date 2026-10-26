@@ -226,7 +226,9 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     const old = logins.filter((r) => Date.parse(r.detail.updatedAt) < Date.parse('2026-09-01')).map((r) => r.detail.id);
     return delay<T.WatchtowerReport>({ score: Math.max(0, 100 - weak.length * 6 - reused.length * 8 - old.length * 2), weak, reused, old, breached: hibp ? weak.slice(0, 1) : [], missingTotp, checkedAt: new Date().toISOString(), hibpChecked: hibp }, 200);
   },
-  import_file: (a: { dryRun: boolean }) => { if (!a.dryRun) onboarding = { ...onboarding, imported: true }; return delay({ parsed: 12, added: a.dryRun ? 0 : 10, duplicates: 2 }, 300); },
+  import_file: (a: { dryRun: boolean }) => { if (!a.dryRun) onboarding = { ...onboarding, imported: true }; return delay<T.ImportResult>({ parsed: 12, added: a.dryRun ? 0 : 10, duplicates: 2, duplicateTitles: ['Example Mail', 'Example Mail'], warnings: ['row 4: skipped empty row'], categories: { login: 10, credit_card: 1, secure_note: 1 },
+    preview: [{ title: 'Example Mail', category: 'login', username: 'alice@example.invalid', url: 'https://mail.example.invalid', hasPassword: true, hasTotp: true, tags: ['Work'], fields: 4, archived: false },
+      { title: 'Fake Visa', category: 'credit_card', username: null, url: null, hasPassword: false, hasTotp: false, tags: [], fields: 5, archived: false }] }, 300); },
   identity: () => delay<T.Identity>({ publicKey: SELF_KEY, fingerprint: SELF.fingerprint }),
   fingerprint_of: (a: { publicKey: string }) => (PUB_RE.test(a.publicKey.trim()) ? delay(mockFingerprint(a.publicKey), 20) : Promise.reject(new Error('public key is not valid base64'))),
   list_members: (a: { vaultId: string }) => delay(vaults.find((v) => v.id === a.vaultId)?.members ?? []),
@@ -247,6 +249,8 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   sync: () => delay({ message: 'Pulled 1 commit (mock)' }, 400),
   onboarding: () => delay(onboarding),
   set_onboarding: (a: { patch: Partial<T.Onboarding> }) => { onboarding = { ...onboarding, ...a.patch }; return delay(onboarding); },
+  emergency_kit_data: (a: { password?: string }) => (a?.password !== undefined && a.password !== 'demo-password' ? Promise.reject(new Error('wrong master password'))
+    : delay<T.EmergencyKitData>({ accountId: 'acc-demo-0000', vaultPath: '~/.gitpass (mock)', remote: 'git@example.com:demo/vault.git', deviceName: 'Demo Mac', createdAt: '2026-10-26T09:00:00Z', secretKeyAvailable: true, secretKey: a?.password ? 'A3-MOCK00-000000-00000-00000-00000-00000' : null })),
   emergency_kit: () => delay('gitpass Emergency Kit (DEMO)\nAccount: Demo Family\nSecret Key: (not shown — rotate to reveal a new one)'),
   favicon_url: () => delay(null),
 };

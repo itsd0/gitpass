@@ -4,6 +4,15 @@ import type { Key } from './en';
 // (unshare.body, devices.rotateHelp, invite.warning) and terms "vault" (သော့ခတ်သေတ္တာ) and "fingerprint" (လက်ဗွေ).
 // Brand/product terms (Watchtower, Secret Key, Emergency Kit) intentionally kept in English.
 export const my: Partial<Record<Key, string>> = {
+  // emergency kit (partial; other kit.* keys fall back to English — TODO translate)
+  'kit.title': 'gitpass Emergency Kit',
+  'kit.created': 'ဖန်တီးသည့်ရက်',
+  'kit.device': 'စက်',
+  'kit.accountId': 'အကောင့် ID',
+  'kit.secretKey': 'Secret Key',
+  'kit.masterPassword': 'မာစတာ စကားဝှက်',
+  'kit.print': 'ပုံနှိပ် / PDF သိမ်းရန်',
+  'kit.close': 'ပိတ်ရန်',
   'nav.home': 'ပင်မ', 'nav.allItems': 'အရာအားလုံး', 'nav.favorites': 'အကြိုက်ဆုံးများ', 'nav.watchtower': 'Watchtower', 'nav.vaults': 'သော့ခတ်သေတ္တာများ', 'nav.tags': 'တဂ်များ',
   'nav.archive': 'မှတ်တမ်းသိမ်း', 'nav.deleted': 'မကြာသေးမီက ဖျက်ထားသည်', 'nav.newItem': 'အရာအသစ်', 'nav.search': 'ရှာဖွေရန်', 'nav.lock': 'သော့ခတ်ရန်', 'nav.settings': 'ဆက်တင်များ', 'nav.people': 'လူများ',
   'common.cancel': 'မလုပ်တော့ပါ', 'common.save': 'သိမ်းရန်', 'common.close': 'ပိတ်ရန်', 'common.copy': 'ကူးယူရန်', 'common.copied': 'ကူးယူပြီး', 'common.loading': 'ဖွင့်နေသည်…', 'common.error': 'အမှားဖြစ်သွားသည်- {msg}', 'common.saved': 'သိမ်းပြီး',

@@ -1,20 +1,15 @@
 import { useEffect, useState } from 'react';
-import { CheckCircle2, Circle, Printer, X } from 'lucide-react';
+import { CheckCircle2, Circle } from 'lucide-react';
+import { EmergencyKitFlow } from './EmergencyKit';
 import type { SyncStatus } from '../../api/types';
 import { api } from '../../api/client';
 import { Button } from '../../ui';
 import { useApp } from '../../lib/store';
 import { STEPS, stepsLeft } from './steps';
 import { useOnboarding } from './useOnboarding';
+/** Kept for compatibility: the printable kit (see EmergencyKit.tsx). */
 export function EmergencyKitView({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
-  const [kit, setKit] = useState<string | null>(null); const [err, setErr] = useState<string | null>(null);
-  useEffect(() => { api.emergencyKit().then(setKit).catch(e => setErr(String(e))); }, []);
-  const isHtml = kit !== null && /^\s*</.test(kit);
-  return (<div className="fixed inset-0 z-50 overflow-auto bg-white text-black" role="dialog" aria-label="Emergency Kit">
-    <div className="no-print flex justify-end gap-2 border-b p-3"><Button variant="default" onClick={() => { window.print(); onSaved(); }}><Printer size={14} /> Print / Save as PDF</Button><Button variant="ghost" className="text-black" onClick={onClose}><X size={14} /> Close</Button></div>
-    <div className="mx-auto max-w-2xl p-10"><h1 className="mb-1 text-2xl font-bold">gitpass Emergency Kit</h1><p className="mb-6 text-sm text-muted">Keep this somewhere safe and offline. You need it to recover your vault.</p>
-      {err && <p className="text-red-600">{err}</p>}
-      {kit !== null && (isHtml ? <iframe title="kit" sandbox="" srcDoc={kit} className="h-[600px] w-full border" /> : <pre className="whitespace-pre-wrap rounded border p-4 font-mono text-sm">{kit}</pre>)}</div></div>);
+  return <EmergencyKitFlow onClose={onClose} onPrinted={onSaved} />;
 }
 export function Checklist() {
   const { onboarding, patch } = useOnboarding(); const { openModal } = useApp();
