@@ -1,10 +1,14 @@
 {
   "name": "gitpass-extension",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "private": true,
   "scripts": {
     "test": "node --test test/*.test.js",
     "check": "node test/check-syntax.js",
-    "build:firefox": "node scripts/build-firefox.js"
+    "build:firefox": "node scripts/build-firefox.js",
+    "e2e": "node e2e/run.js"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1"
   }
 }

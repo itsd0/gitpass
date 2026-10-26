@@ -1,13 +1,14 @@
 {
   "manifest_version": 3,
   "name": "gitpass",
-  "version": "0.5.1",
-  "version_name": "0.5.1",
+  "version": "0.6.0",
+  "version_name": "0.6.0",
   "description": "__MSG_extDesc__",
   "permissions": [
     "nativeMessaging",
     "activeTab",
-    "clipboardWrite"
+    "clipboardWrite",
+    "storage"
   ],
   "host_permissions": [
     "https://*/*",
@@ -41,5 +42,18 @@
   "icons": {
     "128": "icons/icon128.png"
   },
-  "default_locale": "en"
+  "default_locale": "en",
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+X",
+        "mac": "Command+Shift+X"
+      },
+      "description": "Open gitpass"
+    }
+  }
 }

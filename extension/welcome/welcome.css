@@ -1,0 +1,11 @@
+:root{--bg:#0f1115;--panel:#171a21;--line:#262a33;--fg:#e6e8ee;--mut:#8b93a5;--acc:#4f8cff;--ok:#2ecc71;--warn:#f0b429}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans Myanmar","Noto Sans Thai",sans-serif}
+.wrap{max-width:760px;margin:40px auto;padding:0 20px}header{display:flex;align-items:center;gap:12px;margin-bottom:24px}header img{width:40px;height:40px;border-radius:9px}
+h1{font-size:22px;margin:0}.mut{color:var(--mut)}.left{margin-left:auto;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 12px;font-size:13px}
+.step{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:14px}.step h2{font-size:16px;margin:0 0 6px;display:flex;align-items:center;gap:10px}
+.dot{width:22px;height:22px;border-radius:50%;border:2px solid var(--mut);display:inline-flex;align-items:center;justify-content:center;font-size:12px}.done .dot{background:var(--ok);border-color:var(--ok);color:#0f1115}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:inherit;cursor:pointer}button.sec{background:transparent;border:1px solid var(--line);color:var(--fg)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.status{margin-top:8px;font-size:13px}.status.bad{color:var(--warn)}.status.good{color:var(--ok)}
+code,kbd{background:#0b0d11;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font:12px ui-monospace,Menlo,monospace}
+form{display:grid;gap:8px;max-width:320px;margin-top:10px}input{background:#0b0d11;border:1px solid var(--line);color:var(--fg);border-radius:8px;padding:8px 10px;font:inherit}
+label.t{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid var(--line)}
