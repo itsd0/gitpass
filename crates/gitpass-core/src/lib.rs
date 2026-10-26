@@ -4,9 +4,13 @@
 //! - [`store::Session`] (unlock / items / vaults / devices), [`store::Item`]
 //! - [`merge::merge_records`] / [`merge_items`] field-level merge
 //! - [`device`] registry, [`totp::code_now`] / [`totp_now`], [`search::rank`] / [`fuzzy_find`]
+pub mod audit;
 pub mod crypto;
 pub mod device;
 pub mod fsutil;
+pub mod keys;
+pub mod import;
+pub mod item;
 pub mod merge;
 pub mod migrate;
 pub mod search;
@@ -16,5 +20,6 @@ pub mod totp;
 
 pub use merge::{merge_records as merge_items, ItemRecord, MergeReport};
 pub use search::rank as fuzzy_find;
+pub use item::{Category, FieldKind};
 pub use store::{Item, Session, UnlockOpts, FORMAT_VERSION, MIN_READ_FORMAT};
 pub use totp::code_now as totp_now;

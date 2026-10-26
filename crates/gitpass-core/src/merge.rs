@@ -7,8 +7,10 @@
 //!
 //! Clearing a field is modelled as a tombstone: the value becomes `None` and the field's clock is bumped,
 //! so a clear competes with a concurrent edit by clock just like any other write.
+use crate::item::{AttachmentMeta, Category, Field, FieldKind, HistoryEntry, Section, Snapshot};
 use crate::store::Item;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub const FIELDS: [&str; 6] = ["title", "username", "password", "url", "notes", "totp"];
@@ -45,7 +47,36 @@ pub struct ItemRecord {
     pub item: Item,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub clocks: Option<FieldClocks>,
+    // ---- format v5 (all optional: a v2-v4 payload deserializes with defaults = login item) ----
+    #[zeroize(skip)]
+    #[serde(default, skip_serializing_if = "is_login")]
+    pub category: Category,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sections: Vec<Section>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub favorite: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub archived: bool,
+    /// Soft-delete time (unix seconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<u64>,
+    /// Creation time (unix seconds). Absent for pre-v5 items.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<u64>,
+    /// v5 clocks keyed by `f:<field id>`, `s:<section id>`, `m:<meta key>` (ms, Lamport-bumped).
+    #[zeroize(skip)]
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub xclocks: BTreeMap<String, u64>,
+    /// Up to [`crate::item::HISTORY_LIMIT`] prior versions (newest last).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub history: Vec<HistoryEntry>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub attachments: Vec<AttachmentMeta>,
 }
+fn is_login(c: &Category) -> bool { *c == Category::Login }
+fn is_false(b: &bool) -> bool { !*b }
 
 /// Synthesize clocks for a legacy (v2) item: every field gets `updated_at` (seconds) * 1000.
 /// Unparseable `updated_at` yields clock 0 (any v3 edit wins).
@@ -55,6 +86,185 @@ pub fn legacy_clocks(item: &Item) -> FieldClocks {
 
 impl ItemRecord {
     pub fn clocks_or_legacy(&self) -> FieldClocks { self.clocks.unwrap_or_else(|| legacy_clocks(&self.item)) }
+    pub fn new(item: Item) -> Self { let mut r = ItemRecord::default(); r.item = item; r }
+    pub fn with_clocks(item: Item, clocks: Option<FieldClocks>) -> Self { let mut r = ItemRecord::new(item); r.clocks = clocks; r }
+
+    /// Content snapshot (for history).
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot { item: self.item.clone(), category: self.category, sections: self.sections.clone(), tags: self.tags.clone() }
+    }
+    pub fn from_snapshot(s: &Snapshot) -> Self {
+        let mut r = ItemRecord::new(s.item.clone()); r.category = s.category; r.sections = s.sections.clone(); r.tags = s.tags.clone(); r
+    }
+
+    /// Sections as shown to a user: for login items a synthesized `login` section (username, password,
+    /// totp from the legacy fields) followed by the stored sections; tombstoned fields and empty sections
+    /// are dropped.
+    pub fn view_sections(&self) -> Vec<Section> {
+        let mut out = vec![];
+        if self.category == Category::Login {
+            let mut f = vec![];
+            let mut push = |id: &str, label: &str, kind: FieldKind, v: &Option<String>| {
+                if let Some(v) = v.as_ref().filter(|v| !v.is_empty()) { f.push(Field { id: id.into(), label: label.into(), kind, value: Some(v.clone()), removed: false }); }
+            };
+            push(crate::item::LOGIN_USERNAME, "username", FieldKind::Text, &self.item.username);
+            push(crate::item::LOGIN_PASSWORD, "password", FieldKind::Concealed, &self.item.password);
+            push(crate::item::LOGIN_TOTP, "one-time password", FieldKind::Totp, &self.item.totp);
+            if !f.is_empty() { out.push(Section { id: "login".into(), title: None, fields: f }); }
+        }
+        for s in &self.sections {
+            let fields: Vec<Field> = s.fields.iter().filter(|f| !f.removed).cloned().collect();
+            if !fields.is_empty() || s.title.is_some() { out.push(Section { id: s.id.clone(), title: s.title.clone(), fields }); }
+        }
+        out
+    }
+
+    /// Find a visible field by id (including the synthesized login fields).
+    pub fn find_field(&self, id: &str) -> Option<Field> {
+        self.view_sections().into_iter().flat_map(|s| s.fields).find(|f| f.id == id)
+    }
+
+    /// Replace the content with user-edited `sections`. For login items, fields with ids
+    /// `username`/`password`/`totp` are stored in the legacy fields; everything else goes to `sections`.
+    /// Fields that existed before but are absent now become tombstones.
+    pub fn apply_sections(&mut self, input: &[Section]) {
+        let login = self.category == Category::Login;
+        if login { self.item.username = None; self.item.password = None; self.item.totp = None; }
+        let old_ids: Vec<(String, String)> = self.sections.iter().flat_map(|s| s.fields.iter().filter(|f| !f.removed).map(move |f| (s.id.clone(), f.id.clone()))).collect();
+        let mut new_sections: Vec<Section> = vec![];
+        let mut seen = std::collections::HashSet::new();
+        for s in input {
+            let mut ns = Section { id: s.id.clone(), title: s.title.clone(), fields: vec![] };
+            for f in &s.fields {
+                let v = f.value.clone();
+                if login && (f.id == crate::item::LOGIN_USERNAME || f.id == crate::item::LOGIN_PASSWORD || f.id == crate::item::LOGIN_TOTP) {
+                    let v = v.filter(|x| !x.is_empty());
+                    match f.id.as_str() { "username" => self.item.username = v, "password" => self.item.password = v, _ => self.item.totp = v }
+                    continue;
+                }
+                seen.insert(f.id.clone());
+                ns.fields.push(Field { id: f.id.clone(), label: f.label.clone(), kind: f.kind, value: v, removed: false });
+            }
+            if !(login && s.id == "login" && ns.fields.is_empty()) { new_sections.push(ns); }
+        }
+        for (sid, fid) in old_ids {
+            if seen.contains(&fid) { continue; }
+            let tomb = Field { id: fid, label: String::new(), kind: FieldKind::Text, value: None, removed: true };
+            match new_sections.iter_mut().find(|s| s.id == sid) {
+                Some(s) => s.fields.push(tomb),
+                None => new_sections.push(Section { id: sid, title: None, fields: vec![tomb] }),
+            }
+        }
+        // keep old tombstones too, so they keep propagating
+        for s in &self.sections { for f in s.fields.iter().filter(|f| f.removed) {
+            if new_sections.iter().any(|ns| ns.fields.iter().any(|x| x.id == f.id)) { continue; }
+            match new_sections.iter_mut().find(|ns| ns.id == s.id) {
+                Some(ns) => ns.fields.push(f.clone()),
+                None => new_sections.push(Section { id: s.id.clone(), title: None, fields: vec![f.clone()] }),
+            }
+        } }
+        self.sections = new_sections;
+    }
+}
+
+fn field_map(r: &ItemRecord) -> BTreeMap<String, (String, Field)> {
+    r.sections.iter().flat_map(|s| s.fields.iter().map(move |f| (f.id.clone(), (s.id.clone(), f.clone())))).collect()
+}
+fn meta_values(r: &ItemRecord) -> [(&'static str, String); 5] {
+    [("m:category", r.category.as_str().into()), ("m:tags", r.tags.join("\u{1}")), ("m:favorite", r.favorite.to_string()),
+     ("m:archived", r.archived.to_string()), ("m:deleted", r.deleted_at.map(|d| d.to_string()).unwrap_or_default())]
+}
+fn section_titles(r: &ItemRecord) -> BTreeMap<String, Option<String>> { r.sections.iter().map(|s| (s.id.clone(), s.title.clone())).collect() }
+
+/// Stamp v5 clocks on `new`: every field / section title / meta key whose value differs from `old`
+/// gets `max(now, old_clock+1)`. With no `old` everything gets `now`.
+pub fn stamp_ext(old: Option<&ItemRecord>, new: &mut ItemRecord, now: u64) {
+    let mut c = old.map(|o| o.xclocks.clone()).unwrap_or_default();
+    let bump = |c: &mut BTreeMap<String, u64>, k: String| { let v = now.max(c.get(&k).copied().unwrap_or(0) + 1); c.insert(k, v); };
+    let (of, os, om) = match old { Some(o) => (field_map(o), section_titles(o), Some(meta_values(o))), None => (BTreeMap::new(), BTreeMap::new(), None) };
+    for (id, (_, f)) in field_map(new) { if of.get(&id).map(|(_, x)| x) != Some(&f) { bump(&mut c, format!("f:{id}")); } }
+    for (id, t) in section_titles(new) { if os.get(&id) != Some(&t) { bump(&mut c, format!("s:{id}")); } }
+    let nm = meta_values(new);
+    for (i, (k, v)) in nm.iter().enumerate() {
+        // new items: default-valued meta keeps clock 0 (keeps v4-sized payloads small; any edit wins)
+        let changed = match om.as_ref() { Some(m) => &m[i].1 != v, None => *v != meta_values(&ItemRecord::default())[i].1 };
+        if changed { bump(&mut c, k.to_string()); }
+    }
+    new.xclocks = c;
+}
+
+/// Merge the v5 extension (sections by field id, meta, history, attachments) of `remote` into `out`
+/// (which starts as a copy of local). Returns (keys taken from remote, conflicting keys).
+fn merge_ext(local: &ItemRecord, remote: &ItemRecord, out: &mut ItemRecord) -> (Vec<String>, Vec<String>) {
+    let (mut from_r, mut conf) = (vec![], vec![]);
+    let lc = |k: &str| local.xclocks.get(k).copied().unwrap_or(0);
+    let rc = |k: &str| remote.xclocks.get(k).copied().unwrap_or(0);
+    // fields
+    let (lf, rf) = (field_map(local), field_map(remote));
+    for (id, (rsid, rfld)) in &rf {
+        let k = format!("f:{id}");
+        match lf.get(id) {
+            None => {
+                match out.sections.iter_mut().find(|s| &s.id == rsid) {
+                    Some(s) => s.fields.push(rfld.clone()),
+                    None => {
+                        let title = remote.sections.iter().find(|s| &s.id == rsid).and_then(|s| s.title.clone());
+                        out.sections.push(Section { id: rsid.clone(), title, fields: vec![rfld.clone()] });
+                    }
+                }
+                out.xclocks.insert(k.clone(), rc(&k));
+                from_r.push(k);
+            }
+            Some((_, lfld)) => {
+                if rc(&k) > lc(&k) {
+                    if lfld != rfld {
+                        for s in out.sections.iter_mut() { for f in s.fields.iter_mut() { if &f.id == id { *f = rfld.clone(); } } }
+                        from_r.push(k.clone());
+                    }
+                    out.xclocks.insert(k.clone(), rc(&k));
+                } else if rc(&k) == lc(&k) && lfld != rfld { conf.push(k); }
+            }
+        }
+    }
+    // section titles
+    for s in &remote.sections {
+        let k = format!("s:{}", s.id);
+        if rc(&k) > lc(&k) {
+            if let Some(os) = out.sections.iter_mut().find(|x| x.id == s.id) { if os.title != s.title { os.title = s.title.clone(); from_r.push(k.clone()); } }
+            out.xclocks.insert(k.clone(), rc(&k));
+        }
+    }
+    // meta
+    let (lm, rm) = (meta_values(local), meta_values(remote));
+    for i in 0..lm.len() {
+        let k = lm[i].0;
+        if rc(k) > lc(k) {
+            if lm[i].1 != rm[i].1 {
+                match k {
+                    "m:category" => out.category = remote.category,
+                    "m:tags" => out.tags = remote.tags.clone(),
+                    "m:favorite" => out.favorite = remote.favorite,
+                    "m:archived" => out.archived = remote.archived,
+                    _ => out.deleted_at = remote.deleted_at,
+                }
+                from_r.push(k.to_string());
+            }
+            out.xclocks.insert(k.to_string(), rc(k));
+        } else if rc(k) == lc(k) && lm[i].1 != rm[i].1 && (rc(k) != 0) { conf.push(k.to_string()); }
+    }
+    // attachments: union by id
+    for a in &remote.attachments {
+        if !out.attachments.iter().any(|x| x.id == a.id) { out.attachments.push(a.clone()); from_r.push(format!("a:{}", a.id)); }
+    }
+    // history: union by (version, updated_at), keep newest HISTORY_LIMIT
+    for h in &remote.history {
+        if !out.history.iter().any(|x| x.version == h.version && x.updated_at == h.updated_at) { out.history.push(h.clone()); }
+    }
+    out.history.sort_by_key(|h| h.version);
+    let n = out.history.len();
+    if n > crate::item::HISTORY_LIMIT { out.history.drain(..n - crate::item::HISTORY_LIMIT); }
+    out.created_at = match (local.created_at, remote.created_at) { (Some(a), Some(b)) => Some(a.min(b)), (a, b) => a.or(b) };
+    (from_r, conf)
 }
 
 pub fn now_ms() -> u64 {
@@ -105,11 +315,15 @@ pub struct MergeReport {
     pub from_local: Vec<&'static str>,
     /// Equal clocks but different values; local value kept.
     pub conflicts: Vec<&'static str>,
+    /// v5 keys (`f:<field id>`, `s:<section>`, `m:<meta>`, `a:<attachment>`) taken from remote.
+    pub ext_from_remote: Vec<String>,
+    /// v5 keys with equal clocks but different values (local kept).
+    pub ext_conflicts: Vec<String>,
 }
 impl MergeReport {
-    pub fn has_conflicts(&self) -> bool { !self.conflicts.is_empty() }
+    pub fn has_conflicts(&self) -> bool { !self.conflicts.is_empty() || !self.ext_conflicts.is_empty() }
     /// True if the merged result differs from local (i.e. a write is needed).
-    pub fn changed_local(&self) -> bool { !self.from_remote.is_empty() }
+    pub fn changed_local(&self) -> bool { !self.from_remote.is_empty() || !self.ext_from_remote.is_empty() }
 }
 
 /// Field-level merge. Per field: higher clock wins; equal clock + equal value = same;
@@ -132,14 +346,21 @@ pub fn merge_records(local: &ItemRecord, remote: &ItemRecord) -> (ItemRecord, Me
             FieldOutcome::Same => {}
         }
     }
-    out.updated_at = (oc.max() / 1000).to_string();
-    (ItemRecord { item: out, clocks: Some(oc) }, rep)
+    let ext_max = local.xclocks.values().chain(remote.xclocks.values()).copied().max().unwrap_or(0);
+    out.updated_at = (oc.max().max(ext_max) / 1000).to_string();
+    let mut res = local.clone();
+    res.item = out;
+    res.clocks = Some(oc);
+    let (fr, cf) = merge_ext(local, remote, &mut res);
+    rep.ext_from_remote = fr;
+    rep.ext_conflicts = cf;
+    (res, rep)
 }
 
 /// Convenience wrapper over plain [`Item`]s: clocks are synthesized from `updated_at` (legacy semantics),
 /// which makes this whole-item last-write-wins with equal-timestamp conflicts reported per field.
 pub fn merge_items(local: &Item, remote: &Item) -> (Item, MergeReport) {
-    let (r, rep) = merge_records(&ItemRecord { item: local.clone(), clocks: None },
-                                 &ItemRecord { item: remote.clone(), clocks: None });
+    let (r, rep) = merge_records(&ItemRecord::new(local.clone()),
+                                 &ItemRecord::new(remote.clone()));
     (r.item.clone(), rep)
 }

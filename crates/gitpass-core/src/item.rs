@@ -1,0 +1,96 @@
+//! Format v5 item schema: categories, sections + typed fields, tags, favorite/archive, soft delete,
+//! version history and attachment metadata. Everything here lives INSIDE the encrypted, padded item
+//! payload ([`crate::merge::ItemRecord`]); nothing is visible on disk.
+//!
+//! Back-compat: the v2-v4 login fields (`username`, `password`, `url`, `totp`, `notes`, `title`) stay
+//! the canonical storage for login data (so v3 field-level merge and the CLI keep working); views
+//! synthesize a `login` section from them. Extra fields of any category live in `sections`.
+use serde::{Deserialize, Serialize};
+use zeroize::Zeroize;
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum Category {
+    #[default]
+    Login,
+    CreditCard,
+    SecureNote,
+    Identity,
+    ApiCredential,
+    Document,
+    SshKey,
+    Wifi,
+}
+impl Category {
+    pub const ALL: [Category; 8] = [Category::Login, Category::CreditCard, Category::SecureNote, Category::Identity,
+        Category::ApiCredential, Category::Document, Category::SshKey, Category::Wifi];
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Category::Login => "login", Category::CreditCard => "credit_card", Category::SecureNote => "secure_note",
+            Category::Identity => "identity", Category::ApiCredential => "api_credential", Category::Document => "document",
+            Category::SshKey => "ssh_key", Category::Wifi => "wifi",
+        }
+    }
+}
+impl std::str::FromStr for Category {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> anyhow::Result<Self> {
+        Category::ALL.into_iter().find(|c| c.as_str() == s).ok_or_else(|| anyhow::anyhow!("unknown category '{s}'"))
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum FieldKind { #[default] Text, Concealed, Url, Email, Phone, Date, MonthYear, Totp, Multiline }
+impl FieldKind {
+    /// Secret kinds are never returned in list/detail payloads.
+    pub fn is_secret(&self) -> bool { matches!(self, FieldKind::Concealed | FieldKind::Totp) }
+}
+
+fn is_false(b: &bool) -> bool { !*b }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, Zeroize)]
+pub struct Field {
+    pub id: String,
+    pub label: String,
+    #[zeroize(skip)]
+    pub kind: FieldKind,
+    pub value: Option<String>,
+    /// Tombstone: the field was deleted (kept so the deletion merges by clock).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub removed: bool,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, Zeroize)]
+pub struct Section { pub id: String, pub title: Option<String>, pub fields: Vec<Field> }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, Zeroize)]
+pub struct AttachmentMeta { pub id: String, pub name: String, pub size: u64, pub mime: String }
+
+/// A prior version of an item's content (meta flags excluded).
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, Zeroize)]
+pub struct Snapshot {
+    pub item: crate::store::Item,
+    #[zeroize(skip)]
+    #[serde(default)]
+    pub category: Category,
+    #[serde(default)]
+    pub sections: Vec<Section>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, Zeroize)]
+pub struct HistoryEntry { pub version: u64, pub updated_at: String, pub snapshot: Snapshot }
+
+/// Keep at most this many prior versions inside the item record.
+pub const HISTORY_LIMIT: usize = 20;
+/// Soft-deleted items are purged this long after deletion (on unlock or explicit purge).
+pub const PURGE_AFTER_SECS: u64 = 30 * 86400;
+/// Attachment size cap.
+pub const MAX_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
+
+/// Field ids that map onto the legacy login fields of [`crate::store::Item`].
+pub const LOGIN_USERNAME: &str = "username";
+pub const LOGIN_PASSWORD: &str = "password";
+pub const LOGIN_TOTP: &str = "totp";
