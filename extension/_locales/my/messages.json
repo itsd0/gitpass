@@ -3,34 +3,34 @@
     "message": "gitpass helper ချိတ်ဆက်မထားပါ"
   },
   "hostBody": {
-    "message": "Browser က local gitpass-host ကို မရောက်နိုင်ပါ။ Terminal မှာ တစ်ကြိမ် install လုပ်ပြီး extension ကို reload လုပ်ပါ:"
+    "message": "Browser မှ ဤကွန်ပျူတာရှိ gitpass-host ကို ချိတ်ဆက်၍ မရပါ။ Terminal တွင် တစ်ကြိမ် ထည့်သွင်းပြီး extension ကို reload လုပ်ပါ:"
   },
   "retry": {
     "message": "ထပ်စမ်းရန်"
   },
   "unlockTitle": {
-    "message": "gitpass ကို ဖွင့်ရန်"
+    "message": "gitpass ကို သော့ဖွင့်ရန်"
   },
   "masterPassword": {
-    "message": "Master password"
+    "message": "မာစတာ စကားဝှက်"
   },
   "secretKey": {
     "message": "Secret Key"
   },
   "skHint": {
-    "message": "ဖွင့်ရန် တစ်ကြိမ်သာ သုံးပါသည်။ ဖွင့်ထားစဉ် memory ထဲမှာသာ ထားပြီး ဘယ်တော့မှ မသိမ်းပါ။"
+    "message": "သော့ဖွင့်ရန် တစ်ကြိမ်သာ သုံးပါသည်။ သော့ဖွင့်ထားစဉ် memory ထဲတွင်သာ ထားပြီး ဘယ်တော့မှ မသိမ်းပါ။"
   },
   "unlock": {
-    "message": "ဖွင့်ရန်"
+    "message": "သော့ဖွင့်ရန်"
   },
   "touchIdSoon": {
-    "message": "Touch ID ဖြင့်ဖွင့်ခြင်း မကြာမီ လာပါမည်။ Secret Key သည် Emergency Kit ထဲတွင် ရှိပါသည်။"
+    "message": "Touch ID ဖြင့် သော့ဖွင့်ခြင်း မကြာမီ ရနိုင်ပါမည်။ သင့် Secret Key သည် Emergency Kit ထဲတွင် ရှိပါသည်။"
   },
   "searchPh": {
-    "message": "Vault တွင် ရှာရန်"
+    "message": "သော့ခတ်သေတ္တာတွင် ရှာရန်"
   },
   "lock": {
-    "message": "ပိတ်ရန်"
+    "message": "သော့ခတ်ရန်"
   },
   "forThisSite": {
     "message": "ဤဆိုက်အတွက်"
@@ -39,7 +39,7 @@
     "message": "ရှာဖွေမှု ရလဒ်များ"
   },
   "generator": {
-    "message": "Password ထုတ်ပေးစနစ်"
+    "message": "စကားဝှက် ထုတ်ပေးကိရိယာ"
   },
   "regenerate": {
     "message": "ပြန်ထုတ်ရန်"
@@ -54,10 +54,10 @@
     "message": "သင်္ကေတများ"
   },
   "copy": {
-    "message": "ကူးရန်"
+    "message": "ကူးယူရန်"
   },
   "copied": {
-    "message": "ကူးပြီးပါပြီ"
+    "message": "ကူးယူပြီးပါပြီ"
   },
   "fill": {
     "message": "ဖြည့်ရန်"
@@ -66,55 +66,55 @@
     "message": "ဤစာမျက်နှာတွင် ဖြည့်ရန်"
   },
   "copyPassword": {
-    "message": "Password ကူးရန်"
+    "message": "စကားဝှက် ကူးယူရန်"
   },
   "passwordCopied": {
-    "message": "Password ကူးပြီးပါပြီ"
+    "message": "စကားဝှက် ကူးယူပြီးပါပြီ"
   },
   "copyTotp": {
-    "message": "TOTP ကူးရန်"
+    "message": "TOTP ကူးယူရန်"
   },
   "totpCopied": {
-    "message": "TOTP ကူးပြီးပါပြီ"
+    "message": "TOTP ကူးယူပြီးပါပြီ"
   },
   "notHttps": {
     "message": "https စာမျက်နှာ မဟုတ်ပါ"
   },
   "noMatches": {
-    "message": "ဤဆိုက်အတွက် သိမ်းထားသော login မရှိပါ"
+    "message": "ဤဆိုက်အတွက် သိမ်းထားသော လော့ဂ်အင် မရှိပါ"
   },
   "notFillable": {
     "message": "ဖြည့်ရန် https စာမျက်နှာကို ဖွင့်ပါ"
   },
   "noResults": {
-    "message": "ရလဒ် မတွေ့ပါ"
+    "message": "ဘာမှ ရှာမတွေ့ပါ"
   },
   "pwRequired": {
-    "message": "Master password ထည့်ပါ"
+    "message": "မာစတာ စကားဝှက် ထည့်ပါ"
   },
   "wrongCreds": {
-    "message": "Master password သို့မဟုတ် Secret Key မှားနေပါသည်"
+    "message": "မာစတာ စကားဝှက် သို့မဟုတ် Secret Key မှားနေပါသည်"
   },
   "csFillWith": {
     "message": "gitpass ဖြင့် ဖြည့်ရန်"
   },
   "csNoLogins": {
-    "message": "ဤဆိုက်အတွက် gitpass login မရှိပါ"
+    "message": "ဤဆိုက်အတွက် gitpass လော့ဂ်အင် မရှိပါ"
   },
   "csLocked": {
-    "message": "gitpass ပိတ်ထားပါသည်။ toolbar icon မှ ဖွင့်ပါ။"
+    "message": "gitpass ကို သော့ခတ်ထားပါသည်။ toolbar ရှိ icon မှ သော့ဖွင့်ပါ။"
   },
   "extDesc": {
-    "message": "gitpass autofill. Key များသည် local gitpass-host ထဲတွင်သာ ရှိပါသည်။"
+    "message": "gitpass autofill။ Key များသည် ဤကွန်ပျူတာရှိ gitpass-host ထဲတွင်သာ ရှိပါသည်။"
   },
   "unlockTouchId": {
-    "message": "Touch ID ဖြင့် သော့ဖွင့်ပါ"
+    "message": "Touch ID ဖြင့် သော့ဖွင့်ရန်"
   },
   "usePassword": {
-    "message": "စကားဝှက် သုံးပါ"
+    "message": "စကားဝှက် သုံးရန်"
   },
   "unlockWithPassword": {
-    "message": "စကားဝှက်ဖြင့် သော့ဖွင့်ပါ"
+    "message": "စကားဝှက်ဖြင့် သော့ဖွင့်ရန်"
   },
   "openAppToUnlock": {
     "message": "သော့ဖွင့်ရန် gitpass အက်ပ်ကို ဖွင့်ပါ"
@@ -129,16 +129,16 @@
     "message": "gitpass browser extension ကို သော့ဖွင့်ရန်"
   },
   "unlockCancelled": {
-    "message": "သော့ဖွင့်ခြင်း ပယ်ဖျက်လိုက်သည်"
+    "message": "သော့ဖွင့်ခြင်းကို ပယ်ဖျက်လိုက်သည်"
   },
   "back": {
     "message": "နောက်သို့"
   },
   "newItem": {
-    "message": "အသစ်ထည့်ရန်"
+    "message": "အရာအသစ်"
   },
   "newLogin": {
-    "message": "Login အသစ်"
+    "message": "လော့ဂ်အင် အသစ်"
   },
   "filterSuggested": {
     "message": "ဤဆိုက်အတွက် အကြံပြုချက်များ"
@@ -153,10 +153,10 @@
     "message": "အမျိုးအစားများ"
   },
   "vaults": {
-    "message": "Vault များ"
+    "message": "သော့ခတ်သေတ္တာများ"
   },
   "catLogin": {
-    "message": "Login များ"
+    "message": "လော့ဂ်အင်များ"
   },
   "catNote": {
     "message": "လုံခြုံသော မှတ်စုများ"
@@ -180,40 +180,40 @@
     "message": "Wi-Fi"
   },
   "noItems": {
-    "message": "အရာများ မရှိပါ"
+    "message": "အရာ မရှိပါ"
   },
   "selectItem": {
     "message": "အရာတစ်ခု ရွေးပါ"
   },
   "openFill": {
-    "message": "ဖွင့်ပြီး ဖြည့်ပါ"
+    "message": "ဖွင့်ပြီး ဖြည့်ရန်"
   },
   "reveal": {
-    "message": "ပြပါ"
+    "message": "ပြရန်"
   },
   "lastEdited": {
     "message": "နောက်ဆုံး ပြင်ဆင်ချိန်"
   },
   "openInApp": {
-    "message": "gitpass တွင် ဖွင့်ပါ"
+    "message": "gitpass တွင် ဖွင့်ရန်"
   },
   "copyLink": {
-    "message": "လင့်ခ် ကူးပါ"
+    "message": "လင့်ခ် ကူးယူရန်"
   },
   "linkCopied": {
-    "message": "လင့်ခ် ကူးပြီး"
+    "message": "လင့်ခ် ကူးယူပြီးပါပြီ"
   },
   "favorite": {
-    "message": "အကြိုက်ဆုံးသို့ ထည့်ပါ"
+    "message": "အကြိုက်ဆုံးသို့ ထည့်ရန်"
   },
   "unfavorite": {
-    "message": "အကြိုက်ဆုံးမှ ဖယ်ပါ"
+    "message": "အကြိုက်ဆုံးမှ ဖယ်ရန်"
   },
   "more": {
     "message": "နောက်ထပ်"
   },
   "close": {
-    "message": "ပိတ်ပါ"
+    "message": "ပိတ်ရန်"
   },
   "title": {
     "message": "ခေါင်းစဉ်"
@@ -228,234 +228,234 @@
     "message": "စကားဝှက်"
   },
   "generate": {
-    "message": "ထုတ်ပါ"
+    "message": "ထုတ်ရန်"
   },
   "vault": {
-    "message": "Vault"
+    "message": "သော့ခတ်သေတ္တာ"
   },
   "save": {
-    "message": "သိမ်းပါ"
+    "message": "သိမ်းရန်"
   },
   "saved": {
-    "message": "သိမ်းပြီး"
+    "message": "သိမ်းပြီးပါပြီ"
   },
   "needUrlPw": {
-    "message": "ဝက်ဘ်ဆိုက်နှင့် စကားဝှက် လိုအပ်သည်"
+    "message": "ဝက်ဘ်ဆိုက်နှင့် စကားဝှက် လိုအပ်ပါသည်"
   },
   "csSuggest": {
     "message": "ခိုင်မာသော စကားဝှက် အကြံပြုရန်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csSuggestSub": {
-    "message": "တင်သွင်းသောအခါ gitpass က သိမ်းဆည်းပေးပါမည်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "ဖောင်တင်သောအခါ gitpass က သိမ်းပေးပါမည်",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csNoCards": {
     "message": "gitpass တွင် ကတ်များ မရှိပါ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csNoIdentities": {
     "message": "gitpass တွင် ကိုယ်ရေးအချက်အလက်များ မရှိပါ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csUnlock": {
-    "message": "gitpass ကို ဖွင့်ရန်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "gitpass ကို သော့ဖွင့်ရန်",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csUnlockSub": {
     "message": "gitpass အက်ပ်တွင် Touch ID သို့မဟုတ် စကားဝှက်ကို အသုံးပြုပါ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csOpenApp": {
-    "message": "ဖွင့်ရန် gitpass အက်ပ်ကို ဖွင့်ပါ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "သော့ဖွင့်ရန် gitpass အက်ပ်ကို ဖွင့်ပါ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csUpdateQ": {
     "message": "gitpass တွင် စကားဝှက်ကို အပ်ဒိတ်လုပ်မလား?",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csSaveQ": {
-    "message": "gitpass တွင် လော့ဂ်အင်ကို သိမ်းမလား?",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "လော့ဂ်အင်ကို gitpass တွင် သိမ်းမလား?",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csNoUser": {
     "message": "(အသုံးပြုသူအမည် မရှိ)",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csNotNow": {
-    "message": "ယခု မလုပ်ပါ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "နောက်မှ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csUpdate": {
     "message": "အပ်ဒိတ်လုပ်ရန်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csSave": {
     "message": "သိမ်းရန်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csUpdated": {
     "message": "စကားဝှက် အပ်ဒိတ်လုပ်ပြီးပါပြီ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csSaved": {
     "message": "gitpass တွင် သိမ်းပြီးပါပြီ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csLockedShort": {
-    "message": "gitpass ကို အရင်ဖွင့်ပြီး ထပ်ကြိုးစားပါ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "gitpass ကို အရင် သော့ဖွင့်ပြီး ထပ်ကြိုးစားပါ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "allSet": {
     "message": "အားလုံး အဆင်သင့်ဖြစ်ပါပြီ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "oneStepLeft": {
     "message": "အဆင့် 1 ဆင့် ကျန်ပါသေးသည်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepsLeft": {
     "message": "အဆင့် {n} ဆင့် ကျန်ပါသေးသည်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "checking": {
     "message": "စစ်ဆေးနေသည်…",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "hostMissing": {
     "message": "gitpass helper ကို ရှာမတွေ့ပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "hostMissingHelp": {
     "message": "gitpass အက်ပ်မှ တစ်ကြိမ် ထည့်သွင်းပါ (Settings → Browser extension → Install helper)၊ သို့မဟုတ် Terminal တွင် ဤအမိန့်ကို run ပါ ",
     "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
   },
   "thenRetry": {
-    "message": "ထို့နောက် Retry ကို နှိပ်ပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "ထို့နောက် “ထပ်စမ်းရန်” ကို နှိပ်ပါ။",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "appNotRunningHelp": {
-    "message": "gitpass အက်ပ်ကို ဖွင့်ပြီး ဝင်ရောက်ပါ၊ ထို့နောက် Retry ကို နှိပ်ပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "gitpass အက်ပ်ကို ဖွင့်ပြီး သော့ဖွင့်ပါ၊ ထို့နောက် “ထပ်စမ်းရန်” ကို နှိပ်ပါ။",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "connectedUnlocked": {
-    "message": "ချိတ်ဆက်ပြီးပါပြီ။ gitpass ပွင့်နေပါသည်။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "ချိတ်ဆက်ပြီးပါပြီ။ gitpass ကို သော့ဖွင့်ထားပါသည်။",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "connectedLocked": {
-    "message": "ချိတ်ဆက်ပြီးပါပြီ။ extension ကို အသုံးပြုရန် gitpass အက်ပ်ကို ဖွင့်ပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "ချိတ်ဆက်ပြီးပါပြီ။ extension ကို သုံးရန် gitpass အက်ပ်ကို သော့ဖွင့်ပါ။",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "tryDone": {
     "message": "ဖြည့်ပြီးပါပြီ။ Autofill အလုပ်လုပ်ပါသည်။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "settingsTitle": {
     "message": "gitpass ဆက်တင်များ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optAutolock": {
     "message": "gitpass အက်ပ်နှင့်အတူ အလိုအလျောက် သော့ခတ်ရန်",
     "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
   },
   "optAutolockBody": {
-    "message": "အက်ပ် သော့ခတ်သောအခါ extension ကိုလည်း သော့ခတ်ပါ (idle timeout ကို အက်ပ်တွင် သတ်မှတ်ပါ)။",
+    "message": "အက်ပ်ကို သော့ခတ်သောအခါ extension ကိုပါ သော့ခတ်ပါမည် (idle timeout ကို အက်ပ်တွင် သတ်မှတ်ပါ)။",
     "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
   },
   "optAutofill": {
     "message": "စာမျက်နှာများတွင် Autofill အကြံပြုချက်များ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optAutofillBody": {
     "message": "လော့ဂ်အင် အကွက်များအောက်တွင် gitpass မီနူးကို ပြပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optSave": {
     "message": "လော့ဂ်အင်များ သိမ်းရန် အကြံပြုပါ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optSaveBody": {
     "message": "ဝင်ရောက်ပြီးနောက် စကားဝှက်ကို သိမ်းရန် သို့မဟုတ် အပ်ဒိတ်လုပ်ရန် မေးပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optShortcut": {
     "message": "ကီးဘုတ် ဖြတ်လမ်း",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optShortcutBody": {
     "message": "gitpass popup ကို ဖွင့်ပါသည်။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "change": {
     "message": "ပြောင်းရန်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "welcomeTitle": {
     "message": "gitpass မှ ကြိုဆိုပါသည်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "welcomeSub": {
-    "message": "gitpass အက်ပ်ကို တစ်ကြိမ် ဖွင့်လိုက်ရုံဖြင့် extension လည်း ပွင့်ပါမည်။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "gitpass အက်ပ်ကို တစ်ကြိမ် သော့ဖွင့်လိုက်ရုံဖြင့် extension ပါ သော့ပွင့်သွားပါမည်။",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepConnect": {
     "message": "gitpass အက်ပ်နှင့် ချိတ်ဆက်ပါ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepConnectBody": {
     "message": "Extension သည် gitpass desktop အက်ပ်နှင့် local helper (gitpass-host) မှတစ်ဆင့် ဆက်သွယ်ပါသည်။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "openApp": {
     "message": "gitpass အက်ပ်ကို ဖွင့်ရန်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepPin": {
     "message": "Extension ကို pin လုပ်ပါ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepPinBody": {
-    "message": "toolbar ရှိ ပဟေဠိအပိုင်း အိုင်ကွန်ကို နှိပ်ပြီး gitpass ဘေးရှိ pin ကို နှိပ်ပါ။ အချိန်မရွေး ဖွင့်နိုင်သည်",
+    "message": "toolbar ရှိ puzzle (🧩) အိုင်ကွန်ကို နှိပ်ပြီး gitpass ဘေးရှိ pin ကို နှိပ်ပါ။ အောက်ပါ ကီးဖြင့်လည်း အချိန်မရွေး ဖွင့်နိုင်ပါသည်",
     "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
   },
   "pinDone": {
     "message": "pin လုပ်ပြီးပါပြီ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepTry": {
     "message": "Autofill ကို စမ်းကြည့်ပါ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepTryBody": {
-    "message": "ဤသည်မှာ နမူနာ ဖောင်ဖြစ်သည်။ အသုံးပြုသူအမည် အကွက်ကို နှိပ်ပြီး gitpass မီနူးမှ လော့ဂ်အင်ကို ရွေးပါ၊ သို့မဟုတ် popup ကိုဖွင့်ပြီး Fill ကို နှိပ်ပါ။ မည်သည့်နေရာသို့မျှ မပို့ပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "ဤဖောင်သည် နမူနာ ဖောင်ဖြစ်သည်။ အသုံးပြုသူအမည် အကွက်ကို နှိပ်ပြီး gitpass မီနူးမှ လော့ဂ်အင်တစ်ခု ရွေးပါ၊ သို့မဟုတ် popup ကိုဖွင့်ပြီး “ဖြည့်ရန်” ကို နှိပ်ပါ။ မည်သည့်နေရာသို့မျှ ပေးပို့မည် မဟုတ်ပါ။",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "demoSignIn": {
     "message": "ဝင်ရောက်ရန်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "openSettings": {
     "message": "ဆက်တင်များ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "errLocked": {
-    "message": "gitpass ကို သော့ခတ်ထားသည်။ ဆက်လုပ်ရန် ဖွင့်ပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "gitpass ကို သော့ခတ်ထားပါသည်။ ဆက်လုပ်ရန် သော့ဖွင့်ပါ။",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "errDenied": {
     "message": "gitpass က ဤတောင်းဆိုမှုကို ငြင်းပယ်ခဲ့သည်။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "errNotFound": {
     "message": "အရာကို ရှာမတွေ့ပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "errOrigin": {
     "message": "ဤအရာသည် လက်ရှိ ဆိုက်နှင့် မကိုက်ညီပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "errAppDown": {
     "message": "gitpass အက်ပ် ဖွင့်မထားပါ။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   }
 }

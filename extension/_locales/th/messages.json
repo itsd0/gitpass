@@ -1,6 +1,6 @@
 {
   "hostTitle": {
-    "message": "ยังไม่ได้เชื่อมต่อ gitpass helper"
+    "message": "ยังไม่ได้เชื่อมต่อตัวช่วย gitpass"
   },
   "hostBody": {
     "message": "เบราว์เซอร์เข้าถึง gitpass-host ในเครื่องไม่ได้ ติดตั้งครั้งเดียวใน Terminal แล้วรีโหลดส่วนขยายนี้:"
@@ -27,7 +27,7 @@
     "message": "การปลดล็อกด้วย Touch ID จะมาเร็วๆ นี้ Secret Key อยู่ใน Emergency Kit ของคุณ"
   },
   "searchPh": {
-    "message": "ค้นหาในคลัง"
+    "message": "ค้นหาในห้องนิรภัย"
   },
   "lock": {
     "message": "ล็อก"
@@ -105,7 +105,7 @@
     "message": "gitpass ถูกล็อกอยู่ ปลดล็อกจากไอคอนบนแถบเครื่องมือ"
   },
   "extDesc": {
-    "message": "ระบบกรอกอัตโนมัติ gitpass คีย์อยู่ในโปรเซส gitpass-host ในเครื่องเท่านั้น"
+    "message": "กรอกข้อมูลอัตโนมัติด้วย gitpass คีย์อยู่ในโปรเซส gitpass-host บนเครื่องนี้เท่านั้น"
   },
   "unlockTouchId": {
     "message": "ปลดล็อกด้วย Touch ID"
@@ -138,10 +138,10 @@
     "message": "รายการใหม่"
   },
   "newLogin": {
-    "message": "การเข้าสู่ระบบใหม่"
+    "message": "ข้อมูลเข้าสู่ระบบใหม่"
   },
   "filterSuggested": {
-    "message": "คำแนะนำสำหรับเว็บนี้"
+    "message": "แนะนำสำหรับเว็บไซต์นี้"
   },
   "filterAll": {
     "message": "รายการทั้งหมด"
@@ -156,7 +156,7 @@
     "message": "ห้องนิรภัย"
   },
   "catLogin": {
-    "message": "การเข้าสู่ระบบ"
+    "message": "ข้อมูลเข้าสู่ระบบ"
   },
   "catNote": {
     "message": "บันทึกที่ปลอดภัย"
@@ -216,7 +216,7 @@
     "message": "ปิด"
   },
   "title": {
-    "message": "ชื่อ"
+    "message": "ชื่อรายการ"
   },
   "website": {
     "message": "เว็บไซต์"
@@ -244,175 +244,175 @@
   },
   "csSuggest": {
     "message": "แนะนำรหัสผ่านที่รัดกุม",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csSuggestSub": {
-    "message": "gitpass จะบันทึกให้เมื่อคุณส่งฟอร์ม",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "gitpass จะบันทึกให้เมื่อคุณส่งแบบฟอร์ม",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csNoCards": {
     "message": "ไม่มีบัตรใน gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csNoIdentities": {
     "message": "ไม่มีข้อมูลประจำตัวใน gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csUnlock": {
     "message": "ปลดล็อก gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csUnlockSub": {
     "message": "ใช้ Touch ID หรือรหัสผ่านของคุณในแอป gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csOpenApp": {
     "message": "เปิดแอป gitpass เพื่อปลดล็อก",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csUpdateQ": {
-    "message": "อัปเดตรหัสผ่านใน gitpass หรือไม่?",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "อัปเดตรหัสผ่านใน gitpass ไหม",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csSaveQ": {
-    "message": "บันทึกข้อมูลเข้าสู่ระบบลงใน gitpass หรือไม่?",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "บันทึกข้อมูลเข้าสู่ระบบลงใน gitpass ไหม",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csNoUser": {
     "message": "(ไม่มีชื่อผู้ใช้)",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csNotNow": {
-    "message": "ไม่ใช่ตอนนี้",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "ไว้ทีหลัง",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csUpdate": {
     "message": "อัปเดต",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csSave": {
     "message": "บันทึก",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csUpdated": {
     "message": "อัปเดตรหัสผ่านแล้ว",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csSaved": {
     "message": "บันทึกลงใน gitpass แล้ว",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csLockedShort": {
     "message": "ปลดล็อก gitpass ก่อน แล้วลองอีกครั้ง",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "allSet": {
     "message": "พร้อมใช้งานแล้ว",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "oneStepLeft": {
     "message": "เหลืออีก 1 ขั้นตอน",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepsLeft": {
     "message": "เหลืออีก {n} ขั้นตอน",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "checking": {
     "message": "กำลังตรวจสอบ…",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "hostMissing": {
     "message": "ไม่พบตัวช่วย gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "hostMissingHelp": {
     "message": "ติดตั้งครั้งเดียวจากแอป gitpass (Settings → Browser extension → Install helper) หรือรันคำสั่งนี้ใน Terminal ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "thenRetry": {
-    "message": "จากนั้นกด Retry",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "จากนั้นกด “ลองอีกครั้ง”",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "appNotRunningHelp": {
-    "message": "เปิดแอป gitpass และลงชื่อเข้าใช้ จากนั้นกด Retry",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "เปิดแอป gitpass แล้วปลดล็อก จากนั้นกด “ลองอีกครั้ง”",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "connectedUnlocked": {
     "message": "เชื่อมต่อแล้ว gitpass ปลดล็อกอยู่",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "connectedLocked": {
     "message": "เชื่อมต่อแล้ว ปลดล็อกแอป gitpass เพื่อใช้ส่วนขยาย",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "tryDone": {
-    "message": "กรอกแล้ว การกรอกอัตโนมัติทำงานได้",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "กรอกแล้ว การกรอกอัตโนมัติใช้งานได้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "settingsTitle": {
     "message": "การตั้งค่า gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optAutolock": {
     "message": "ล็อกอัตโนมัติตามแอป gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optAutolockBody": {
     "message": "ล็อกส่วนขยายเมื่อแอปล็อก (ตั้งเวลาไม่ใช้งานได้ในแอป)",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optAutofill": {
     "message": "คำแนะนำการกรอกอัตโนมัติบนหน้าเว็บ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optAutofillBody": {
     "message": "แสดงเมนู gitpass ใต้ช่องเข้าสู่ระบบ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optSave": {
     "message": "เสนอให้บันทึกข้อมูลเข้าสู่ระบบ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optSaveBody": {
     "message": "ถามเพื่อบันทึกหรืออัปเดตรหัสผ่านหลังจากคุณลงชื่อเข้าใช้",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optShortcut": {
     "message": "แป้นพิมพ์ลัด",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optShortcutBody": {
     "message": "เปิดป๊อปอัป gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "change": {
     "message": "เปลี่ยน",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "welcomeTitle": {
     "message": "ยินดีต้อนรับสู่ gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "welcomeSub": {
     "message": "ปลดล็อกแอป gitpass ครั้งเดียว ส่วนขยายก็จะปลดล็อกด้วย",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepConnect": {
     "message": "เชื่อมต่อกับแอป gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepConnectBody": {
     "message": "ส่วนขยายสื่อสารกับแอปเดสก์ท็อป gitpass ผ่านตัวช่วยภายในเครื่องขนาดเล็ก (gitpass-host)",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "openApp": {
     "message": "เปิดแอป gitpass",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepPin": {
     "message": "ปักหมุดส่วนขยาย",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepPinBody": {
     "message": "คลิกไอคอนจิ๊กซอว์ในแถบเครื่องมือ แล้วคลิกหมุดข้าง gitpass คุณยังเปิดได้ทุกเมื่อด้วย",
@@ -420,42 +420,42 @@
   },
   "pinDone": {
     "message": "ปักหมุดแล้ว",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepTry": {
     "message": "ลองกรอกอัตโนมัติ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "stepTryBody": {
-    "message": "นี่คือฟอร์มตัวอย่าง คลิกช่องชื่อผู้ใช้แล้วเลือกข้อมูลเข้าสู่ระบบจากเมนู gitpass หรือเปิดป๊อปอัปแล้วกด Fill จะไม่มีการส่งข้อมูลไปที่ใด",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "นี่คือแบบฟอร์มตัวอย่าง คลิกช่องชื่อผู้ใช้แล้วเลือกข้อมูลเข้าสู่ระบบจากเมนู gitpass หรือเปิดป๊อปอัปแล้วกด “กรอก” ระบบจะไม่ส่งข้อมูลไปที่ใด",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "demoSignIn": {
     "message": "ลงชื่อเข้าใช้",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "openSettings": {
     "message": "การตั้งค่า",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "errLocked": {
     "message": "gitpass ถูกล็อกอยู่ ปลดล็อกเพื่อดำเนินการต่อ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "errDenied": {
     "message": "gitpass ปฏิเสธคำขอนี้",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "errNotFound": {
     "message": "ไม่พบรายการ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "errOrigin": {
     "message": "รายการนี้ไม่ตรงกับเว็บไซต์ปัจจุบัน",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "errAppDown": {
     "message": "แอป gitpass ไม่ได้ทำงานอยู่",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   }
 }
