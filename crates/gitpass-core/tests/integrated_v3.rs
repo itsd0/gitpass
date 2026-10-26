@@ -16,7 +16,7 @@ fn fresh_v2_vault_gets_devices_clocks_and_search() {
     let s = Session::unlock_device(r, PW, &sk, &opts(), Some("laptop")).unwrap();
     assert_eq!(s.fmt.version, 2);
     assert!(r.join("devices.enc").exists());
-    assert_eq!(s.load_manifest().unwrap().format, store::FORMAT_VERSION);
+    assert_eq!(s.load_manifest().unwrap().format, store::MANIFEST_FORMAT_V3); // v4 only once identity/members exist
     let vid = s.create_vault("personal").unwrap();
     let mut it = Item::default();
     it.title = "GitHub".into(); it.username = Some("octo".into()); it.password = Some("a".into());
@@ -27,7 +27,7 @@ fn fresh_v2_vault_gets_devices_clocks_and_search() {
     // remote edits password; local merge picks it up
     let mut remote_item = rec.item.clone(); remote_item.password = Some("b".into());
     let mut c = rec.clocks.unwrap(); c.set("password", c.get("password") + 10);
-    let remote = ItemRecord { item: remote_item, clocks: Some(c) };
+    let remote = ItemRecord::with_clocks(remote_item, Some(c));
     let (m, _) = merge_items(&rec, &remote);
     assert_eq!(m.item.password.as_deref(), Some("b"));
     s.merge_item(&vid, &iid, &remote).unwrap();
