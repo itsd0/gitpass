@@ -86,6 +86,22 @@ pub fn validate_url(url: &str, allow_local: bool) -> Result<()> {
 /// Make sure every [`REQUIRED_IGNORES`] line is in `<root>/.gitignore`.
 pub fn ensure_gitignore(root: &Path) -> Result<()> {
     for n in REQUIRED_IGNORES { crate::device::ensure_ignored(root, n)?; }
+    ensure_gitattributes(root)
+}
+
+/// `.gitattributes` content: every vault file is byte-exact (hashes in manifest.enc), so git must never
+/// convert line endings (Windows `core.autocrlf=true` would otherwise corrupt `.enc` files on checkout).
+pub const GITATTRIBUTES: &str = "* -text\n";
+
+/// Make sure `<root>/.gitattributes` disables line-ending conversion for all files.
+pub fn ensure_gitattributes(root: &Path) -> Result<()> {
+    let p = root.join(".gitattributes");
+    let cur = std::fs::read_to_string(&p).unwrap_or_default();
+    if cur.lines().any(|l| l.trim() == "* -text") { return Ok(()); }
+    let mut s = cur;
+    if !s.is_empty() && !s.ends_with('\n') { s.push('\n'); }
+    s.push_str(GITATTRIBUTES);
+    std::fs::write(&p, s)?;
     Ok(())
 }
 
@@ -94,7 +110,7 @@ pub fn is_allowed_path(path: &str) -> bool {
     let name = path.rsplit('/').next().unwrap_or(path);
     if path.split('/').any(|c| c.starts_with(".gitpass-") || c == ".gitpass.lock" || c == "secret.key") { return false; }
     match path {
-        ".gitignore" | "format.json" | "identity.pub" => true,
+        ".gitignore" | ".gitattributes" | "format.json" | "identity.pub" => true,
         _ if name == ".keep" => path.starts_with("vaults/"), // empty placeholder dirs (content checked in check_staged)
         _ => name.ends_with(".enc") && !name.starts_with('.') && !path.contains(".."),
     }
