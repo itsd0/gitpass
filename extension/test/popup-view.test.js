@@ -72,6 +72,9 @@ test('ringOffset, formatValue, mask', () => {
   assert.strictEqual(V.formatValue('card_number', '4242424242424242'), '4242 4242 4242 4242');
   assert.strictEqual(V.formatValue('text', null), '');
   assert.ok(V.mask('password').startsWith('•'));
+  assert.strictEqual(V.mask('card_number', '•••• •••• •••• 7575'), '•••• •••• •••• 7575');
+  assert.strictEqual(V.mask('card_number'), '•••• •••• •••• ••••');
+  assert.strictEqual(V.mask('password', '•••• 7575'), '••••••••••', 'non-card secrets (CVV) ignore any mask hint');
 });
 
 test('fillKind and primarySecretField per category', () => {

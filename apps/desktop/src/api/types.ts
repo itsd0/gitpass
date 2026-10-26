@@ -1,6 +1,6 @@
 export type ItemCategory = 'login'|'credit_card'|'secure_note'|'identity'|'api_credential'|'document'|'ssh_key'|'wifi'|'passkey';
 export type FieldKind = 'text'|'concealed'|'url'|'email'|'phone'|'date'|'month_year'|'totp'|'multiline';
-export interface Field { id: string; label: string; kind: FieldKind; value: string | null; } // concealed values are null in summaries/details until reveal
+export interface Field { id: string; label: string; kind: FieldKind; value: string | null; /** card numbers only: '•••• •••• •••• 7575' (computed after decryption, display only) */ masked?: string | null; } // concealed values are null in summaries/details until reveal
 export interface Section { id: string; title: string | null; fields: Field[]; }
 export interface Attachment { id: string; name: string; size: number; mime: string; }
 export interface ItemSummary { id: string; vaultId: string; category: ItemCategory; title: string; subtitle: string; favorite: boolean; archived: boolean; deletedAt: string|null; tags: string[]; updatedAt: string; createdAt: string; url?: string|null; }

@@ -232,9 +232,9 @@ function fieldRow(d, f) {
   const acts = el('div', 'acts'); row.append(acts);
   if (f.kind === 'totp') { renderTotp(d, val); }
   else if (f.concealed) {
-    val.textContent = V.mask(f.kind);
+    val.textContent = V.mask(f.kind, f.masked);
     acts.append(iconBtn(UI.eye, t('reveal', 'Reveal'), async (b) => {
-      if (S.revealed[f.name] != null) { delete S.revealed[f.name]; val.textContent = V.mask(f.kind); b.innerHTML = UI.eye; return; }
+      if (S.revealed[f.name] != null) { delete S.revealed[f.name]; val.textContent = V.mask(f.kind, f.masked); b.innerHTML = UI.eye; return; }
       const v = await secretValue(d, f); S.revealed[f.name] = v; val.textContent = V.formatValue(f.kind, v); b.innerHTML = UI.eyeOff;
     }));
   } else if (f.kind === 'url' && f.value) {

@@ -5,6 +5,7 @@ import type { Field } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { Button, Tooltip, toast } from '../../ui';
 import { errText } from './actions';
+import { groupCardNumber } from '../../lib/cardMask';
 
 export const REVEAL_MS = 30_000;
 const DOTS = '••••••••••';
@@ -59,7 +60,7 @@ export function ConcealedValue({ field, ctx, strength }: { field: Field; ctx: Ct
   return (
     <div>
       <div className="flex items-center gap-2">
-        <div className={cn('min-w-0 flex-1 break-all font-mono text-[14px]', revealed === null && 'tracking-widest')} data-testid="concealed-value">{revealed ?? DOTS}</div>
+        <div className={cn('min-w-0 flex-1 break-all font-mono text-[14px]', revealed === null && 'tracking-widest')} data-testid="concealed-value">{revealed === null ? (field.masked || DOTS) : field.masked ? groupCardNumber(revealed) : revealed}</div>
         <div className="flex opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <Tooltip content={revealed === null ? 'Reveal' : 'Conceal'}>
             <Button variant="ghost" size="iconSm" aria-label={revealed === null ? `Reveal ${field.label}` : `Conceal ${field.label}`} onClick={toggle}>{revealed === null ? <Eye size={13} /> : <EyeOff size={13} />}</Button>

@@ -34,7 +34,7 @@ fn env() -> Env {
     let v = vs[0].clone();
     Env { vault: v.id, _vault: d, _cfg: cfg, app, clip, sk }
 }
-fn fld(id: &str, kind: FieldKind, v: Option<&str>) -> Field { Field { id: id.into(), label: id.into(), kind, value: v.map(Into::into) } }
+fn fld(id: &str, kind: FieldKind, v: Option<&str>) -> Field { Field { id: id.into(), label: id.into(), kind, value: v.map(Into::into), masked: None } }
 fn login(e: &Env, title: &str, user: &str, pw: &str) -> ItemSummary {
     e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some("https://example.invalid".into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some(user)), fld("password", FieldKind::Concealed, Some(pw))] }],
@@ -69,7 +69,11 @@ fn items_crud_subtitles_and_no_secret_leak() {
     let l = login(&e, "Example Mail", "alice@example.invalid", "FAKE-very-secret-pw-123!");
     assert_eq!(l.subtitle, "alice@example.invalid");
     let c = card(&e);
-    assert_eq!(c.subtitle, "4111 **** 1111");
+    assert_eq!(c.subtitle, "Visa •••• 1111");
+    { let d = e.app.get_item(&e.vault, &c.id).unwrap();
+      let num = d.sections.iter().flat_map(|s| &s.fields).find(|f| f.id == "number").unwrap();
+      assert_eq!((num.value.as_deref(), num.masked.as_deref()), (None, Some("•••• •••• •••• 1111")));
+      assert!(d.sections.iter().flat_map(|s| &s.fields).filter(|f| f.id != "number").all(|f| f.masked.is_none()), "cvv/pin stay fully masked"); }
     assert!(c.favorite);
     let d = e.app.get_item(&e.vault, &c.id).unwrap();
     let json = serde_json::to_string(&d).unwrap();
@@ -553,4 +557,17 @@ fn vault_update_and_delete() {
     let vs = e.app.list_vaults().unwrap();
     assert_eq!(vs.len(), 1);
     assert!(e.app.delete_vault(&vs[0].id, &vs[0].name).is_err());
+}
+
+#[test]
+fn card_brand_and_labels() {
+    for (n, b) in [("4111111111111111", Some("Visa")), ("5555555555554444", Some("Mastercard")), ("2223003122003222", Some("Mastercard")),
+                   ("378282246310005", Some("Amex")), ("6011111111111117", Some("Discover")), ("3530111333300000", Some("JCB")),
+                   ("30569309025904", Some("Diners Club")), ("6200000000000005", Some("UnionPay")), ("9999000011117575", None)] {
+        assert_eq!(card_brand(n), b, "{n}");
+    }
+    assert_eq!(card_label("4000123412347575"), "Visa •••• 7575");
+    assert_eq!(card_label("9999000011117575"), "•••• 7575");
+    assert_eq!(card_mask("4000123412347575"), "•••• •••• •••• 7575");
+    assert!(!card_label("4000123412347575").contains("4000"));
 }

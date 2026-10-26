@@ -90,7 +90,8 @@
     return v;
   }
 
-  function mask(kind) { return kind === 'card_number' ? '•••• •••• •••• ••••' : '••••••••••'; }
+  /** Card numbers show the last 4 the host computed after decryption (f.masked); everything else is fully masked. */
+  function mask(kind, masked) { return kind === 'card_number' ? (masked || '•••• •••• •••• ••••') : '••••••••••'; }
 
   /** Which fill command applies to a category (or null if not fillable). */
   function fillKind(category) {

@@ -2,6 +2,7 @@
 // Concealed values are kept in a private map and only returned by reveal_field,
 // mirroring the Rust security model (detail payloads carry value: null).
 import type * as T from './types';
+import { cardDigits, cardLabel, cardMask } from '../lib/cardMask';
 
 const delay = <R>(v: R, ms = 60): Promise<R> => new Promise((r) => setTimeout(() => r(structuredClone(v)), ms));
 let seq = 1000;
@@ -30,7 +31,8 @@ const db = new Map<string, Rec>();
 const f = (label: string, kind: T.FieldKind, value: string): [T.Field, string | null] => {
   const id = uid('f');
   const hidden = kind === 'concealed' || kind === 'totp';
-  return [{ id, label, kind, value: hidden ? null : value }, hidden ? value : null];
+  const masked = kind === 'concealed' && label === 'number' && cardDigits(value).length >= 8 ? cardMask(value) : undefined;
+  return [{ id, label, kind, value: hidden ? null : value, ...(masked ? { masked } : {}) }, hidden ? value : null];
 };
 
 // 0-100 like gui-core `strength` (rough stand-in; real scoring is entropy-based in Rust).
@@ -84,7 +86,7 @@ const cards: [string, string, number][] = [
   ['Example Bank Visa', '4111 1111 1111 1111', 0], ['Demo Credit Union Visa', '4012 8888 8888 1881', 4], ['Fake Rewards Mastercard', '5555 5555 5555 4444', 9],
   ['Test Travel Amex', '3782 822463 10005', 15], ['Sample Debit Visa', '4000 0566 5566 5556', 40], ['Mock Business Card', '5105 1051 0510 5100', 70],
 ];
-cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_card', t, `${n.slice(0, 4)} **** ${n.slice(-4)}`, d, [
+cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_card', t, cardLabel(n), d, [
   ['cardholder name', 'text', 'Demo User'], ['number', 'concealed', n], ['verification number', 'concealed', '123'], ['expiry date', 'month_year', `203${i}/0${(i % 9) + 1}`],
 ], { tags: ['finance'], favorite: i === 0 }));
 ['Wi-Fi router setup', 'Recipe: fake lasagna', 'Locker combination', 'Meeting notes (sample)', 'Gift ideas', 'Server runbook (demo)'].forEach((t, i) =>
@@ -130,6 +132,7 @@ const touch = (r: Rec) => {
 };
 const subtitleFor = (input: T.ItemInput): string => {
   const flds = input.sections.flatMap((s) => s.fields);
+  if (input.category === 'credit_card') { const n = flds.find((x) => x.id === 'number' || x.label === 'number'); return n?.value ? cardLabel(n.value) : ''; }
   const u = flds.find((x) => x.kind === 'text' || x.kind === 'email');
   return u?.value ?? '';
 };

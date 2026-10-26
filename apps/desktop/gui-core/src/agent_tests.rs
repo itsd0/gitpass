@@ -71,7 +71,7 @@ impl Client {
     }
 }
 
-fn fld(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), label: id.into(), kind, value: Some(v.into()) } }
+fn fld(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), label: id.into(), kind, value: Some(v.into()), masked: None } }
 fn add_login(e: &Env, title: &str, url: &str, user: &str, pw: &str) -> String {
     let s = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some(url.into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, user), fld("password", FieldKind::Concealed, pw)] }],
@@ -171,7 +171,7 @@ fn match_fill_reveal_origin_rules_and_categories() {
     assert_eq!(cat(&gh), json!("login")); assert_eq!(cat(&card), json!("credit_card"));
     let cards = c.ok("list_items", json!({"category": "credit_card"}))["items"].clone();
     assert_eq!(cards.as_array().unwrap().len(), 1);
-    assert_eq!(cards[0]["subtitle"], json!("•••• 1111"));
+    assert_eq!(cards[0]["subtitle"], json!("Visa •••• 1111"));
     let cd = c.ok("get_item", json!({"item_id": card}))["item"].clone();
     assert_eq!(cd["fields"][0]["kind"], json!("card_number"));
     assert!(!cd.to_string().contains("4111 1111"));

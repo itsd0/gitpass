@@ -15,8 +15,8 @@
     ['v1', 'login', 'Amazon', 'naing@example.com', 'https://amazon.com', false, false],
     ['v1', 'login', 'Grab', '+66 81 234 5678', 'https://grab.com', false, false],
     ['v2', 'login', 'AWS Console', 'admin', 'https://aws.amazon.com', false, true],
-    ['v1', 'credit_card', 'Visa Platinum', '•••• 4242', null, true, false],
-    ['v1', 'credit_card', 'Mastercard', '•••• 5100', null, false, false],
+    ['v1', 'credit_card', 'Visa Platinum', 'Visa •••• 4242', null, true, false],
+    ['v1', 'credit_card', 'Mastercard', 'Mastercard •••• 5100', null, false, false],
     ['v1', 'identity', 'Naing Oo', 'Naing Oo', null, false, false],
     ['v1', 'secure_note', 'Recovery codes', 'Updated last week', null, false, false],
     ['v2', 'api_credential', 'OpenAI API', 'sk-…', null, false, false],
@@ -37,7 +37,7 @@
     switch (it.category) {
       case 'login': fields = [F('username', 'username', 'text', it.subtitle), F('password', 'password', 'password', null, true), F('url', 'website', 'url', it.url)];
         secrets.password = 'c0rrect-Horse-battery!'; if (it.has_totp) fields.push(F('totp', 'one-time password', 'totp', null, true)); break;
-      case 'credit_card': fields = [F('cardholder', 'cardholder name', 'text', 'NAING OO'), F('number', 'number', 'card_number', null, true), F('expiry', 'expiry date', 'date', '08/2029'), F('cvv', 'verification number', 'password', null, true), F('type', 'type', 'text', 'Visa')];
+      case 'credit_card': fields = [F('cardholder', 'cardholder name', 'text', 'NAING OO'), Object.assign(F('number', 'number', 'card_number', null, true), { masked: '•••• •••• •••• ' + String(it.subtitle).slice(-4) }), F('expiry', 'expiry date', 'date', '08/2029'), F('cvv', 'verification number', 'password', null, true), F('type', 'type', 'text', 'Visa')];
         secrets.number = '4242424242424242'; secrets.cvv = '123'; break;
       case 'identity': fields = [F('first', 'first name', 'text', 'Naing'), F('last', 'last name', 'text', 'Oo'), F('email', 'email', 'email', 'naing@example.com'), F('phone', 'phone', 'phone', '+66 81 234 5678'), F('birth', 'birth date', 'date', '1990-04-12')]; break;
       case 'secure_note': fields = []; break;

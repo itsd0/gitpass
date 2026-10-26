@@ -433,8 +433,7 @@ pub fn split_id(id: &str) -> Result<(String, String)> {
 fn has_totp(r: &ItemRecord) -> bool { r.view_sections().iter().flat_map(|s| s.fields.iter()).any(|f| f.kind == FieldKind::Totp && f.value.as_deref().is_some_and(|v| !v.is_empty())) }
 
 fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
-    let s = api::subtitle(r);
-    let subtitle = if r.category == Category::CreditCard { s.rsplit(' ').next().filter(|x| !x.is_empty()).map(|l| format!("•••• {l}")).unwrap_or_default() } else { s };
+    let subtitle = api::subtitle(r);
     let favicon_host = r.item.url.as_deref().and_then(|u| url_host(u));
     let mut v = json!({"id": format!("{vid}:{iid}"), "vault_id": vid, "vault_name": vname, "category": r.category.as_str(), "title": r.item.title,
         "subtitle": subtitle, "has_totp": has_totp(r), "favorite": r.favorite, "updated_at": ts(&r.item.updated_at)});
@@ -451,8 +450,7 @@ fn ts(s: &str) -> String { s.trim().parse::<i64>().map(gitpass_core::device::iso
 
 fn kind_name(cat: Category, f: &gitpass_core::item::Field) -> &'static str {
     match f.kind {
-        FieldKind::Concealed if cat == Category::CreditCard && (f.id == "number" || f.label.to_lowercase().contains("number")) => "card_number",
-        FieldKind::Text if cat == Category::CreditCard && (f.id == "number" || f.label.to_lowercase().contains("number")) => "card_number",
+        FieldKind::Concealed | FieldKind::Text if cat == Category::CreditCard && api::is_card_number(f) => "card_number",
         FieldKind::Concealed => "password", FieldKind::Totp => "totp", FieldKind::Url => "url", FieldKind::Email => "email",
         FieldKind::Phone => "phone", FieldKind::Date | FieldKind::MonthYear => "date", FieldKind::Text | FieldKind::Multiline => "text",
     }
@@ -465,6 +463,7 @@ fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         let concealed = f.kind.is_secret();
         let mut x = json!({"name": f.id, "label": f.label, "concealed": concealed, "kind": kind_name(r.category, &f)});
         if !concealed { if let Some(val) = &f.value { x["value"] = json!(val); } }
+        else if x["kind"] == json!("card_number") { if let Some(d) = f.value.as_deref().and_then(api::card_digits_of) { x["masked"] = json!(api::card_mask(&d)); } }
         fields.push(x);
     }
     v["fields"] = json!(fields);

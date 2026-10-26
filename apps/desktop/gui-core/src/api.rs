@@ -24,7 +24,9 @@ use zeroize::Zeroizing;
 // ------------------------------------------------------------------ DTOs (contract types.ts)
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct Field { pub id: String, pub label: String, pub kind: FieldKind, pub value: Option<String> }
+pub struct Field { pub id: String, pub label: String, pub kind: FieldKind, pub value: Option<String>,
+    /// Display-only mask for a concealed card number ("•••• •••• •••• 7575"); computed after decryption, never persisted.
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub masked: Option<String> }
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Section { pub id: String, pub title: Option<String>, pub fields: Vec<Field> }
@@ -250,18 +252,46 @@ pub fn strength(pw: &str) -> u8 {
     s
 }
 
-/// List subtitle: login -> username; credit_card -> "4111 **** 1111"; identity -> name;
+/// List subtitle: login -> username; credit_card -> "Visa •••• 1111" (brand + last 4 only, computed in memory after decryption); identity -> name;
 /// others -> first non-concealed field value or "".
+pub(crate) fn is_card_number(f: &item::Field) -> bool {
+    let l = f.label.to_lowercase();
+    if f.id == "cvv" || f.id == "pin" || ["cvv", "cvc", "verification", "security", "pin"].iter().any(|k| l.contains(k)) { return false; }
+    f.id == "number" || l.contains("number") || l.contains("card")
+}
+fn card_digits(r: &ItemRecord) -> Option<String> {
+    if r.category != Category::CreditCard { return None; }
+    r.view_sections().into_iter().flat_map(|s| s.fields).find(is_card_number).and_then(|f| f.value)
+        .map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8)
+}
+/// Card brand from the BIN (leading digits). None when unknown.
+pub fn card_brand(d: &str) -> Option<&'static str> {
+    let p = |n: usize| d.get(..n).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    Some(match () {
+        _ if d.starts_with('4') => "Visa",
+        _ if (51..=55).contains(&p(2)) || (2221..=2720).contains(&p(4)) => "Mastercard",
+        _ if p(2) == 34 || p(2) == 37 => "Amex",
+        _ if p(4) == 6011 || p(2) == 65 || (644..=649).contains(&p(3)) => "Discover",
+        _ if (3528..=3589).contains(&p(4)) => "JCB",
+        _ if p(2) == 36 || p(2) == 38 || (300..=305).contains(&p(3)) => "Diners Club",
+        _ if p(2) == 62 => "UnionPay",
+        _ => return None,
+    })
+}
+/// "Visa •••• 7575" / "•••• 7575": only the brand and last 4 digits ever leave this function.
+pub fn card_label(d: &str) -> String {
+    let l4 = &d[d.len() - 4..];
+    match card_brand(d) { Some(b) => format!("{b} •••• {l4}"), None => format!("•••• {l4}") }
+}
+pub(crate) fn card_digits_of(v: &str) -> Option<String> { Some(v.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8) }
+pub fn card_mask(d: &str) -> String { format!("•••• •••• •••• {}", &d[d.len() - 4..]) }
+
 pub fn subtitle(r: &ItemRecord) -> String {
     let fields: Vec<item::Field> = r.view_sections().into_iter().flat_map(|s| s.fields).collect();
     let find = |pred: &dyn Fn(&item::Field) -> bool| fields.iter().find(|f| pred(f)).and_then(|f| f.value.clone());
     match r.category {
         Category::Login => r.item.username.clone().unwrap_or_default(),
-        Category::CreditCard => {
-            let num = find(&|f| { let l = f.label.to_lowercase(); f.id == "number" || l.contains("number") || l.contains("card") })
-                .map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).unwrap_or_default();
-            if num.len() >= 8 { format!("{} **** {}", &num[..4], &num[num.len() - 4..]) } else { String::new() }
-        }
+        Category::CreditCard => card_digits(r).map(|d| card_label(&d)).unwrap_or_default(),
         Category::Identity => find(&|f| { let l = f.label.to_lowercase(); f.id == "name" || l.contains("name") })
             .or_else(|| find(&|f| !f.kind.is_secret())).unwrap_or_default(),
         _ => find(&|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())).unwrap_or_default(),
@@ -270,6 +300,8 @@ pub fn subtitle(r: &ItemRecord) -> String {
 
 fn to_dto_sections(r: &ItemRecord) -> Vec<Section> {
     r.view_sections().into_iter().map(|s| Section { id: s.id, title: s.title, fields: s.fields.into_iter().map(|f| Field {
+        masked: (r.category == Category::CreditCard && f.kind.is_secret() && is_card_number(&f))
+            .then(|| f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8).map(|d| card_mask(&d))).flatten(),
         value: if f.kind.is_secret() { None } else { f.value.clone() }, id: f.id, label: f.label, kind: f.kind }).collect() }).collect()
 }
 
