@@ -32,24 +32,24 @@ struct ItemListView: View {
                         HStack(spacing: 12) {
                             CategoryIconView(category: GitpassCategory.from(raw: item.category))
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(item.title).font(.headline).foregroundStyle(.primary)
+                                Text(item.title).font(.headline).foregroundStyle(Color.gitpassPrimary)
                                 if !item.subtitle.isEmpty {
-                                    Text(item.subtitle).font(.subheadline).foregroundStyle(.secondary)
+                                    Text(item.subtitle).font(.subheadline).foregroundStyle(Color.gitpassSecondary)
                                 }
                                 if !item.tags.isEmpty {
                                     Text(item.tags.joined(separator: ", "))
-                                        .font(.caption).foregroundStyle(.secondary)
+                                        .font(.caption).foregroundStyle(Color.gitpassSecondary)
                                 }
                             }
                             Spacer()
                             if item.favorite {
                                 Image(systemName: "star.fill")
-                                    .foregroundStyle(.yellow)
+                                    .foregroundStyle(Color.gitpassPrimary)
                                     .font(.caption)
                             }
                             if item.hasTotp {
                                 Image(systemName: "timer")
-                                    .foregroundStyle(.secondary)
+                                    .foregroundStyle(Color.gitpassSecondary)
                                     .font(.caption)
                             }
                         }
@@ -68,11 +68,12 @@ struct ItemListView: View {
                                 systemImage: "star"
                             )
                         }
-                        .tint(.yellow)
+                        .tint(.gray)
                     }
                 }
             }
         }
+        .gitpassBackground()
         .searchable(text: $query, prompt: String(localized: "Search"))
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -107,7 +108,7 @@ struct ItemDetailSheet: View {
                 if let detail {
                     ItemDetailView(detail: detail)
                 } else if let errorMessage {
-                    Text(errorMessage).foregroundStyle(.red).padding()
+                    Text(errorMessage).foregroundStyle(Color.gitpassPrimary).padding()
                 } else {
                     ProgressView(String(localized: "Loading…"))
                 }
@@ -153,11 +154,11 @@ struct ItemDetailView: View {
                     VStack(alignment: .leading) {
                         Text(detail.title).font(.headline)
                         Text(GitpassCategory.from(raw: detail.category).title)
-                            .font(.subheadline).foregroundStyle(.secondary)
+                            .font(.subheadline).foregroundStyle(Color.gitpassSecondary)
                     }
                 }
                 if !detail.tags.isEmpty {
-                    Text(detail.tags.joined(separator: ", ")).font(.footnote).foregroundStyle(.secondary)
+                    Text(detail.tags.joined(separator: ", ")).font(.footnote).foregroundStyle(Color.gitpassSecondary)
                 }
             }
             ForEach(detail.sections, id: \.id) { section in
@@ -193,9 +194,10 @@ struct ItemDetailView: View {
                 }
             }
             if let copiedMessage {
-                Section { Text(copiedMessage).foregroundStyle(.secondary).font(.footnote) }
+                Section { Text(copiedMessage).foregroundStyle(Color.gitpassSecondary).font(.footnote) }
             }
         }
+        .gitpassBackground()
     }
 }
 
@@ -221,12 +223,12 @@ struct FieldRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(field.label).font(.caption).foregroundStyle(.secondary)
+            Text(field.label).font(.caption).foregroundStyle(Color.gitpassSecondary)
             HStack {
                 if field.kind == "totp" {
                     if let liveCode {
                         Text(liveCode.code).font(.headline.monospaced())
-                        Text("(\(liveCode.secondsRemaining)s)").font(.caption).foregroundStyle(.secondary)
+                        Text("(\(liveCode.secondsRemaining)s)").font(.caption).foregroundStyle(Color.gitpassSecondary)
                     } else {
                         Text("••••••").font(.headline.monospaced())
                     }

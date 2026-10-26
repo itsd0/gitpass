@@ -4,11 +4,29 @@ import SwiftUI
 struct GitpassApp: App {
     @StateObject private var store = VaultStore()
 
+    init() {
+        // Monochrome chrome for the UIKit-backed parts SwiftUI does not
+        // style itself (navigation bars, sheets, alerts, switches).
+        let nav = UINavigationBarAppearance()
+        nav.configureWithOpaqueBackground()
+        nav.backgroundColor = .black
+        nav.shadowColor = .clear
+        nav.titleTextAttributes = [.foregroundColor: UIColor.white]
+        nav.largeTitleTextAttributes = [.foregroundColor: UIColor.white]
+        UINavigationBar.appearance().standardAppearance = nav
+        UINavigationBar.appearance().scrollEdgeAppearance = nav
+        UINavigationBar.appearance().compactAppearance = nav
+        UIView.appearance().tintColor = .white
+        UISwitch.appearance().onTintColor = UIColor(white: 0.55, alpha: 1)
+    }
+
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(store)
                 .preferredColorScheme(.dark)
+                .tint(.gitpassPrimary)
+                .background(Color.gitpassBackground.ignoresSafeArea())
         }
     }
 }
@@ -28,6 +46,7 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
                 .environmentObject(store)
+                .tint(.gitpassPrimary)
         }
     }
 }
@@ -88,6 +107,6 @@ struct MainView: View {
                 }
             }
         }
-        .tint(.gitpassOrange)
+        .tint(.gitpassPrimary)
     }
 }

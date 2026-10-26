@@ -3,7 +3,7 @@ import SwiftUI
 /// Category icons for gitpass iOS.
 ///
 /// These are the desktop app's nine categories, rendered with system
-/// symbols in the gitpass orange tint — not copied from any other
+/// symbols in the monochrome gitpass palette — not copied from any other
 /// password manager. The desktop glyphs are custom SVG; the iOS app
 /// uses the platform's symbol set for the same categories so the
 /// icons stay sharp at every size and respect accessibility settings.
@@ -47,9 +47,23 @@ enum GitpassCategory: String, CaseIterable, Identifiable {
     }
 }
 
+/// gitpass iOS palette: black and white only. Pure black background,
+/// white primary text and symbols, gray secondary text.
 extension Color {
-    /// gitpass orange accent, matching the desktop app (#F28C28).
-    static let gitpassOrange = Color(red: 0.95, green: 0.55, blue: 0.16)
+    static let gitpassBackground = Color.black
+    static let gitpassPrimary = Color.white
+    static let gitpassSecondary = Color(white: 0.6)
+    static let gitpassSurface = Color(white: 0.1)
+    static let gitpassStroke = Color(white: 0.25)
+}
+
+extension View {
+    /// Pure black behind lists, forms and scroll views (instead of the
+    /// system's dark gray grouped background).
+    func gitpassBackground() -> some View {
+        scrollContentBackground(.hidden)
+            .background(Color.gitpassBackground.ignoresSafeArea())
+    }
 }
 
 struct CategoryIconView: View {
@@ -59,11 +73,11 @@ struct CategoryIconView: View {
     var body: some View {
         ZStack {
             Circle()
-                .fill(Color.gitpassOrange.opacity(0.14))
-                .overlay(Circle().stroke(Color.gitpassOrange.opacity(0.3), lineWidth: 1))
+                .fill(Color.gitpassSurface)
+                .overlay(Circle().stroke(Color.gitpassStroke, lineWidth: 1))
             Image(systemName: category.systemImage)
                 .font(.system(size: size * 0.45, weight: .semibold))
-                .foregroundStyle(Color.gitpassOrange)
+                .foregroundStyle(Color.gitpassPrimary)
         }
         .frame(width: size, height: size)
         .accessibilityLabel(category.title)

@@ -96,9 +96,10 @@ struct ItemEditView: View {
                     Toggle(String(localized: "Favorite"), isOn: $favorite)
                 }
                 if let errorMessage {
-                    Section { Text(errorMessage).foregroundStyle(.red) }
+                    Section { Text(errorMessage).foregroundStyle(Color.gitpassPrimary) }
                 }
             }
+            .gitpassBackground()
             .navigationTitle(itemId == nil ? String(localized: "New Item") : String(localized: "Edit Item"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -209,9 +210,10 @@ struct GeneratorView: View {
                 Section {
                     Text(String(localized: "Generated with gitpass-core, the same generator the CLI uses (letters, digits and symbols, uniform sampling)."))
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.gitpassSecondary)
                 }
             }
+            .gitpassBackground()
             .navigationTitle(String(localized: "Password Generator"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
