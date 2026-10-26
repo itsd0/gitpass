@@ -1,0 +1,54 @@
+import { invoke } from '@tauri-apps/api/core';
+import type * as T from './types';
+import { mock } from './mock';
+const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+const call = <R>(cmd: string, args?: Record<string, unknown>): Promise<R> => isTauri ? invoke<R>(cmd, args) : (mock as any)[cmd](args ?? {});
+export const api = {
+  status: () => call<T.UnlockState>('status'),
+  unlock: (a:{vaultPath:string; password:string; secretKey?:string|null}) => call<T.UnlockState>('unlock', a),
+  lock: () => call<void>('lock'),
+  listVaults: () => call<T.VaultInfo[]>('list_vaults'),
+  createVault: (a:{name:string; description?:string|null; icon?:string|null; color?:string|null}) => call<T.VaultInfo>('create_vault', a),
+  showQuickAccess: () => call<void>('show_quick_access', {}),
+  listItems: (a:{filter:T.Filter}) => call<T.ItemSummary[]>('list_items', a),
+  getItem: (a:{vaultId:string; itemId:string}) => call<T.ItemDetail>('get_item', a),
+  revealField: (a:{vaultId:string; itemId:string; fieldId:string}) => call<string>('reveal_field', a),
+  copyField: (a:{vaultId:string; itemId:string; fieldId:string}) => call<void>('copy_field', a),
+  totpNow: (a:{vaultId:string; itemId:string}) => call<{code:string; remaining:number; period:number}>('totp_now', a),
+  createItem: (a:{input:T.ItemInput}) => call<T.ItemSummary>('create_item', a),
+  updateItem: (a:{itemId:string; input:T.ItemInput}) => call<T.ItemSummary>('update_item', a),
+  setFavorite: (a:{vaultId:string; itemId:string; favorite:boolean}) => call<void>('set_favorite', a),
+  archiveItem: (a:{vaultId:string; itemId:string; archived:boolean}) => call<void>('archive_item', a),
+  deleteItem: (a:{vaultId:string; itemId:string}) => call<void>('delete_item', a),       // soft delete
+  restoreItem: (a:{vaultId:string; itemId:string}) => call<void>('restore_item', a),
+  purgeItem: (a:{vaultId:string; itemId:string}) => call<void>('purge_item', a),
+  moveItem: (a:{vaultId:string; itemId:string; toVaultId:string}) => call<T.ItemSummary>('move_item', a),
+  duplicateItem: (a:{vaultId:string; itemId:string}) => call<T.ItemSummary>('duplicate_item', a),
+  itemVersion: (a:{vaultId:string; itemId:string; version:number}) => call<T.ItemDetail>('item_version', a),
+  addAttachment: (a:{vaultId:string; itemId:string; path:string}) => call<T.Attachment>('add_attachment', a),
+  saveAttachment: (a:{vaultId:string; itemId:string; attachmentId:string; destPath:string}) => call<void>('save_attachment', a),
+  listTags: () => call<string[]>('list_tags'),
+  generatePassword: (a:{length:number; symbols:boolean; digits:boolean; words?:boolean}) => call<string>('generate_password', a),
+  passwordStrength: (a:{password:string}) => call<number>('password_strength', a),
+  watchtower: (a:{hibp:boolean}) => call<T.WatchtowerReport>('watchtower', a),
+  importFile: (a:{vaultId:string; format:string; path:string; dryRun:boolean}) => call<{parsed:number; added:number; duplicates:number}>('import_file', a),
+  identity: () => call<T.Identity>('identity'),
+  /** fingerprint of a pasted recipient key (same parser as share_vault); for out-of-band verification */
+  fingerprintOf: (a:{publicKey:string}) => call<string>('fingerprint_of', a),
+  listMembers: (a:{vaultId:string}) => call<T.Member[]>('list_members', a),
+  shareVault: (a:{vaultId:string; publicKey:string; label?:string|null}) => call<T.Member>('share_vault', a),
+  unshareVault: (a:{vaultId:string; fingerprint:string}) => call<void>('unshare_vault', a),
+  acceptShare: (a:{path:string}) => call<T.VaultInfo>('accept_share', a),
+  listDevices: () => call<T.DeviceInfo[]>('list_devices'),
+  revokeDevice: (a:{id:string; rotateCredentials:boolean}) => call<void>('revoke_device', a),
+  getSettings: () => call<T.Settings>('get_settings'),
+  setSettings: (a:{settings:T.Settings}) => call<T.Settings>('set_settings', a),
+  changePassword: (a:{current:string; next:string}) => call<void>('change_password', a),
+  rotateSecretKey: () => call<{emergencyKit:string}>('rotate_secret_key'),
+  syncStatus: () => call<T.SyncStatus>('sync_status'),
+  sync: (a:{merge:boolean}) => call<{message:string}>('sync', a),
+  onboarding: () => call<T.Onboarding>('onboarding'),
+  setOnboarding: (a:{patch:Partial<T.Onboarding>}) => call<T.Onboarding>('set_onboarding', a),
+  emergencyKit: () => call<string>('emergency_kit'),   // returns HTML/text kit WITHOUT secret key unless user just rotated
+  faviconUrl: (a:{url:string}) => call<string|null>('favicon_url', a), // local cache/data URL; never leaks vault data
+};
