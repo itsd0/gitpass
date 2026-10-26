@@ -107,6 +107,7 @@ export const en = {
   "onb.repo.open": "Open Settings → Sync",
   "onb.repo.recheck": "Re-check",
   "onb.repo.stillNot": "Still not connected.",
+  'update.title': 'Updates', 'update.check': 'Check for updates', 'update.checking': 'Checking for updates…', 'update.none': "You're on the latest version.", 'update.available': 'Version {version} is available.', 'update.install': 'Install and restart', 'update.installing': 'Downloading update… {pct}', 'update.error': 'Update check failed: {msg}', 'update.unsupported': 'Updates are only available in the desktop app.',
   'about.version': 'Version', 'about.repo': 'Source code', 'about.issues': 'Report an issue', 'about.license': 'Open-source password manager built on git.',
   // palette
   'palette.placeholder': 'Search items or type a command…', 'palette.commands': 'Commands', 'palette.items': 'Items', 'palette.empty': 'No results for “{q}”',

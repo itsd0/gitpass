@@ -1,3 +1,4 @@
+#![cfg(unix)]
 //! Bridge tests against a mock desktop-app agent socket.
 mod common;
 use common::*;

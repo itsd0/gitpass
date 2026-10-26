@@ -1,6 +1,7 @@
 //! macOS Touch ID unlock: the master password + Secret Key are kept in the user's login Keychain
 //! (never on disk in the vault, never logged) and are only read after LocalAuthentication confirms
-//! biometry (`LAPolicyDeviceOwnerAuthenticationWithBiometrics`). Other platforms: unsupported.
+//! biometry (`LAPolicyDeviceOwnerAuthenticationWithBiometrics`). Linux: unsupported. Windows: STUB (NoBiometrics);
+//! Windows Hello + Credential Manager is not implemented yet.
 use anyhow::{anyhow, bail, Result};
 use gitpass_gui_core::api::BiometricStore;
 use zeroize::Zeroizing;

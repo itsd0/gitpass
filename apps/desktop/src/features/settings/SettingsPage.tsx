@@ -10,6 +10,7 @@ import { languages, useT, type Lang } from '../../i18n';
 import { useApp } from '../../lib/store';
 import { useSettings } from './useSettings';
 import { SyncPanel } from './SyncPanel';
+import { UpdateRow } from './UpdateRow';
 
 const errMsg = (e: unknown) => String((e as Error)?.message ?? e);
 export const APP_VERSION = '0.5.0';
@@ -135,6 +136,7 @@ function About() {
   return <><div className="flex items-center gap-3 py-4"><Logo size={48} />
     <div><div className="text-lg font-semibold">gitpass</div><div className="text-sm text-muted">{t('about.license')}</div></div></div>
     <Row label={t('about.version')}><span className="font-mono text-sm">{APP_VERSION}</span></Row>
+    <UpdateRow />
     <Row label={t('about.repo')}><a className="inline-flex items-center gap-1 text-sm text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" href={REPO_URL} target="_blank" rel="noreferrer">{REPO_URL.replace('https://', '')}<ExternalLink className="h-3 w-3" aria-hidden /></a></Row>
     <Row label={t('about.issues')}><a className="text-sm text-accent hover:underline" href={ISSUES_URL} target="_blank" rel="noreferrer">{t('about.issues')}</a></Row></>;
 }
