@@ -1,0 +1,2 @@
+# Test fixtures are byte-exact (CSV notes contain embedded LF newlines): never convert line endings.
+crates/gitpass-core/tests/fixtures/** -text
