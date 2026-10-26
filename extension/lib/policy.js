@@ -41,7 +41,18 @@
     return out;
   }
 
-  const api = { isFillableOrigin, originOf, findLoginFields, isVisible };
+  /** Rough "same site" check (last two host labels, scheme must match). Used only to carry a pending
+   *  save-login prompt across a post-login redirect (e.g. login.example.com -> www.example.com); never for fills. */
+  function sameSite(a, b) {
+    try {
+      const x = new URL(a), y = new URL(b);
+      if (x.protocol !== y.protocol) return false;
+      const tail = (h) => h.split('.').slice(-2).join('.');
+      return x.hostname === y.hostname || tail(x.hostname) === tail(y.hostname);
+    } catch { return false; }
+  }
+
+  const api = { isFillableOrigin, originOf, findLoginFields, isVisible, sameSite };
   root.GitpassPolicy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -17,6 +17,7 @@
   "background": {
     "scripts": [
       "lib/policy.js",
+      "bg-page.js",
       "background.js"
     ]
   },
@@ -33,6 +34,7 @@
       ],
       "js": [
         "lib/policy.js",
+        "lib/forms.js",
         "lib/i18n.js",
         "lib/icons.js",
         "content.js"
