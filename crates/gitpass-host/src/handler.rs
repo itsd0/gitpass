@@ -1,13 +1,51 @@
-//! Command handling. Requests: `{"id":<any>,"cmd":"<name>", ...args}`.
-//! Responses: `{"id":<same>,"ok":true,"result":{...}}` or `{"id":<same>,"ok":false,"error":"..."}`.
+//! Standalone (fallback) command handling, used when the gitpass desktop app is not running.
+//! Implements the v0.6 contract commands directly with gitpass-core (format v5 items).
+//! Requests: `{"id":<any>,"cmd":"<name>", ...args}`.
+//! Responses: `{"id":<same>,"ok":true,"result":{...}}` or
+//! `{"id":<same>,"ok":false,"error":"<code>","message":"..."}`.
 use crate::origin::{origin_matches, parse_request_origin};
-use anyhow::{anyhow, bail, Context, Result};
-use gitpass_core::crypto::{generate_password, KdfParams, SecretKey};
-use gitpass_core::store::{self, Session};
-use serde_json::{json, Value};
+use anyhow::Result;
+use gitpass_core::crypto::{KdfParams, SecretKey};
+use gitpass_core::item::{Category, Field, FieldKind};
+use gitpass_core::merge::ItemRecord;
+use gitpass_core::store::{self, Item, Session};
+use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use zeroize::Zeroizing;
+
+/// Contract error codes.
+pub mod code {
+    pub const LOCKED: &str = "locked";
+    pub const DENIED: &str = "denied";
+    pub const NOT_FOUND: &str = "not_found";
+    pub const ORIGIN_MISMATCH: &str = "origin_mismatch";
+    pub const BAD_REQUEST: &str = "bad_request";
+    pub const APP_NOT_RUNNING: &str = "app_not_running";
+    pub const INTERNAL: &str = "internal";
+}
+
+/// An error carrying a contract error code.
+#[derive(Debug)]
+pub struct CodedError { pub code: &'static str, pub message: String }
+impl std::fmt::Display for CodedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
+}
+impl std::error::Error for CodedError {}
+pub fn coded(code: &'static str, message: impl Into<String>) -> anyhow::Error { CodedError { code, message: message.into() }.into() }
+
+/// Build an error response frame.
+pub fn error_frame(id: Value, code: &str, message: &str) -> Value {
+    json!({"id": id, "ok": false, "error": code, "message": message})
+}
+
+/// Validate a requesting page origin (https, or http on loopback). Used in both proxy and fallback mode.
+pub fn check_request_origin(origin: &str) -> Result<()> {
+    if parse_request_origin(origin).is_none() {
+        return Err(coded(code::ORIGIN_MISMATCH, format!("refused: origin must be https (or http://localhost): {origin}")));
+    }
+    Ok(())
+}
 
 pub struct HostConfig {
     pub vault_path: PathBuf,
@@ -25,11 +63,115 @@ pub struct Host {
 }
 
 fn arg_str<'a>(req: &'a Value, k: &str) -> Result<&'a str> {
-    req.get(k).and_then(Value::as_str).ok_or_else(|| anyhow!("missing string argument '{k}'"))
+    req.get(k).and_then(Value::as_str).ok_or_else(|| coded(code::BAD_REQUEST, format!("missing string argument '{k}'")))
 }
 
 fn split_id(id: &str) -> Result<(&str, &str)> {
-    id.split_once(':').filter(|(v, i)| !v.is_empty() && !i.is_empty()).ok_or_else(|| anyhow!("bad item_id (expected <vault>:<item>)"))
+    id.split_once(':').filter(|(v, i)| !v.is_empty() && !i.is_empty())
+        .ok_or_else(|| coded(code::BAD_REQUEST, "bad item_id (expected <vault>:<item>)"))
+}
+
+fn nonempty(v: &Option<String>) -> Option<&str> { v.as_deref().filter(|s| !s.is_empty()) }
+
+fn url_host(u: &str) -> Option<String> {
+    let u = u.trim();
+    let p = if u.contains("://") { url::Url::parse(u).ok()? } else { url::Url::parse(&format!("https://{u}")).ok()? };
+    p.host_str().map(str::to_string)
+}
+
+/// Contract field kind for a gitpass-core field.
+fn kind_str(cat: Category, f: &Field) -> &'static str {
+    match f.kind {
+        FieldKind::Concealed if cat == Category::CreditCard && is_card_number(f) => "card_number",
+        FieldKind::Text if cat == Category::CreditCard && is_card_number(f) => "card_number",
+        FieldKind::Concealed => "password",
+        FieldKind::Totp => "totp",
+        FieldKind::Url => "url",
+        FieldKind::Email => "email",
+        FieldKind::Phone => "phone",
+        FieldKind::Date | FieldKind::MonthYear => "date",
+        FieldKind::Text | FieldKind::Multiline => "text",
+    }
+}
+fn is_card_number(f: &Field) -> bool { matches!(f.id.as_str(), "number" | "ccnum" | "card_number") }
+
+fn fields_of(r: &ItemRecord) -> Vec<Field> { r.view_sections().into_iter().flat_map(|s| s.fields).collect() }
+
+fn field_val(r: &ItemRecord, ids: &[&str]) -> Option<String> {
+    let fs = fields_of(r);
+    ids.iter().find_map(|id| fs.iter().find(|f| f.id == *id).and_then(|f| f.value.clone()).filter(|v| !v.is_empty()))
+}
+
+fn subtitle(r: &ItemRecord) -> String {
+    match r.category {
+        Category::Login => r.item.username.clone().unwrap_or_default(),
+        Category::CreditCard => {
+            let n: String = field_val(r, &["number", "ccnum", "card_number"]).unwrap_or_default().chars().filter(|c| c.is_ascii_digit()).collect();
+            if n.len() >= 4 { format!("•••• {}", &n[n.len() - 4..]) } else { String::new() }
+        }
+        Category::Identity => field_val(r, &["name", "full_name"]).unwrap_or_else(|| {
+            [field_val(r, &["first", "first_name", "firstname"]), field_val(r, &["last", "last_name", "lastname"])]
+                .into_iter().flatten().collect::<Vec<_>>().join(" ")
+        }),
+        Category::Wifi => field_val(r, &["ssid"]).unwrap_or_default(),
+        _ => fields_of(r).into_iter().find(|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty()))
+            .and_then(|f| f.value).map(|v| v.lines().next().unwrap_or("").chars().take(80).collect()).unwrap_or_default(),
+    }
+}
+
+fn has_totp(r: &ItemRecord) -> bool {
+    nonempty(&r.item.totp).is_some() || fields_of(r).iter().any(|f| f.kind == FieldKind::Totp && f.value.as_deref().is_some_and(|v| !v.is_empty()))
+}
+
+/// ItemSummary (contract).
+pub fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
+    let url = nonempty(&r.item.url);
+    json!({
+        "id": format!("{vid}:{iid}"), "vault_id": vid, "vault_name": vname,
+        "category": r.category.as_str(), "title": r.item.title, "subtitle": subtitle(r),
+        "url": url, "favicon_host": url.and_then(url_host), "has_totp": has_totp(r),
+        "favorite": r.favorite, "updated_at": r.item.updated_at,
+    })
+}
+
+/// ItemDetail (contract): summary + fields with secrets omitted (`concealed:true`, no value).
+pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
+    let mut v = summary(vid, vname, iid, r);
+    let mut fields = vec![];
+    if let Some(u) = nonempty(&r.item.url) {
+        fields.push(json!({"name": "url", "label": "website", "value": u, "concealed": false, "kind": "url"}));
+    }
+    for f in fields_of(r) {
+        let secret = f.kind.is_secret();
+        let mut o = json!({"name": f.id, "label": f.label, "concealed": secret, "kind": kind_str(r.category, &f)});
+        if !secret { o["value"] = json!(f.value); }
+        fields.push(o);
+    }
+    let m = v.as_object_mut().unwrap();
+    m.insert("fields".into(), json!(fields));
+    m.insert("notes".into(), json!(nonempty(&r.item.notes)));
+    m.insert("tags".into(), json!(r.tags));
+    m.insert("created_at".into(), json!(r.created_at));
+    v
+}
+
+fn visible(r: &ItemRecord) -> bool { r.deleted_at.is_none() && !r.archived }
+
+/// Password generator with options (`digits`, `symbols`), using the OS RNG.
+pub fn generate(len: usize, digits: bool, symbols: bool) -> String {
+    use rand::rngs::OsRng;
+    use rand::seq::SliceRandom;
+    const L: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    const D: &[u8] = b"23456789";
+    const S: &[u8] = b"!@#$%^&*-_=+?";
+    let mut rng = OsRng;
+    let mut pool = L.to_vec();
+    let mut out: Vec<u8> = vec![*L.choose(&mut rng).unwrap()];
+    if digits { pool.extend_from_slice(D); out.push(*D.choose(&mut rng).unwrap()); }
+    if symbols { pool.extend_from_slice(S); out.push(*S.choose(&mut rng).unwrap()); }
+    while out.len() < len { out.push(*pool.choose(&mut rng).unwrap()); }
+    out.shuffle(&mut rng);
+    String::from_utf8(out).unwrap()
 }
 
 impl Host {
@@ -49,101 +191,231 @@ impl Host {
     /// Test hook: pretend the last activity was `d` ago.
     pub fn backdate_activity(&mut self, d: Duration) { self.last_activity = Instant::now() - d; }
 
+    /// Drop the in-memory session (e.g. when the desktop app takes over).
+    pub fn lock(&mut self) { self.session = None; }
+
     pub fn handle(&mut self, req: &Value) -> Value {
         let id = req.get("id").cloned().unwrap_or(Value::Null);
         self.expire_if_idle();
         match self.dispatch(req) {
             Ok(r) => json!({"id": id, "ok": true, "result": r}),
-            Err(e) => json!({"id": id, "ok": false, "error": format!("{e:#}")}),
+            Err(e) => match e.downcast_ref::<CodedError>() {
+                Some(c) => error_frame(id, c.code, &c.message),
+                None => error_frame(id, code::INTERNAL, &format!("{e:#}")),
+            },
         }
     }
 
     fn sess(&self) -> Result<&Session> {
-        let s = self.session.as_ref().ok_or_else(|| anyhow!("locked"))?;
-        Ok(s)
+        self.session.as_ref().ok_or_else(|| coded(code::LOCKED, "locked"))
+    }
+
+    fn vault_name(&self, vid: &str) -> Result<String> { Ok(self.sess()?.vault_meta(vid)?.name.clone()) }
+
+    fn record(&self, item_id: &str) -> Result<(String, String, ItemRecord)> {
+        let (vid, iid) = split_id(item_id)?;
+        let s = self.sess()?;
+        let (_, r) = s.read_record(vid, iid).map_err(|e| coded(code::NOT_FOUND, format!("item not found: {e:#}")))?;
+        if r.deleted_at.is_some() { return Err(coded(code::NOT_FOUND, "item not found")); }
+        Ok((vid.to_string(), iid.to_string(), r))
+    }
+
+    /// Every visible record: (vault id, vault name, item id, record).
+    fn all_records(&self, only_vault: Option<&str>) -> Result<Vec<(String, String, String, ItemRecord)>> {
+        let s = self.sess()?;
+        let mut out = vec![];
+        for (vid, meta) in s.list_vaults()? {
+            if only_vault.is_some_and(|v| v != vid) { continue; }
+            for (iid, _, r) in s.list_records(&vid)? {
+                if visible(&r) { out.push((vid.clone(), meta.name.clone(), iid, r)); }
+            }
+        }
+        Ok(out)
+    }
+
+    fn require_user_action(req: &Value, what: &str) -> Result<()> {
+        let popup = req.get("source").and_then(Value::as_str) == Some("popup");
+        let gesture = req.get("user_gesture").and_then(Value::as_bool) == Some(true);
+        if popup || gesture { Ok(()) } else { Err(coded(code::DENIED, format!("{what} is allowed only from the popup or after an in-page click"))) }
     }
 
     fn dispatch(&mut self, req: &Value) -> Result<Value> {
         let cmd = arg_str(req, "cmd")?;
         // status/generate don't count as vault activity, everything else refreshes the idle timer.
-        if !matches!(cmd, "status" | "generate") { self.last_activity = Instant::now(); }
+        if !matches!(cmd, "status" | "generate" | "hello") { self.last_activity = Instant::now(); }
         match cmd {
-            "status" => Ok(json!({
+            "status" | "hello" => Ok(json!({
                 "unlocked": self.is_unlocked(),
+                "app_running": false,
+                "mode": "standalone",
                 "version": env!("CARGO_PKG_VERSION"),
                 "idle_timeout_secs": self.cfg.idle_timeout.as_secs(),
                 "secret_key_file": self.cfg.secret_key_path.is_file(),
             })),
+            // Fallback only: password + Secret Key, in memory only.
             "unlock" => {
                 let pw = Zeroizing::new(arg_str(req, "password")?.to_string());
                 // Secret Key: provided by the popup (kept only for this call, zeroized), else the optional file.
                 let sk_txt = match req.get("secret_key").and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty()) {
                     Some(v) => Zeroizing::new(v.to_string()),
-                    None => Zeroizing::new(std::fs::read_to_string(&self.cfg.secret_key_path).map_err(|_| anyhow!(
-                        "Secret Key required: enter it in the popup (no Secret Key file at {})", self.cfg.secret_key_path.display()))?),
+                    None => Zeroizing::new(std::fs::read_to_string(&self.cfg.secret_key_path).map_err(|_| coded(code::BAD_REQUEST, format!(
+                        "Secret Key required: enter it in the popup (no Secret Key file at {})", self.cfg.secret_key_path.display())))?),
                 };
-                let sk = SecretKey::parse(sk_txt.trim())?;
+                let sk = SecretKey::parse(sk_txt.trim()).map_err(|e| coded(code::DENIED, format!("unlock failed: {e:#}")))?;
                 let root = &self.cfg.vault_path;
                 if store::read_format(root)?.version < store::MIN_READ_FORMAT {
-                    bail!("vault uses an old format; run `gitpass migrate` first");
+                    return Err(coded(code::INTERNAL, "vault uses an old format; run `gitpass migrate` first"));
                 }
-                // Verify-only unlock: keeps the vault's KDF params and writes nothing to the vault repo.
-                let s = Session::reopen_verify(root, &pw, &sk, false)?;
-                if s.device_revoked { bail!("this device is revoked"); }
+                // Verify-only unlock: keeps the vault's KDF params and writes nothing on unlock.
+                let s = Session::reopen_verify(root, &pw, &sk, false).map_err(|e| coded(code::DENIED, format!("{e:#}")))?;
+                if s.device_revoked { return Err(coded(code::DENIED, "this device is revoked")); }
                 self.session = Some(s);
                 self.last_activity = Instant::now();
                 Ok(json!({"unlocked": true}))
             }
+            "request_unlock" => Err(coded(code::APP_NOT_RUNNING, "the gitpass app is not running; open it or unlock with password")),
             "lock" => { self.session = None; Ok(json!({"unlocked": false})) }
-            "match" => {
-                let url = arg_str(req, "url")?;
-                if parse_request_origin(url).is_none() { bail!("refused: origin must be https (or http://localhost)"); }
-                let s = self.sess()?;
+            "list_items" => {
+                let vault = req.get("vault_id").and_then(Value::as_str);
+                let cat = req.get("category").and_then(Value::as_str);
+                if let Some(c) = cat { c.parse::<Category>().map_err(|e| coded(code::BAD_REQUEST, e.to_string()))?; }
+                let q = req.get("query").and_then(Value::as_str).map(str::to_lowercase).filter(|q| !q.is_empty());
+                let limit = req.get("limit").and_then(Value::as_u64).unwrap_or(500) as usize;
                 let mut out = vec![];
-                for (vid, _) in s.list_vaults()? {
-                    for (iid, it) in s.list_items(&vid)? {
-                        if it.url.as_deref().is_some_and(|u| origin_matches(u, url)) {
-                            out.push(json!({"id": format!("{vid}:{iid}"), "title": it.title, "username": it.username, "has_totp": it.totp.is_some()}));
-                        }
+                for (vid, vname, iid, r) in self.all_records(vault)? {
+                    if cat.is_some_and(|c| c != r.category.as_str()) { continue; }
+                    let s = summary(&vid, &vname, &iid, &r);
+                    if let Some(q) = &q {
+                        let hay = format!("{} {} {}", r.item.title, s["subtitle"].as_str().unwrap_or(""), r.item.url.as_deref().unwrap_or("")).to_lowercase();
+                        if !hay.contains(q.as_str()) { continue; }
+                    }
+                    out.push(s);
+                }
+                out.sort_by(|a, b| a["title"].as_str().unwrap_or("").to_lowercase().cmp(&b["title"].as_str().unwrap_or("").to_lowercase()));
+                out.truncate(limit);
+                Ok(json!({"items": out}))
+            }
+            "match" => {
+                // `url` accepted for 0.5 extensions.
+                let origin = req.get("origin").or_else(|| req.get("url")).and_then(Value::as_str)
+                    .ok_or_else(|| coded(code::BAD_REQUEST, "missing string argument 'origin'"))?;
+                check_request_origin(origin)?;
+                let mut out = vec![];
+                for (vid, vname, iid, r) in self.all_records(None)? {
+                    if r.category == Category::Login && r.item.url.as_deref().is_some_and(|u| origin_matches(u, origin)) {
+                        out.push(summary(&vid, &vname, &iid, &r));
                     }
                 }
                 Ok(json!({"items": out}))
             }
             "search" => {
+                // 0.5 compatibility.
                 let q = arg_str(req, "query")?;
                 let s = self.sess()?;
                 let mut out = vec![];
-                for (vid, _) in s.list_vaults()? {
+                for (vid, meta) in s.list_vaults()? {
                     for (_, iid, it) in gitpass_core::fuzzy_find(q, s.list_items(&vid)?) {
-                        out.push(json!({"id": format!("{vid}:{iid}"), "title": it.title, "username": it.username, "url": it.url, "has_totp": it.totp.is_some()}));
+                        out.push(json!({"id": format!("{vid}:{iid}"), "vault_name": meta.name, "title": it.title, "username": it.username, "url": it.url, "has_totp": it.totp.is_some()}));
                     }
                 }
                 out.truncate(50);
                 Ok(json!({"items": out}))
             }
+            "get_item" => {
+                let (vid, iid, r) = self.record(arg_str(req, "item_id")?)?;
+                Ok(json!({"item": detail(&vid, &self.vault_name(&vid)?, &iid, &r)}))
+            }
+            "reveal" => {
+                if req.get("source").and_then(Value::as_str) != Some("popup") {
+                    return Err(coded(code::DENIED, "reveal is allowed only from the popup"));
+                }
+                let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
+                let field = arg_str(req, "field")?;
+                let value = match field {
+                    "notes" => r.item.notes.clone(),
+                    "url" => r.item.url.clone(),
+                    _ => r.find_field(field).and_then(|f| f.value),
+                }.ok_or_else(|| coded(code::NOT_FOUND, format!("no field '{field}'")))?;
+                Ok(json!({"value": value}))
+            }
             "fill" => {
-                let (vid, iid) = split_id(arg_str(req, "item_id")?)?;
                 let origin = arg_str(req, "origin")?;
-                let s = self.sess()?;
-                let (_, it) = s.read_item(vid, iid)?;
-                let ok = it.url.as_deref().is_some_and(|u| origin_matches(u, origin));
-                if !ok { bail!("refused: item URL does not match origin {origin}"); }
-                Ok(json!({"username": it.username, "password": it.password}))
+                check_request_origin(origin)?;
+                let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
+                let ok = r.item.url.as_deref().is_some_and(|u| origin_matches(u, origin));
+                if !ok { return Err(coded(code::ORIGIN_MISMATCH, format!("refused: item URL does not match origin {origin}"))); }
+                let totp = match nonempty(&r.item.totp) {
+                    Some(t) => Some(gitpass_core::totp_now(&gitpass_core::totp::parse(t)?).0),
+                    None => None,
+                };
+                Ok(json!({"username": r.item.username, "password": r.item.password, "totp": totp}))
+            }
+            "fill_card" | "fill_identity" => {
+                Self::require_user_action(req, cmd)?;
+                let want = if cmd == "fill_card" { Category::CreditCard } else { Category::Identity };
+                let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
+                if r.category != want { return Err(coded(code::BAD_REQUEST, format!("item is a {}, not a {}", r.category.as_str(), want.as_str()))); }
+                let mut m = Map::new();
+                for f in fields_of(&r) {
+                    if let Some(v) = f.value.filter(|v| !v.is_empty()) { m.entry(f.id).or_insert(json!(v)); }
+                }
+                Ok(Value::Object(m))
             }
             "totp" => {
-                let (vid, iid) = split_id(arg_str(req, "item_id")?)?;
+                let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
+                let t = nonempty(&r.item.totp).map(str::to_string)
+                    .or_else(|| fields_of(&r).into_iter().find(|f| f.kind == FieldKind::Totp).and_then(|f| f.value))
+                    .ok_or_else(|| coded(code::NOT_FOUND, "item has no TOTP secret"))?;
+                let spec = gitpass_core::totp::parse(&t)?;
+                let (code, remaining) = gitpass_core::totp_now(&spec);
+                Ok(json!({"code": code, "remaining": remaining, "period": spec.period}))
+            }
+            "save_login" => {
+                let origin = arg_str(req, "origin")?;
+                check_request_origin(origin)?;
+                let username = arg_str(req, "username")?;
+                let password = arg_str(req, "password")?;
                 let s = self.sess()?;
-                let (_, it) = s.read_item(vid, iid)?;
-                let t = it.totp.as_deref().ok_or_else(|| anyhow!("item has no TOTP secret"))?;
-                let (code, remaining) = gitpass_core::totp_now(&gitpass_core::totp::parse(t)?);
-                Ok(json!({"code": code, "remaining": remaining}))
+                let vid = match req.get("vault_id").and_then(Value::as_str) {
+                    Some(v) => { s.vault_meta(v).map_err(|_| coded(code::NOT_FOUND, "vault not found"))?; v.to_string() }
+                    None => s.list_vaults()?.into_iter().next().map(|(v, _)| v).ok_or_else(|| coded(code::NOT_FOUND, "no vault to save into"))?,
+                };
+                let host = url_host(origin).unwrap_or_else(|| origin.to_string());
+                let title = req.get("title").and_then(Value::as_str).filter(|t| !t.is_empty()).map(str::to_string).unwrap_or(host);
+                let item = Item { title, username: Some(username.into()), password: Some(password.into()),
+                    url: Some(origin.into()), notes: None, totp: None, updated_at: String::new() };
+                let iid = s.add_record(&vid, ItemRecord::new(item))?;
+                Ok(json!({"item_id": format!("{vid}:{iid}")}))
+            }
+            "update_password" => {
+                let password = arg_str(req, "password")?.to_string();
+                let (vid, iid, mut r) = self.record(arg_str(req, "item_id")?)?;
+                r.item.password = Some(password);
+                self.sess()?.update_record(&vid, &iid, r)?;
+                Ok(json!({"ok": true}))
             }
             "generate" => {
                 let len = req.get("len").and_then(Value::as_u64).unwrap_or(20) as usize;
-                if !(8..=128).contains(&len) { bail!("len must be 8..=128"); }
-                Ok(json!({"password": generate_password(len)}))
+                if !(8..=128).contains(&len) { return Err(coded(code::BAD_REQUEST, "len must be 8..=128")); }
+                let digits = req.get("digits").and_then(Value::as_bool).unwrap_or(true);
+                let symbols = req.get("symbols").and_then(Value::as_bool).unwrap_or(true);
+                Ok(json!({"password": generate(len, digits, symbols)}))
             }
-            other => bail!("unknown command '{other}'"),
+            "list_vaults" => {
+                let s = self.sess()?;
+                let mut out = vec![];
+                for (vid, meta) in s.list_vaults()? {
+                    let n = s.list_records(&vid)?.iter().filter(|(_, _, r)| visible(r)).count();
+                    out.push(json!({"id": vid, "name": meta.name, "item_count": n}));
+                }
+                Ok(json!({"vaults": out}))
+            }
+            "open_in_app" => {
+                crate::agent::launch_app().map_err(|e| coded(code::APP_NOT_RUNNING, format!("could not launch the gitpass app: {e:#}")))?;
+                Ok(json!({"launched": true}))
+            }
+            other => Err(coded(code::BAD_REQUEST, format!("unknown command '{other}'"))),
         }
     }
 }
+

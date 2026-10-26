@@ -1,27 +1,57 @@
-# gitpass-host + browser extension (0.4.0)
+# gitpass-host + browser extension (0.6)
 
-Keys never live in the browser. `gitpass-host` (native messaging host `com.gitpass.host`) unlocks the
-vault with gitpass-core and holds the `Session` in memory; it auto-locks after `idle_secs` (default 300) of
-no vault activity (`status`/`generate` don't count). The browser only gets metadata, and username+password via `fill`.
+`gitpass-host` is the native messaging host `com.gitpass.host`. Keys never live in the browser.
+
+```
+extension <-native messaging-> gitpass-host <-UNIX socket-> gitpass desktop app (holds the unlocked Session)
+```
+
+## Modes
+**App mode (normal).** On start (and lazily before each request) the host connects to the desktop app's agent
+socket — macOS `~/Library/Application Support/gitpass/agent.sock`, Linux `$XDG_RUNTIME_DIR/gitpass/agent.sock`
+(overrides: `GITPASS_AGENT_SOCK`, `GITPASS_AGENT_TOKEN`). The socket directory must be owned by the user and not
+group/other accessible. The host sends `hello {client:"gitpass-host", version, token?}`; `token` is the content of
+`agent.token` next to the socket if that file exists. Every command except `generate` and `unlock` is proxied
+unchanged (the host rewrites `id` to its own numeric id on the socket and restores the extension's id in the
+reply), so unlocking the app (password or Touch ID) unlocks the extension. App events `{"event":"lock"|"unlock"}`
+are forwarded to the extension as-is. If the app connection drops the host sends
+`{"event":"lock","reason":"app_disconnected"}` and falls back to standalone mode. Timeouts: `request_unlock` 125 s,
+other commands 30 s. Connecting to the app drops any standalone session.
+
+**Standalone (fallback).** If the socket is missing, refuses `hello`, or the app is not running, the host answers
+the same commands itself with gitpass-core: `unlock {password, secret_key?}` (Secret Key from the popup, or the
+optional file `secret_key_path`, default `<vault>/secret.key`), session in memory only, idle auto-lock after
+`idle_secs` (default 300; `status`/`generate` don't count). `status` reports `app_running:false, mode:"standalone"`;
+`request_unlock` returns `app_not_running`; `open_in_app` runs `open -b dev.gitpass.desktop`.
 
 ## Protocol
-Framing: 4-byte **little-endian** u32 length + UTF-8 JSON. Inbound max 1 MiB; outbound max 1 MiB (Chrome limit).
-A malformed frame ends the process (the browser sees a disconnect).
+Framing: 4-byte **little-endian** u32 length + UTF-8 JSON. Browser side: in/out max 1 MiB (Chrome limit).
+Socket side: max 4 MiB. A malformed browser frame ends the process.
 
-Request `{"id": <any>, "cmd": "<name>", ...}` → `{"id": <same>, "ok": true, "result": {...}}` or `{"id": <same>, "ok": false, "error": "..."}`.
+Request `{"id": <any>, "cmd": "<name>", ...}` → `{"id", "ok": true, "result": {...}}` or
+`{"id", "ok": false, "error": "<code>", "message": "..."}` with codes `locked`, `denied`, `not_found`,
+`origin_mismatch`, `bad_request`, `app_not_running`, `internal`.
 
-| cmd | args | result |
-|---|---|---|
-| status | – | `{unlocked, version, idle_timeout_secs}` |
-| unlock | `password` | `{unlocked:true}` (Secret Key read from `secret_key_path`, default `<vault>/secret.key`) |
-| lock | – | `{unlocked:false}` |
-| match | `url` (page origin) | `{items:[{id,title,username,has_totp}]}` – no passwords |
-| search | `query` | `{items:[{id,title,username,url,has_totp}]}` (≤50) – no passwords |
-| fill | `item_id`, `origin` | `{username,password}` only if origin matches the item URL |
-| totp | `item_id` | `{code, remaining}` |
-| generate | `len` (8..128, default 20) | `{password}` |
+Commands (see the v0.6 contract): `hello`, `status`, `request_unlock`, `lock`, `list_items {vault_id?, category?,
+query?, limit?}`, `match {origin}`, `get_item {item_id}`, `reveal {item_id, field, source:"popup"}`,
+`fill {item_id, origin}` → `{username, password, totp?}`, `fill_card` / `fill_identity {item_id}` (needs
+`source:"popup"` or `user_gesture:true`) → `{<field id>: value}`, `totp` → `{code, remaining, period}`,
+`save_login {origin, title?, username, password, vault_id?}` → `{item_id}`, `update_password`,
+`generate {len, digits, symbols}`, `list_vaults`, `open_in_app`. Standalone-only: `unlock`; 0.5 compat: `search`,
+`match {url}`.
 
-`item_id` = `<vault_id>:<item_id>`. Any command but status/generate/unlock returns `"locked"` when locked.
+ItemSummary: `{id:"<vault>:<item>", vault_id, vault_name, category, title, subtitle, url?, favicon_host?, has_totp,
+favorite, updated_at}`; `category` is the real v5 type (`login|secure_note|credit_card|identity|api_credential|
+document|ssh_key|wifi`). ItemDetail adds `fields:[{name,label,value?,concealed,kind}]`, `notes?`, `tags`,
+`created_at`; secret fields (concealed / TOTP) never carry a value — use `reveal`. Archived and deleted items are hidden.
+
+**Origin checks in both modes:** `match`, `fill` and `save_login` origins must be https (or http on loopback) or
+the host replies `origin_mismatch` without contacting the app.
+
+## macOS signing
+The desktop app verifies the peer's code signature (certificate "gitpass Local Signing", identifier
+`dev.gitpass.host`). After `cargo build --release -p gitpass-host` run `crates/gitpass-host/sign-macos.sh
+[binary]` (uses `codesign --identifier dev.gitpass.host`; override the cert with `GITPASS_SIGNING_IDENTITY`).
 
 ## Origin matching (`src/origin.rs`)
 1. Requesting origin must be `https://`, or `http://` on loopback (`localhost`, `*.localhost`, `127.0.0.1`, `[::1]`).
