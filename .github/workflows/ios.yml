@@ -1,0 +1,95 @@
+name: iOS
+
+# Builds the gitpass iOS app on macOS: the UniFFI XCFramework, the
+# Rust FFI tests, and an unsigned simulator build + test run.
+# This workflow never signs, never needs a team, and never touches
+# any vault repository — it only builds and tests the app itself.
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths:
+      - "ios/**"
+      - "crates/gitpass-core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - "crates/gitpass-core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-ffi:
+    name: Rust FFI tests
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: FFI crate tests (real vault, real crypto)
+        run: cargo test -p gitpass-ios-ffi --locked
+
+  ios:
+    name: iOS simulator build + test
+    runs-on: macos-latest
+    needs: rust-ffi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Build XCFramework + Swift bindings
+        run: |
+          chmod +x ios/scripts/build-xcframework.sh
+          ./ios/scripts/build-xcframework.sh
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Build for simulator (unsigned)
+        working-directory: ios
+        run: |
+          xcodebuild build \
+            -project Gitpass.xcodeproj \
+            -scheme Gitpass \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Test on simulator (unsigned)
+        working-directory: ios
+        run: |
+          xcodebuild test \
+            -project Gitpass.xcodeproj \
+            -scheme Gitpass \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Build unsigned archive for inspection
+        working-directory: ios
+        run: |
+          xcodebuild archive \
+            -project Gitpass.xcodeproj \
+            -scheme Gitpass \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Gitpass.xcarchive" \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+          ls -la "$RUNNER_TEMP/Gitpass.xcarchive"
+      - name: Upload unsigned app artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gitpass-ios-unsigned
+          path: |
+            ${{ runner.temp }}/Gitpass.xcarchive
+            ios/Frameworks/GitpassCore.xcframework
+          if-no-files-found: warn
