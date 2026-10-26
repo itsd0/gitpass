@@ -376,11 +376,18 @@ impl Agent {
         }
     }
 
+    /// Friendly name (git config gitpass.displayName / remote owner / OS full name / "gitpass"), never the
+    /// account UUID. Available while locked too (from the vault path); `vault_count` only when unlocked.
     fn account(&self) -> Option<Value> {
-        self.app.state.with(|u| {
+        let unlocked = self.app.state.with(|u| {
             let n = u.session.list_vaults()?.len();
-            Ok(json!({"name": u.session.fmt.account_id, "vault_count": n}))
-        }).ok()
+            Ok(json!({"name": gitpass_core::remote::display_name(&u.session.root), "vault_count": n}))
+        }).ok();
+        unlocked.or_else(|| {
+            let st = self.app.status().ok()?;
+            (st.vault_exists && !st.vault_path.is_empty())
+                .then(|| json!({"name": gitpass_core::remote::display_name(std::path::Path::new(&st.vault_path))}))
+        })
     }
     /// Live (not deleted, not archived) records of every vault: (vault id, vault name, item id, record).
     fn records(&self) -> Result<Vec<(String, String, String, ItemRecord)>> {

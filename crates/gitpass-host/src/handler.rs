@@ -233,6 +233,13 @@ impl Host {
         Ok(out)
     }
 
+    /// `{name, vault_count?}`; the name is never the account UUID (see `remote::display_name`).
+    fn account(&self) -> Value {
+        let mut a = json!({"name": gitpass_core::remote::display_name(&self.cfg.vault_path)});
+        if let Some(n) = self.session.as_ref().and_then(|s| s.list_vaults().ok()).map(|v| v.len()) { a["vault_count"] = json!(n); }
+        a
+    }
+
     fn require_user_action(req: &Value, what: &str) -> Result<()> {
         let src = req.get("source").and_then(Value::as_str);
         if matches!(src, Some("popup") | Some("inpage_click")) { Ok(()) } else { Err(coded(code::DENIED, format!("{what} is allowed only from the popup or after an in-page click"))) }
@@ -245,6 +252,7 @@ impl Host {
         match cmd {
             "status" | "hello" => Ok(json!({
                 "unlocked": self.is_unlocked(),
+                "account": self.account(),
                 "app_running": false,
                 "mode": "standalone",
                 "version": env!("CARGO_PKG_VERSION"),

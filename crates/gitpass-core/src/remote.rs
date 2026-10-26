@@ -159,6 +159,44 @@ pub fn commit_checked(root: &Path, msg: &str) -> Result<bool> {
     Ok(true)
 }
 
+/// Owner part of a hosted git remote URL: `https://github.com/itsd0/gitpass-vault.git` and
+/// `git@github.com:itsd0/gitpass-vault.git` both give `itsd0`. Local paths / file URLs give None.
+pub fn remote_owner(url: &str) -> Option<String> {
+    let u = url.trim();
+    let rest = if let Some((scheme, r)) = u.split_once("://") {
+        if scheme.eq_ignore_ascii_case("file") { return None; }
+        r.split_once('/').map(|(_, p)| p)?
+    } else if let Some((h, p)) = u.split_once(':') {
+        if h.contains('/') || !h.contains('@') && !h.contains('.') { return None; } // a path, or a Windows drive
+        p
+    } else { return None };
+    let segs: Vec<&str> = rest.trim_matches('/').split('/').filter(|s| !s.is_empty()).collect();
+    if segs.len() < 2 { return None; }
+    let o = segs[segs.len() - 2];
+    (!o.is_empty() && o.chars().all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))).then(|| o.to_string())
+}
+
+/// Friendly account name for UIs; never the account UUID. Order: optional `git config gitpass.displayName`
+/// in the vault repo (local, plaintext, set with `git -C <vault> config gitpass.displayName "..."`), then the
+/// owner of the `origin` remote, then the OS full user name, then "gitpass".
+pub fn display_name(root: &Path) -> String {
+    if root.join(".git").exists() {
+        if let Ok((true, v)) = git_cmd(root, &["config", "--get", "gitpass.displayName"]) {
+            let v = v.trim(); if !v.is_empty() { return v.chars().take(64).collect(); }
+        }
+        if let Ok((true, u)) = git_cmd(root, &["remote", "get-url", "origin"]) {
+            if let Some(o) = remote_owner(&u) { return o; }
+        }
+    }
+    os_full_name().unwrap_or_else(|| "gitpass".to_string())
+}
+
+fn os_full_name() -> Option<String> {
+    #[cfg(target_os = "macos")]
+    { let o = Command::new("id").arg("-F").output().ok()?; let n = String::from_utf8_lossy(&o.stdout).trim().to_string(); if o.status.success() && !n.is_empty() { return Some(n); } }
+    None
+}
+
 /// Info about the configured remote.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RemoteInfo { pub url: Option<String>, pub branch: Option<String>, pub ahead: u64, pub behind: u64, pub is_repo: bool }
@@ -287,6 +325,26 @@ fn connect_inner(root: &Path, account_id: &str, log: &mut String) -> Result<()> 
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn remote_owner_forms() {
+        assert_eq!(super::remote_owner("https://github.com/itsd0/gitpass-vault.git").as_deref(), Some("itsd0"));
+        assert_eq!(super::remote_owner("git@github.com:itsd0/gitpass-vault.git").as_deref(), Some("itsd0"));
+        assert_eq!(super::remote_owner("ssh://git@gitlab.com/team/sub/vault").as_deref(), Some("sub"));
+        assert_eq!(super::remote_owner("/tmp/bare.git"), None);
+        assert_eq!(super::remote_owner("file:///tmp/x/bare.git"), None);
+        assert_eq!(super::remote_owner("https://github.com/vault.git"), None);
+    }
+    #[test]
+    fn display_name_prefers_git_config_and_never_uuid() {
+        let d = tempfile::tempdir().unwrap();
+        let r = d.path();
+        assert!(std::process::Command::new("git").arg("-C").arg(r).arg("init").arg("-q").status().unwrap().success());
+        super::git_cmd(r, &["remote", "add", "origin", "https://github.com/itsd0/gitpass-vault.git"]).unwrap();
+        assert_eq!(super::display_name(r), "itsd0");
+        super::git_cmd(r, &["config", "gitpass.displayName", "Naing"]).unwrap();
+        assert_eq!(super::display_name(r), "Naing");
+    }
+
     use super::*;
     #[test]
     fn urls() {

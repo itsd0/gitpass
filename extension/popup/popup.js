@@ -53,7 +53,11 @@ async function refresh() {
   if (view === 'nohost') return showNoHost(err);
   if (view === 'locked' || view === 'appdown') return showLocked(view, st);
   show('unlocked');
-  if (st && st.account) { $('acctName').textContent = st.account.name || 'gitpass'; $('acct').title = st.account.email || ''; }
+  if (st && st.account) {
+    const nm = String(st.account.name || ''); // never show a raw account UUID
+    $('acctName').textContent = (!nm || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(nm)) ? 'gitpass' : nm;
+    $('acct').title = st.account.email || '';
+  }
   await loadData();
   $('q').focus();
 }
