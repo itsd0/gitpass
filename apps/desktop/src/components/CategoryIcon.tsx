@@ -34,6 +34,10 @@ const GLYPHS: Record<ItemCategory, { base: ReactNode; accent: ReactNode }> = {
     base: <><rect x="2.5" y="4.5" width="19" height="15" rx="2.5" /><path d="M6.5 9.5l3 2.5-3 2.5" /></>,
     accent: <path d="M12 15h5" />,
   },
+  passkey: {
+    base: <><circle cx="9" cy="8" r="3.5" /><path d="M3 20a6 6 0 0 1 10.5-4" /></>,
+    accent: <><circle cx="17.5" cy="13.5" r="2.5" /><path d="M17.5 16v5M17.5 18.5h2" /></>,
+  },
   wifi: {
     base: <><path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0" /><circle cx="12" cy="19.2" r="1.1" fill={STROKE} stroke="none" /></>,
     accent: <path d="M8.5 16a5 5 0 0 1 7 0" />,

@@ -1,4 +1,4 @@
-export type ItemCategory = 'login'|'credit_card'|'secure_note'|'identity'|'api_credential'|'document'|'ssh_key'|'wifi';
+export type ItemCategory = 'login'|'credit_card'|'secure_note'|'identity'|'api_credential'|'document'|'ssh_key'|'wifi'|'passkey';
 export type FieldKind = 'text'|'concealed'|'url'|'email'|'phone'|'date'|'month_year'|'totp'|'multiline';
 export interface Field { id: string; label: string; kind: FieldKind; value: string | null; } // concealed values are null in summaries/details until reveal
 export interface Section { id: string; title: string | null; fields: Field[]; }
@@ -11,7 +11,7 @@ export interface Member { fingerprint: string; label: string|null; isSelf: boole
 export interface Filter { kind: 'all'|'favorites'|'archive'|'deleted'|'vault'|'tag'|'category'; vaultId?: string; tag?: string; category?: ItemCategory; query?: string; sort?: 'updated'|'title'|'created'; }
 export interface WatchtowerReport { score: number; weak: string[]; reused: string[][]; old: string[]; breached: string[]; missingTotp: string[]; checkedAt: string; hibpChecked: boolean; }
 export interface DeviceInfo { id: string; name: string; lastSeen: string; revoked: boolean; current: boolean; }
-export interface Settings { autoLockMinutes: number; clipboardClearSecs: number; theme: 'dark'|'light'|'system'; language: 'en'|'my'|'th'; biometricUnlock: boolean; quickAccessHotkey: string; /** opt-in HIBP k-anonymity check in Watchtower; default false */ hibpCheck: boolean; }
+export interface Settings { autoLockMinutes: number; clipboardClearSecs: number; theme: 'dark'|'light'|'system'; language: 'en'|'my'|'th'; biometricUnlock: boolean; quickAccessHotkey: string; /** opt-in HIBP k-anonymity check in Watchtower; default false */ hibpCheck: boolean; /** ask before every SSH agent signature (v0.7) */ sshApproveEachUse?: boolean; }
 export interface SyncStatus { remote: string|null; lastSync: string|null; ahead: number; behind: number; dirty: boolean; }
 export interface Identity { publicKey: string; fingerprint: string; }
 export interface Onboarding { extensionInstalled: boolean; emergencyKitSaved: boolean; repoConnected: boolean; imported: boolean; dismissed: boolean; }
@@ -20,3 +20,5 @@ export interface CreateAccountResult { vaultPath: string; secretKey: string; }
 export interface EmergencyKitData { accountId: string; vaultPath: string; remote: string | null; deviceName: string | null; createdAt: string; secretKeyAvailable: boolean; secretKey: string | null; }
 export interface ImportPreviewItem { title: string; category: string; username: string | null; url: string | null; hasPassword: boolean; hasTotp: boolean; tags: string[]; fields: number; archived: boolean; }
 export interface ImportResult { parsed: number; added: number; duplicates: number; duplicateTitles?: string[]; warnings?: string[]; categories?: Record<string, number>; preview?: ImportPreviewItem[]; }
+export interface SshKeyCreated { item: ItemSummary; publicKey: string; fingerprint: string; keyType: string; }
+export interface SshAgentInfo { socketPath: string; configLine: string; running: boolean; approveEachUse: boolean; }

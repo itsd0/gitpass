@@ -8,6 +8,7 @@ import { buildSections, categoryById } from './categories';
 import { brandLabel, detectBrand, formatCardNumber, formatExpiry, luhnValid } from './card';
 import { CategoryIcon } from './CategoryIcon';
 import { PasswordGenerator, StrengthMeter } from './PasswordGenerator';
+import { SshKeyCreate } from './SshKeyCreate';
 const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
 const YEARS = Array.from({ length: 21 }, (_, i) => String(new Date().getFullYear() - 5 + i));
 /** Accepts a raw base32 secret or an otpauth:// URI (e.g. pasted from a QR scanner). Returns normalised value or null. */
@@ -16,7 +17,9 @@ export function normaliseTotp(input: string): string | null {
   if (s.startsWith('otpauth://')) { try { const u = new URL(s); return u.searchParams.get('secret') ? s : null; } catch { return null; } }
   const b = s.replace(/\s+/g, '').toUpperCase(); return /^[A-Z2-7]+=*$/.test(b) && b.length >= 16 ? b : null;
 }
-export function CreateForm({ category, initial, vaultId: initialVault, onBack, onDone }: { category: ItemCategory; initial?: { title?: string; url?: string }; vaultId?: string; onBack: () => void; onDone: () => void }) {
+type FormProps = { category: ItemCategory; initial?: { title?: string; url?: string }; vaultId?: string; onBack: () => void; onDone: () => void };
+export function CreateForm(p: FormProps) { return p.category === 'ssh_key' ? <SshKeyCreate {...p} /> : <TemplateForm {...p} />; }
+function TemplateForm({ category, initial, vaultId: initialVault, onBack, onDone }: FormProps) {
   const cat = categoryById(category);
   const [vaults, setVaults] = useState<VaultInfo[]>([]);
   const [vaultId, setVaultId] = useState(initialVault ?? '');
