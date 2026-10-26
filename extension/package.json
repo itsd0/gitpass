@@ -6,5 +6,8 @@
     "test": "node --test test/*.test.js",
     "check": "node test/check-syntax.js",
     "build:firefox": "node scripts/build-firefox.js"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
   }
 }

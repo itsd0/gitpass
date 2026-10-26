@@ -30,6 +30,7 @@
       ],
       "js": [
         "lib/policy.js",
+        "lib/forms.js",
         "lib/i18n.js",
         "lib/icons.js",
         "content.js"

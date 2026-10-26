@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..');
 const m = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
-const files = new Set(['background.js', 'content.js', 'lib/policy.js', 'popup/popup.js', 'lib/i18n.js', 'lib/icons.js', 'popup/view.js', 'popup/icons.js', 'popup/mock.js']);
+const files = new Set(['background.js', 'content.js', 'lib/policy.js', 'popup/popup.js', 'lib/i18n.js', 'lib/icons.js', 'popup/view.js', 'popup/icons.js', 'popup/mock.js', 'lib/forms.js', 'bg-page.js']);
 for (const cs of m.content_scripts) cs.js.forEach((f) => files.add(f));
 let bad = 0;
 for (const f of files) {

@@ -1,0 +1,13 @@
+<!doctype html><html><head><meta charset="utf-8"><title>gitpass test: login</title></head><body>
+<h1>Sign in</h1>
+<form id="login" action="/session" method="post">
+  <label for="em">Email address</label><input id="em" name="email" type="email" autocomplete="username">
+  <label for="pw">Password</label><input id="pw" name="password" type="password" autocomplete="current-password">
+  <input type="checkbox" name="remember"> Remember me
+  <input type="hidden" name="csrf" value="x">
+  <button type="submit">Sign in</button>
+</form>
+<form id="search" role="search"><input type="search" name="q" placeholder="Search"></form>
+<!-- formless login with no autocomplete attributes -->
+<div id="formless"><input id="u2" placeholder="Username"><input id="p2" type="password" placeholder="Password"><button>Log in</button></div>
+</body></html>

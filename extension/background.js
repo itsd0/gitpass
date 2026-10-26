@@ -2,6 +2,8 @@
 /* global chrome, GitpassPolicy, importScripts */
 'use strict';
 if (typeof importScripts === 'function' && !globalThis.GitpassPolicy) importScripts('lib/policy.js');
+// ws4 (in-page): page:* routing lives in bg-page.js
+if (typeof importScripts === 'function' && !globalThis.GitpassPage) importScripts('bg-page.js');
 
 const HOST = 'com.gitpass.host';
 let port = null;
@@ -132,15 +134,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       if (typeof msg.type === 'string' && msg.type.startsWith('popup:')) return popupRoute(msg);
       throw new Error('unknown message');
     }
-    // Content script: trust only the browser-provided sender, never origins in the message. Top frame only.
-    if (!sender.tab || sender.frameId !== 0) throw new Error('only the top frame may request fills');
-    const origin = GitpassPolicy.originOf(sender.url || sender.tab.url);
-    if (!origin || !GitpassPolicy.isFillableOrigin(origin)) throw new Error('origin not fillable');
-    switch (msg.type) {
-      case 'cs-match': return host('match', { url: origin });
-      case 'cs-fill': return fillTab(sender.tab.id, origin, msg.item_id);
-    }
+    // ---- ws4 (in-page): content-script messages are `page:*` and handled in bg-page.js (sender checks there) ----
+    if (typeof msg.type === 'string' && msg.type.startsWith('page:')) return GitpassPage.handle(msg, sender, host);
     throw new Error('unknown message');
-  })().then((r) => sendResponse({ ok: true, result: r }), (e) => sendResponse({ ok: false, error: String(e.message || e), code: e.code }));
+    // ---- end ws4 ----
+  })().then((r) => sendResponse({ ok: true, result: r }), (e) => sendResponse({ ok: false, error: String(e.message || e), code: e.code || null }));
   return true; // async
 });
