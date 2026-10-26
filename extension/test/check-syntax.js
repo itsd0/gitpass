@@ -14,4 +14,9 @@ for (const f of [m.background.service_worker, m.action.default_popup, ...Object.
   if (!fs.existsSync(path.join(root, f))) { console.error('missing', f); bad++; }
 if (m.manifest_version !== 3) { console.error('not MV3'); bad++; }
 if (!m.permissions.includes('nativeMessaging')) { console.error('no nativeMessaging'); bad++; }
+if (m.background.scripts) { console.error('Chrome manifest must not use background.scripts'); bad++; }
+const ff = JSON.parse(fs.readFileSync(path.join(root, 'manifest.firefox.json'), 'utf8'));
+if (ff.version !== m.version) { console.error('firefox/chrome version mismatch'); bad++; }
+for (const f of ff.background.scripts || []) if (!fs.existsSync(path.join(root, f))) { console.error('missing', f); bad++; }
+if (ff.background.service_worker) { console.error('firefox manifest should use background.scripts'); bad++; }
 process.exit(bad ? 1 : 0);

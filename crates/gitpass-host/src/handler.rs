@@ -3,7 +3,7 @@
 use crate::origin::{origin_matches, parse_request_origin};
 use anyhow::{anyhow, bail, Context, Result};
 use gitpass_core::crypto::{generate_password, KdfParams, SecretKey};
-use gitpass_core::store::{self, Session, UnlockOpts};
+use gitpass_core::store::{self, Session};
 use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -72,18 +72,23 @@ impl Host {
                 "unlocked": self.is_unlocked(),
                 "version": env!("CARGO_PKG_VERSION"),
                 "idle_timeout_secs": self.cfg.idle_timeout.as_secs(),
+                "secret_key_file": self.cfg.secret_key_path.is_file(),
             })),
             "unlock" => {
                 let pw = Zeroizing::new(arg_str(req, "password")?.to_string());
-                let sk_txt = Zeroizing::new(std::fs::read_to_string(&self.cfg.secret_key_path)
-                    .with_context(|| format!("cannot read Secret Key file {}", self.cfg.secret_key_path.display()))?);
+                // Secret Key: provided by the popup (kept only for this call, zeroized), else the optional file.
+                let sk_txt = match req.get("secret_key").and_then(Value::as_str).map(str::trim).filter(|v| !v.is_empty()) {
+                    Some(v) => Zeroizing::new(v.to_string()),
+                    None => Zeroizing::new(std::fs::read_to_string(&self.cfg.secret_key_path).map_err(|_| anyhow!(
+                        "Secret Key required: enter it in the popup (no Secret Key file at {})", self.cfg.secret_key_path.display()))?),
+                };
                 let sk = SecretKey::parse(sk_txt.trim())?;
                 let root = &self.cfg.vault_path;
                 if store::read_format(root)?.version < store::MIN_READ_FORMAT {
                     bail!("vault uses an old format; run `gitpass migrate` first");
                 }
-                let opts = UnlockOpts { accept_rollback: false, target_kdf: self.cfg.target_kdf.clone() };
-                let s = Session::unlock_device(root, &pw, &sk, &opts, Some("browser-extension"))?;
+                // Verify-only unlock: keeps the vault's KDF params and writes nothing to the vault repo.
+                let s = Session::reopen_verify(root, &pw, &sk, false)?;
                 if s.device_revoked { bail!("this device is revoked"); }
                 self.session = Some(s);
                 self.last_activity = Instant::now();

@@ -116,3 +116,22 @@ fn missing_secret_key_file() {
     std::fs::remove_file(&f.host.cfg.secret_key_path).unwrap();
     assert!(err(&mut f.host, json!({"cmd":"unlock","password":PW})).contains("Secret Key"));
 }
+
+#[test]
+fn unlock_with_provided_secret_key_no_file() {
+    let mut f = setup();
+    let sk = std::fs::read_to_string(&f.host.cfg.secret_key_path).unwrap();
+    std::fs::remove_file(&f.host.cfg.secret_key_path).unwrap();
+    assert_eq!(ok(&mut f.host, json!({"cmd":"status"}))["secret_key_file"], false);
+    assert!(err(&mut f.host, json!({"cmd":"unlock","password":PW,"secret_key":"A3-BOGUS"})).len() > 0);
+    assert!(!f.host.is_unlocked());
+    ok(&mut f.host, json!({"cmd":"unlock","password":PW,"secret_key":sk.trim()}));
+    let m = ok(&mut f.host, json!({"cmd":"match","url":"https://www.paypal.com"}));
+    assert_eq!(m["items"].as_array().unwrap().len(), 1);
+    // host never echoes the secret key back
+    assert!(!m.to_string().contains(sk.trim()));
+    ok(&mut f.host, json!({"cmd":"lock"}));
+    assert!(err(&mut f.host, json!({"cmd":"match","url":"https://www.paypal.com"})).contains("locked"));
+    // Not retained: unlocking again without it fails.
+    assert!(err(&mut f.host, json!({"cmd":"unlock","password":PW})).contains("Secret Key required"));
+}

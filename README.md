@@ -32,11 +32,20 @@ npx tauri build --bundles deb             # or: npx tauri dev
 ### Browser extension
 ```bash
 cargo build --release -p gitpass-host
+# Install the host at a stable path (outside target/); on macOS sign it with the local identity (scripts/macos-local-sign.md)
+D="$HOME/Library/Application Support/gitpass/bin"; mkdir -p "$D"
+cp target/release/gitpass-host "$D/" && codesign -f -s "gitpass Local Signing" -i app.gitpass.host -o runtime "$D/gitpass-host"
 # Chromium: chrome://extensions > Developer mode > Load unpacked > extension/, copy the ID, then
-target/release/gitpass-host install --browser chrome --extension-id <id> --vault ~/.gitpass
-# Firefox: about:debugging > Load Temporary Add-on > extension/manifest.json, then
-target/release/gitpass-host install --browser firefox --extension-id gitpass@gitpass.dev
+"$D/gitpass-host" install --browser chrome --extension-id <id> --vault ~/.gitpass
+# Firefox: (cd extension && npm run build:firefox), then about:debugging > Load Temporary Add-on > extension/dist/firefox/manifest.json
+"$D/gitpass-host" install --browser firefox --extension-id gitpass@gitpass.dev
 ```
+`extension/manifest.json` is the Chrome (MV3 service worker) manifest; `extension/manifest.firefox.json` is the Firefox one (`background.scripts`).
+
+Unlocking from the popup: enter the master password and, if there's no `<vault>/secret.key`, your Secret Key. The popup sends both
+only to the background worker, which passes them over native messaging to `gitpass-host`. Content scripts never see them. The host uses the
+Secret Key once to derive the session keys and then zeroizes it. Nothing is written to disk, and the extension doesn't store it. After Lock, an idle
+auto-lock, or a browser restart, you need to enter it again. Unlocking from the extension doesn't write to the vault repo.
 See `crates/gitpass-host/README.md` and `apps/desktop/README.md` for details, and CHANGELOG.md for the limitations of each feature.
 
 ## Format compatibility (0.4.0)

@@ -9,7 +9,12 @@ input,button{font:inherit} .row{display:flex;gap:6px;margin:6px 0} .row input{fl
 <body>
 <div id="err"></div>
 <section id="locked" class="hidden">
-  <form id="unlockForm" class="row"><input id="pw" type="password" placeholder="Master password" autocomplete="off" autofocus><button>Unlock</button></form>
+  <form id="unlockForm">
+    <div class="row"><input id="pw" type="password" placeholder="Master password" autocomplete="off" autofocus></div>
+    <div class="row" id="skRow"><input id="sk" type="password" placeholder="Secret Key (A3-…)" autocomplete="off" spellcheck="false"></div>
+    <small id="skHint">Your Secret Key is used only to unlock and is kept in memory by the local gitpass-host while unlocked. It is never saved.</small>
+    <div class="row"><button>Unlock</button></div>
+  </form>
 </section>
 <section id="unlocked" class="hidden">
   <div class="row"><input id="q" placeholder="Search vault"><button id="lock">Lock</button></div>

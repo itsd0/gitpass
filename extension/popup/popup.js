@@ -40,6 +40,9 @@ async function refresh() {
   try { st = await send({ type: 'status' }); } catch (e) { showErr(e); $('locked').classList.remove('hidden'); return; }
   $('locked').classList.toggle('hidden', st.unlocked);
   $('unlocked').classList.toggle('hidden', !st.unlocked);
+  const needSk = !st.secret_key_file;
+  $('skRow').classList.toggle('hidden', !needSk);
+  $('skHint').classList.toggle('hidden', !needSk);
   if (st.unlocked) {
     try {
       const m = await send({ type: 'matchActive' });
@@ -52,7 +55,10 @@ async function refresh() {
 $('unlockForm').onsubmit = async (e) => {
   e.preventDefault();
   const pw = $('pw').value; $('pw').value = '';
-  try { await send({ type: 'unlock', password: pw }); } catch (err) { showErr(err); return; }
+  const sk = $('sk').value; $('sk').value = '';
+  const msg = { type: 'unlock', password: pw };
+  if (sk.trim()) msg.secret_key = sk.trim();
+  try { await send(msg); } catch (err) { showErr(err); return; }
   refresh();
 };
 $('lock').onclick = async () => { await send({ type: 'lock' }).catch(showErr); refresh(); };

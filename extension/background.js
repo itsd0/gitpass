@@ -54,7 +54,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (fromExtensionPage) {
       switch (msg.type) {
         case 'status': return host('status');
-        case 'unlock': return host('unlock', { password: msg.password });
+        case 'unlock': {
+          // Secret Key goes popup -> background -> native host only; never stored, never sent to content scripts.
+          const args = { password: msg.password };
+          if (typeof msg.secret_key === 'string' && msg.secret_key.trim()) args.secret_key = msg.secret_key.trim();
+          return host('unlock', args);
+        }
         case 'lock': return host('lock');
         case 'search': return host('search', { query: msg.query });
         case 'totp': return host('totp', { item_id: msg.item_id });
