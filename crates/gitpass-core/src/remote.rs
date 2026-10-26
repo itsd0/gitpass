@@ -55,7 +55,8 @@ pub fn validate_url(url: &str, allow_local: bool) -> Result<()> {
     let bad = |why: &str| -> Result<()> { bail!("{E_BAD_URL}: {why}: {u:?}. Use https://github.com/YOU/REPO.git or git@github.com:YOU/REPO.git") };
     if u.is_empty() { return bad("empty URL"); }
     if u.starts_with('-') || u.chars().any(|c| c.is_whitespace() || c.is_control()) { return bad("invalid characters"); }
-    if allow_local && (u.starts_with('/') || u.starts_with("file://")) { return Ok(()); }
+    // Local paths: `/…` on Unix, `C:\…` on Windows (Path::is_absolute is platform-specific).
+    if allow_local && (u.starts_with('/') || u.starts_with("file://") || std::path::Path::new(u).is_absolute()) { return Ok(()); }
     let path_ok = |p: &str| { let p = p.trim_matches('/'); !p.is_empty() && !p.contains("..") && p.split('/').all(|s| !s.is_empty()) };
     let host_ok = |h: &str| !h.is_empty() && h.chars().all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-' || c == ':' || c == '[' || c == ']');
     if let Some(rest) = u.strip_prefix("https://") {
