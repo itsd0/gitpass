@@ -1,0 +1,86 @@
+// gitpass background: the only component that talks to the native host.
+/* global chrome, GitpassPolicy, importScripts */
+'use strict';
+if (typeof importScripts === 'function' && !globalThis.GitpassPolicy) importScripts('lib/policy.js');
+
+const HOST = 'com.gitpass.host';
+let port = null;
+let nextId = 1;
+const pending = new Map();
+
+function connect() {
+  if (port) return port;
+  port = chrome.runtime.connectNative(HOST);
+  port.onMessage.addListener((msg) => {
+    const p = pending.get(msg.id);
+    if (!p) return;
+    pending.delete(msg.id);
+    msg.ok ? p.resolve(msg.result) : p.reject(new Error(msg.error || 'host error'));
+  });
+  port.onDisconnect.addListener(() => {
+    const err = new Error((chrome.runtime.lastError && chrome.runtime.lastError.message) || 'native host disconnected');
+    for (const p of pending.values()) p.reject(err);
+    pending.clear();
+    port = null;
+  });
+  return port;
+}
+
+function host(cmd, args = {}) {
+  return new Promise((resolve, reject) => {
+    const id = nextId++;
+    pending.set(id, { resolve, reject });
+    try { connect().postMessage({ id, cmd, ...args }); } catch (e) { pending.delete(id); reject(e); }
+  });
+}
+
+async function activeTab() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  return tab;
+}
+
+/** Fill creds into the top frame of a tab; the content script re-checks the origin. */
+async function fillTab(tabId, origin, itemId) {
+  if (!GitpassPolicy.isFillableOrigin(origin)) throw new Error('refusing to fill: page is not https');
+  const creds = await host('fill', { item_id: itemId, origin }); // host enforces origin match
+  await chrome.tabs.sendMessage(tabId, { type: 'gitpass-fill', origin, username: creds.username, password: creds.password }, { frameId: 0 });
+  return true;
+}
+
+// Messages from the popup (extension pages) and content scripts.
+chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  (async () => {
+    const fromExtensionPage = sender.id === chrome.runtime.id && !sender.tab;
+    if (fromExtensionPage) {
+      switch (msg.type) {
+        case 'status': return host('status');
+        case 'unlock': return host('unlock', { password: msg.password });
+        case 'lock': return host('lock');
+        case 'search': return host('search', { query: msg.query });
+        case 'totp': return host('totp', { item_id: msg.item_id });
+        case 'generate': return host('generate', { len: msg.len });
+        case 'matchActive': {
+          const tab = await activeTab();
+          const origin = tab && GitpassPolicy.originOf(tab.url);
+          if (!origin || !GitpassPolicy.isFillableOrigin(origin)) return { items: [], origin: null };
+          return { ...(await host('match', { url: origin })), origin };
+        }
+        case 'fillActive': {
+          const tab = await activeTab();
+          return fillTab(tab.id, GitpassPolicy.originOf(tab.url), msg.item_id);
+        }
+      }
+      throw new Error('unknown message');
+    }
+    // Content script: trust only the browser-provided sender, never origins in the message. Top frame only.
+    if (!sender.tab || sender.frameId !== 0) throw new Error('only the top frame may request fills');
+    const origin = GitpassPolicy.originOf(sender.url || sender.tab.url);
+    if (!origin || !GitpassPolicy.isFillableOrigin(origin)) throw new Error('origin not fillable');
+    switch (msg.type) {
+      case 'cs-match': return host('match', { url: origin });
+      case 'cs-fill': return fillTab(sender.tab.id, origin, msg.item_id);
+    }
+    throw new Error('unknown message');
+  })().then((r) => sendResponse({ ok: true, result: r }), (e) => sendResponse({ ok: false, error: String(e.message || e) }));
+  return true; // async
+});
