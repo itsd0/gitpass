@@ -1,0 +1,115 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { ArrowDownUp, ChevronDown, LayoutGrid, Star } from 'lucide-react';
+import { api } from '../../api/client';
+import type { Filter } from '../../api/types';
+import { useApp } from '../../lib/store';
+import { cn } from '../../lib/utils';
+import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, Skeleton, toast } from '../../ui';
+import { CATEGORIES, ItemIcon, catMeta } from './categories';
+import { groupRows } from './grouping';
+import { useItemsUI } from './state';
+import { copyPrimarySecret, errText } from './actions';
+
+const SORTS: { id: NonNullable<Filter['sort']>; label: string }[] = [
+  { id: 'updated', label: 'Date Edited' }, { id: 'created', label: 'Date Created' }, { id: 'title', label: 'Title' },
+];
+
+export function ItemList() {
+  const route = useApp((s) => s.route);
+  const version = useApp((s) => s.itemsVersion);
+  const selectedItemId = useApp((s) => s.selectedItemId);
+  const selectItem = useApp((s) => s.selectItem);
+  const { query, category, setCategory, sort, setSort, items, setItems, loading, setLoading } = useItemsUI();
+  const base: Filter = route.name === 'items' ? route.filter : { kind: 'all' };
+
+  // debounce query (200ms) then call api.listItems
+  const debounced = useDebounced(query, 200);
+  useEffect(() => {
+    let on = true; setLoading(true);
+    const filter: Filter = { ...base, query: debounced || undefined, sort, ...(category ? { category } : {}) };
+    api.listItems({ filter }).then((xs) => { if (on) setItems(xs); }).catch((e) => toast(errText(e), 'danger')).finally(() => on && setLoading(false));
+    return () => { on = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(base), debounced, sort, category, version]);
+
+  const rows = useMemo(() => groupRows(items, sort), [items, sort]);
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virt = useVirtualizer({ count: rows.length, getScrollElement: () => parentRef.current, estimateSize: (i) => (rows[i].type === 'header' ? 36 : 52), overscan: 8, initialRect: { width: 320, height: 700 } });
+
+  // auto-select first item when nothing selected
+  useEffect(() => { if (!selectedItemId && items[0]) selectItem(items[0].id); }, [items, selectedItemId, selectItem]);
+
+  function onKey(e: React.KeyboardEvent) {
+    const idx = items.findIndex((x) => x.id === selectedItemId);
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      const n = Math.max(0, Math.min(items.length - 1, idx + (e.key === 'ArrowDown' ? 1 : -1)));
+      if (items[n]) { selectItem(items[n].id); const ri = rows.findIndex((r) => r.key === items[n].id); if (ri >= 0) virt.scrollToIndex(ri, { align: 'auto' }); }
+    } else if (e.key === 'Enter' && idx >= 0) {
+      e.preventDefault(); (document.querySelector('[data-detail-pane]') as HTMLElement | null)?.focus();
+    } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && idx >= 0 && !window.getSelection()?.toString()) {
+      e.preventDefault(); void copyPrimarySecret(items[idx].vaultId, items[idx].id);
+    }
+  }
+
+  const CatIcon = category ? catMeta(category).icon : LayoutGrid;
+  return (
+    <div className="flex h-full flex-col bg-panel" data-testid="item-list">
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-2">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="sm" className="gap-1.5 text-sm"><CatIcon size={14} className="text-accent" />{category ? catMeta(category).label : 'All Categories'}<ChevronDown size={14} className="text-muted" /></Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem onSelect={() => setCategory(null)}><LayoutGrid size={14} />All Categories</DropdownMenuItem>
+            {CATEGORIES.map((c) => <DropdownMenuItem key={c.id} onSelect={() => setCategory(c.id)}><c.icon size={14} style={{ color: c.color }} />{c.label}</DropdownMenuItem>)}
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label="Sort"><ArrowDownUp size={15} /></Button></DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+            {SORTS.map((s) => <DropdownMenuItem key={s.id} onSelect={() => setSort(s.id)}><span className="w-3">{sort === s.id ? '✓' : ''}</span>{s.label}</DropdownMenuItem>)}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+      <div ref={parentRef} tabIndex={0} onKeyDown={onKey} className="flex-1 overflow-y-auto outline-none" role="listbox" aria-label="Items" data-item-list>
+        {loading && items.length === 0 ? (
+          <div className="space-y-3 p-3">{Array.from({ length: 8 }, (_, i) => <div key={i} className="flex gap-3"><Skeleton className="h-8 w-8" /><div className="flex-1 space-y-1.5"><Skeleton className="h-3 w-3/4" /><Skeleton className="h-2.5 w-1/2" /></div></div>)}</div>
+        ) : items.length === 0 ? (
+          <div className="p-8 text-center text-muted">{query ? `No items match “${query}”` : 'No items here yet'}</div>
+        ) : (
+          <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
+            {virt.getVirtualItems().map((v) => {
+              const r = rows[v.index];
+              return (
+                <div key={r.key} data-index={v.index} ref={virt.measureElement} style={{ position: 'absolute', top: 0, left: 0, width: '100%', transform: `translateY(${v.start}px)` }}>
+                  {r.type === 'header' ? (
+                    <div className="px-4 pb-1.5 pt-4 text-[11px] font-semibold tracking-wider text-muted" data-testid="group-header">{r.label}</div>
+                  ) : (
+                    <div role="option" aria-selected={r.item.id === selectedItemId} onClick={() => { selectItem(r.item.id); parentRef.current?.focus(); }}
+                      className={cn('mx-1.5 flex cursor-default items-center gap-3 rounded-md px-2.5 py-2', r.item.id === selectedItemId ? 'bg-active' : 'hover:bg-hover')}>
+                      <ItemIcon item={r.item} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[14px] font-medium">{r.item.title}</div>
+                        <div className="truncate text-xs text-muted">{r.item.subtitle}</div>
+                      </div>
+                      {r.item.favorite && <Star size={12} className="shrink-0 fill-warn text-warn" />}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function useDebounced<T>(value: T, ms: number): T {
+  const [v, setV] = useState(value);
+  useEffect(() => { const t = setTimeout(() => setV(value), ms); return () => clearTimeout(t); }, [value, ms]);
+  return v;
+}
