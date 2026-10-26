@@ -1,0 +1,408 @@
+//! Contract API tests against a temp vault. All data is FAKE.
+use crate::api::*;
+use gitpass_core::audit::PwnedRangeClient;
+use gitpass_core::crypto::KdfParams;
+use gitpass_core::item::{Category, FieldKind};
+use gitpass_core::store::{self, UnlockOpts};
+use std::sync::Arc;
+use base64::{engine::general_purpose::STANDARD as B64, Engine};
+
+fn fast() -> KdfParams { KdfParams { alg: "argon2id".into(), m_kib: 8192, t: 1, p: 1 } }
+
+struct MockHibp;
+impl PwnedRangeClient for MockHibp {
+    fn range(&self, prefix: &str) -> anyhow::Result<String> {
+        // SHA1("password") = 5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8
+        Ok(if prefix == "5BAA6" { "1E4C9B93F3F0682250B6CF8331B7EE68FD8:9999\r\n0000000000000000000000000000000000A:0".into() } else { String::new() })
+    }
+}
+
+struct Env { _vault: tempfile::TempDir, _cfg: tempfile::TempDir, app: App, clip: Arc<MemClipboard>, sk: String, vault: String }
+
+fn env() -> Env {
+    let d = tempfile::tempdir().unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let sk = store::init(d.path(), "correct horse", fast()).unwrap().encode();
+    let clip = Arc::new(MemClipboard::default());
+    let app = App::new(cfg.path().to_path_buf(), clip.clone()).with_hibp(Box::new(MockHibp));
+    app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
+    let st = app.unlock(&d.path().display().to_string(), "correct horse", Some(&sk)).unwrap();
+    assert!(st.unlocked && st.account.is_some());
+    let v = app.create_vault("Personal", Some("mine".into()), Some("home".into()), Some("#336699".into())).unwrap();
+    Env { vault: v.id, _vault: d, _cfg: cfg, app, clip, sk }
+}
+fn fld(id: &str, kind: FieldKind, v: Option<&str>) -> Field { Field { id: id.into(), label: id.into(), kind, value: v.map(Into::into) } }
+fn login(e: &Env, title: &str, user: &str, pw: &str) -> ItemSummary {
+    e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some("https://example.invalid".into()),
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some(user)), fld("password", FieldKind::Concealed, Some(pw))] }],
+        notes: None, tags: Some(vec!["work".into()]), favorite: None }).unwrap()
+}
+fn card(e: &Env) -> ItemSummary {
+    e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "Example Bank".into(), url: None,
+        sections: vec![Section { id: "card".into(), title: Some("Card".into()), fields: vec![fld("number", FieldKind::Concealed, Some("4111 1111 1111 1111")),
+            fld("cvv", FieldKind::Concealed, Some("123")), fld("expiry", FieldKind::MonthYear, Some("12/30"))] }],
+        notes: Some("fake".into()), tags: None, favorite: Some(true) }).unwrap()
+}
+
+#[test]
+fn status_lock_unlock_and_vaults() {
+    let e = env();
+    let vs = e.app.list_vaults().unwrap();
+    assert_eq!(vs.len(), 1);
+    assert_eq!((vs[0].icon.as_deref(), vs[0].color.as_deref(), vs[0].item_count, vs[0].shared), (Some("home"), Some("#336699"), 0, false));
+    let path = e.app.status().unwrap().vault_path;
+    e.app.lock();
+    let st = e.app.status().unwrap();
+    assert!(!st.unlocked);
+    assert_eq!(st.vault_path, path, "last vault path remembered in settings file");
+    assert!(e.app.list_vaults().unwrap_err().to_string().contains("locked"));
+    assert!(e.app.unlock(&path, "wrong", Some(&e.sk)).is_err());
+    assert!(e.app.unlock(&path, "correct horse", Some(&e.sk)).unwrap().unlocked);
+}
+
+#[test]
+fn items_crud_subtitles_and_no_secret_leak() {
+    let e = env();
+    let l = login(&e, "Example Mail", "alice@example.invalid", "FAKE-very-secret-pw-123!");
+    assert_eq!(l.subtitle, "alice@example.invalid");
+    let c = card(&e);
+    assert_eq!(c.subtitle, "4111 **** 1111");
+    assert!(c.favorite);
+    let d = e.app.get_item(&e.vault, &c.id).unwrap();
+    let json = serde_json::to_string(&d).unwrap();
+    assert!(!json.contains("4111 1111") && !json.contains("\"123\""), "{json}");
+    assert!(json.contains("\"vaultId\"") && json.contains("\"passwordStrength\"") && json.contains("\"hasTotp\""));
+    assert_eq!(d.sections[0].fields[2].value.as_deref(), Some("12/30"));
+    let ld = e.app.get_item(&e.vault, &l.id).unwrap();
+    assert!(ld.password_strength.unwrap() > 50);
+    assert!(!serde_json::to_string(&e.app.list_items(&Filter { kind: FilterKind::All, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap()).unwrap().contains("FAKE-very"));
+    assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, "cvv").unwrap(), "123");
+    assert_eq!(&*e.app.reveal_field(&e.vault, &l.id, "password").unwrap(), "FAKE-very-secret-pw-123!");
+    // update: secret fields sent back as null keep their value; title change adds history
+    let mut secs = d.sections.clone();
+    secs[0].fields.push(fld("pin", FieldKind::Concealed, Some("9876")));
+    e.app.update_item(&c.id, &ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "Example Bank Visa".into(), sections: secs,
+        notes: None, tags: Some(vec!["finance".into()]), favorite: None, url: None }).unwrap();
+    assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, "number").unwrap(), "4111 1111 1111 1111");
+    assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, "pin").unwrap(), "9876");
+    let d2 = e.app.get_item(&e.vault, &c.id).unwrap();
+    assert_eq!(d2.summary.title, "Example Bank Visa");
+    assert_eq!(d2.history.len(), 1);
+    let old = e.app.item_version(&e.vault, &c.id, d2.history[0].version).unwrap();
+    assert_eq!(old.summary.title, "Example Bank");
+    assert_eq!(e.app.list_tags().unwrap(), vec!["finance".to_string(), "work".to_string()]);
+    // invalid input
+    assert!(e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::SecureNote, title: " ".into(), sections: vec![], notes: None, tags: None, favorite: None, url: None }).is_err());
+}
+
+#[test]
+fn filters_favorite_archive_delete_restore_purge_move_duplicate() {
+    let e = env();
+    let a = login(&e, "Alpha", "a", "pw-a-FAKE-xx");
+    let b = card(&e);
+    let n = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::SecureNote, title: "Note".into(),
+        sections: vec![Section { id: "s".into(), title: None, fields: vec![fld("body", FieldKind::Multiline, Some("hello"))] }], notes: None, tags: None, favorite: None, url: None }).unwrap();
+    assert_eq!(n.subtitle, "hello");
+    let f = |kind: FilterKind| Filter { kind, vault_id: Some(e.vault.clone()), tag: Some("work".into()), category: Some(Category::CreditCard), query: None, sort: Some(Sort::Title) };
+    let ids = |v: Vec<ItemSummary>| v.into_iter().map(|s| s.title).collect::<Vec<_>>();
+    assert_eq!(ids(e.app.list_items(&f(FilterKind::All)).unwrap()), vec!["Alpha", "Example Bank", "Note"]);
+    assert_eq!(ids(e.app.list_items(&f(FilterKind::Favorites)).unwrap()), vec!["Example Bank"]);
+    assert_eq!(ids(e.app.list_items(&f(FilterKind::Tag)).unwrap()), vec!["Alpha"]);
+    assert_eq!(ids(e.app.list_items(&f(FilterKind::Category)).unwrap()), vec!["Example Bank"]);
+    assert_eq!(ids(e.app.list_items(&f(FilterKind::Vault)).unwrap()).len(), 3);
+    let mut q = f(FilterKind::All); q.query = Some("alp".into());
+    assert_eq!(ids(e.app.list_items(&q).unwrap()), vec!["Alpha"]);
+    e.app.set_favorite(&e.vault, &a.id, true).unwrap();
+    assert_eq!(e.app.list_items(&f(FilterKind::Favorites)).unwrap().len(), 2);
+    e.app.archive_item(&e.vault, &a.id, true).unwrap();
+    assert_eq!(ids(e.app.list_items(&f(FilterKind::Archive)).unwrap()), vec!["Alpha"]);
+    assert_eq!(e.app.list_items(&f(FilterKind::All)).unwrap().len(), 2);
+    e.app.delete_item(&e.vault, &n.id).unwrap();
+    let del = e.app.list_items(&f(FilterKind::Deleted)).unwrap();
+    assert_eq!(del.len(), 1);
+    assert!(del[0].deleted_at.is_some());
+    assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 2);
+    e.app.restore_item(&e.vault, &n.id).unwrap();
+    assert!(e.app.list_items(&f(FilterKind::Deleted)).unwrap().is_empty());
+    e.app.delete_item(&e.vault, &n.id).unwrap();
+    e.app.purge_item(&e.vault, &n.id).unwrap();
+    assert!(e.app.get_item(&e.vault, &n.id).is_err());
+    let dup = e.app.duplicate_item(&e.vault, &b.id).unwrap();
+    assert_eq!(dup.title, "Example Bank copy");
+    assert_eq!(&*e.app.reveal_field(&e.vault, &dup.id, "cvv").unwrap(), "123");
+    let v2 = e.app.create_vault("Shared", None, None, None).unwrap();
+    let moved = e.app.move_item(&e.vault, &b.id, &v2.id).unwrap();
+    assert_eq!(moved.vault_id, v2.id);
+    assert!(e.app.get_item(&e.vault, &b.id).is_err());
+    assert_eq!(&*e.app.reveal_field(&v2.id, &moved.id, "number").unwrap(), "4111 1111 1111 1111");
+}
+
+#[test]
+fn copy_field_clears_clipboard_only_if_unchanged() {
+    let e = env();
+    let mut s = e.app.get_settings();
+    s.clipboard_clear_secs = 1;
+    e.app.set_settings(s).unwrap();
+    let l = login(&e, "Alpha", "a", "pw-FAKE-1");
+    e.app.copy_field(&e.vault, &l.id, "password").unwrap();
+    assert_eq!(e.clip.get_text().as_deref(), Some("pw-FAKE-1"));
+    std::thread::sleep(std::time::Duration::from_millis(1600));
+    assert_eq!(e.clip.get_text().as_deref(), Some(""));
+    e.app.copy_field(&e.vault, &l.id, "username").unwrap();
+    e.clip.set_text("user copied something else").unwrap();
+    std::thread::sleep(std::time::Duration::from_millis(1600));
+    assert_eq!(e.clip.get_text().as_deref(), Some("user copied something else"));
+}
+
+#[test]
+fn totp_now_and_totp_field_copy() {
+    let e = env();
+    let it = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "2FA".into(), url: None,
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("u")), fld("totp", FieldKind::Totp, Some("JBSWY3DPEHPK3PXP"))] }],
+        notes: None, tags: None, favorite: None }).unwrap();
+    let d = e.app.get_item(&e.vault, &it.id).unwrap();
+    assert!(d.has_totp);
+    assert!(d.sections[0].fields.iter().all(|f| f.kind != FieldKind::Totp || f.value.is_none()));
+    let t = e.app.totp_now(&e.vault, &it.id).unwrap();
+    assert_eq!((t.code.len(), t.period), (6, 30));
+    e.app.copy_field(&e.vault, &it.id, "totp").unwrap();
+    assert_eq!(e.clip.get_text().unwrap().len(), 6);
+    assert!(e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "bad".into(), url: None,
+        sections: vec![Section { id: "x".into(), title: None, fields: vec![fld("t", FieldKind::Totp, Some("not base32!!"))] }], notes: None, tags: None, favorite: None }).is_err());
+}
+
+#[test]
+fn attachments_via_paths() {
+    let e = env();
+    let n = card(&e);
+    let dir = tempfile::tempdir().unwrap();
+    let src = dir.path().join("statement.pdf");
+    std::fs::write(&src, b"%PDF-fake").unwrap();
+    let a = e.app.add_attachment(&e.vault, &n.id, &src.display().to_string()).unwrap();
+    assert_eq!((a.name.as_str(), a.size, a.mime.as_str()), ("statement.pdf", 9, "application/pdf"));
+    assert_eq!(e.app.get_item(&e.vault, &n.id).unwrap().attachments, vec![a.clone()]);
+    let dst = dir.path().join("out.pdf");
+    e.app.save_attachment(&e.vault, &n.id, &a.id, &dst.display().to_string()).unwrap();
+    assert_eq!(std::fs::read(&dst).unwrap(), b"%PDF-fake");
+}
+
+#[test]
+fn tools_generate_strength_watchtower_hibp() {
+    let e = env();
+    let p = e.app.generate_password(24, true, true, false);
+    assert_eq!(p.len(), 24);
+    assert!(p.chars().any(|c| c.is_ascii_digit()) && p.chars().any(|c| "!@#$%^&*-_=+?".contains(c)));
+    assert!(e.app.generate_password(20, false, false, false).chars().all(|c| c.is_ascii_alphabetic()));
+    assert_eq!(e.app.generate_password(5, true, false, true).split('-').count(), 5);
+    assert!(e.app.password_strength("password") <= 10);
+    assert!(e.app.password_strength(&p) >= 90);
+    assert_eq!(e.app.password_strength(""), 0);
+    let a = login(&e, "Weak1", "a", "password");
+    let b = login(&e, "Weak2", "b", "password");
+    let _c = login(&e, "Strong", "c", &p);
+    let r = e.app.watchtower(false).unwrap();
+    assert!(!r.hibp_checked && r.breached.is_empty());
+    assert!(r.weak.contains(&a.id) && r.weak.contains(&b.id));
+    assert_eq!(r.reused.len(), 1);
+    assert_eq!(r.missing_totp.len(), 3);
+    assert!(r.score < 100);
+    // HIBP is opt-in: without Settings.hibpCheck no network check happens even if asked.
+    assert!(!e.app.get_settings().hibp_check);
+    let r = e.app.watchtower(true).unwrap();
+    assert!(!r.hibp_checked && r.breached.is_empty());
+    e.app.set_settings(Settings { hibp_check: true, ..e.app.get_settings() }).unwrap();
+    let r = e.app.watchtower(true).unwrap();
+    assert!(r.hibp_checked);
+    let mut br = r.breached.clone(); br.sort();
+    let mut want = vec![a.id.clone(), b.id.clone()]; want.sort();
+    assert_eq!(br, want);
+}
+
+#[test]
+fn import_file_dry_run_and_real() {
+    let e = env();
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("chrome.csv");
+    std::fs::write(&f, "name,url,username,password\nExample,https://a.example.invalid,alice,FAKE1\nOther,https://b.example.invalid,bob,FAKE2\n").unwrap();
+    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), true).unwrap();
+    assert_eq!((r.parsed, r.added, r.duplicates), (2, 2, 0));
+    assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 0);
+    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), false).unwrap();
+    assert_eq!(r.added, 2);
+    assert!(e.app.onboarding().imported);
+    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), false).unwrap();
+    assert_eq!((r.added, r.duplicates), (0, 2));
+    assert!(e.app.import_file(&e.vault, "nope", &f.display().to_string(), true).is_err());
+}
+
+#[test]
+fn identity_sharing_members() {
+    let e = env();
+    let other = env();
+    let id = e.app.identity().unwrap();
+    let oid = other.app.identity().unwrap();
+    assert!(!id.public_key.is_empty() && id.fingerprint != oid.fingerprint);
+    let m = e.app.share_vault(&e.vault, &oid.public_key, Some("Bob (fake)".into())).unwrap();
+    assert_eq!((m.fingerprint.as_str(), m.label.as_deref(), m.is_self), (oid.fingerprint.as_str(), Some("Bob (fake)"), false));
+    let ms = e.app.list_members(&e.vault).unwrap();
+    assert_eq!(ms.len(), 2);
+    assert!(ms.iter().any(|m| m.is_self && m.fingerprint == id.fingerprint));
+    let v = &e.app.list_vaults().unwrap()[0];
+    assert!(v.shared);
+    // accept on the other account (share file lives in e's vault dir)
+    let share = e._vault.path().join("vaults").join(&e.vault).join("members").join(format!("{}.enc", oid.fingerprint));
+    // other already has a vault named "Personal": rename conflict is reported
+    assert!(other.app.accept_share(&share.display().to_string()).unwrap_err().to_string().contains("already exists"));
+    e.app.unshare_vault(&e.vault, &oid.fingerprint).unwrap();
+    assert!(e.app.list_members(&e.vault).unwrap().is_empty());
+}
+
+#[test]
+fn accept_share_imports_vault() {
+    let e = env();
+    let other = env();
+    let x = other.app.create_vault("Team", None, None, None).unwrap();
+    let it = other.app.create_item(&ItemInput { vault_id: x.id.clone(), category: Category::Wifi, title: "Office WiFi".into(), url: None,
+        sections: vec![Section { id: "w".into(), title: None, fields: vec![fld("ssid", FieldKind::Text, Some("FakeNet")), fld("pw", FieldKind::Concealed, Some("FAKE-wifi"))] }],
+        notes: None, tags: None, favorite: None }).unwrap();
+    let me = e.app.identity().unwrap();
+    other.app.share_vault(&x.id, &me.public_key, None).unwrap();
+    let share = other._vault.path().join("vaults").join(&x.id).join("members").join(format!("{}.enc", me.fingerprint));
+    let v = e.app.accept_share(&share.display().to_string()).unwrap();
+    assert_eq!((v.name.as_str(), v.item_count), ("Team", 1));
+    assert_eq!(&*e.app.reveal_field(&v.id, &it.id, "pw").unwrap(), "FAKE-wifi");
+    assert_eq!(it.subtitle, "FakeNet");
+}
+
+#[test]
+fn devices_settings_onboarding_favicon() {
+    let e = env();
+    let ds = e.app.list_devices().unwrap();
+    assert_eq!(ds.len(), 1);
+    assert!(ds[0].current && !ds[0].revoked);
+    assert!(e.app.revoke_device("nonexistent-device", false).is_err());
+    let s = e.app.get_settings();
+    assert_eq!(s, Settings::default());
+    let mut s2 = s.clone();
+    s2.theme = Theme::Light; s2.language = Language::Th; s2.auto_lock_minutes = 15;
+    assert_eq!(e.app.set_settings(s2.clone()).unwrap(), s2);
+    assert_eq!(e.app.get_settings(), s2);
+    let json = serde_json::to_value(&s2).unwrap();
+    assert_eq!(json["autoLockMinutes"], 15);
+    assert_eq!(json["language"], "th");
+    let mut s3 = s2.clone(); s3.biometric_unlock = true;
+    assert!(e.app.set_settings(s3).unwrap_err().to_string().contains("not supported yet"));
+    let o = e.app.set_onboarding(OnboardingPatch { emergency_kit_saved: Some(true), ..Default::default() }).unwrap();
+    assert!(o.emergency_kit_saved && !o.dismissed);
+    assert_eq!(e.app.onboarding(), o);
+    // settings file has no secrets
+    let raw = std::fs::read_to_string(e._cfg.path().join(SETTINGS_FILE)).unwrap();
+    assert!(!raw.contains("correct horse") && !raw.contains(&e.sk));
+    assert_eq!(e.app.favicon_url("https://example.invalid"), None);
+}
+
+#[test]
+fn credentials_change_password_and_rotate_secret_key() {
+    let e = env();
+    let path = e.app.status().unwrap().vault_path;
+    let kit = e.app.emergency_kit().unwrap();
+    assert!(kit.contains("not shown") && !kit.contains(&e.sk));
+    assert!(e.app.change_password("wrong", "new-password-123").is_err());
+    e.app.change_password("correct horse", "new-password-123").unwrap();
+    let r = e.app.rotate_secret_key().unwrap();
+    assert!(r.emergency_kit.contains("Secret Key: "));
+    assert!(!r.emergency_kit.contains(&e.sk));
+    assert_eq!(e.app.emergency_kit().unwrap(), r.emergency_kit, "fresh kit available until lock");
+    let new_sk = r.emergency_kit.lines().find(|l| l.starts_with("Secret Key: ")).unwrap().trim_start_matches("Secret Key: ").to_string();
+    e.app.lock();
+    assert!(e.app.unlock(&path, "new-password-123", Some(&e.sk)).is_err());
+    assert!(e.app.unlock(&path, "new-password-123", Some(&new_sk)).unwrap().unlocked);
+    assert!(e.app.emergency_kit().unwrap().contains("not shown"));
+}
+
+#[test]
+fn sync_status_without_git() {
+    let e = env();
+    let s = e.app.sync_status().unwrap();
+    assert_eq!(s.remote, None);
+    assert_eq!((s.ahead, s.behind), (0, 0));
+}
+
+#[test]
+fn contract_json_shapes() {
+    let e = env();
+    let l = login(&e, "Alpha", "a", "pw-FAKE");
+    let v = serde_json::to_value(&l).unwrap();
+    for k in ["id", "vaultId", "category", "title", "subtitle", "favorite", "archived", "deletedAt", "tags", "updatedAt", "createdAt", "url"] { assert!(v.get(k).is_some(), "{k}"); }
+    assert_eq!(v["category"], "login");
+    let d = serde_json::to_value(e.app.get_item(&e.vault, &l.id).unwrap()).unwrap();
+    for k in ["sections", "notes", "attachments", "history", "passwordStrength", "hasTotp", "vaultId"] { assert!(d.get(k).is_some(), "{k}"); }
+    assert!(d["sections"][0]["fields"][1]["value"].is_null());
+    let vi = serde_json::to_value(&e.app.list_vaults().unwrap()[0]).unwrap();
+    for k in ["id", "name", "description", "itemCount", "shared", "members", "icon", "color"] { assert!(vi.get(k).is_some(), "{k}"); }
+    let f: Filter = serde_json::from_str(r#"{"kind":"category","category":"credit_card","sort":"created"}"#).unwrap();
+    assert_eq!(f.category, Some(Category::CreditCard));
+    let inp: ItemInput = serde_json::from_str(r#"{"vaultId":"x","category":"wifi","title":"t","sections":[{"id":"s","title":null,"fields":[{"id":"a","label":"A","kind":"month_year","value":"01/30"}]}]}"#).unwrap();
+    assert_eq!(inp.sections[0].fields[0].kind, FieldKind::MonthYear);
+    let w = serde_json::to_value(e.app.watchtower(false).unwrap()).unwrap();
+    for k in ["score", "weak", "reused", "old", "breached", "missingTotp", "checkedAt", "hibpChecked"] { assert!(w.get(k).is_some(), "{k}"); }
+}
+
+#[test]
+fn update_item_assigns_ids_for_new_fields_and_keeps_null_secrets() {
+    let e = env();
+    let c = card(&e);
+    let d = e.app.get_item(&e.vault, &c.id).unwrap();
+    // UI shape: unchanged concealed fields come back value=null; new field + new section have id ""
+    let mut secs = d.sections.clone();
+    for f in &mut secs[0].fields { if f.kind == FieldKind::Concealed { assert!(f.value.is_none()); } }
+    secs[0].fields.push(fld("", FieldKind::Concealed, Some("2468")));
+    secs[0].fields.push(fld("", FieldKind::Text, Some("note-a")));
+    secs.push(Section { id: "".into(), title: Some("Extra".into()), fields: vec![fld("", FieldKind::Concealed, Some("s3cr3t-extra"))] });
+    e.app.update_item(&c.id, &ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "Example Bank".into(), sections: secs,
+        notes: None, tags: None, favorite: None, url: None }).unwrap();
+    assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, "number").unwrap(), "4111 1111 1111 1111");
+    assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, "cvv").unwrap(), "123");
+    let d2 = e.app.get_item(&e.vault, &c.id).unwrap();
+    let all: Vec<_> = d2.sections.iter().flat_map(|s| s.fields.iter()).collect();
+    assert!(all.iter().all(|f| !f.id.is_empty()) && d2.sections.iter().all(|s| !s.id.is_empty()));
+    let mut ids: Vec<_> = all.iter().map(|f| f.id.clone()).collect(); ids.sort(); ids.dedup();
+    assert_eq!(ids.len(), all.len());
+    let pin = all.iter().find(|f| f.kind == FieldKind::Concealed && f.id.starts_with("f_") && d2.sections[0].fields.iter().any(|g| g.id == f.id)).unwrap();
+    assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, &pin.id).unwrap(), "2468");
+    let extra = d2.sections.iter().find(|s| s.title.as_deref() == Some("Extra")).unwrap();
+    assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, &extra.fields[0].id).unwrap(), "s3cr3t-extra");
+    assert!(all.iter().any(|f| f.value.as_deref() == Some("note-a")));
+    // create_item with empty ids works too
+    let n = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::ApiCredential, title: "API (fake)".into(), url: None,
+        sections: vec![Section { id: "".into(), title: None, fields: vec![fld("", FieldKind::Concealed, Some("k1")), fld("", FieldKind::Concealed, Some("k2"))] }],
+        notes: None, tags: None, favorite: None }).unwrap();
+    let nd = e.app.get_item(&e.vault, &n.id).unwrap();
+    assert_eq!(nd.sections[0].fields.len(), 2);
+    assert_ne!(nd.sections[0].fields[0].id, nd.sections[0].fields[1].id);
+}
+
+#[test]
+fn fingerprint_of_matches_identity_and_share() {
+    let e = env();
+    let me = e.app.identity().unwrap();
+    assert_eq!(e.app.fingerprint_of(&me.public_key).unwrap(), me.fingerprint);
+    assert_eq!(e.app.fingerprint_of(&format!("  gitpass-x25519:{}\n", me.public_key)).unwrap(), me.fingerprint);
+    let other = B64.encode([7u8; 32]);
+    let f = e.app.fingerprint_of(&other).unwrap();
+    assert_eq!(f.len(), 32);
+    assert_ne!(f, me.fingerprint);
+    let m = e.app.share_vault(&e.vault, &other, Some("Alex (fake)".into())).unwrap();
+    assert_eq!(m.fingerprint, f);
+    assert!(e.app.fingerprint_of("not a key").is_err());
+    assert!(e.app.fingerprint_of(&B64.encode([1u8; 16])).is_err());
+}
+
+#[test]
+fn settings_hibp_defaults_off_and_old_files_parse() {
+    assert!(!Settings::default().hibp_check);
+    let old = r#"{"autoLockMinutes":5,"clipboardClearSecs":90,"theme":"dark","language":"en","biometricUnlock":false,"quickAccessHotkey":"X"}"#;
+    let s: Settings = serde_json::from_str(old).unwrap();
+    assert!(!s.hibp_check);
+    assert!(serde_json::to_string(&Settings::default()).unwrap().contains("\"hibpCheck\":false"));
+}
