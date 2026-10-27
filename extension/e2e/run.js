@@ -333,6 +333,43 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       const sent = REAL ? { source: '(real host; not logged)' } : cmdsIn(mockDir).filter((m) => m.cmd === cmd).pop();
       return [same(await vals(ids), want), `${how}; ${diff(await vals(ids), want, ids)}; ${cmd} source=${sent && sent.source}`];
     }
+    // Card form: one gitpass icon per logical group, on the card number input — never one per card
+    // field. /card also holds a second card form and the identity form used below, so the page-wide
+    // icon count is 3; these checks scope the count to the #pay card form.
+    await cardPage.goto(CARD); await cardPage.bringToFront();
+    const readCardIcons = () => cardPage.evaluate(() => {
+      const hosts = [...document.querySelectorAll('gitpass-ui')];
+      const over = (el) => {
+        const r = el.getBoundingClientRect();
+        const left = r.right + window.scrollX - 28;
+        const top = r.top + window.scrollY + (r.height - 22) / 2;
+        return hosts.filter((h) => Math.abs(parseFloat(h.style.left) - left) < 1 && Math.abs(parseFloat(h.style.top) - top) < 1);
+      };
+      const fields = [...document.querySelectorAll('#pay input, #pay select')].map((el) => ({ id: el.id, decorated: el.dataset.gitpassDecorated === 'true', icons: over(el).length }));
+      const numHost = over(document.getElementById('num'))[0];
+      const box = numHost && numHost.getBoundingClientRect();
+      return { pageIcons: hosts.length, fields, badge: box && box.width && box.height ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : null };
+    });
+    const cardIcons = await until(async () => {
+      const r = await readCardIcons();
+      const n = r.fields.find((f) => f.id === 'num');
+      return r.badge && n && n.decorated && n.icons === 1 ? r : null;
+    }, T(5000)) || await readCardIcons();
+    const cardGroupIcons = cardIcons.fields.reduce((n, f) => n + f.icons, 0);
+    const numField = cardIcons.fields.find((f) => f.id === 'num');
+    rec('card form: exactly one gitpass icon, on the card number field',
+      cardGroupIcons === 1 && !!numField && numField.decorated && numField.icons === 1,
+      `card form icons=${cardGroupIcons} on=${cardIcons.fields.filter((f) => f.icons).map((f) => f.id).join(',') || 'none'}; page icons=${cardIcons.pageIcons} (2 card groups + identity)`);
+    rec('card form: name/expiry/CVC are not separately decorated',
+      ['name', 'mm', 'yy', 'cvc'].every((id) => { const f = cardIcons.fields.find((x) => x.id === id); return !!f && !f.decorated && f.icons === 0; }),
+      cardIcons.fields.filter((f) => f.id !== 'num').map((f) => `${f.id}:${f.decorated || f.icons ? 'decorated' : 'no badge'}`).join(' '));
+    // The icon itself (not the field) must open the dropdown, and picking a card fills every card field.
+    if (cardIcons.badge) await cardPage.mouse.click(cardIcons.badge.x, cardIcons.badge.y);
+    const iconRow = await until(async () => { const h = await findInShadow(cardPage, /^Visa$/); return h.length && h; }, T(5000));
+    if (iconRow) await cardPage.mouse.click(iconRow[0].x, iconRow[0].y);
+    const iconFilled = await until(async () => same(await vals(CARD_IDS), CARD_WANT), T(3000));
+    rec('card number icon fills all card fields', !!iconFilled,
+      `${iconRow ? `clicked "${iconRow[0].text}"` : (cardIcons.badge ? 'no dropdown entry after icon click' : 'no icon found on #num')}; ${diff(await vals(CARD_IDS), CARD_WANT, CARD_IDS)}`);
     rec('card fill via in-page dropdown', ...await inpageCF('#num', /^Visa$/, CARD_IDS, CARD_WANT, 'fill_card'));
     rec('identity fill via in-page dropdown', ...await inpageCF('#fn', /^Home Identity$/, ID_IDS, ID_WANT, 'fill_identity'));
     rec('card fill via popup Fill', ...await viaPop('Visa', CARD_IDS, CARD_WANT, 'fill_card'));
