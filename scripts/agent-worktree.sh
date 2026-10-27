@@ -6,7 +6,7 @@
 #   scripts/agent-worktree.sh list
 set -euo pipefail
 ROOT="${GITPASS_WT_ROOT:-$HOME/gitpass-wt}"
-AGENTS="edison opencode agy grokbot human"
+AGENTS="edison opencode agy muse grokbot human"
 usage() { sed -n '2,6p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 valid() { [[ "$1" =~ ^[a-z0-9][a-z0-9._-]*$ ]] || { echo "invalid name: $1 (use lowercase a-z 0-9 . _ -)" >&2; exit 2; }; }
 repo=$(git rev-parse --show-toplevel 2>/dev/null) || { echo "run inside the gitpass repo" >&2; exit 2; }
