@@ -50,6 +50,7 @@ export const api = {
   passwordStrength: (a:{password:string}) => call<number>('password_strength', a),
   watchtower: (a:{hibp:boolean}) => call<T.WatchtowerReport>('watchtower', a),
   importFile: (a:{vaultId:string; format:string; path:string; dryRun:boolean}) => call<T.ImportResult>('import_file', a),
+  exportItems: (a:{req:T.ExportRequest}) => call<T.ExportResult>('export_items', a),
   identity: () => call<T.Identity>('identity'),
   /** v0.7: new Ed25519 key in a new SSH Key item (private key never reaches the webview) */
   sshGenerate: (a:{vaultId:string; title:string; comment?:string|null}) => call<T.SshKeyCreated>('ssh_generate', a),

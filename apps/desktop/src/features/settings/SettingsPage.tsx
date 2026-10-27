@@ -1,7 +1,7 @@
 import { Logo } from '../../ui/logo';
 import { EmergencyKitFlow } from '../onboarding/EmergencyKit';
 import { useEffect, useState } from 'react';
-import { Archive as VaultsTabIcon, Copy, ExternalLink, Pencil, Trash2, Laptop, Lock, Info, RefreshCw, SlidersHorizontal, Smartphone, Terminal } from 'lucide-react';
+import { Archive as VaultsTabIcon, Copy, Download, ExternalLink, Pencil, Trash2, Laptop, Lock, Info, RefreshCw, SlidersHorizontal, Smartphone, Terminal } from 'lucide-react';
 import { api } from '../../api/client';
 import type { DeviceInfo, SshAgentInfo, VaultInfo } from '../../api/types';
 import { cn } from '../../lib/utils';
@@ -14,6 +14,7 @@ import { UpdateRow } from './UpdateRow';
 import { getAppVersion } from '../../lib/updater';
 import { VaultIcon } from '../home/vaultIcons';
 import { DeleteVaultDialog, EditVaultDialog } from '../home/VaultDialogs';
+import { ExportDialog } from '../export';
 
 const errMsg = (e: unknown) => String((e as Error)?.message ?? e);
 /** Build-time fallback; About shows the running app's version from getAppVersion(). */
@@ -150,6 +151,7 @@ function About() {
 function Vaults() {
   const t = useT(); const [vs, setVs] = useState<VaultInfo[] | null>(null); const [err, setErr] = useState<string | null>(null);
   const [editV, setEditV] = useState<VaultInfo | null>(null); const [delV, setDelV] = useState<VaultInfo | null>(null);
+  const [exportV, setExportV] = useState<VaultInfo | null>(null);
   const reload = () => api.listVaults().then(setVs, (e) => setErr(errMsg(e)));
   useEffect(() => { void reload(); }, []);
   if (err) return <p role="alert" className="py-4 text-sm text-danger">{err}</p>;
@@ -160,11 +162,13 @@ function Vaults() {
     {vs.map((v) => <div key={v.id} className="flex items-center gap-3 border-b border-border py-3 last:border-0">
       <VaultIcon icon={v.icon} color={v.color} size={28} />
       <div className="min-w-0 flex-1"><div className="truncate text-sm font-medium">{v.name}</div><div className="truncate text-xs text-muted">{v.description ? `${v.description} · ` : ''}{t('settings.vaultItems')}: {v.itemCount}</div></div>
+      <Button variant="ghost" size="sm" aria-label={t('export.vaultLabel', { vault: v.name })} title={t('export.vaultLabel', { vault: v.name })} onClick={() => setExportV(v)}><Download size={14} /></Button>
       <Button variant="ghost" size="sm" aria-label={`${t('vault.edit')} ${v.name}`} onClick={() => setEditV(v)}><Pencil size={14} /></Button>
       <Button variant="ghost" size="sm" aria-label={`${t('vault.delete')} ${v.name}`} disabled={vs.length <= 1} title={vs.length <= 1 ? t('vault.lastVault') : undefined} onClick={() => setDelV(v)}><Trash2 size={14} className="text-danger" /></Button>
     </div>)}
     <EditVaultDialog vault={editV} onOpenChange={(o) => !o && setEditV(null)} onSaved={() => { toast(t('vault.saved')); done(); }} />
     <DeleteVaultDialog vault={delV} isLast={vs.length <= 1} onOpenChange={(o) => !o && setDelV(null)} onDeleted={() => { toast(t('vault.deleted', { vault: delV?.name ?? '' })); useApp.getState().selectItem(null); done(); }} />
+    <ExportDialog open={!!exportV} onOpenChange={(o) => !o && setExportV(null)} vaultId={exportV?.id} vaultName={exportV?.name} />
   </div>;
 }
 
@@ -172,7 +176,7 @@ function Vaults() {
  * command in the contract, so this is a read-only overview with links to items and sharing. */
 function VaultPanel({ vaultId }: { vaultId: string }) {
   const t = useT(); const [v, setV] = useState<VaultInfo | null | undefined>(undefined); const [count, setCount] = useState(0);
-  const [edit, setEdit] = useState(false); const [del, setDel] = useState(false);
+  const [edit, setEdit] = useState(false); const [del, setDel] = useState(false); const [exp, setExp] = useState(false);
   const reload = () => api.listVaults().then((vs) => { setCount(vs.length); setV(vs.find((x) => x.id === vaultId) ?? null); }).catch(() => setV(null));
   useEffect(() => { void reload(); }, [vaultId]); // eslint-disable-line react-hooks/exhaustive-deps
   if (v === undefined) return <Skeleton className="h-24" />;
@@ -185,10 +189,12 @@ function VaultPanel({ vaultId }: { vaultId: string }) {
     <Row label={t('people.vaultMembers')}><span className="text-sm">{v.members.length}</span></Row>
     <div className="flex gap-2 py-4"><Button variant="default" onClick={() => app.setRoute({ name: 'items', filter: { kind: 'vault', vaultId: v.id } })}>{t('settings.vaultOpen')}</Button>
       <Button variant="outline" onClick={() => app.openModal('people', { vaultId: v.id })}>{t('people.invite')}</Button>
+      <Button variant="outline" onClick={() => setExp(true)}><Download size={14} />{t('export.buttonVault')}</Button>
       <Button variant="outline" onClick={() => setEdit(true)}><Pencil size={14} />{t('vault.edit')}</Button>
       <Button variant="outline" className="text-danger" disabled={count <= 1} title={count <= 1 ? t('vault.lastVault') : undefined} onClick={() => setDel(true)}><Trash2 size={14} />{t('vault.delete')}</Button></div>
     <EditVaultDialog vault={edit ? v : null} onOpenChange={setEdit} onSaved={(nv) => { toast(t('vault.saved')); setV(nv); app.refreshItems(); }} />
     <DeleteVaultDialog vault={del ? v : null} isLast={count <= 1} onOpenChange={setDel} onDeleted={() => { toast(t('vault.deleted', { vault: v.name })); app.selectItem(null); app.refreshItems(); app.setRoute({ name: 'settings', tab: 'vaults' }); }} />
+    <ExportDialog open={exp} onOpenChange={setExp} vaultId={v.id} vaultName={v.name} />
   </>;
 }
 
