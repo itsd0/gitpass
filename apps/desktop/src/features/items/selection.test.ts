@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clickSelect, prune, selectAll, selectedIds } from './selection';
+import { arrowSelect, clickSelect, prune, rangeFocus, selectAll, selectedIds } from './selection';
 const order = ['a', 'b', 'c', 'd', 'e'];
 describe('item multi-select', () => {
   it('plain click selects one', () => {
@@ -23,6 +23,48 @@ describe('item multi-select', () => {
     // cmd+shift adds the range to the current selection
     expect(clickSelect(order, { selected: 'e', multi: ['a', 'e'] }, 'c', { range: true, toggle: true }).multi).toEqual(['a', 'c', 'd', 'e']);
     expect(clickSelect(order, { selected: 'c', multi: [] }, 'c', { range: true })).toEqual({ selected: 'c', multi: [] });
+  });
+  it('shift+arrow extends, shrinks and crosses the anchor; plain arrow returns to single', () => {
+    // Single selection: anchor is the starting item.
+    let s = arrowSelect(order, { selected: 'c', multi: [] }, 1, true);
+    expect(s).toEqual({ selected: 'c', multi: ['c', 'd'] });
+    expect(rangeFocus(order, s)).toBe('d');
+    // Extend further down.
+    s = arrowSelect(order, s, 1, true);
+    expect(s).toEqual({ selected: 'c', multi: ['c', 'd', 'e'] });
+    // Shrink back toward the anchor.
+    s = arrowSelect(order, s, -1, true);
+    expect(s).toEqual({ selected: 'c', multi: ['c', 'd'] });
+    s = arrowSelect(order, s, -1, true);
+    expect(s).toEqual({ selected: 'c', multi: [] });
+    // Cross the anchor to the other side.
+    s = arrowSelect(order, s, -1, true);
+    expect(s).toEqual({ selected: 'c', multi: ['b', 'c'] });
+    // Plain arrow from a range moves one step from the focus row and returns to a single selection.
+    expect(arrowSelect(order, { selected: 'c', multi: ['c', 'd', 'e'] }, 1)).toEqual({ selected: 'e', multi: [] });
+    expect(arrowSelect(order, { selected: 'c', multi: ['b', 'c'] }, -1)).toEqual({ selected: 'a', multi: [] });
+    // Clamped at the ends, and no selection starts at the first row.
+    expect(arrowSelect(order, { selected: 'e', multi: [] }, 1, true)).toEqual({ selected: 'e', multi: [] });
+    expect(arrowSelect(order, { selected: null, multi: [] }, 1, true)).toEqual({ selected: 'a', multi: [] });
+    expect(arrowSelect([], { selected: null, multi: [] }, 1, true)).toEqual({ selected: null, multi: [] });
+  });
+  it('arrow keys from Cmd-click / Cmd-A selections move from the last-clicked item, not the opposite end', () => {
+    // Cmd-click a, c, e: selection is not a contiguous range, so focus is the last-clicked item e.
+    const cmdClick = { selected: 'e', multi: ['a', 'c', 'e'] };
+    expect(rangeFocus(order, cmdClick)).toBe('e');
+    // Shift+Down is clamped at e; Shift+Up selects the range from the anchor e.
+    expect(arrowSelect(order, cmdClick, 1, true)).toEqual({ selected: 'e', multi: [] });
+    expect(arrowSelect(order, cmdClick, -1, true)).toEqual({ selected: 'e', multi: ['d', 'e'] });
+    // Cmd-A with c selected: the anchor is inside the range, not at an end, so focus is c.
+    const cmdA = selectAll(order, { selected: 'c', multi: [] });
+    expect(cmdA).toEqual({ selected: 'c', multi: order });
+    expect(rangeFocus(order, cmdA)).toBe('c');
+    expect(arrowSelect(order, cmdA, 1, true)).toEqual({ selected: 'c', multi: ['c', 'd'] });
+    expect(arrowSelect(order, cmdA, 1)).toEqual({ selected: 'd', multi: [] });
+    // A Cmd+Shift range that is not contiguous (a, c, d, e with anchor e) behaves the same way.
+    const gapped = { selected: 'e', multi: ['a', 'c', 'd', 'e'] };
+    expect(rangeFocus(order, gapped)).toBe('e');
+    expect(arrowSelect(order, gapped, -1, true)).toEqual({ selected: 'e', multi: ['d', 'e'] });
   });
   it('select all, prune and selectedIds', () => {
     const s = selectAll(order, { selected: 'c', multi: [] });

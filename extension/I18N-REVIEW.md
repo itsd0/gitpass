@@ -31,5 +31,5 @@
 
 ## v0.6 integration note
 The 49 keys added during the v0.6 merge (in-page `cs*` strings plus the welcome/options keys above) have draft my/th
-translations marked `"description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"` in `_locales/my|th/messages.json`.
-They are not reviewed by native speakers yet.
+translations harmonized with the desktop glossary by agent `agy` (Issue #9). All keys in `_locales/my|th/messages.json`
+are aligned with `en`. Final native-speaker sign-off remains with the repo owner.

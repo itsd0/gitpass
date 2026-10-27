@@ -58,9 +58,13 @@ describe('emergency kit', () => {
     fireEvent.click(screen.getByText(en['kit.print']));
     await waitFor(() => expect(done).toHaveBeenCalled()); expect(print).toHaveBeenCalled();
   });
-  it('every kit.* key exists in English; my/th translations are partial (fall back to English)', () => {
+  it('every kit.* key exists in English, Burmese, and Thai', () => {
     const keys = Object.keys(en).filter(k => k.startsWith('kit.'));
     expect(keys.length).toBeGreaterThan(25);
-    for (const d of [dictionaries.my, dictionaries.th]) expect(d['kit.title' as keyof typeof en]).toBeTruthy();
+    for (const d of [dictionaries.my, dictionaries.th]) {
+      for (const k of keys) {
+        expect(d[k as keyof typeof en]).toBeTruthy();
+      }
+    }
   });
 });

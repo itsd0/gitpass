@@ -327,8 +327,8 @@
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "hostMissingHelp": {
-    "message": "gitpass အက်ပ်မှ တစ်ကြိမ် ထည့်သွင်းပါ (Settings → Browser extension → Install helper)၊ သို့မဟုတ် Terminal တွင် ဤအမိန့်ကို run ပါ ",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "message": "gitpass အက်ပ်မှ တစ်ကြိမ် ထည့်သွင်းပါ (Settings → Browser extension → Install helper) သို့မဟုတ် Terminal တွင် run ပါ:",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "thenRetry": {
     "message": "ထို့နောက် “ထပ်စမ်းရန်” ကို နှိပ်ပါ။",
@@ -356,11 +356,11 @@
   },
   "optAutolock": {
     "message": "gitpass အက်ပ်နှင့်အတူ အလိုအလျောက် သော့ခတ်ရန်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optAutolockBody": {
     "message": "အက်ပ်ကို သော့ခတ်သောအခါ extension ကိုပါ သော့ခတ်ပါမည် (idle timeout ကို အက်ပ်တွင် သတ်မှတ်ပါ)။",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optAutofill": {
     "message": "စာမျက်နှာများတွင် Autofill အကြံပြုချက်များ",
@@ -416,7 +416,7 @@
   },
   "stepPinBody": {
     "message": "toolbar ရှိ puzzle (🧩) အိုင်ကွန်ကို နှိပ်ပြီး gitpass ဘေးရှိ pin ကို နှိပ်ပါ။ အောက်ပါ ကီးဖြင့်လည်း အချိန်မရွေး ဖွင့်နိုင်ပါသည်",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "pinDone": {
     "message": "pin လုပ်ပြီးပါပြီ",

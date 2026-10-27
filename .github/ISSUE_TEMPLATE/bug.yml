@@ -22,5 +22,5 @@ body:
     validations: { required: true }
   - type: dropdown
     id: agent
-    attributes: { label: Suggested agent, options: [edison, opencode, agy, grokbot, other, human] }
+    attributes: { label: Suggested agent, options: [edison, opencode, agy, muse, grokbot, other, human] }
     validations: { required: true }

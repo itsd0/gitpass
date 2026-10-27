@@ -11,7 +11,7 @@ import { CategoryIcon } from '../../components/CategoryIcon';
 import { groupRows, type Row } from './grouping';
 import { useItemsUI } from './state';
 import { copyPrimarySecret, errText } from './actions';
-import { applySel, clickSelect, prune, readSel, selectAll } from './selection';
+import { applySel, arrowSelect, clickSelect, prune, rangeFocus, readSel, selectAll } from './selection';
 import { requestDelete } from './BulkPane';
 
 /** Every row has a fixed, explicit height (the DOM enforces it), so virtual offsets are exact: no overlap, no stray gaps. */
@@ -67,8 +67,13 @@ export function ItemList() {
     if ((e.key === 'Delete' || e.key === 'Backspace') && !e.altKey) { e.preventDefault(); requestDelete(); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
-      const n = Math.max(0, Math.min(items.length - 1, idx + (e.key === 'ArrowDown' ? 1 : -1)));
-      if (items[n]) { selectItem(items[n].id); const ri = rows.findIndex((r) => r.key === items[n].id); if (ri >= 0) virt.scrollToIndex(ri, { align: 'auto' }); }
+      // Shift+Arrow extends/shrinks the range from the anchor; plain Arrow
+      // returns to a single selection. Both move from the focus row, and the
+      // focus row (not the anchor) is scrolled into view.
+      const next = arrowSelect(order, readSel(), e.key === 'ArrowDown' ? 1 : -1, e.shiftKey);
+      const focusId = rangeFocus(order, next) ?? next.selected;
+      applySel(next);
+      if (focusId) { const ri = rows.findIndex((r) => r.key === focusId); if (ri >= 0) virt.scrollToIndex(ri, { align: 'auto' }); }
     } else if (e.key === 'Enter' && idx >= 0) {
       e.preventDefault(); (document.querySelector('[data-detail-pane]') as HTMLElement | null)?.focus();
     } else if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && idx >= 0 && !window.getSelection()?.toString()) {
