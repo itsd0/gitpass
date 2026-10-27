@@ -226,6 +226,62 @@ fn mfa_site_list_parsing_and_lookup() {
     assert!(audit::lookup_mfa_site(&sites, "   ").is_none());
 }
 
+const BARE_PUBLIC_SUFFIXES: &[&str] = &[
+    "com", "org", "net", "edu", "gov", "mil", "int", "io", "me", "tv", "us", "uk", "de", "jp", "ca", "au",
+    "co.uk", "org.uk", "gov.uk", "ac.uk", "com.au", "net.au", "org.au", "co.jp", "co.nz", "com.br",
+    "github.io", "gitlab.io", "pages.dev", "vercel.app", "herokuapp.com", "azurewebsites.net", "cloudfront.net",
+];
+
+fn is_bare_public_suffix(domain: &str) -> bool {
+    let d = domain.trim().trim_matches('.').to_ascii_lowercase();
+    if !d.contains('.') { return true; } // bare TLD (e.g. "com", "io")
+    BARE_PUBLIC_SUFFIXES.iter().any(|&s| d == s)
+}
+
+#[test]
+fn reject_bare_public_suffixes() {
+    for bare in ["com", "co.uk", "github.io", "pages.dev", "herokuapp.com"] {
+        assert!(is_bare_public_suffix(bare), "expected {bare} to be rejected as bare public suffix");
+    }
+    for valid in ["google.com", "live.com", "microsoftonline.com", "mysite.github.io", "sub.example.co.uk"] {
+        assert!(!is_bare_public_suffix(valid), "expected {valid} to be accepted as registrable domain");
+    }
+}
+
+#[test]
+fn longest_match_wins_over_first_sorted_match() {
+    // accounts.example.test is more specific than example.test
+    let sites = audit::parse_mfa_site_list("example.test\ttotp\naccounts.example.test\ttotp,passkey\n");
+    let hit_sub = audit::lookup_mfa_site(&sites, "https://accounts.example.test/signin");
+    assert_eq!(hit_sub.map(|(d, s)| (d, s.totp, s.passkey)), Some(("accounts.example.test", true, true)));
+
+    let hit_apex = audit::lookup_mfa_site(&sites, "https://example.test/login");
+    assert_eq!(hit_apex.map(|(d, s)| (d, s.totp, s.passkey)), Some(("example.test", true, false)));
+
+    let hit_other = audit::lookup_mfa_site(&sites, "https://other.example.test/login");
+    assert_eq!(hit_other.map(|(d, s)| (d, s.totp, s.passkey)), Some(("example.test", true, false)));
+}
+
+#[test]
+fn passkey_suppression_across_subdomains_and_registrable_domain() {
+    let now = 2_000_000_000u64;
+    let sites = audit::parse_mfa_site_list("google.com\ttotp,passkey\n");
+    let strong = "Xq7#vR2!mK9@pL4$wZ";
+    let items = vec![
+        item("ApexLogin", Some(strong), Some("https://google.com/login")),
+        item("SubLogin", Some(strong), Some("https://mail.google.com/")),
+    ];
+    let mut passkeys = BTreeSet::new();
+    // Passkey registered under accounts.google.com
+    passkeys.insert("accounts.google.com".to_string());
+    let o = AuditOpts { now_secs: now, ..Default::default() };
+    let r = audit::audit_with_sites(&rows(items), &passkeys, &sites, &o, None).unwrap();
+    let f = |t: &str| r.per_item.iter().find(|x| x.title == t).map(|x| x.findings.clone()).unwrap_or_default();
+    // Both logins are under google.com, so stored passkey on accounts.google.com suppresses passkey advice for both.
+    assert!(!f("ApexLogin").iter().any(|x| matches!(x, Finding::PasskeyAvailable { .. })));
+    assert!(!f("SubLogin").iter().any(|x| matches!(x, Finding::PasskeyAvailable { .. })));
+}
+
 #[test]
 fn bundled_mfa_site_list_is_well_formed() {
     let src = include_str!("../data/mfa-sites.tsv");
@@ -234,8 +290,19 @@ fn bundled_mfa_site_list_is_well_formed() {
     assert_eq!(sites.len(), data_lines, "every bundled data line must parse");
     assert!(sites.len() >= 20);
     assert!(sites.iter().all(|(d, s)| !d.is_empty() && !d.contains('/') && (s.totp || s.passkey)));
+    for (d, _) in sites {
+        assert!(!is_bare_public_suffix(d), "bare public suffix or TLD in bundled list: {d}");
+    }
     assert!(sites.iter().any(|(d, s)| d == "github.com" && s.totp && s.passkey));
     assert!(sites.iter().any(|(d, s)| d == "apple.com" && s.passkey && !s.totp));
+    assert!(sites.iter().any(|(d, s)| d == "walmart.com" && s.passkey && !s.totp));
+    assert!(sites.iter().any(|(d, s)| d == "live.com" && s.totp && s.passkey));
+    assert!(sites.iter().any(|(d, s)| d == "microsoftonline.com" && s.totp && s.passkey));
+    assert!(sites.iter().any(|(d, s)| d == "paypal.com" && s.totp && s.passkey));
+    assert!(sites.iter().any(|(d, s)| d == "ebay.com" && s.totp && s.passkey));
+    assert!(sites.iter().any(|(d, s)| d == "bestbuy.com" && s.totp && s.passkey));
+    assert!(sites.iter().any(|(d, s)| d == "uber.com" && s.totp && s.passkey));
+    assert!(!sites.iter().any(|(d, _)| d == "steamcommunity.com"), "steamcommunity.com should be dropped (non-standard TOTP)");
     let mut domains: Vec<&str> = sites.iter().map(|(d, _)| d.as_str()).collect();
     let n = domains.len(); domains.sort_unstable(); domains.dedup(); assert_eq!(domains.len(), n);
     // Bundled lookups: subdomains and case match, lookalikes do not.
@@ -269,7 +336,7 @@ fn audit_flags_totp_and_passkey_availability_offline() {
     let f = |t: &str| r.per_item.iter().find(|x| x.title == t).map(|x| x.findings.clone()).unwrap_or_default();
     assert!(f("TotpMissing").contains(&Finding::TotpAvailable { site: "example.test".into() }));
     assert!(f("TotpMissing").contains(&Finding::PasskeyAvailable { site: "example.test".into() }));
-    assert!(f("TotpMissing").contains(&Finding::MissingTotp));
+    assert!(!f("TotpMissing").contains(&Finding::MissingTotp));
     // TOTP present: no TOTP advice, but a passkey is still suggested (no passkey recorded for example.test).
     assert!(!f("WithTotp").iter().any(|x| matches!(x, Finding::TotpAvailable { .. })));
     assert!(f("WithTotp").contains(&Finding::PasskeyAvailable { site: "example.test".into() }));
@@ -277,20 +344,28 @@ fn audit_flags_totp_and_passkey_availability_offline() {
     assert!(!f("PasskeySite").iter().any(|x| matches!(x, Finding::PasskeyAvailable { .. })));
     assert!(f("TotpOnly").contains(&Finding::TotpAvailable { site: "totp.test".into() }));
     assert!(!f("TotpOnly").iter().any(|x| matches!(x, Finding::PasskeyAvailable { .. })));
+    assert!(!f("TotpOnly").contains(&Finding::MissingTotp));
     // Lookalikes / unknown sites get the generic missing-TOTP finding but no site advice.
     for t in ["Lookalike", "Unknown"] {
         assert!(f(t).contains(&Finding::MissingTotp));
         assert!(!f(t).iter().any(|x| matches!(x, Finding::TotpAvailable { .. } | Finding::PasskeyAvailable { .. })));
     }
     assert!(!f("NoUrl").iter().any(|x| matches!(x, Finding::MissingTotp | Finding::TotpAvailable { .. } | Finding::PasskeyAvailable { .. })));
-    assert_eq!((r.totp_available, r.passkey_available, r.missing_totp), (2, 2, 4));
-    // A passkey rp_id covers subdomains of itself, not its parent domain.
+    assert_eq!((r.totp_available, r.passkey_available, r.missing_totp), (2, 2, 2));
+    // A passkey rp_id on a subdomain (login.example.test) also suppresses for parent domain (example.test).
     let mut sub_only = BTreeSet::new();
     sub_only.insert("login.example.test".to_string());
     let mut parent = item("ParentHost", Some(strong), Some("https://example.test"));
     parent.updated_at = (now - 10 * 86400).to_string();
-    let r = audit::audit_with_sites(&rows(vec![parent]), &sub_only, &sites, &o, None).unwrap();
-    assert!(r.per_item[0].findings.contains(&Finding::PasskeyAvailable { site: "example.test".into() }));
+    let r = audit::audit_with_sites(&rows(vec![parent.clone()]), &sub_only, &sites, &o, None).unwrap();
+    let parent_findings = r.per_item.iter().find(|x| x.title == "ParentHost").map(|x| x.findings.clone()).unwrap_or_default();
+    assert!(!parent_findings.iter().any(|x| matches!(x, Finding::PasskeyAvailable { .. })));
+    // Unrelated passkey domain does not suppress passkey advice.
+    let mut unrelated = BTreeSet::new();
+    unrelated.insert("other.test".to_string());
+    let r = audit::audit_with_sites(&rows(vec![parent]), &unrelated, &sites, &o, None).unwrap();
+    let parent_findings = r.per_item.iter().find(|x| x.title == "ParentHost").map(|x| x.findings.clone()).unwrap_or_default();
+    assert!(parent_findings.contains(&Finding::PasskeyAvailable { site: "example.test".into() }));
 }
 
 struct MockHibp { body: String, calls: RefCell<Vec<String>> }

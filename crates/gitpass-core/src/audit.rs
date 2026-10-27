@@ -102,10 +102,14 @@ fn domain_matches(host: &str, domain: &str) -> bool {
 }
 
 /// Look up a URL (or bare host) in an offline site list. Returns the matched domain and its
-/// capabilities. The first (sorted) matching entry wins.
+/// capabilities. The most-specific (longest domain) match wins.
 pub fn lookup_mfa_site<'a>(sites: &'a [(String, SiteSupport)], url: &str) -> Option<(&'a str, SiteSupport)> {
     let host = host_of(url)?;
-    sites.iter().find(|(domain, _)| domain_matches(&host, domain)).map(|(domain, s)| (domain.as_str(), *s))
+    sites
+        .iter()
+        .filter(|(domain, _)| domain_matches(&host, domain))
+        .max_by_key(|(domain, _)| (domain.len(), domain.as_str()))
+        .map(|(domain, s)| (domain.as_str(), *s))
 }
 
 fn bundled_mfa_sites() -> &'static [(String, SiteSupport)] {
@@ -119,8 +123,13 @@ pub fn mfa_sites() -> &'static [(String, SiteSupport)] { bundled_mfa_sites() }
 /// Look up a URL (or bare host) in the bundled offline list.
 pub fn site_support(url: &str) -> Option<(&'static str, SiteSupport)> { lookup_mfa_site(bundled_mfa_sites(), url) }
 
-fn has_passkey_for(passkey_sites: &BTreeSet<String>, host: &str) -> bool {
-    passkey_sites.iter().any(|rp_id| domain_matches(host, rp_id))
+fn has_passkey_for(passkey_sites: &BTreeSet<String>, host: &str, site: &str) -> bool {
+    passkey_sites.iter().any(|rp_id| {
+        domain_matches(host, rp_id)
+            || domain_matches(rp_id, host)
+            || domain_matches(rp_id, site)
+            || domain_matches(site, rp_id)
+    })
 }
 
 /// Naive entropy estimate: length * log2(pool size of the character classes used).
@@ -212,13 +221,21 @@ pub fn audit_with_sites(items: &[(String, String, Item)], passkey_sites: &BTreeS
         let host = url.and_then(host_of);
         let support = host.as_deref().and_then(|h| lookup_mfa_site(sites, h));
         if url.is_some() && no_totp {
+            let mut advised_totp = false;
             if let Some((site, s)) = support {
-                if s.totp { f.push(Finding::TotpAvailable { site: site.to_string() }); r.totp_available += 1; }
+                if s.totp {
+                    f.push(Finding::TotpAvailable { site: site.to_string() });
+                    r.totp_available += 1;
+                    advised_totp = true;
+                }
             }
-            f.push(Finding::MissingTotp); r.missing_totp += 1;
+            if !advised_totp {
+                f.push(Finding::MissingTotp);
+                r.missing_totp += 1;
+            }
         }
         if let (Some(host), Some((site, s))) = (host.as_deref(), support) {
-            if s.passkey && !has_passkey_for(&passkey_domains, host) {
+            if s.passkey && !has_passkey_for(&passkey_domains, host, site) {
                 f.push(Finding::PasskeyAvailable { site: site.to_string() }); r.passkey_available += 1;
             }
         }
