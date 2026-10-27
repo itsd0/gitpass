@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.6.1 — 2026-10-27
+
+### Desktop
+- **Lock always returns to the unlock screen** (750bc18). The backend now emits `locked` on every lock path (idle auto-lock,
+  lazy expiry inside a command, manual lock, extension/agent `lock`); any "vault is locked" command error also locks the UI.
+  Item/vault state, modals and the item detail are cleared; after unlocking you return to the page you were on.
+  No page or toast shows a raw "vault is locked" error anymore.
+- **Auto-lock after system sleep**: the lock watcher detects a wall-clock gap (macOS `Instant` does not advance while
+  asleep) and locks on wake.
+- Cards: brand + last 4 in the list subtitle and a masked number; CVV no longer misdetected as the card number; skip
+  "cardholder name" fields when locating the number (4cf2d44, f99c822). Extension popup too.
+- Vault CRUD (rename / restyle / delete) in core, CLI and GUI; item list row heights, breadcrumb and empty-vault state fixes (992bb49).
+- About shows the real app version; a 404 update check means "You're on the latest version"; my/th update strings (ffea0bd).
+
+### Windows
+- SSH agent gated behind `cfg(unix)` with a Windows stub; unix-only SSH tests (26e1d93, 479de0b).
+
+### Release / CI
+- Releases create the gitpass-releases tag from its own `main` (e0b2780).
+- CI, iOS and macOS release builds run on a self-hosted Mac runner; tests use an isolated temp `HOME`; Windows/Linux
+  release builds are opt-in (`include_windows_linux`); all actions pinned to commit SHAs. macOS builds are signed with the
+  self-signed "gitpass Local Signing" identity (not notarized).
+
 ## Unreleased — feat/keys (SSH keys, SSH agent, passkeys)
 - SSH Key items: generate Ed25519, import OpenSSH private keys (ed25519 / ECDSA P-256, passphrase-protected OK), public key + SHA256 fingerprint stored.
 - Desktop SSH agent at `~/Library/Application Support/gitpass/ssh-agent.sock` (identities + sign, only while unlocked, optional approve-each-use). Settings → SSH Agent shows the `IdentityAgent` line.
