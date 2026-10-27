@@ -94,9 +94,31 @@ fn run_host(args: &[String]) -> Result<()> {
     let b = Bridge::new(AgentPaths::default_paths(), Host::new(cfg), Box::new(std::io::stdout()));
     {
         let h = b.host.clone();
-        std::thread::spawn(move || loop {
-            std::thread::sleep(Duration::from_secs(1));
-            if let Ok(mut g) = h.lock() { g.expire_if_idle(); }
+        let b2 = b.clone();
+        std::thread::spawn(move || {
+            let mut last_wall = std::time::SystemTime::now();
+            const SLEEP_GAP: Duration = Duration::from_secs(30);
+            loop {
+                std::thread::sleep(Duration::from_secs(1));
+                let now = std::time::SystemTime::now();
+                let slept = now.duration_since(last_wall).map(|d| d > SLEEP_GAP).unwrap_or(false);
+                last_wall = now;
+                if let Ok(mut g) = h.lock() {
+                    let mut locked = false;
+                    let mut reason = "idle";
+                    if slept && g.is_unlocked() {
+                        g.lock();
+                        locked = true;
+                        reason = "sleep";
+                    } else if g.expire_if_idle() {
+                        locked = true;
+                        reason = "idle";
+                    }
+                    if locked {
+                        b2.emit(&json!({"event": "lock", "reason": reason}));
+                    }
+                }
+            }
         });
     }
     // Connect eagerly so app lock/unlock events reach the extension even before its first request.

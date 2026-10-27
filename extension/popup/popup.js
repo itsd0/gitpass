@@ -3,8 +3,8 @@
 // gitpass popup v0.6: 1Password-style 2-pane UI. All host calls go through background.js as `popup:*` messages.
 const $ = (id) => document.getElementById(id);
 const t = (k, f) => GitpassI18n.t(k, f);
-const V = GitpassView;
-const { UI, categoryIcon } = GitpassPopupIcons;
+const V = typeof GitpassView !== 'undefined' ? GitpassView : (typeof require !== 'undefined' ? require('./view.js') : null);
+const { UI, categoryIcon } = typeof GitpassPopupIcons !== 'undefined' ? GitpassPopupIcons : (typeof require !== 'undefined' ? require('./icons.js') : { UI: {} });
 const ROW_H = 52;
 
 function send(msg) {
@@ -35,11 +35,55 @@ function errText(e) {
   return (c && M[c]) || String((e && e.message) || e);
 }
 function showErr(e) { if (e && e.code === 'locked') { refresh(); return; } toast(errText(e)); }
-async function copy(text, label) {
-  if (window.__gitpassMock) { toast(label || t('copied', 'Copied')); return; }
-  await navigator.clipboard.writeText(text); toast(label || t('copied', 'Copied'));
+let clipTimer = null;
+let lastCopied = null;
+
+async function clearClipboardIfOurs() {
+  if (!lastCopied) return false;
+  const token = lastCopied;
+  lastCopied = null;
+  if (clipTimer) { clearTimeout(clipTimer); clipTimer = null; }
+  if (window.__gitpassMock) {
+    if (window.__gitpassMockClipboard === token) {
+      window.__gitpassMockClipboard = '';
+      return true;
+    }
+    return false;
+  }
+  try {
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      const cur = await navigator.clipboard.readText();
+      if (cur === token) {
+        await navigator.clipboard.writeText('');
+        return true;
+      }
+    }
+  } catch (_) {}
+  return false;
 }
-function show(view) { for (const v of ['nohost', 'locked', 'unlocked']) { const e = $(v); if (e) e.classList.toggle('hidden', v !== view); } }
+
+async function copy(text, label, clearSecs = 30) {
+  lastCopied = text;
+  if (clipTimer) clearTimeout(clipTimer);
+  if (window.__gitpassMock) {
+    window.__gitpassMockClipboard = text;
+    toast(label || t('copied', 'Copied'));
+  } else {
+    await navigator.clipboard.writeText(text);
+    toast(label || t('copied', 'Copied'));
+  }
+  if (clearSecs > 0) {
+    clipTimer = setTimeout(() => {
+      clearClipboardIfOurs();
+    }, clearSecs * 1000);
+  }
+}
+globalThis.copy = copy;
+globalThis.clearClipboardIfOurs = clearClipboardIfOurs;
+function show(view) {
+  if (view === 'locked') clearClipboardIfOurs();
+  for (const v of ['nohost', 'locked', 'unlocked']) { const e = $(v); if (e) e.classList.toggle('hidden', v !== view); }
+}
 
 // ---------- state ----------
 const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpTimer: null, panel: null, view: null };
@@ -113,7 +157,7 @@ document.querySelectorAll('.eye').forEach((b) => {
   b.addEventListener('click', () => { const i = $(b.dataset.for); const on = i.type === 'password'; i.type = on ? 'text' : 'password'; b.innerHTML = on ? UI.eyeOff : UI.eye; });
 });
 $('retry').onclick = refresh;
-$('lock').onclick = async () => { await send({ type: 'popup:lock' }).catch(showErr); refresh(); };
+$('lock').onclick = async () => { clearClipboardIfOurs(); await send({ type: 'popup:lock' }).catch(showErr); refresh(); };
 
 // ---------- data + list ----------
 async function loadData() {
@@ -449,9 +493,18 @@ if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
     if (!msg || msg.type !== 'popup:event') return;
     if (msg.event === 'unlock') refresh();
     else if (msg.event === 'changed') liveReload();
-    else if (msg.event === 'lock') popupSettings().then((st) => { if (st.autolockFollowsApp !== false) refresh(); });
+    else if (msg.event === 'lock') {
+      clearClipboardIfOurs();
+      popupSettings().then((st) => { if (st.autolockFollowsApp !== false) refresh(); });
+    }
   });
 }
 
-GitpassI18n.apply(document);
-refresh();
+if (typeof document !== 'undefined') {
+  GitpassI18n.apply(document);
+  refresh();
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { copy, clearClipboardIfOurs };
+}

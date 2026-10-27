@@ -111,6 +111,17 @@ fn idle_auto_lock() {
 }
 
 #[test]
+fn idle_auto_lock_after_sleep_wall_clock() {
+    let mut f = setup();
+    ok(&mut f.host, json!({"cmd":"unlock","password":PW}));
+    assert!(f.host.is_unlocked());
+    // Monotonic Instant remains frozen as if asleep, but wall clock advanced past timeout
+    f.host.backdate_wall_activity(Duration::from_secs(305));
+    assert!(f.host.expire_if_idle(), "must expire when wall clock shows elapsed > timeout despite paused instant");
+    assert!(!f.host.is_unlocked());
+}
+
+#[test]
 fn missing_secret_key_file() {
     let mut f = setup();
     std::fs::remove_file(&f.host.cfg.secret_key_path).unwrap();

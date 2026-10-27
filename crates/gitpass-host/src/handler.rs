@@ -11,7 +11,7 @@ use gitpass_core::merge::ItemRecord;
 use gitpass_core::store::{self, Item, Session};
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use zeroize::Zeroizing;
 
 /// Contract error codes.
@@ -60,6 +60,7 @@ pub struct Host {
     pub cfg: HostConfig,
     session: Option<Session>,
     last_activity: Instant,
+    last_activity_wall: SystemTime,
 }
 
 fn arg_str<'a>(req: &'a Value, k: &str) -> Result<&'a str> {
@@ -175,13 +176,15 @@ pub fn generate(len: usize, digits: bool, symbols: bool) -> String {
 }
 
 impl Host {
-    pub fn new(cfg: HostConfig) -> Self { Host { cfg, session: None, last_activity: Instant::now() } }
+    pub fn new(cfg: HostConfig) -> Self { Host { cfg, session: None, last_activity: Instant::now(), last_activity_wall: SystemTime::now() } }
 
     pub fn is_unlocked(&self) -> bool { self.session.is_some() }
 
     /// Drop the session if idle for longer than the timeout. Returns true if it locked.
     pub fn expire_if_idle(&mut self) -> bool {
-        if self.session.is_some() && self.last_activity.elapsed() >= self.cfg.idle_timeout {
+        let idle_by_instant = self.last_activity.elapsed() >= self.cfg.idle_timeout;
+        let idle_by_wall = SystemTime::now().duration_since(self.last_activity_wall).map(|d| d >= self.cfg.idle_timeout).unwrap_or(false);
+        if self.session.is_some() && (idle_by_instant || idle_by_wall) {
             self.session = None;
             return true;
         }
@@ -189,7 +192,15 @@ impl Host {
     }
 
     /// Test hook: pretend the last activity was `d` ago.
-    pub fn backdate_activity(&mut self, d: Duration) { self.last_activity = Instant::now() - d; }
+    pub fn backdate_activity(&mut self, d: Duration) {
+        self.last_activity = Instant::now() - d;
+        self.last_activity_wall = SystemTime::now().checked_sub(d).unwrap_or_else(SystemTime::now);
+    }
+
+    #[doc(hidden)]
+    pub fn backdate_wall_activity(&mut self, d: Duration) {
+        self.last_activity_wall = SystemTime::now().checked_sub(d).unwrap_or_else(SystemTime::now);
+    }
 
     /// Drop the in-memory session (e.g. when the desktop app takes over).
     pub fn lock(&mut self) { self.session = None; }
@@ -248,7 +259,10 @@ impl Host {
     fn dispatch(&mut self, req: &Value) -> Result<Value> {
         let cmd = arg_str(req, "cmd")?;
         // status/generate don't count as vault activity, everything else refreshes the idle timer.
-        if !matches!(cmd, "status" | "generate" | "hello") { self.last_activity = Instant::now(); }
+        if !matches!(cmd, "status" | "generate" | "hello") {
+            self.last_activity = Instant::now();
+            self.last_activity_wall = SystemTime::now();
+        }
         match cmd {
             "status" | "hello" => Ok(json!({
                 "unlocked": self.is_unlocked(),
@@ -278,6 +292,7 @@ impl Host {
                 if s.device_revoked { return Err(coded(code::DENIED, "this device is revoked")); }
                 self.session = Some(s);
                 self.last_activity = Instant::now();
+                self.last_activity_wall = SystemTime::now();
                 Ok(json!({"unlocked": true}))
             }
             "request_unlock" => Err(coded(code::APP_NOT_RUNNING, "the gitpass app is not running; open it or unlock with password")),

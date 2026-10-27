@@ -102,10 +102,43 @@ impl a::Clipboard for SysClipboard {
 /// Not in the contract: resets the idle timer (harmless extra; the contract UI may ignore it).
 #[tauri::command] pub fn touch(s: State<App>) { s.state.touch() }
 
+#[cfg(target_os = "macos")]
+fn is_screen_locked() -> bool {
+    #[link(name = "CoreGraphics", kind = "framework")]
+    extern "C" {
+        fn CGSessionCopyCurrentDictionary() -> *const std::ffi::c_void;
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    extern "C" {
+        fn CFDictionaryGetValue(dict: *const std::ffi::c_void, key: *const std::ffi::c_void) -> *const std::ffi::c_void;
+        fn CFStringCreateWithCString(alloc: *const std::ffi::c_void, c_str: *const std::ffi::c_char, encoding: u32) -> *const std::ffi::c_void;
+        fn CFBooleanGetValue(boolean: *const std::ffi::c_void) -> bool;
+        fn CFRelease(obj: *const std::ffi::c_void);
+    }
+    unsafe {
+        let dict = CGSessionCopyCurrentDictionary();
+        if dict.is_null() { return false; }
+        let key = CFStringCreateWithCString(std::ptr::null(), c"CGSSessionScreenIsLocked".as_ptr(), 0x08000100 /* kCFStringEncodingUTF8 */);
+        let mut locked = false;
+        if !key.is_null() {
+            let val = CFDictionaryGetValue(dict, key);
+            if !val.is_null() {
+                locked = CFBooleanGetValue(val);
+            }
+            CFRelease(key);
+        }
+        CFRelease(dict);
+        locked
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn is_screen_locked() -> bool { false }
+
 /// Background lock + change watcher (300 ms tick): emits `vault-changed` when the vault is written by anyone,
 /// `unlocked` on a locked -> unlocked transition, and `locked` (payload = reason) on EVERY unlocked -> locked transition so the
 /// UI returns to the unlock screen, whatever caused it: idle auto-lock (this loop or the lazy expiry inside a
-/// command), manual lock, or the extension/agent `lock` command. It also locks after system sleep: the loop
+/// command), manual lock, screen lock, or the extension/agent `lock` command. It also locks after system sleep: the loop
 /// notices a wall-clock gap (macOS `Instant` does not advance while asleep, so the idle timer alone would not).
 pub fn spawn_idle_watcher(app: AppHandle) {
     const TICK: std::time::Duration = std::time::Duration::from_millis(300);
@@ -120,9 +153,14 @@ pub fn spawn_idle_watcher(app: AppHandle) {
             let now = std::time::SystemTime::now();
             let slept = now.duration_since(last_wall).map(|d| d > SLEEP_GAP).unwrap_or(false);
             last_wall = now;
+            let screen_locked = is_screen_locked();
             let mut reason = "lock";
-            if slept && st.state.is_unlocked() { st.lock(); reason = "sleep"; }
-            else if st.state.check_idle() { reason = "idle"; }
+            if (slept || screen_locked) && st.state.is_unlocked() {
+                st.lock();
+                reason = if screen_locked { "screen" } else { "sleep" };
+            } else if st.state.check_idle() {
+                reason = "idle";
+            }
             let unlocked = st.state.is_unlocked();
             if was_unlocked && !unlocked { let _ = app.emit("locked", reason); }
             // Unlocked elsewhere (extension Touch ID / request_unlock): the UI refreshes in place.

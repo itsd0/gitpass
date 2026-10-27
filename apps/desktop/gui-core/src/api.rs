@@ -263,6 +263,7 @@ pub struct App {
     settings_dir: PathBuf,
     clipboard: Arc<dyn Clipboard>,
     clip_gen: Arc<AtomicU64>,
+    last_copied: Arc<Mutex<Option<Zeroizing<String>>>>,
     hibp: Box<dyn PwnedRangeClient + Send + Sync>,
     unlock_opts: Mutex<UnlockOpts>,
     /// Emergency kit text with the NEW Secret Key, kept only right after rotate_secret_key (until lock).
@@ -409,7 +410,7 @@ fn git(dir: &Path, args: &[&str]) -> Option<String> {
 impl App {
     /// `settings_dir`: where `.gitpass-settings.json` lives (the desktop app uses the default vault dir).
     pub fn new(settings_dir: PathBuf, clipboard: Arc<dyn Clipboard>) -> Self {
-        let app = App { state: GuiState::new(5), settings_dir, clipboard, clip_gen: Arc::new(AtomicU64::new(0)), hibp: Box::new(UreqHibp),
+        let app = App { state: GuiState::new(5), settings_dir, clipboard, clip_gen: Arc::new(AtomicU64::new(0)), last_copied: Arc::new(Mutex::new(None)), hibp: Box::new(UreqHibp),
             unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), fresh_secret: Mutex::new(None), biometric: Box::new(NoBiometrics), file_lock: Mutex::new(()) };
         let s = app.get_settings();
         app.state.set_auto_lock_minutes(s.auto_lock_minutes);
@@ -500,9 +501,21 @@ impl App {
         self.unlock(&vp, &pw, Some(&sk))
     }
     pub fn lock(&self) {
+        self.clear_clipboard_if_ours();
         self.state.lock();
         if let Ok(mut k) = self.fresh_kit.lock() { *k = None; }
         if let Ok(mut k) = self.fresh_secret.lock() { *k = None; }
+    }
+
+    /// Clears the clipboard immediately if it still holds the text copied by [`App::copy_field`].
+    pub fn clear_clipboard_if_ours(&self) {
+        if let Ok(mut lc) = self.last_copied.lock() {
+            if let Some(token) = lc.take() {
+                if self.clipboard.get_text().as_deref() == Some(token.as_str()) {
+                    let _ = self.clipboard.set_text("");
+                }
+            }
+        }
     }
 
     // ---------------- vaults
@@ -607,13 +620,21 @@ impl App {
             Ok(Zeroizing::new(if f.kind == FieldKind::Totp { totp::code_now(&totp::parse(&raw)?).0 } else { raw }))
         })?;
         self.clipboard.set_text(&v)?;
+        if let Ok(mut lc) = self.last_copied.lock() {
+            *lc = Some(Zeroizing::new(v.to_string()));
+        }
         let gen = self.clip_gen.fetch_add(1, Ordering::SeqCst) + 1;
         let secs = self.get_settings().clipboard_clear_secs;
         if secs > 0 {
-            let (cb, g) = (self.clipboard.clone(), self.clip_gen.clone());
+            let (cb, g, lc) = (self.clipboard.clone(), self.clip_gen.clone(), self.last_copied.clone());
             std::thread::spawn(move || {
                 std::thread::sleep(std::time::Duration::from_secs(secs));
-                if g.load(Ordering::SeqCst) == gen && cb.get_text().as_deref() == Some(v.as_str()) { let _ = cb.set_text(""); }
+                if g.load(Ordering::SeqCst) == gen && cb.get_text().as_deref() == Some(v.as_str()) {
+                    let _ = cb.set_text("");
+                    if let Ok(mut l) = lc.lock() {
+                        if l.as_ref().map(|s| s.as_str()) == Some(v.as_str()) { *l = None; }
+                    }
+                }
             });
         }
         Ok(())
