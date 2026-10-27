@@ -495,5 +495,8 @@
   },
   "catPasskey": {
     "message": "Passkey များ"
+  },
+  "itemType": {
+    "message": "အမျိုးအစား"
   }
 }
