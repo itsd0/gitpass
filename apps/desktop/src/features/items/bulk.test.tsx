@@ -46,6 +46,16 @@ describe('bulk pane', () => {
     await waitFor(async () => expect((await api.listItems({ filter: { kind: 'deleted' } })).length).toBe(deleted.length - 3));
   });
 
+  it('opens the export dialog for the selection', async () => {
+    const items = await load();
+    const ids = items.slice(0, 2).map((x) => x.id);
+    useApp.setState({ selectedItemId: ids[0], multiIds: ids });
+    render(<BulkPane />);
+    fireEvent.click(screen.getByRole('button', { name: /Export selected/ }));
+    expect(await screen.findByText('Export selected items')).toBeTruthy();
+    expect(screen.getByText('2 selected item(s)')).toBeTruthy();
+  });
+
   it('adds a tag and favorites in one action', async () => {
     const items = await load();
     const ids = items.slice(0, 2).map((x) => x.id);
