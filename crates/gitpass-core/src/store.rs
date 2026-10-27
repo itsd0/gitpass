@@ -139,6 +139,12 @@ pub struct MemberFile {
     /// Ed25519 signature (base64) over `share_sig_payload` for this file.
     #[serde(default)]
     pub sender_sig: String,
+    /// Sender binding tag (base64): BLAKE3-keyed over `share_sig_payload`,
+    /// keyed by DH(sender X25519 secret, recipient public). Proves the share
+    /// came from the holder of `sender_pub`, which the Ed25519 signature alone
+    /// cannot (its verifying key is carried in the file).
+    #[serde(default)]
+    pub sender_auth: String,
 }
 pub fn member_aad(mf: &MemberFile) -> Vec<u8> {
     format!("gitpass/member/v4|{}|{}|{}|{}|{}|{}", mf.vault_id, mf.key_version, mf.recipient_fpr, mf.recipient_pub, mf.sender_fpr, mf.sender_pub).into_bytes()
@@ -1112,7 +1118,7 @@ impl Session {
         let mut mf = MemberFile { format: 4, vault_id: vid.into(), key_version: kv, recipient_fpr: crate::keys::fingerprint(recipient),
             recipient_pub: B64.encode(recipient), sender_fpr: me.fingerprint(), sender_pub: B64.encode(me.public),
             sealed: crate::keys::SealedBox { alg: String::new(), eph: String::new(), envelope: Envelope { alg: String::new(), nonce: String::new(), ct: String::new() } },
-            sender_sign_pub: String::new(), sender_sig: String::new() };
+            sender_sign_pub: String::new(), sender_sig: String::new(), sender_auth: String::new() };
         mf.sealed = crate::keys::seal_to(recipient, &vk.0, &member_aad(&mf))?;
         // Sign the finished share (sealed box included) with the sender's
         // share-signing key, derived from the identity secret.
@@ -1120,6 +1126,7 @@ impl Session {
         let signing = crate::keys::signing_key_from_identity_secret(&secret);
         mf.sender_sign_pub = B64.encode(signing.verifying_key().to_bytes());
         mf.sender_sig = B64.encode(crate::keys::sign_share_payload(&signing, &share_sig_payload(&mf)));
+        mf.sender_auth = B64.encode(crate::keys::share_auth_tag(me, recipient, &share_sig_payload(&mf))?);
         write_json(&dir.join("members").join(format!("{}.enc", mf.recipient_fpr)), &mf)
     }
 
@@ -1176,7 +1183,7 @@ impl Session {
         // this. Require a valid Ed25519 signature over the whole share.
         // Pre-signature shares (no signature fields) are rejected, not
         // grandfathered in — ask the sender to re-share with a current build.
-        if mf.sender_sig.is_empty() || mf.sender_sign_pub.is_empty() {
+        if mf.sender_sig.is_empty() || mf.sender_sign_pub.is_empty() || mf.sender_auth.is_empty() {
             bail!("share is unsigned (created before share signatures, or stripped) — refusing; ask the sender to re-share");
         }
         let sender_pub = crate::keys::parse_pub(&mf.sender_pub)?;
@@ -1187,6 +1194,10 @@ impl Session {
         let sig: [u8; 64] = B64.decode(&mf.sender_sig).context("bad share signature")?.try_into().map_err(|_| anyhow!("bad share signature length"))?;
         crate::keys::verify_share_payload(&sign_pub, &share_sig_payload(&mf), &sig)
             .context("share signature invalid — wrong sender or tampered share")?;
+        // Bind the share to sender_pub (the signing key above is self-asserted).
+        let tag: [u8; 32] = B64.decode(&mf.sender_auth).context("bad sender binding")?.try_into().map_err(|_| anyhow!("bad sender binding length"))?;
+        crate::keys::verify_share_auth_tag(&me, &sender_pub, &share_sig_payload(&mf), &tag)
+            .context("share is not bound to the claimed sender identity — refusing")?;
         let pt = crate::keys::open_sealed(&me, &mf.sealed, &member_aad(&mf))?;
         let b: [u8; 32] = pt[..].try_into().map_err(|_| anyhow!("shared vault key has wrong length"))?;
         let vk = Key32(b);
@@ -1494,6 +1505,37 @@ mod share_signature_tests {
         let attacker = crate::keys::KeyPair::generate();
         mf.sender_pub = B64.encode(attacker.public);
         mf.sender_fpr = attacker.fingerprint();
+        write_member(&p.member, &mf);
+        assert!(p.sb.accept_share(&p.member).is_err());
+    }
+
+    #[test]
+    fn substituted_signing_key_rejects() {
+        // Attacker keeps the victim's sender_pub/sender_fpr but signs with
+        // their own Ed25519 key: the signature verifies, the binding must not.
+        let p = setup();
+        let mut mf = read_member(&p.member);
+        let atk = crate::keys::signing_key_from_identity_secret(&crate::crypto::random_bytes::<32>());
+        mf.sender_sign_pub = B64.encode(atk.verifying_key().to_bytes());
+        mf.sender_sig = B64.encode(crate::keys::sign_share_payload(&atk, &share_sig_payload(&mf)));
+        write_member(&p.member, &mf);
+        let err = format!("{:#}", p.sb.accept_share(&p.member).unwrap_err());
+        assert!(err.contains("not bound"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn forged_sender_with_own_keys_rejects() {
+        // Attacker seals a fresh vault key to the recipient, claims the
+        // victim's identity, and signs + tags with their own keys.
+        let p = setup();
+        let mut mf = read_member(&p.member);
+        let atk = crate::keys::KeyPair::generate();
+        let rec = crate::keys::parse_pub(&mf.recipient_pub).unwrap();
+        mf.sealed = crate::keys::seal_to(&rec, &crate::crypto::random_bytes::<32>(), &member_aad(&mf)).unwrap();
+        let sk = crate::keys::signing_key_from_identity_secret(&atk.secret_bytes());
+        mf.sender_sign_pub = B64.encode(sk.verifying_key().to_bytes());
+        mf.sender_sig = B64.encode(crate::keys::sign_share_payload(&sk, &share_sig_payload(&mf)));
+        mf.sender_auth = B64.encode(crate::keys::share_auth_tag(&atk, &rec, &share_sig_payload(&mf)).unwrap());
         write_member(&p.member, &mf);
         assert!(p.sb.accept_share(&p.member).is_err());
     }

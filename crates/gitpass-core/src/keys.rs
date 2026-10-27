@@ -142,3 +142,33 @@ pub fn verify_share_payload(verifying: &[u8; 32], payload: &[u8], sig: &[u8; 64]
     let signature = ed25519_dalek::Signature::from_bytes(sig);
     vk.verify(payload, &signature).map_err(|_| anyhow!("share signature invalid"))
 }
+
+// ---------- share sender binding (static X25519 DH) ----------
+//
+// The Ed25519 signing key travels inside the share, so a signature alone does
+// not bind the share to `sender_pub`: an attacker can label a share with a
+// victim's X25519 identity and sign it with the attacker's own Ed25519 key.
+// This tag closes that gap: it is keyed by DH(sender_secret, recipient_pub),
+// which only the holder of the sender's X25519 secret (or the recipient) can
+// compute, so a valid tag proves the share came from the owner of `sender_pub`.
+
+/// HKDF domain for the sender-binding tag key.
+pub const SHARE_AUTH_INFO: &[u8] = b"gitpass/share-auth/v1";
+
+fn share_auth_key(me: &KeyPair, peer: &[u8; 32]) -> Result<crate::crypto::Key32> {
+    let shared = me.secret.diffie_hellman(&PublicKey::from(*peer));
+    if !shared.was_contributory() { bail!("share peer key is a low-order point — refusing"); }
+    Ok(hkdf32(shared.as_bytes(), None, SHARE_AUTH_INFO))
+}
+
+/// Sender side: tag = BLAKE3-keyed(HKDF(DH(me, recipient)), payload).
+pub fn share_auth_tag(me: &KeyPair, recipient: &[u8; 32], payload: &[u8]) -> Result<[u8; 32]> {
+    let k = share_auth_key(me, recipient)?;
+    Ok(*blake3::keyed_hash(&k.0, payload).as_bytes())
+}
+
+/// Recipient side: recompute with DH(me, sender) and compare in constant time.
+pub fn verify_share_auth_tag(me: &KeyPair, sender: &[u8; 32], payload: &[u8], tag: &[u8; 32]) -> Result<()> {
+    let k = share_auth_key(me, sender)?;
+    if blake3::keyed_hash(&k.0, payload) == blake3::Hash::from(*tag) { Ok(()) } else { bail!("share sender binding invalid") }
+}
