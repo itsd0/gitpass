@@ -16,7 +16,7 @@ test('content.js boots, badges login fields, ignores untrusted clicks', async ()
   for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'content.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
   await new Promise((r) => setTimeout(r, 50));
   const hosts = w.document.querySelectorAll('gitpass-ui');
-  assert.ok(hosts.length >= 4, 'badges (2 forms x 2 fields) + banner, got ' + hosts.length); 
+  assert.strictEqual(hosts.length, 3, 'one badge per form (2 forms) + banner, got ' + hosts.length);
   assert.ok(sent.includes('page:pending'));
   w.document.getElementById('pw').dispatchEvent(new w.FocusEvent('focus'));
   await new Promise((r) => setTimeout(r, 20));

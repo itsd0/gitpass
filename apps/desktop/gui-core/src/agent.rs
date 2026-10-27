@@ -132,6 +132,8 @@ pub struct Agent {
     conns: Mutex<Vec<Arc<Conn>>>,
     /// last observed unlock state + condvar for request_unlock waiters
     state: Mutex<bool>,
+    /// last observed vault change stamp (see `GuiState::change_stamp`)
+    stamp: Mutex<Option<u64>>,
     cv: Condvar,
     pub socket_path: PathBuf,
     unlock_timeout: Mutex<Duration>,
@@ -170,7 +172,7 @@ impl Agent {
     /// Bind in `dir` and start the accept loop + lock-state watcher threads.
     pub fn start(app: Arc<App>, ui: Arc<dyn AgentUi>, dir: &Path) -> Result<Arc<Agent>> {
         let (l, sp, token) = bind(dir)?;
-        let a = Arc::new(Agent { state: Mutex::new(app.state.is_unlocked()), app, ui, token, conns: Mutex::new(vec![]), cv: Condvar::new(), socket_path: sp, unlock_timeout: Mutex::new(UNLOCK_TIMEOUT) });
+        let a = Arc::new(Agent { state: Mutex::new(app.state.is_unlocked()), stamp: Mutex::new(app.state.change_stamp()), app, ui, token, conns: Mutex::new(vec![]), cv: Condvar::new(), socket_path: sp, unlock_timeout: Mutex::new(UNLOCK_TIMEOUT) });
         let a2 = a.clone();
         std::thread::spawn(move || for s in l.incoming() { match s { Ok(s) => { let a = a2.clone(); std::thread::spawn(move || a.serve(s)); } Err(_) => continue } });
         let w = Arc::downgrade(&a);
@@ -194,6 +196,15 @@ impl Agent {
             self.cv.notify_all();
             drop(s);
             self.broadcast(&json!({"event": if now { "unlock" } else { "lock" }}));
+        } else { drop(s); }
+        // Vault content changed (any writer: GUI, this agent, CLI, git sync): tell connected extensions.
+        let st = self.app.state.change_stamp();
+        let mut last = self.stamp.lock().unwrap();
+        if *last != st {
+            let changed = last.is_some() && st.is_some();
+            *last = st;
+            drop(last);
+            if changed { self.broadcast(&json!({"event": "changed"})); }
         }
     }
     fn broadcast(&self, v: &Value) {
@@ -339,6 +350,19 @@ impl Agent {
                     x.session.add_record(&vid, rec)
                 })?;
                 Ok(json!({"item_id": format!("{vid}:{iid}")}))
+            }
+            "create_item" => {
+                // Any category, same model as the GUI's New Item (gui-core api::ItemInput); vault defaults to the first.
+                let mut v = q.get("item").cloned().ok_or_else(|| err("bad_request", "missing 'item'"))?;
+                if v.get("vaultId").and_then(|x| x.as_str()).filter(|x| !x.is_empty()).is_none() {
+                    let vid = self.app.list_vaults()?.into_iter().next().map(|v| v.id).ok_or_else(|| err("not_found", "no vault"))?;
+                    v["vaultId"] = json!(vid);
+                }
+                let input: crate::api::ItemInput = serde_json::from_value(v).map_err(|e| err("bad_request", e.to_string()))?;
+                if input.category == Category::Passkey { return Err(err("bad_request", "passkeys are created by websites")); }
+                let r = self.app.create_item(&input).map_err(|e| { let m = format!("{e:#}"); if m.contains("revoked") { err("denied", m) } else if m.contains("locked") { e } else { err("bad_request", m) } })?;
+                self.poll_state();
+                Ok(json!({"item_id": format!("{}:{}", input.vault_id, r.id), "title": r.title}))
             }
             "update_password" => {
                 let (vid, iid) = split_id(&req("item_id")?)?;

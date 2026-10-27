@@ -97,7 +97,9 @@
         if (!a.user_click) throw err('denied', 'card/identity fill needs an in-page click');
         const cmd = a.type === 'page:fill_card' ? 'fill_card' : 'fill_identity';
         const r = await host(cmd, { item_id: a.item_id, origin, source: 'inpage_click' });
-        return { origin, fields: (r && (r.fields || r)) || {} };
+        const fields = (r && (r.fields || r)) || {};
+        if (cmd === 'fill_card') await fillPaymentFrames(tabId, fields).catch(() => 0);
+        return { origin, fields };
       }
       case 'page:generate': {
         const r = await host('generate', { len: 20, digits: true, symbols: true });
@@ -153,7 +155,28 @@
   function forgetTab(tabId) { pendingSaves.delete(tabId); lastUsername.delete(tabId); }
   if (root.chrome && chrome.tabs && chrome.tabs.onRemoved) chrome.tabs.onRemoved.addListener(forgetTab);
 
-  const api = { handle, forgetTab, _pendingSaves: pendingSaves };
+  /** Fill a card into the tab's payment-processor iframes (Stripe Elements & co., see GitpassPolicy.
+   *  isPaymentFrameOrigin), so one pick in the top frame fills number / expiry / CVC living in separate
+   *  frames. Step 1 asks every frame only for its origin (no data); step 2 sends the card only to allow-listed
+   *  child frames, and the injected code re-checks its own origin before touching anything (the frame may
+   *  have navigated in between). Returns the number of fields filled. */
+  async function fillPaymentFrames(tabId, fields) {
+    const S = root.chrome && chrome.scripting;
+    if (!S || typeof tabId !== 'number') return 0;
+    const probe = await S.executeScript({ target: { tabId, allFrames: true }, func: () => location.origin }).catch(() => []);
+    const frameIds = (probe || []).filter((x) => x && x.frameId !== 0 && GitpassPolicy.isPaymentFrameOrigin(x.result)).map((x) => x.frameId);
+    if (!frameIds.length) return 0;
+    await S.executeScript({ target: { tabId, frameIds }, files: ['lib/policy.js', 'lib/forms.js'] });
+    const res = await S.executeScript({
+      target: { tabId, frameIds },
+      func: (map) => (globalThis.GitpassPolicy && GitpassPolicy.isPaymentFrameOrigin(location.origin) && window !== top
+        ? GitpassForms.fillCardDocument(document, map) : 0),
+      args: [fields],
+    });
+    return (res || []).reduce((n, x) => n + (Number(x && x.result) || 0), 0);
+  }
+
+  const api = { handle, forgetTab, fillPaymentFrames, _pendingSaves: pendingSaves };
   root.GitpassPage = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

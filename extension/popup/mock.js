@@ -70,6 +70,7 @@
       case 'totp': { const s = Math.floor(Date.now() / 1000); return ok({ code: String(100000 + (Math.floor(s / 30) * 7919) % 900000), remaining: 30 - (s % 30), period: 30 }); }
       case 'generate': return ok({ password: 'Xk7#pQ2m-Vr9!tLz4wNb' });
       case 'save_login': return ok({ item_id: 'v1:new' });
+      case 'create_item': { const id = 'v1:new' + items.length; items.unshift({ id, vault_id: 'v1', title: msg.item.title, subtitle: '', category: msg.item.category, favorite: false }); return ok({ item_id: id, title: msg.item.title }); }
       case 'set_favorite': { const it = items.find((i) => i.id === msg.item_id); it.favorite = !!msg.favorite; return ok({ ok: true }); }
       case 'open_fill': case 'fill_active': return ok(true);
     }

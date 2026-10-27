@@ -394,6 +394,19 @@ impl Host {
                 let iid = s.add_record(&vid, ItemRecord::new(item))?;
                 Ok(json!({"item_id": format!("{vid}:{iid}")}))
             }
+            "create_item" => {
+                // Same item model as the desktop app's New Item (any category except passkey).
+                let v = req.get("item").ok_or_else(|| coded(code::BAD_REQUEST, "missing 'item'"))?;
+                let (want_vid, rec) = record_from_input(v)?;
+                let s = self.sess()?;
+                let vid = match want_vid {
+                    Some(v) => { s.vault_meta(&v).map_err(|_| coded(code::NOT_FOUND, "vault not found"))?; v }
+                    None => s.list_vaults()?.into_iter().next().map(|(v, _)| v).ok_or_else(|| coded(code::NOT_FOUND, "no vault to save into"))?,
+                };
+                let title = rec.item.title.clone();
+                let iid = s.add_record(&vid, rec)?;
+                Ok(json!({"item_id": format!("{vid}:{iid}"), "title": title}))
+            }
             "update_password" => {
                 let password = arg_str(req, "password")?.to_string();
                 let username = req.get("username").and_then(Value::as_str).filter(|u| !u.trim().is_empty());
@@ -448,3 +461,33 @@ impl Host {
     }
 }
 
+
+/// Build a record from the desktop app's `ItemInput` JSON shape
+/// (`{vaultId?, category, title, sections:[{id,title,fields:[{id,label,kind,value}]}], notes?, url?, tags?}`).
+/// Mirrors gui-core `App::create_item` validation: title required, unique non-empty field ids, valid TOTP.
+pub fn record_from_input(v: &Value) -> Result<(Option<String>, ItemRecord)> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Input { #[serde(default)] vault_id: Option<String>, category: Category, title: String,
+        #[serde(default)] sections: Vec<gitpass_core::item::Section>, #[serde(default)] notes: Option<String>,
+        #[serde(default)] url: Option<String>, #[serde(default)] tags: Option<Vec<String>> }
+    let i: Input = serde_json::from_value(v.clone()).map_err(|e| coded(code::BAD_REQUEST, format!("bad item: {e}")))?;
+    if i.category == Category::Passkey { return Err(coded(code::BAD_REQUEST, "passkeys are created by websites")); }
+    if i.title.trim().is_empty() { return Err(coded(code::BAD_REQUEST, "title is required")); }
+    let mut ids = std::collections::BTreeSet::new();
+    for s in &i.sections { for f in &s.fields {
+        if f.id.trim().is_empty() { return Err(coded(code::BAD_REQUEST, "field id is empty")); }
+        if !ids.insert(f.id.clone()) { return Err(coded(code::BAD_REQUEST, format!("duplicate field id '{}'", f.id))); }
+        if f.kind == FieldKind::Totp { if let Some(t) = f.value.as_deref().filter(|t| !t.is_empty()) {
+            gitpass_core::totp::parse(t).map_err(|e| coded(code::BAD_REQUEST, format!("invalid one-time password: {e}")))?; } }
+    } }
+    let ne = |o: Option<String>| o.filter(|x| !x.trim().is_empty());
+    let mut r = ItemRecord::new(Item::default());
+    r.category = i.category;
+    r.item.title = i.title.trim().into();
+    r.item.notes = ne(i.notes);
+    r.item.url = ne(i.url);
+    if let Some(t) = i.tags { let mut t: Vec<String> = t.iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect(); t.dedup(); r.tags = t; }
+    r.apply_sections(&i.sections);
+    Ok((ne(i.vault_id), r))
+}

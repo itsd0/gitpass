@@ -8,7 +8,8 @@
     "nativeMessaging",
     "activeTab",
     "clipboardWrite",
-    "storage"
+    "storage",
+    "scripting"
   ],
   "host_permissions": [
     "https://*/*",

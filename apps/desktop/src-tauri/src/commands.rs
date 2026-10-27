@@ -100,16 +100,18 @@ impl a::Clipboard for SysClipboard {
 /// Not in the contract: resets the idle timer (harmless extra; the contract UI may ignore it).
 #[tauri::command] pub fn touch(s: State<App>) { s.state.touch() }
 
-/// Background lock watcher: emits `locked` (payload = reason) on EVERY unlocked -> locked transition so the
+/// Background lock + change watcher (300 ms tick): emits `vault-changed` when the vault is written by anyone,
+/// `unlocked` on a locked -> unlocked transition, and `locked` (payload = reason) on EVERY unlocked -> locked transition so the
 /// UI returns to the unlock screen, whatever caused it: idle auto-lock (this loop or the lazy expiry inside a
 /// command), manual lock, or the extension/agent `lock` command. It also locks after system sleep: the loop
 /// notices a wall-clock gap (macOS `Instant` does not advance while asleep, so the idle timer alone would not).
 pub fn spawn_idle_watcher(app: AppHandle) {
-    const TICK: std::time::Duration = std::time::Duration::from_secs(2);
+    const TICK: std::time::Duration = std::time::Duration::from_millis(300);
     const SLEEP_GAP: std::time::Duration = std::time::Duration::from_secs(30);
     std::thread::spawn(move || {
         let mut was_unlocked = app.state::<App>().state.is_unlocked();
         let mut last_wall = std::time::SystemTime::now();
+        let mut last_stamp = app.state::<App>().state.change_stamp();
         loop {
             std::thread::sleep(TICK);
             let st = app.state::<App>();
@@ -121,6 +123,12 @@ pub fn spawn_idle_watcher(app: AppHandle) {
             else if st.state.check_idle() { reason = "idle"; }
             let unlocked = st.state.is_unlocked();
             if was_unlocked && !unlocked { let _ = app.emit("locked", reason); }
+            // Unlocked elsewhere (extension Touch ID / request_unlock): the UI refreshes in place.
+            if !was_unlocked && unlocked { let _ = app.emit("unlocked", "watcher"); }
+            // Live sync: any vault write (this window, the extension via the agent, CLI, git sync) changes the
+            // sealed manifest; the UI refetches the item list (src/lib/agentEvents.ts `vault-changed`).
+            let stamp = st.state.change_stamp();
+            if stamp != last_stamp { if stamp.is_some() && last_stamp.is_some() { let _ = app.emit("vault-changed", ()); } last_stamp = stamp; }
             was_unlocked = unlocked;
         }
     });

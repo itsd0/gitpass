@@ -249,3 +249,37 @@ fn request_unlock_times_out() {
     let (mut c, _) = Client::connect(&e);
     assert_eq!(c.ok("request_unlock", json!({"reason": "x"}))["unlocked"], json!(false));
 }
+
+#[test]
+fn create_item_any_category_via_agent() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+    let r = c.ok("create_item", json!({"item": {"category": "api_credential", "title": "OpenAI", "url": "https://platform.openai.com",
+        "sections": [{"id": "main", "title": null, "fields": [{"id": "credential", "label": "credential", "kind": "concealed", "value": "sk-FAKE"}]}]}}));
+    assert_eq!(r["title"], "OpenAI");
+    let (vid, iid) = split_id(r["item_id"].as_str().unwrap()).unwrap();
+    assert_eq!(vid, e.vault);
+    let d = e.app.get_item(&vid, &iid).unwrap();
+    assert_eq!(d.summary.category, Category::ApiCredential);
+    assert_eq!(e.app.reveal_field(&vid, &iid, "credential").unwrap().as_str(), "sk-FAKE");
+    assert_eq!(c.err("create_item", json!({"item": {"category": "login", "title": ""}})), "bad_request");
+    assert_eq!(c.err("create_item", json!({"item": {"category": "passkey", "title": "x"}})), "bad_request");
+    assert_eq!(c.err("create_item", json!({})), "bad_request");
+    e.app.lock();
+    assert_eq!(c.err("create_item", json!({"item": {"category": "secure_note", "title": "x"}})), "locked");
+}
+
+#[test]
+fn changed_event_pushed_for_gui_and_agent_writes() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+    std::thread::sleep(Duration::from_millis(400)); // watcher has seen the initial stamp
+    let t = std::time::Instant::now();
+    add_login(&e, "From GUI", "https://a.example", "u", "FAKE-pw"); // a GUI-side write
+    c.wait_event("changed");
+    assert!(t.elapsed() < Duration::from_millis(1500), "changed after {:?}", t.elapsed());
+    // lock/unlock still pushed; a lock is not reported as a content change
+    e.app.lock();
+    c.wait_event("lock");
+    assert!(c.events.iter().all(|v| v["event"] != json!("changed")));
+}

@@ -1,4 +1,4 @@
-/* global chrome, GitpassI18n, GitpassPopupIcons, GitpassView */
+/* global chrome, GitpassI18n, GitpassPopupIcons, GitpassView, GitpassNewItem */
 'use strict';
 // gitpass popup v0.6: 1Password-style 2-pane UI. All host calls go through background.js as `popup:*` messages.
 const $ = (id) => document.getElementById(id);
@@ -300,7 +300,7 @@ async function copyPrimary() {
 }
 
 // ---------- panels: generator / new login ----------
-function closePanel() { const p = $('panel'); p.classList.add('hidden'); p.textContent = ''; S.panel = null; $('q').focus(); }
+function closePanel() { const p = $('panel'); p.classList.add('hidden'); p.textContent = ''; S.panel = null; $('q').focus(); if (livePending) { livePending = false; liveReload(); } }
 function panelHead(title) { const h = el('h3', null, title); h.append(iconBtn(UI.close, t('close', 'Close'), closePanel)); return h; }
 
 function localGenerate(len, digits, symbols) {
@@ -329,37 +329,72 @@ function openGenerator() {
   run();
 }
 
-function openNewLogin() {
+/** New item: every type the desktop app supports (except passkeys, which websites create, and documents,
+ *  which need a file). Fields/ids come from popup/newitem.js (mirrors the GUI templates); saved via `create_item`. */
+function openNewItem(typeId) {
+  const N = GitpassNewItem;
   const p = $('panel'); p.textContent = ''; p.classList.remove('hidden'); S.panel = 'new';
-  p.append(panelHead(t('newLogin', 'New Login')));
-  const f = el('form', 'stack'); f.style.maxWidth = 'none'; f.autocomplete = 'off';
-  const inp = (key, fb, type, val) => { f.append(el('label', null, t(key, fb))); const i = Object.assign(el('input'), { type, value: val || '' }); i.spellcheck = false; f.append(i); return i; };
-  const title = inp('title', 'Title', 'text', S.origin ? V.hostOfUrl(S.origin) : '');
-  const url = inp('website', 'Website', 'url', S.origin || '');
-  const user = inp('username', 'Username', 'text');
-  f.append(el('label', null, t('password', 'Password')));
-  const pwWrap = el('div', 'field'); const pw = Object.assign(el('input'), { type: 'text' }); pw.spellcheck = false;
-  const g = el('button', 'eye'); g.type = 'button'; g.innerHTML = UI.key; g.title = t('generate', 'Generate'); g.onclick = async () => { pw.value = await generate(20, true, true); };
-  pwWrap.append(pw, g); f.append(pwWrap);
-  const vs = el('select'); for (const v of S.vaults) { const o = el('option', null, v.name); o.value = v.id; vs.append(o); }
+  const type = N.typeById(typeId || S.newType || 'login'); S.newType = type.id;
+  p.append(panelHead(t('newItem', 'New item')));
+  const f = el('form', 'stack newitem'); f.style.maxWidth = 'none'; f.autocomplete = 'off'; f.noValidate = true;
+  const ts = el('select'); ts.setAttribute('aria-label', t('itemType', 'Item type'));
+  for (const x of N.TYPES) { const o = el('option', null, x.label); o.value = x.id; if (x.id === type.id) o.selected = true; ts.append(o); }
+  ts.onchange = () => openNewItem(ts.value);
+  f.append(el('label', null, t('itemType', 'Type')), ts);
+  const inputs = {};
+  const add = (id, label, ui, val, opt) => {
+    const o = opt || {};
+    const lab = el('label', null, label + (o.required ? ' *' : '')); f.append(lab);
+    let i;
+    if (ui === 'multiline') { i = el('textarea'); i.rows = id === 'private_key' || id === 'note' ? 5 : 3; if (o.secret) i.classList.add('secret'); }
+    else i = Object.assign(el('input'), { type: ui === 'url' ? 'url' : ui === 'email' ? 'email' : ui === 'date' ? 'date' : ui === 'phone' ? 'tel' : 'text' });
+    i.value = val || ''; i.spellcheck = false; i.dataset.field = id; i.setAttribute('aria-label', label);
+    if (o.inputmode) i.inputMode = o.inputmode;
+    if (ui === 'month_year') i.placeholder = 'MM/YY';
+    if (o.hint) i.placeholder = o.hint;
+    if (ui === 'secret' || ui === 'password') {
+      const w = el('div', 'field'); i.type = 'password'; i.autocomplete = 'new-password';
+      const eye = el('button', 'eye'); eye.type = 'button'; eye.innerHTML = UI.eye || UI.key; eye.title = t('show', 'Show');
+      eye.onclick = () => { i.type = i.type === 'password' ? 'text' : 'password'; };
+      w.append(i, eye);
+      if (ui === 'password') { i.type = 'text'; const g = el('button', 'eye gen'); g.type = 'button'; g.innerHTML = UI.key; g.title = t('generate', 'Generate'); g.onclick = async () => { i.value = await generate(20, true, true); }; w.replaceChildren(i, g); }
+      f.append(w);
+    } else f.append(i);
+    inputs[id] = i; return i;
+  };
+  const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
+  add('title', type.titleLabel || 'Title', 'text', type.id === 'login' && S.origin ? V.hostOfUrl(S.origin) : '', { required: true });
+  if (type.url) add('url', t('website', 'Website'), 'url', S.origin || '');
+  for (const sec of N.sectionsOf(type)) {
+    if (sec.title) f.append(el('div', 'sec-title', sec.title));
+    for (const fl of sec.fields) add(fl.id, fl.hintLabel || cap(fl.label), fl.ui, '', fl);
+  }
+  if (!type.noNotes) add('notes', t('notes', 'Notes'), 'multiline', '');
+  const vs = el('select'); vs.setAttribute('aria-label', t('vault', 'Vault'));
+  for (const v of S.vaults) { const o = el('option', null, v.name); o.value = v.id; vs.append(o); }
   if (S.vaults.length) { f.append(el('label', null, t('vault', 'Vault'))); f.append(vs); }
-  const errEl = el('p', 'err'); f.append(errEl);
+  const errEl = el('p', 'err'); errEl.setAttribute('role', 'alert'); f.append(errEl);
   const save = el('button', 'btn btn-primary', t('save', 'Save')); save.type = 'submit'; f.append(save);
   f.onsubmit = async (e) => {
     e.preventDefault(); errEl.textContent = '';
-    if (!url.value || !pw.value) { errEl.textContent = t('needUrlPw', 'Website and password are required'); return; }
+    for (const i of Object.values(inputs)) i.classList.remove('bad');
+    const values = {}; for (const [k, i] of Object.entries(inputs)) values[k] = i.value;
+    const bad = N.validate(type.id, values);
+    if (bad) { errEl.textContent = bad.error; if (inputs[bad.field]) { inputs[bad.field].classList.add('bad'); inputs[bad.field].focus(); } return; }
     save.disabled = true;
     try {
-      await send({ type: 'popup:save_login', origin: url.value, title: title.value || undefined, username: user.value, password: pw.value, vault_id: vs.value || undefined });
-      toast(t('saved', 'Saved')); closePanel(); await loadData();
-    } catch (err) { errEl.textContent = String(err.message || err); } finally { save.disabled = false; }
+      const r = await send({ type: 'popup:create_item', item: N.buildItem(type.id, values, vs.value || undefined) });
+      toast(t('saved', 'Saved') + ' — ' + (r && r.title ? r.title : values.title)); closePanel(); await loadData();
+    } catch (err) { errEl.textContent = errText(err); } finally { save.disabled = false; }
   };
-  p.append(f); user.focus();
-  pw.value = ''; generate(20, true, true).then((v) => { if (!pw.value) pw.value = v; });
+  p.append(f);
+  const first = type.id === 'login' ? inputs.username : (inputs.title.value ? Object.values(inputs)[1] : inputs.title);
+  (first || inputs.title).focus();
+  if (type.id === 'login' && inputs.password) generate(20, true, true).then((v) => { if (!inputs.password.value) inputs.password.value = v; });
 }
 
 $('genBtn').innerHTML = UI.key; $('genBtn').onclick = () => (S.panel === 'gen' ? closePanel() : openGenerator());
-$('newBtn').innerHTML = UI.plus; $('newBtn').onclick = () => (S.panel === 'new' ? closePanel() : openNewLogin());
+$('newBtn').innerHTML = UI.plus; $('newBtn').onclick = () => (S.panel === 'new' ? closePanel() : openNewItem());
 $('lock').innerHTML = UI.lock; $('searchIc').innerHTML = UI.search;
 
 // ---------- keyboard ----------
@@ -387,11 +422,33 @@ function popupSettings() {
   });
 }
 
+// ---------- live sync ----------
+// The app pushes `changed` when anyone writes the vault (GUI, this extension, CLI, git sync). Reload the
+// lists in place, keeping the selection and scroll; never clobber an open New-item form (reload after it closes).
+let liveT = null, livePending = false;
+function liveReload() {
+  if (S.view !== 'unlocked-loaded') return;
+  if (S.panel === 'new') { livePending = true; return; }
+  clearTimeout(liveT);
+  liveT = setTimeout(async () => {
+    const [all, match] = await Promise.all([
+      send({ type: 'popup:list_items' }).catch(() => null),
+      send({ type: 'popup:match_active' }).catch(() => null),
+    ]);
+    if (!all) return;
+    S.all = all.items || []; if (match) { S.suggested = match.items || []; S.origin = match.origin || null; }
+    const top = $('list').scrollTop;
+    applyFilter(false);
+    $('list').scrollTop = top; renderList();
+  }, 120);
+}
+
 // ---------- live lock/unlock events ----------
 if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
   chrome.runtime.onMessage.addListener((msg) => {
     if (!msg || msg.type !== 'popup:event') return;
     if (msg.event === 'unlock') refresh();
+    else if (msg.event === 'changed') liveReload();
     else if (msg.event === 'lock') popupSettings().then((st) => { if (st.autolockFollowsApp !== false) refresh(); });
   });
 }

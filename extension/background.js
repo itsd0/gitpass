@@ -20,7 +20,7 @@ function connect() {
   port.onMessage.addListener((msg) => {
     // App lock/unlock events (forwarded by the host) -> open popups. No popup open is fine.
     if (msg && msg.event && msg.id == null) {
-      if (msg.event === 'lock' || msg.event === 'unlock') chrome.runtime.sendMessage({ type: 'popup:event', event: msg.event }).catch(() => {});
+      if (msg.event === 'lock' || msg.event === 'unlock' || msg.event === 'changed') chrome.runtime.sendMessage({ type: 'popup:event', event: msg.event }).catch(() => {});
       return;
     }
     const p = pending.get(msg.id);
@@ -98,6 +98,11 @@ async function popupRoute(msg) {
     case 'reveal': return host('reveal', { item_id: msg.item_id, field: msg.field, source: 'popup' });
     case 'totp': return host('totp', { item_id: msg.item_id });
     case 'generate': return host('generate', { len: msg.len, digits: !!msg.digits, symbols: !!msg.symbols });
+    case 'create_item': {
+      const it = msg.item && typeof msg.item === 'object' ? msg.item : null;
+      if (!it || typeof it.category !== 'string' || it.category === 'passkey') throw Object.assign(new Error('bad item'), { code: 'bad_request' });
+      return host('create_item', { item: it });
+    }
     case 'save_login': return host('save_login', { origin: msg.origin, title: msg.title, username: msg.username, password: msg.password, vault_id: msg.vault_id });
     case 'set_favorite': return host('set_favorite', { item_id: msg.item_id, favorite: !!msg.favorite });
     case 'open_in_app': return host('open_in_app', msg.item_id ? { item_id: msg.item_id } : {});
@@ -127,6 +132,7 @@ async function openFill(msg) {
   const fields = await host(msg.kind === 'card' ? 'fill_card' : 'fill_identity', { item_id: msg.item_id, source: 'popup' });
   // Content side (workstream 4) handles `gitpass-fill-fields`.
   await chrome.tabs.sendMessage(tab.id, { type: 'gitpass-fill-fields', kind: msg.kind, origin, fields }, { frameId: 0 });
+  if (msg.kind === 'card') await GitpassPage.fillPaymentFrames(tab.id, fields).catch(() => 0); // Stripe-style card iframes
   return true;
 }
 
