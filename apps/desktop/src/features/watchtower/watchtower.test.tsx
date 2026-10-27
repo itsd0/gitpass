@@ -3,13 +3,14 @@ import { cleanup } from '@testing-library/react';
 import { api } from '../../api/client';
 import { useSettings } from '../settings/useSettings';
 const it3 = { id: 'i3', vaultId: 'v-private', category: 'login' as const, title: 'Fake Forum', subtitle: 'demo', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: '', createdAt: '' };
+const it3x = { ...it3, id: 'i3x', title: 'Fake 2FA Site' };
 let hibpOn = false;
 beforeEach(() => {
   hibpOn = false; useSettings.setState({ settings: null });
   vi.spyOn(api, 'getSettings').mockImplementation(async () => ({ autoLockMinutes: 10, clipboardClearSecs: 30, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: hibpOn }));
   vi.spyOn(api, 'setSettings').mockImplementation(async (a: any) => { hibpOn = !!a.settings.hibpCheck; });
-  vi.spyOn(api, 'listItems').mockResolvedValue([it3]);
-  vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], checkedAt: '', hibpChecked: on }; });
+  vi.spyOn(api, 'listItems').mockResolvedValue([it3, it3x]);
+  vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'], passkeyAvailable: ['i3x'], checkedAt: '', hibpChecked: on }; });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -24,7 +25,13 @@ describe('watchtower score', () => {
     const d = gaugeDash(50); expect(d.filled).toBeCloseTo(d.arc / 2);
   });
   it('flattens reused groups uniquely', () => {
-    expect(issueIds({ score: 0, weak: [], reused: [['a', 'b'], ['b', 'c']], old: [], breached: [], missingTotp: [], checkedAt: '', hibpChecked: false }, 'reused')).toEqual(['a', 'b', 'c']);
+    expect(issueIds({ score: 0, weak: [], reused: [['a', 'b'], ['b', 'c']], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [], checkedAt: '', hibpChecked: false }, 'reused')).toEqual(['a', 'b', 'c']);
+  });
+  it('shows site-specific 2FA instead of generic missing TOTP', () => {
+    const r = { score: 0, weak: [], reused: [], old: [], breached: [], missingTotp: ['a', 'b'], totpAvailable: ['b'], passkeyAvailable: ['c'], checkedAt: '', hibpChecked: false };
+    expect(issueIds(r, 'missingTotp')).toEqual(['a']);
+    expect(issueIds(r, 'totpAvailable')).toEqual(['b']);
+    expect(issueIds(r, 'passkeyAvailable')).toEqual(['c']);
   });
   it('renders gauge', () => {
     render(<ScoreGauge score={71} />);
@@ -34,13 +41,23 @@ describe('watchtower score', () => {
     render(<WatchtowerPage />);
     expect((await screen.findByTestId('score')).textContent).toBe('71');
     expect(screen.getByTestId('count-breached').textContent).toBe('—');
-    expect(screen.getByTestId('count-missingTotp').textContent).toBe('2');
+    expect(screen.getByTestId('count-missingTotp').textContent).toBe('1'); // i3x is shown as "2FA available"
+    expect(screen.getByTestId('count-totpAvailable').textContent).toBe('1');
+    expect(screen.getByTestId('count-passkeyAvailable').textContent).toBe('1');
     fireEvent.click(screen.getByRole('switch', { name: 'Check for breached passwords' }));
     await waitFor(() => expect(screen.getByTestId('score').textContent).toBe('62'));
     expect(screen.getByTestId('count-breached').textContent).toBe('1');
     expect(hibpOn).toBe(true); // opt-in persisted to settings (default off)
     fireEvent.click(screen.getAllByText('Fake Forum')[0]);
     expect(useApp.getState().selectedItemId).toBe('i3');
+    expect(useApp.getState().route).toEqual({ name: 'items', filter: { kind: 'vault', vaultId: 'v-private' } });
+  });
+  it('links 2FA/passkey items from their cards', async () => {
+    render(<WatchtowerPage />);
+    await screen.findByTestId('score');
+    expect(screen.getAllByText('Fake 2FA Site').length).toBe(2); // 2FA available + Passkeys available
+    fireEvent.click(screen.getAllByText('Fake 2FA Site')[0]);
+    expect(useApp.getState().selectedItemId).toBe('i3x');
     expect(useApp.getState().route).toEqual({ name: 'items', filter: { kind: 'vault', vaultId: 'v-private' } });
   });
 });

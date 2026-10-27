@@ -268,8 +268,11 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     const reused = [...groups.values()].filter((g) => g.length > 1);
     const logins = [...db.values()].filter((r) => r.detail.category === 'login');
     const missingTotp = logins.filter((r) => !r.detail.hasTotp).map((r) => r.detail.id);
+    // Demo analogue of the core offline site list: GitHub is TOTP+passkey, banking is passkey-capable.
+    const totpAvailable = logins.filter((r) => !r.detail.hasTotp && /github/i.test(r.detail.title)).map((r) => r.detail.id);
+    const passkeyAvailable = logins.filter((r) => /github|bank/i.test(r.detail.title)).map((r) => r.detail.id);
     const old = logins.filter((r) => Date.parse(r.detail.updatedAt) < Date.parse('2026-09-01')).map((r) => r.detail.id);
-    return delay<T.WatchtowerReport>({ score: Math.max(0, 100 - weak.length * 6 - reused.length * 8 - old.length * 2), weak, reused, old, breached: hibp ? weak.slice(0, 1) : [], missingTotp, checkedAt: new Date().toISOString(), hibpChecked: hibp }, 200);
+    return delay<T.WatchtowerReport>({ score: Math.max(0, 100 - weak.length * 6 - reused.length * 8 - old.length * 2), weak, reused, old, breached: hibp ? weak.slice(0, 1) : [], missingTotp, totpAvailable, passkeyAvailable, checkedAt: new Date().toISOString(), hibpChecked: hibp }, 200);
   },
   import_file: (a: { dryRun: boolean }) => { if (!a.dryRun) onboarding = { ...onboarding, imported: true }; return delay<T.ImportResult>({ parsed: 12, added: a.dryRun ? 0 : 10, duplicates: 2, duplicateTitles: ['Example Mail', 'Example Mail'], warnings: ['row 4: skipped empty row'], categories: { login: 10, credit_card: 1, secure_note: 1 },
     preview: [{ title: 'Example Mail', category: 'login', username: 'alice@example.invalid', url: 'https://mail.example.invalid', hasPassword: true, hasTotp: true, tags: ['Work'], fields: 4, archived: false },

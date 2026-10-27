@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Clock, Copy, ShieldAlert, ShieldCheck, Smartphone, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Clock, Copy, KeyRound, ShieldAlert, ShieldCheck, Smartphone, RefreshCw } from 'lucide-react';
 import type { ItemSummary, WatchtowerReport } from '../../api/types';
 import { api } from '../../api/client';
+import { useT } from '../../i18n';
 import { Button, Skeleton } from '../../ui';
 import { useApp } from '../../lib/store';
 import { useSettings } from '../settings/useSettings';
@@ -18,9 +19,14 @@ const CARDS: { key: IssueKey; title: string; desc: string; Icon: typeof AlertTri
   { key: 'reused', title: 'Reused passwords', desc: 'Same password on multiple sites.', Icon: Copy },
   { key: 'old', title: 'Old passwords', desc: 'Not changed in a long time.', Icon: Clock },
   { key: 'breached', title: 'Breached passwords', desc: 'Found in known data breaches (HIBP).', Icon: ShieldAlert },
-  { key: 'missingTotp', title: 'Missing 2FA', desc: 'Sites that support two-factor auth but have no one-time password saved.', Icon: Smartphone },
+  { key: 'missingTotp', title: 'Missing 2FA', desc: 'Logins with a URL but no one-time password saved.', Icon: Smartphone },
 ];
 export function WatchtowerPage() {
+  const t = useT();
+  const cards = [...CARDS,
+    { key: 'totpAvailable' as const, title: t('watchtower.totpAvailable'), desc: t('watchtower.totpAvailableDesc'), Icon: Smartphone },
+    { key: 'passkeyAvailable' as const, title: t('watchtower.passkeyAvailable'), desc: t('watchtower.passkeyAvailableDesc'), Icon: KeyRound },
+  ];
   const { selectItem, setRoute } = useApp();
   // Opt-in HIBP lives in Rust-persisted Settings.hibpCheck (default off); Rust also refuses the network
   // check unless that setting is on, so this toggle is the only way to enable it.
@@ -46,7 +52,7 @@ export function WatchtowerPage() {
         <div className="rounded-lg border border-border p-3">
           <label className="flex items-center gap-2 text-sm font-medium"><input type="checkbox" role="switch" aria-label="Check for breached passwords" checked={hibp} onChange={e => setHibp(e.target.checked)} className="accent-accent" /> Check passwords against known breaches</label>
           <p className="mt-1 text-xs text-muted">Off by default. When on, gitpass hashes each password with SHA-1 locally and sends only the <b>first 5 characters</b> of the hash to Have I Been Pwned (k-anonymity). HIBP returns every breached hash with that prefix and the match is done on your device — your passwords and full hashes never leave this computer, and HIBP can’t tell which password you checked.</p></div></div></div>
-    <div className="grid gap-4 md:grid-cols-2">{CARDS.map(({ key, title, desc, Icon }) => { const ids = report ? issueIds(report, key) : [];
+    <div className="grid gap-4 md:grid-cols-2">{cards.map(({ key, title, desc, Icon }) => { const ids = report ? issueIds(report, key) : [];
       const off = key === 'breached' && report && !report.hibpChecked;
       return (<section key={key} aria-label={title} className="rounded-xl border border-border bg-panel p-4">
         <div className="flex items-center gap-2"><Icon size={18} className={ids.length ? 'text-warn' : 'text-ok'} /><h2 className="font-semibold">{title}</h2>

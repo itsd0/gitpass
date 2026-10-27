@@ -19,6 +19,14 @@
   builds must be re-enabled once (Settings → turn Touch ID off and on).
 - Passkeys: p256 0.13 → 0.14 (crypto-bigint 0.7.10); storage format unchanged.
 
+### Audit & Watchtower (PR #17, #20)
+- **Offline 2FA / passkey availability**: compiled-in offline directory of MFA-capable sites (`mfa-sites.tsv`);
+  audits logins without network calls and flags missing TOTP or passkeys. Longest/most-specific domain match wins,
+  passkeys on subdomains (e.g. `accounts.google.com`) suppress passkey advice for the same registrable domain (`google.com`),
+  and items on sites with documented TOTP support no longer receive double-flagged generic `MissingTotp` warnings.
+- **Audit scope**: `gitpass audit` now audits only non-archived Login items (matching GUI/Watchtower behaviour),
+  so `items_checked` can drop compared to earlier versions that audited all item categories and archived records.
+
 ### Supply chain / CI
 - `deny.toml` + CI `supply-chain` job (`cargo deny check`, `cargo audit`) on the self-hosted Mac; every ignore has a
   written reason. Release signing key password read from the `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secret when set.
