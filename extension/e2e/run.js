@@ -30,6 +30,20 @@ const LOGIN_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Test
 <input id="p" name="password" type="password" autocomplete="current-password"><button id="go" type="submit">Sign in</button></form>
 <script>document.getElementById('f').addEventListener('submit',e=>{e.preventDefault();document.getElementById('msg').textContent='signed in as '+document.getElementById('u').value;});</script></body></html>`;
 
+// Two-page login (x.com style): step 1 takes the username, step 2 only the password. The step-2 form has
+// no username field, so saving it relies on the background's per-tab lastUsername from step 1.
+const MULTISTEP_USER_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Test sign in</title></head><body>
+<h1>Sign in to X</h1>
+<form id="f" action="/multistep/password" method="get"><input id="u" name="username" type="text" autocomplete="username" placeholder="Phone, email, or username">
+<button id="next" type="submit">Next</button></form>
+<script>document.getElementById('f').addEventListener('submit',e=>{e.preventDefault();setTimeout(()=>location.assign('/multistep/password'),150);});</script></body></html>`;
+
+const MULTISTEP_PW_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Enter your password</title></head><body>
+<h1>Enter your password</h1><div id="msg"></div>
+<form id="f"><input id="p" name="password" type="password" autocomplete="current-password" placeholder="Password">
+<button id="go" type="submit">Log in</button></form>
+<script>document.getElementById('f').addEventListener('submit',e=>{e.preventDefault();document.getElementById('msg').textContent='signed in';});</script></body></html>`;
+
 const CARD_HTML = fs.readFileSync(path.join(ROOT, 'test', 'pages', 'card.html'), 'utf8');
 
 // Find visible elements by text, piercing CLOSED shadow roots via CDP (DOM.getDocument pierce:true).
@@ -161,7 +175,7 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
   // Linux Chromium reads the per-profile dir too; also set via env for safety on Linux CI.
   console.log(`tmp: ${tmp}\nextension id (expected): ${id}`);
 
-  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
+  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/multistep/password') ? MULTISTEP_PW_HTML : req.url.startsWith('/multistep') ? MULTISTEP_USER_HTML : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const LOGIN = `http://localhost:${server.address().port}/login`;
   if (realSetup) realSetup(server.address().port); // real host matches loopback origins incl. port
@@ -253,6 +267,37 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     const saved = await until(() => cmdsIn(mockDir).find((m) => m.cmd === 'save_login' && m.username === 'newuser@example.com'), T(4000));
     if (REAL) rec('save-login prompt after submit (real host)', !!banner, banner ? `banner button "${banner[0].text}" clicked` : 'no Save button found', 'test'); else
     rec('save-login prompt after submit -> save_login sent', !!saved, banner ? `banner button "${banner[0].text}"; save_login ${saved ? 'received' : 'NOT received'}` : 'no Save button found in page shadow DOM');
+
+    // --- Multi-step login (username page -> password page). The step-2 form has no username input, so
+    // save_login can only carry both values if the step-1 username survives the page load in the background.
+    // Each step must show exactly one icon (the anchor badge) for its single input field.
+    const MS_USER = 'multistep@example.com', MS_PASS = 'Two-St3p-Login!';
+    const badgeHosts = (pg) => pg.evaluate(() => document.querySelectorAll('gitpass-ui').length);
+    const decorated = (pg, sel) => pg.evaluate((s) => { const el = document.querySelector(s); return !!el && el.dataset.gitpassDecorated === 'true'; }, sel);
+    const ms = await ctx.newPage();
+    const MS1 = LOGIN.replace(/\/login$/, '/multistep');
+    await ms.goto(MS1); await sleep(1000);
+    const step1Badge = await until(async () => (await badgeHosts(ms)) === 1 && await decorated(ms, '#u'), T(5000));
+    rec('multi-step step 1: exactly one gitpass icon on the username field', !!step1Badge, `icons=${await badgeHosts(ms)}`);
+    await ms.fill('#u', MS_USER);
+    await Promise.all([ms.waitForURL(/\/multistep\/password$/, { timeout: T(8000) }), ms.click('#next')]);
+    await sleep(1000);
+    const step2Badge = await until(async () => (await badgeHosts(ms)) === 1 && await decorated(ms, '#p'), T(5000));
+    rec('multi-step step 2: exactly one gitpass icon on the password field', !!step2Badge, `icons=${await badgeHosts(ms)}`);
+    await ms.fill('#p', MS_PASS); await ms.click('#go');
+    const msBanner = await until(async () => { const h = await findInShadow(ms, /multistep@example\.com/); return h.length && h; }, T(6000));
+    rec('multi-step login: banner shows the step-1 username before saving', !!msBanner, msBanner ? `"${msBanner[0].text}"` : 'no username in the save banner');
+    const msSave = await until(async () => { const h = await findInShadow(ms, /^\s*(Save|บันทึก|သိမ်းရန်)\s*$/i); return h.length && h; }, T(6000));
+    if (msSave) await ms.mouse.click(msSave[0].x, msSave[0].y);
+    const msSavedAll = await until(() => { const l = cmdsIn(mockDir).filter((m) => m.cmd === 'save_login' && m.username === MS_USER); return l.length && l; }, T(5000)) || [];
+    const msSaved = msSavedAll[0];
+    rec('multi-step login saves username + password from two pages',
+      REAL ? !!(msBanner && msSave) : !!(msSaved && msSaved.password === MS_PASS && msSaved.origin === `http://localhost:${server.address().port}`),
+      REAL ? 'real host (temp vault; not logged)' : msSaved
+        ? `save_login username=${msSaved.username} password=${msSaved.password === MS_PASS ? 'matches' : 'MISMATCH'} origin=${msSaved.origin}`
+        : 'save_login NOT received');
+    rec('multi-step login saves exactly once', REAL || msSavedAll.length === 1, REAL ? 'real host (not logged)' : `save_login count=${msSavedAll.length}`);
+    await ms.close();
 
     // --- Card + identity (test/pages/card.html): in-page click and popup Fill
     const CARD = LOGIN.replace(/\/login$/, '/card');
