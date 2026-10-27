@@ -71,7 +71,7 @@ export function ItemList() {
       // returns to a single selection. Both move from the focus row, and the
       // focus row (not the anchor) is scrolled into view.
       const next = arrowSelect(order, readSel(), e.key === 'ArrowDown' ? 1 : -1, e.shiftKey);
-      const focusId = rangeFocus(next) ?? next.selected;
+      const focusId = rangeFocus(order, next) ?? next.selected;
       applySel(next);
       if (focusId) { const ri = rows.findIndex((r) => r.key === focusId); if (ri >= 0) virt.scrollToIndex(ri, { align: 'auto' }); }
     } else if (e.key === 'Enter' && idx >= 0) {

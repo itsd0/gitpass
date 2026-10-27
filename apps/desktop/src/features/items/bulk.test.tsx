@@ -98,4 +98,18 @@ describe('item list multi-select', () => {
     expect(useApp.getState().multiIds).toEqual([]);
     expect(useApp.getState().selectedItemId).toBe(items[2].id);
   });
+
+  it('cmd-A then plain arrow moves from the anchor, not the opposite end', async () => {
+    const items = await load();
+    useApp.setState({ selectedItemId: items[2].id });
+    render(<ItemList />);
+    await screen.findAllByRole('option');
+    const list = screen.getByRole('listbox');
+    fireEvent.keyDown(list, { key: 'a', metaKey: true });
+    expect(useApp.getState().multiIds.length).toBe(items.length);
+    expect(useApp.getState().selectedItemId).toBe(items[2].id);
+    fireEvent.keyDown(list, { key: 'ArrowDown' });
+    expect(useApp.getState().multiIds).toEqual([]);
+    expect(useApp.getState().selectedItemId).toBe(items[3].id);
+  });
 });

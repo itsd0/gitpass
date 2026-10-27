@@ -42,22 +42,29 @@ export const selectAll = (order: string[], s: Sel): Sel =>
  * contiguous range in list order. Moving back toward the anchor shrinks the
  * range; moving past it expands it on the other side.
  *
- * The current focus is not stored separately: for a range selection it is
- * the endpoint opposite the anchor (see `rangeFocus`), and for a single
- * selection it is that item.
+ * The current focus is not stored separately. It is the endpoint opposite
+ * the anchor only when `multi` is exactly a contiguous span in list order
+ * and the anchor is one of its ends (see `rangeFocus`); in every other
+ * case — Cmd-clicked, non-contiguous selections and Cmd-A, where the
+ * anchor is not an end — the focus is `selected` itself, the last-clicked
+ * item / anchor.
  */
+function contiguousOppositeEnd(order: string[], s: Sel, anchor: string): string | null {
+  if (s.multi.length <= 1) return null;
+  const sorted = order.filter((x) => s.multi.includes(x));
+  if (sorted.length !== s.multi.length) return null; // ids outside the list: not a range
+  const first = order.indexOf(sorted[0]), last = order.indexOf(sorted[sorted.length - 1]);
+  if (last - first + 1 !== sorted.length) return null; // gaps: not contiguous
+  if (anchor !== sorted[0] && anchor !== sorted[sorted.length - 1]) return null; // anchor not at an end
+  return anchor === sorted[0] ? sorted[sorted.length - 1] : sorted[0];
+}
+
 export function arrowSelect(order: string[], s: Sel, delta: 1 | -1, shift = false): Sel {
   if (!order.length) return s;
   const anchor = s.selected && order.includes(s.selected) ? s.selected : null;
-  // Current focus: opposite endpoint of a range, else the single selection.
-  let focusIdx: number;
-  if (s.multi.length > 1 && anchor) {
-    const sorted = order.filter((x) => s.multi.includes(x));
-    const focus = anchor === sorted[0] ? sorted[sorted.length - 1] : sorted[0];
-    focusIdx = order.indexOf(focus);
-  } else {
-    focusIdx = anchor ? order.indexOf(anchor) : -1;
-  }
+  // Current focus: opposite endpoint of a contiguous range, else the anchor itself.
+  const focusId = anchor ? contiguousOppositeEnd(order, s, anchor) ?? anchor : null;
+  const focusIdx = focusId ? order.indexOf(focusId) : -1;
   const nextIdx = Math.max(0, Math.min(order.length - 1, focusIdx + delta));
   const nextId = order[nextIdx];
   if (!shift) return { selected: nextId, multi: [] };
@@ -67,9 +74,13 @@ export function arrowSelect(order: string[], s: Sel, delta: 1 | -1, shift = fals
   return span.length > 1 ? { selected: rangeAnchor, multi: span } : { selected: rangeAnchor, multi: [] };
 }
 
-/** Focus row for a selection: the range endpoint opposite the anchor, else the single selection. */
-export function rangeFocus(s: Sel): string | null {
-  if (s.multi.length > 1) return s.multi[0] === s.selected ? s.multi[s.multi.length - 1] : s.multi[0];
+/** Focus row for a selection: the range endpoint opposite the anchor when
+ *  `multi` is a contiguous span with the anchor at an end, else `selected`
+ *  itself (Cmd-click / Cmd-A and other non-contiguous selections). */
+export function rangeFocus(order: string[], s: Sel): string | null {
+  if (s.selected && order.includes(s.selected) && s.multi.length > 1) {
+    return contiguousOppositeEnd(order, s, s.selected) ?? s.selected;
+  }
   return s.selected;
 }
 
