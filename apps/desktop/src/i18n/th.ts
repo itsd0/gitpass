@@ -142,4 +142,9 @@ export const th: Partial<Record<Key, string>> = {
   "detail.emptyTitle": "ห้องนิรภัยนี้ว่างเปล่า",
   "detail.emptyBody": "เพิ่มข้อมูลเข้าสู่ระบบ บัตร หรือโน้ตแรกของคุณในห้องนิรภัยนี้",
   "detail.newItem": "รายการใหม่",
+  // TODO(i18n-review): native Thai review of the new watchtower.* wording
+  "watchtower.totpAvailable": "ใช้ 2FA ได้",
+  "watchtower.totpAvailableDesc": "เว็บไซต์รองรับรหัสจากแอป authenticator แต่รายการเข้าสู่ระบบนี้ยังไม่ได้บันทึก TOTP",
+  "watchtower.passkeyAvailable": "ใช้ passkey ได้",
+  "watchtower.passkeyAvailableDesc": "เว็บไซต์รองรับ passkey แต่ยังไม่ได้บันทึก passkey สำหรับเว็บนี้",
 };

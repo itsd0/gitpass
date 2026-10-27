@@ -149,4 +149,9 @@ export const my: Partial<Record<Key, string>> = {
   "detail.emptyTitle": "ဤ vault ထဲတွင် ဘာမှမရှိသေးပါ",
   "detail.emptyBody": "ဤ vault ထဲသို့ ပထမဆုံး login၊ ကတ် သို့မဟုတ် မှတ်စု ထည့်ပါ။",
   "detail.newItem": "Item အသစ်",
+  // TODO(i18n-review): native Burmese review of the new watchtower.* wording
+  "watchtower.totpAvailable": "2FA အသုံးပြုနိုင်သည်",
+  "watchtower.totpAvailableDesc": "ဤဆိုက်တွင် authenticator app ကုဒ်များ အသုံးပြုနိုင်သော်လည်း ဤလော့ဂ်အင်တွင် TOTP မသိမ်းထားပါ။",
+  "watchtower.passkeyAvailable": "Passkey အသုံးပြုနိုင်သည်",
+  "watchtower.passkeyAvailableDesc": "ဤဆိုက်တွင် passkey အသုံးပြုနိုင်သော်လည်း ယင်းအတွက် passkey မသိမ်းထားပါ။",
 };
