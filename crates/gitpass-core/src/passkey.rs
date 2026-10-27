@@ -108,7 +108,7 @@ impl Passkey {
         let f = |id: &str, label: &str, kind: FieldKind, v: String| Field { id: id.into(), label: label.into(), kind, value: Some(v), removed: false };
         let mut it = Item::default();
         it.title = title.into();
-        it.username = None;
+        it.username = if self.user_name.trim().is_empty() { None } else { Some(self.user_name.clone()) };
         it.url = Some(format!("https://{}", self.rp_id));
         let mut r = ItemRecord::new(it);
         r.category = Category::Passkey;
@@ -128,7 +128,11 @@ impl Passkey {
         let key = SigningKey::from_pkcs8_der(&unb64(&g(F_PRIVATE))?).map_err(|e| anyhow!("bad passkey private key: {e}"))?;
         let rp_id = g(F_RP_ID);
         if rp_id.is_empty() { bail!("passkey has no rp_id"); }
-        Ok(Passkey { rp_id, credential_id: unb64(&g(F_CRED_ID))?, user_handle: unb64(&g(F_USER_HANDLE))?, user_name: g(F_USER_NAME), key, sign_count: g(F_SIGN_COUNT).trim().parse().unwrap_or(0) })
+        let user_name = {
+            let u = g(F_USER_NAME);
+            if !u.is_empty() { u } else { r.item.username.clone().unwrap_or_default() }
+        };
+        Ok(Passkey { rp_id, credential_id: unb64(&g(F_CRED_ID))?, user_handle: unb64(&g(F_USER_HANDLE))?, user_name, key, sign_count: g(F_SIGN_COUNT).trim().parse().unwrap_or(0) })
     }
     /// Set `sign_count` in an existing record (keeps clocks/history semantics to the store).
     pub fn set_sign_count(r: &mut ItemRecord, n: u32) {
@@ -184,8 +188,10 @@ mod tests {
     fn record_roundtrip() {
         let pk = Passkey::generate("example.com", b"uh", "bob");
         let r = pk.to_record("example.com").unwrap();
+        assert_eq!(r.item.username.as_deref(), Some("bob"));
         let back = Passkey::from_record(&r).unwrap();
         assert_eq!(back.credential_id, pk.credential_id);
+        assert_eq!(back.user_name, "bob");
         assert_eq!(back.verifying_key(), pk.verifying_key());
         let ao = pk.attestation_object();
         assert_eq!(ao[0], 0xa3);

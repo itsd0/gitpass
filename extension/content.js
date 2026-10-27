@@ -33,7 +33,20 @@
   .banner .row{display:flex;align-items:center;gap:10px}
   .banner .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
   .btn{border:1px solid #3c3e44;background:#2a2b30;color:#ECEDF0;border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
-  .btn.pri{background:#F28C28;border-color:#F28C28;color:#1C1C1E;font-weight:600}`;
+  .btn.pri{background:#F28C28;border-color:#F28C28;color:#1C1C1E;font-weight:600}
+  .pk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:2147483647;backdrop-filter:blur(2px)}
+  .pk-card{width:360px;background:#1C1C1E;color:#ECEDF0;border:1px solid #3c3e44;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.6);font:13px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px}
+  .pk-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .pk-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#2a2b30;flex-shrink:0}
+  .pk-title{font-size:15px;font-weight:600;color:#ECEDF0}
+  .pk-meta{background:#25262a;border-radius:8px;padding:12px;margin:12px 0;display:flex;flex-direction:column;gap:8px}
+  .pk-field{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+  .pk-label{color:#969AA4}
+  .pk-val{font-weight:600;color:#ECEDF0;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pk-acts{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
+  .pk-status{font-size:12px;margin-top:4px;color:#969AA4;white-space:pre-wrap;word-break:break-word}
+  .pk-status.err{color:#ff8a80}
+  .pk-status.ok{color:#7ee2a8}`;
 
   // ---------- messaging ----------
   async function send(type, args) {
@@ -65,25 +78,74 @@
   let forms = [];
   const badges = new Map(); // field -> { host, btn, role }
   const bound = new WeakSet();
+  const decoratedInputs = new WeakSet();
+
+  function pruneDetachedBadges() {
+    for (const [field, b] of badges) {
+      if (!field.isConnected) {
+        if (b.host) b.host.remove();
+        badges.delete(field);
+        try { delete field.dataset.gitpassDecorated; } catch (_) {}
+      }
+    }
+  }
+
+  function removeBadge(field) {
+    const b = badges.get(field);
+    if (b) {
+      if (b.host) b.host.remove();
+      badges.delete(field);
+    }
+    try { delete field.dataset.gitpassDecorated; } catch (_) {}
+  }
+
+  function hasOverlappingBadge(field, role) {
+    const r1 = field.getBoundingClientRect ? field.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+    if (!r1.width || !r1.height) return false;
+    for (const [existingField, b] of badges) {
+      if (existingField === field || !existingField.isConnected) continue;
+      const sameContainer = (field.form && existingField.form && field.form === existingField.form) ||
+                            (field.parentElement && existingField.parentElement && field.parentElement === existingField.parentElement);
+      if (!sameContainer) continue;
+      if (b.role !== role) continue;
+      const r2 = existingField.getBoundingClientRect ? existingField.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
+      if (!r2.width || !r2.height) continue;
+      const dx = Math.abs(r1.left - r2.left);
+      const dy = Math.abs(r1.top - r2.top);
+      if (dx < 4 && dy < 4) return true;
+    }
+    return false;
+  }
+
   function rescan() {
+    pruneDetachedBadges();
     if (!SETTINGS.autofill) { // in-page suggestions turned off: drop badges/dropdown, keep capture (governed by savePrompts)
       closeDropdown();
-      for (const [field, b] of badges) { b.host.remove(); badges.delete(field); }
+      for (const field of Array.from(badges.keys())) removeBadge(field);
       return;
     }
     forms = GitpassForms.detectForms(document);
     const live = new Set();
-    for (const f of forms) for (const { el: field, role } of GitpassForms.anchorFields(f)) {
-      live.add(field);
-      if (!badges.has(field)) addBadge(field, role);
-      if (!bound.has(field)) { bound.add(field); bindField(field); }
+    for (const f of forms) {
+      for (const { el: field, role } of GitpassForms.anchorFields(f)) {
+        if (!field || !field.isConnected) continue;
+        if (hasOverlappingBadge(field, role) && !badges.has(field)) continue;
+        live.add(field);
+        if (!badges.has(field)) addBadge(field, role);
+        if (!bound.has(field)) { bound.add(field); bindField(field); }
+      }
     }
-    for (const [field, b] of badges) if (!live.has(field) || !field.isConnected) { b.host.remove(); badges.delete(field); }
+    for (const [field] of badges) {
+      if (!live.has(field) || !field.isConnected) removeBadge(field);
+    }
     placeAll();
   }
   function ctxFor(field) { return GitpassForms.locate(forms, field); }
 
   function addBadge(field, role) {
+    if (badges.has(field)) return;
+    decoratedInputs.add(field);
+    try { field.dataset.gitpassDecorated = 'true'; } catch (_) {}
     const { host, root } = shadowHost();
     const btn = el('button', 'badge'); btn.type = 'button'; btn.tabIndex = -1;
     btn.title = t('csFillWith', 'Fill with gitpass');
@@ -93,12 +155,13 @@
     badges.set(field, { host, btn, role });
   }
   function placeAll() {
+    pruneDetachedBadges();
     for (const [field, b] of badges) {
       const r = field.getBoundingClientRect();
       if (!r.width || !r.height) { b.host.style.display = 'none'; continue; }
       b.host.style.display = '';
-      b.host.style.left = (r.right + scrollX - 28) + 'px';
-      b.host.style.top = (r.top + scrollY + (r.height - 22) / 2) + 'px';
+      b.host.style.left = (r.right + window.scrollX - 28) + 'px';
+      b.host.style.top = (r.top + window.scrollY + (r.height - 22) / 2) + 'px';
     }
     if (dd) placeDropdown();
   }
@@ -240,6 +303,41 @@
     return forms.find((f) => f.scope === form.scope && f.kind === form.kind) || form;
   }
 
+  // ---------- username tracking across multi-step flows ----------
+  const USERNAME_TTL_MS = 5 * 60 * 1000;
+  let inMemoryUsername = null;
+  let inMemoryUsernameTs = 0;
+
+  // Extension memory only. Never the page's sessionStorage/localStorage: those are readable and
+  // writable by the page itself. Across page loads the background keeps the value per tab+origin
+  // (bg-page.js `lastUsername`, 5 min TTL), and page:capture falls back to it.
+  function getStoredUsername() {
+    if (inMemoryUsername && (Date.now() - inMemoryUsernameTs < USERNAME_TTL_MS)) return inMemoryUsername;
+    return null;
+  }
+
+  function storeUsername(user) {
+    if (!user || typeof user !== 'string') return;
+    const trimmed = user.trim().slice(0, 512);
+    if (!trimmed || trimmed === inMemoryUsername) { inMemoryUsernameTs = Date.now(); return; }
+    inMemoryUsername = trimmed;
+    inMemoryUsernameTs = Date.now();
+    send('page:capture', { kind: 'username', username: trimmed }).catch(() => {});
+  }
+
+  function handlePotentialUsername(el) {
+    if (!el || el.tagName !== 'INPUT') return;
+    const type = (el.getAttribute('type') || 'text').toLowerCase();
+    if (type === 'password' || type === 'hidden') return;
+    const toks = (el.getAttribute('autocomplete') || '').toLowerCase().split(/\s+/);
+    const h = GitpassForms.hints ? GitpassForms.hints(el) : ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.placeholder || ''));
+    if (toks.includes('username') || toks.includes('email') || type === 'email' || GitpassForms.RX.username.test(h) || GitpassForms.RX.email.test(h)) {
+      if (typeof el.value === 'string' && el.value.trim().length >= 1) {
+        storeUsername(el.value);
+      }
+    }
+  }
+
   // ---------- save / update banner ----------
   let banner = null;
   function closeBanner() { if (banner) { banner.host.remove(); banner = null; } }
@@ -261,8 +359,18 @@
     yes.addEventListener('click', async (e) => {
       if (!e.isTrusted) return;
       yes.disabled = true;
-      try { await send('page:save_decision', { action: p.prompt === 'update' ? 'update' : 'save', user_click: true }); m.firstChild.textContent = p.prompt === 'update' ? t('csUpdated', 'Password updated') : t('csSaved', 'Saved to gitpass'); acts.remove(); setTimeout(closeBanner, 1800); }
-      catch (err) { yes.disabled = false; const code = err.code || codeOf(err.message); m.lastChild.textContent = code === 'locked' ? t('csLockedShort', 'Unlock gitpass first, then try again') : 'gitpass: ' + err.message; if (code === 'locked') send('page:request_unlock').catch(() => {}); }
+      try {
+        await send('page:save_decision', { action: p.prompt === 'update' ? 'update' : 'save', username: p.username, item_id: p.item_id, user_click: true });
+        m.firstChild.textContent = p.prompt === 'update' ? t('csUpdated', 'Password updated') : t('csSaved', 'Saved to gitpass');
+        acts.remove();
+        setTimeout(closeBanner, 1800);
+      }
+      catch (err) {
+        yes.disabled = false;
+        const code = err.code || codeOf(err.message);
+        m.lastChild.textContent = code === 'locked' ? t('csLockedShort', 'Unlock gitpass first, then try again') : 'gitpass: ' + err.message;
+        if (code === 'locked') send('page:request_unlock').catch(() => {});
+      }
     });
     acts.append(no, yes); b.append(row, acts); banner.root.append(b);
   }
@@ -276,11 +384,17 @@
     for (const f of (cand.length ? cand : list)) {
       let c = GitpassForms.captureCredentials(f);
       if (!c) continue;
+      if (!c.username) {
+        const fallback = getStoredUsername();
+        if (fallback) c.username = fallback;
+      }
       send('page:capture', c).then(showBanner).catch(() => {});
       c = null; // the password now lives only in the background's memory
       return;
     }
   }
+  document.addEventListener('input', (e) => { if (e.isTrusted) handlePotentialUsername(e.target); }, true);
+  document.addEventListener('change', (e) => { if (e.isTrusted) handlePotentialUsername(e.target); }, true);
   document.addEventListener('submit', (e) => capture(e.target), true);
   document.addEventListener('click', (e) => {
     if (!e.isTrusted) return;
@@ -291,9 +405,116 @@
     if (e.key === 'Enter' && e.isTrusted && e.target && e.target.tagName === 'INPUT' && !dd) capture(e.target.form || document);
   }, true);
 
-  // ---------- popup "Open & Fill" (background sends to frame 0 only; sender must be our extension) ----------
-  chrome.runtime.onMessage.addListener((msg, sender) => {
+  // ---------- popup "Open & Fill" and in-page prompts (frame 0 only) ----------
+  let pkPrompt = null;
+  function closePkPrompt() { if (pkPrompt) { pkPrompt.host.remove(); pkPrompt = null; } }
+  function showPkPrompt(msg, sendResponse) {
+    closePkPrompt();
+    const { host, root } = shadowHost(true);
+    host.style.zIndex = '2147483647'; host.style.inset = '0'; host.style.position = 'fixed';
+    const overlay = el('div', 'pk-overlay');
+    const card = el('div', 'pk-card');
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+
+    const row = el('div', 'pk-row');
+    const ic = el('div', 'pk-icon');
+    const img = el('img'); img.src = LOGO; img.alt = 'gitpass'; img.style.cssText = 'width:20px;height:20px;border-radius:4px';
+    ic.append(img);
+    const ti = el('div', 'pk-title', msg.kind === 'create' ? t('pkCreateTitle', 'Save a passkey?') : t('pkGetTitle', 'Sign in with a passkey?'));
+    row.append(ic, ti);
+
+    const meta = el('div', 'pk-meta');
+    const siteRow = el('div', 'pk-field');
+    siteRow.append(el('span', 'pk-label', t('pkSite', 'Site:')), el('span', 'pk-val', msg.rpId));
+    const userRow = el('div', 'pk-field');
+    userRow.append(el('span', 'pk-label', t('pkAccount', 'Account:')), el('span', 'pk-val', msg.userName || '—'));
+    meta.append(siteRow, userRow);
+
+    const acts = el('div', 'pk-acts');
+    const cancelBtn = el('button', 'btn', t('pkCancel', 'Cancel')); cancelBtn.type = 'button';
+    const okBtn = el('button', 'btn pri', msg.kind === 'create' ? t('pkSave', 'Save passkey') : t('pkSignIn', 'Sign in')); okBtn.type = 'button';
+
+    let answered = false;
+    // Anti-clickjacking: ignore clicks that land in the first 600 ms (a page can trigger the prompt
+    // right under a click it solicited).
+    const shownAt = performance.now();
+    const armed = () => performance.now() - shownAt > 600;
+    const status = el('div', 'pk-status');
+    const finish = (approved) => {
+      if (answered) return;
+      answered = true;
+      // Approved: keep the dialog open and show progress; the background reports the outcome with
+      // `gitpass-passkey-result` (success, or the error plus retry / native fallback). Never silent.
+      if (approved) {
+        cancelBtn.disabled = true; okBtn.disabled = true;
+        status.className = 'pk-status';
+        status.textContent = msg.kind === 'create' ? t('pkSaving', 'Saving to gitpass…') : t('pkSigning', 'Signing in with gitpass…');
+        const mine = pkPrompt;
+        setTimeout(() => {
+          if (pkPrompt !== mine || mine.resulted) return;
+          status.className = 'pk-status err';
+          status.textContent = t('pkNoAnswer', 'No answer from gitpass (the extension may have restarted). Close this and try again.');
+          const c = el('button', 'btn', t('pkClose', 'Close')); c.type = 'button';
+          c.addEventListener('click', (e) => { if (e.isTrusted) closePkPrompt(); });
+          acts.textContent = ''; acts.append(c);
+        }, 45000);
+      } else closePkPrompt();
+      try { sendResponse({ approved }); } catch (_) {}
+    };
+
+    cancelBtn.addEventListener('click', (e) => { if (!e.isTrusted) return; finish(false); });
+    okBtn.addEventListener('click', (e) => { if (!e.isTrusted || !armed()) return; finish(true); });
+    overlay.addEventListener('keydown', (e) => { if (!e.isTrusted || e.key !== 'Escape') return; if (pkPrompt && pkPrompt.onEscape) pkPrompt.onEscape(e); else finish(false); });
+
+    acts.append(cancelBtn, okBtn);
+    card.append(row, meta, status, acts);
+    overlay.append(card);
+    root.append(overlay);
+    // Outcome from the background after the host call.
+    const showResult = (res, respond) => {
+      if (pkPrompt) pkPrompt.resulted = true;
+      acts.textContent = '';
+      if (res.ok) {
+        status.className = 'pk-status ok';
+        status.textContent = msg.kind === 'create'
+          ? t('pkSaved', 'Saved to gitpass') + (res.title ? ` — “${res.title}” (${t('catPasskey', 'Passkeys')})` : '')
+          : t('pkSignedIn', 'Signed in with gitpass');
+        setTimeout(closePkPrompt, 1800);
+        respond({ action: 'done' });
+        return;
+      }
+      status.className = 'pk-status err';
+      status.textContent = (msg.kind === 'create' ? t('pkSaveFailed', 'gitpass could not save this passkey:') : t('pkGetFailed', 'gitpass could not sign in:')) + '\n' + (res.error || res.code || 'unknown error');
+      let done = false;
+      const pick = (action) => (e) => {
+        if (!e.isTrusted || done) return;
+        done = true;
+        if (action === 'retry') { status.className = 'pk-status'; status.textContent = t('pkRetrying', 'Retrying…'); acts.textContent = ''; }
+        else closePkPrompt();
+        respond({ action });
+      };
+      const closeB = el('button', 'btn', t('pkClose', 'Close')); closeB.type = 'button'; closeB.addEventListener('click', pick('close'));
+      const retryB = el('button', 'btn', res.code === 'locked' ? t('pkUnlockRetry', 'Unlock & retry') : t('pkRetry', 'Retry')); retryB.type = 'button'; retryB.addEventListener('click', pick('retry'));
+      const nativeB = el('button', 'btn pri', t('pkUseDevice', 'Use device passkey')); nativeB.type = 'button'; nativeB.addEventListener('click', pick('native'));
+      if (res.code === 'exists') acts.append(closeB, nativeB); else acts.append(closeB, retryB, nativeB);
+      pkPrompt.onEscape = pick('close');
+    };
+    pkPrompt = { host, finish, reqId: msg.reqId, showResult };
+    setTimeout(() => okBtn.focus(), 50);
+  }
+
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || (sender && sender.id && sender.id !== chrome.runtime.id)) return;
+    if (msg.type === 'gitpass-passkey-prompt') {
+      showPkPrompt(msg, sendResponse);
+      return true; // async sendResponse
+    }
+    if (msg.type === 'gitpass-passkey-result') {
+      if (!pkPrompt || pkPrompt.reqId !== msg.reqId) { sendResponse({ action: 'close' }); return; }
+      pkPrompt.showResult(msg, sendResponse);
+      return true;
+    }
     if (msg.origin !== location.origin) return; // page navigated meanwhile: drop
     const list = GitpassForms.detectForms(document);
     if (msg.type === 'gitpass-fill') {
@@ -316,6 +537,7 @@
   new MutationObserver((muts) => {
     const ours = (n) => n && n.nodeName === 'GITPASS-UI';
     if (muts.every((m) => ours(m.target) || (m.type === 'childList' && [...m.addedNodes, ...m.removedNodes].every(ours)))) return; // only our own UI changed
+    pruneDetachedBadges();
     if (scheduled) return; scheduled = true; setTimeout(() => { scheduled = false; rescan(); }, 250); })
     .observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden', 'type'] });
   rescan();

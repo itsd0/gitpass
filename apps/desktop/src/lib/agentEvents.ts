@@ -15,10 +15,24 @@ export function openItemFromAgent(p: OpenItemPayload | null | undefined) {
   s.selectItem(p.itemId);
 }
 let pending: OpenItemPayload | null = null;
+let refreshPending = false;
+
+/** Live sync: the vault was written by someone (this window, the browser extension, CLI, git sync).
+ *  Refetch lists/detail now, or right after the user finishes editing (never clobber an open editor). */
+export function onVaultChanged() {
+  const s = useApp.getState();
+  if (s.locked) return;
+  if (s.editing) { refreshPending = true; return; }
+  s.refreshItems();
+}
 
 /** Extension-triggered unlock (Touch ID via the agent) and open-item events from Rust (src-tauri/src/agent_ui.rs). */
 export function useAgentEvents() {
   const locked = useApp((s) => s.locked);
+  const editing = useApp((s) => s.editing);
+  useEffect(() => {
+    if (!editing && refreshPending) { refreshPending = false; useApp.getState().refreshItems(); }
+  }, [editing]);
   useEffect(() => {
     if (!locked && pending) { const p = pending; pending = null; openItemFromAgent(p); }
   }, [locked]);
@@ -32,6 +46,7 @@ export function useAgentEvents() {
         listen<OpenItemPayload>('open-item', (ev) => openItemFromAgent(ev.payload)).then((u) => unlisten.push(u));
         // Backend lock on any path (idle, sleep, manual, extension/agent): back to the unlock screen.
         listen<string>('locked', () => { const s = useApp.getState(); if (!s.locked) s.lock(); }).then((u) => unlisten.push(u));
+        listen('vault-changed', () => onVaultChanged()).then((u) => unlisten.push(u));
         // Unlocked from the extension (Touch ID): refresh state in place instead of reloading the window.
         listen('unlocked', () => {
           api.status().then((st) => {

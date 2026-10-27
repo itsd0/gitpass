@@ -11,7 +11,7 @@
   const q = r.result;
   $('title').textContent = q.kind === 'create' ? t('pkCreateTitle', 'Save a passkey?') : t('pkGetTitle', 'Sign in with a passkey?');
   $('site').textContent = q.rp_id + (q.origin && new URL(q.origin).hostname !== q.rp_id ? ` (${q.origin})` : '');
-  $('account').textContent = q.kind === 'create' ? (q.user_name || '—') : '—';
+  $('account').textContent = q.user_name || '—';
   let busy = false;
   $('deny').onclick = async () => { if (busy) return; busy = true; await send('passkey-ui:decide', { approved: false }); window.close(); };
   $('approve').onclick = async () => {

@@ -222,6 +222,32 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   delete_item: (a: { itemId: string }) => { get(a.itemId).detail.deletedAt = new Date().toISOString(); return delay(undefined); },
   restore_item: (a: { itemId: string }) => { const d = get(a.itemId).detail; d.deletedAt = null; d.archived = false; return delay(undefined); },
   purge_item: (a: { itemId: string }) => { db.delete(a.itemId); return delay(undefined); },
+  bulk_items: ({ req }: { req: T.BulkRequest }) => {
+    const now = new Date().toISOString(); const out: T.ItemRef[] = []; let count = 0;
+    const tag = (req.tag ?? '').trim();
+    if ((req.action === 'add_tag' || req.action === 'remove_tag') && !tag && req.items.length) return Promise.reject(new Error('tag is required'));
+    if ((req.action === 'move' || req.action === 'copy') && req.items.length && !vaults.some((v) => v.id === req.toVaultId)) return Promise.reject(new Error('no vault'));
+    for (const ref of [...new Map(req.items.map((x) => [x.itemId, x])).values()]) {
+      const r = db.get(ref.itemId); if (!r) return Promise.reject(new Error(`no item ${ref.itemId}`));
+      const d = r.detail; count++;
+      switch (req.action) {
+        case 'trash': d.deletedAt ??= now; break;
+        case 'restore': d.deletedAt = null; break;
+        case 'archive': d.archived = true; break;
+        case 'unarchive': d.archived = false; break;
+        case 'favorite': d.favorite = true; break;
+        case 'unfavorite': d.favorite = false; break;
+        case 'add_tag': if (!d.tags.includes(tag)) d.tags.push(tag); break;
+        case 'remove_tag': d.tags = d.tags.filter((t) => t !== tag); break;
+        case 'purge': db.delete(ref.itemId); continue;
+        case 'move': if (d.vaultId === req.toVaultId) { count--; continue; } d.vaultId = req.toVaultId!; touch(r); break;
+        case 'copy': { const c: Rec = structuredClone(r); Object.assign(c.detail, { id: uid('i'), vaultId: req.toVaultId!, createdAt: now, updatedAt: now }); c.versions = []; db.set(c.detail.id, c); out.push({ vaultId: c.detail.vaultId, itemId: c.detail.id }); continue; }
+        default: return Promise.reject(new Error(`unknown bulk action '${req.action}'`));
+      }
+      out.push({ vaultId: d.vaultId, itemId: d.id });
+    }
+    return delay({ count, items: out });
+  },
   move_item: (a: { itemId: string; toVaultId: string }) => { const r = get(a.itemId); touch(r); r.detail.vaultId = a.toVaultId; return delay(summary(r.detail)); },
   duplicate_item: (a: { itemId: string }) => {
     const src = get(a.itemId); const r: Rec = structuredClone(src); const now = new Date().toISOString();

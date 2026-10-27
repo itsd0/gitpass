@@ -41,7 +41,7 @@ pub struct Bridge {
 fn origin_arg(cmd: &str, req: &Value) -> Option<String> {
     match cmd {
         "match" => req.get("origin").or_else(|| req.get("url")).and_then(Value::as_str).map(str::to_string),
-        "fill" | "save_login" | "passkey_create" | "passkey_get" => req.get("origin").and_then(Value::as_str).map(str::to_string),
+        "fill" | "save_login" | "passkey_create" | "passkey_get" | "passkey_query" => req.get("origin").and_then(Value::as_str).map(str::to_string),
         _ => None,
     }
 }

@@ -23,7 +23,7 @@ fn setup() -> (tempfile::TempDir, SecretKey, String, String) {
 }
 fn ipath(root: &Path, vid: &str, iid: &str) -> std::path::PathBuf { root.join("vaults").join(vid).join("items").join(format!("{iid}.enc")) }
 fn assert_refused(root: &Path, sk: &SecretKey) {
-    let e = unlock(root, PW, sk).err().expect("unlock should have been refused");
+    let e = unlock(root, PW, sk).expect_err("unlock should have been refused");
     eprintln!("refused as expected: {e:#}");
 }
 

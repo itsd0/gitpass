@@ -21,11 +21,13 @@ pub mod v1 {
     #[derive(serde::Serialize, serde::Deserialize)]
     pub struct MetaV1 { pub name: String }
 
+    type MigratedVault = (String, Key32, Zeroizing<String>, Vec<(String, u64, Item)>);
+
     /// Decrypted v1 content held in memory (items zeroize on drop).
     pub struct Plain {
         pub fmt: Format,
         pub account_key: Key32,
-        pub vaults: Vec<(String, Key32, Zeroizing<String>, Vec<(String, u64, Item)>)>,
+        pub vaults: Vec<MigratedVault>,
     }
 
     pub fn unlock(root: &Path, password: &str, secret: &SecretKey) -> Result<(Format, Key32)> {

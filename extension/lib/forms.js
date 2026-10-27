@@ -179,6 +179,20 @@
     return null;
   }
 
+  function findHiddenUsername(scope) {
+    if (!scope || !scope.querySelectorAll) return null;
+    const candidates = scope.querySelectorAll('input[type=hidden], input[hidden], input[disabled], input[readonly], input[style*="display: none"], input[style*="visibility: hidden"], [aria-hidden="true"] input');
+    for (const el of candidates) {
+      const toks = acTokens(el);
+      if (toks.includes('username') || toks.includes('email')) return el;
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      if (type === 'email') return el;
+      const h = hints(el);
+      if (RX.username.test(h) || RX.email.test(h)) return el;
+    }
+    return null;
+  }
+
   function classifyGroup(scope, list) {
     const pw = list.filter((x) => /password$/.test(x.role));
     const fh = formHints(scope === scope.ownerDocument ? null : scope);
@@ -214,7 +228,7 @@
         fields.newPassword = (restNoCur.find((x) => x.role !== 'confirm_password') || restNoCur[0]).el;
         fields.confirm = conf || (restNoCur.find((x) => x.el !== fields.newPassword) || {}).el || null;
       }
-      fields.username = pickUsername(list, pw[0].el);
+      fields.username = pickUsername(list, pw[0].el) || findHiddenUsername(scope);
       return { kind, scope, fields };
     }
     if (fields.totp) return { kind: 'totp', scope, fields };
@@ -236,12 +250,39 @@
     return null;
   }
 
+  /** Payment-processor card iframes in this document (Stripe Elements etc.), best card-number frame first. */
+  function paymentFrames(doc) {
+    const P = root.GitpassPolicy;
+    if (!P || !P.isPaymentFrameOrigin || !doc.querySelectorAll) return [];
+    const out = [];
+    for (const f of doc.querySelectorAll('iframe')) {
+      let origin = null; try { origin = new URL(f.getAttribute('src') || '', doc.baseURI).origin; } catch (_) {}
+      if (!origin || !P.isPaymentFrameOrigin(origin)) continue;
+      const h = ((f.getAttribute('title') || '') + ' ' + (f.getAttribute('name') || '') + ' ' + (f.getAttribute('src') || '')).toLowerCase();
+      if (/3ds|challenge|authenticat|controller|metrics|m\.stripe|apple|google.?pay|payment.?request|link-auth|hcaptcha|address/.test(h)) continue;
+      if (!isVisible(f)) continue;
+      out.push({ el: f, number: /card.?number|cardnumber|numberinput|card.?payment|encryptedcardnumber|\bnumber\b|elements-inner-card(?:-number)?\.html|componentname=card\b/.test(h) });
+    }
+    out.sort((a, b) => (b.number ? 1 : 0) - (a.number ? 1 : 0));
+    return out.map((x) => x.el);
+  }
+
   /** Detect all actionable forms in a document. */
   function detectForms(doc, opts) {
     const out = [];
+    const loose = {}; // card-role fields that are not part of a card form (e.g. cardholder name next to Stripe iframes)
     for (const [scope, list] of groups(doc, opts)) {
       const f = classifyGroup(scope, list);
       if (f) out.push(f);
+      if (!f || f.kind !== 'card') for (const x of list) if (CARD_ROLES.has(x.role) && !loose[x.role]) loose[x.role] = x.el;
+    }
+    // Card fields hosted in processor iframes: one logical card group anchored on the card-number frame;
+    // gitpass fills those frames from the background (bg-page.js fillPaymentFrames), never from this page.
+    if (!out.some((f) => f.kind === 'card')) {
+      const frames = paymentFrames(doc);
+      if (frames.length) {
+        out.push({ kind: 'card', scope: doc, frames, fields: { username: null, password: null, newPassword: null, confirm: null, current: null, totp: null, totpDigits: [], card: loose, identity: {} } });
+      }
     }
     return out;
   }
@@ -255,19 +296,43 @@
       if (F.totpDigits.includes(el)) return { form: f, role: 'totp' };
       for (const [role, e] of Object.entries(F.card)) if (e === el) return { form: f, role };
       for (const [role, e] of Object.entries(F.identity)) if (e === el) return { form: f, role };
+      if (f.frames && f.frames.includes(el)) return { form: f, role: 'cc_number' };
     }
     return null;
   }
 
-  /** Fields that get a badge / dropdown. */
+  const CARD_ANCHOR_ORDER = ['cc_number', 'cc_name', 'cc_exp', 'cc_exp_month', 'cc_exp_year', 'cc_csc'];
+  function domFirst(els) {
+    const list = els.filter(Boolean);
+    if (list.length < 2 || !list[0].compareDocumentPosition) return list[0] || null;
+    return list.reduce((a, b) => (a.compareDocumentPosition(b) & 4 /* FOLLOWING */ ? a : b));
+  }
+  /** The ONE field per logical form group that gets the gitpass badge / dropdown (like 1Password):
+   *  login -> username (else password); signup -> username (else new password); change -> current (else new);
+   *  card -> card number (else the first card field; Stripe-style iframes -> the card-number frame);
+   *  identity -> the first identity field in the page; one-time code -> the code field.
+   *  Picking an item from that one icon fills the whole group. */
   function anchorFields(form) {
-    const F = form.fields, out = [];
-    const push = (e, role) => { if (e && !out.some((x) => x.el === e)) out.push({ el: e, role }); };
-    push(F.username, 'username'); push(F.password, 'password'); push(F.current, 'current_password');
-    push(F.newPassword, 'new_password'); push(F.totp, 'totp');
-    for (const [r, e] of Object.entries(F.card)) push(e, r);
-    for (const [r, e] of Object.entries(F.identity)) push(e, r);
-    return out;
+    const F = form.fields;
+    let el = null, role = null;
+    const pick = (e, r) => { if (!el && e) { el = e; role = r; } };
+    switch (form.kind) {
+      case 'card':
+        pick(F.card.cc_number, 'cc_number');
+        if (form.frames && form.frames.length) pick(form.frames[0], 'cc_number');
+        for (const r of CARD_ANCHOR_ORDER) pick(F.card[r], r);
+        break;
+      case 'identity': {
+        const first = domFirst(Object.values(F.identity));
+        if (first) pick(first, Object.keys(F.identity).find((r) => F.identity[r] === first));
+        break;
+      }
+      case 'totp': pick(F.totp, 'totp'); break;
+      case 'change_password': pick(F.current, 'current_password'); pick(F.newPassword, 'new_password'); break;
+      case 'signup': pick(F.username, 'username'); pick(F.newPassword, 'new_password'); break;
+      default: pick(F.username, 'username'); pick(F.password, 'password'); pick(F.totp, 'totp');
+    }
+    return el ? [{ el, role }] : [];
   }
 
   /** Set a value the way a user would, so React/Vue/Angular see it. */
@@ -361,6 +426,18 @@
     return n;
   }
 
+  /** Fill every card field in one document (used inside payment-processor iframes, where each frame
+   *  may hold just one of number / expiry / CVC). Returns how many fields were set. */
+  function fillCardDocument(doc, map) {
+    const card = {};
+    for (const el of doc.querySelectorAll('input, select')) {
+      if (!isVisible(el)) continue;
+      const r = classifyField(el);
+      if (CARD_ROLES.has(r) && !card[r]) card[r] = el;
+    }
+    return Object.keys(card).length ? fillCard({ fields: { card } }, map) : 0;
+  }
+
   function identityValues(m) {
     // gitpass-core v5 identity template ids: first, last, birth, address (multiline), email, phone.
     const given = pick(m, 'first', 'first_name', 'firstname', 'given_name');
@@ -386,15 +463,22 @@
   /** Read what the user typed, for the save/update banner. Returns null if nothing worth saving. */
   function captureCredentials(form) {
     const F = form.fields;
-    const val = (e) => (e && typeof e.value === 'string' ? e.value : '');
-    if (form.kind === 'login') { const p = val(F.password); return p ? { kind: 'login', username: val(F.username), password: p } : null; }
-    if (form.kind === 'signup') { const p = val(F.newPassword); if (!p || (F.confirm && val(F.confirm) !== p)) return null; return { kind: 'signup', username: val(F.username), password: p }; }
-    if (form.kind === 'change_password') { const p = val(F.newPassword); if (!p || (F.confirm && val(F.confirm) !== p)) return null; return { kind: 'change_password', username: val(F.username), password: p }; }
-    if (form.kind === 'login_username') { const u = val(F.username); return u ? { kind: 'username', username: u } : null; }
+    // Usernames are trimmed; passwords are taken verbatim (leading/trailing spaces are legal).
+    const val = (e) => (e && typeof e.value === 'string' ? e.value.trim() : '');
+    const raw = (e) => (e && typeof e.value === 'string' ? e.value : '');
+    let u = val(F.username);
+    if (!u && form.scope) {
+      const h = findHiddenUsername(form.scope);
+      if (h) u = val(h);
+    }
+    if (form.kind === 'login') { const p = raw(F.password); return p ? { kind: 'login', username: u, password: p } : null; }
+    if (form.kind === 'signup') { const p = raw(F.newPassword); if (!p || (F.confirm && raw(F.confirm) !== p)) return null; return { kind: 'signup', username: u, password: p }; }
+    if (form.kind === 'change_password') { const p = raw(F.newPassword); if (!p || (F.confirm && raw(F.confirm) !== p)) return null; return { kind: 'change_password', username: u, password: p }; }
+    if (form.kind === 'login_username') { return u ? { kind: 'username', username: u } : null; }
     return null;
   }
 
-  const api = { RX, classifyField, detectForms, locate, anchorFields, isVisible, hints, setValue, fillLogin, fillNewPassword, fillTotp, fillCard, fillIdentity, cardValues, identityValues, captureCredentials, CARD_ROLES, ID_ROLES };
+  const api = { RX, classifyField, detectForms, locate, anchorFields, isVisible, hints, setValue, fillLogin, fillNewPassword, fillTotp, fillCard, fillCardDocument, paymentFrames, fillIdentity, cardValues, identityValues, captureCredentials, findHiddenUsername, CARD_ROLES, ID_ROLES };
   root.GitpassForms = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

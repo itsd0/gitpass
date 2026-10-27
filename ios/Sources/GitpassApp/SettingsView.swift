@@ -79,6 +79,8 @@ struct SyncSetupView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var clientId = UserDefaults.standard.string(forKey: "gitpass.github.clientId") ?? ""
     @State private var repo = UserDefaults.standard.string(forKey: "gitpass.github.repo") ?? "itsd0/gitpass-vault"
+    @State private var pat = ""
+    @State private var authMode = 0 // 0: Fine-grained PAT, 1: OAuth Device Flow
     @State private var deviceCode: DeviceCodeResponse?
     @State private var status = ""
     @State private var isWorking = false
@@ -100,11 +102,17 @@ struct SyncSetupView: View {
                                 .font(.headline)
                                 .foregroundStyle(Color.gitpassPrimary)
                         }
-                        LabeledContent(String(localized: "Client ID")) {
-                            Text(clientId.isEmpty ? String(localized: "Not saved") : clientId)
-                                .font(.footnote.monospaced())
+                        if !clientId.isEmpty {
+                            LabeledContent(String(localized: "Client ID")) {
+                                Text(clientId)
+                                    .font(.footnote.monospaced())
+                                    .foregroundStyle(Color.gitpassSecondary)
+                                    .textSelection(.enabled)
+                            }
+                        } else {
+                            Text(String(localized: "Connected using a Personal Access Token"))
+                                .font(.footnote)
                                 .foregroundStyle(Color.gitpassSecondary)
-                                .textSelection(.enabled)
                         }
                         TextField(String(localized: "Vault repository (owner/repo)"), text: $repo)
                             .autocapitalization(.none)
@@ -113,48 +121,75 @@ struct SyncSetupView: View {
                         Button(role: .destructive) {
                             KeychainStore.shared.deleteGitHubToken()
                             tokenPresent = false
-                            status = String(localized: "Disconnected. The client ID is kept so you can reconnect.")
+                            status = String(localized: "Disconnected.")
                         } label: {
                             Text(String(localized: "Disconnect GitHub"))
                                 .foregroundStyle(Color.gitpassPrimary)
                         }
                     }
                 } else {
-                Section(String(localized: "GitHub")) {
-                    TextField(String(localized: "OAuth App client ID"), text: $clientId)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                    TextField(String(localized: "Vault repository (owner/repo)"), text: $repo)
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
-                    Text(String(localized: "The client ID is an OAuth App identifier, not a secret. Create one at github.com/settings/developers (do not enable a client secret flow for a public device app) and paste its client ID here. The token it issues is stored in the Keychain."))
-                        .font(.footnote)
-                        .foregroundStyle(Color.gitpassSecondary)
-                }
-                Section {
-                    if let deviceCode {                    } else if let deviceCode {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(String(localized: "On another device, open:"))
+                    Section {
+                        Picker(String(localized: "Method"), selection: $authMode) {
+                            Text(String(localized: "Fine-grained PAT")).tag(0)
+                            Text(String(localized: "OAuth App")).tag(1)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+
+                    if authMode == 0 {
+                        Section(String(localized: "Fine-grained Personal Access Token")) {
+                            TextField(String(localized: "Vault repository (owner/repo)"), text: $repo)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                            SecureField(String(localized: "Token (github_pat_...)"), text: $pat)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                            Button(String(localized: "Connect with Personal Access Token")) {
+                                savePat()
+                            }
+                            .disabled(pat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                            Text(String(localized: "Recommended: create a fine-grained Personal Access Token on GitHub (github.com/settings/tokens?type=beta) scoped ONLY to your vault repository (Repository access: Only select repositories -> choose your vault repo; Permissions: Contents: Read and write). Unlike OAuth Apps with the classic 'repo' scope, a fine-grained PAT cannot access any of your other repositories."))
                                 .font(.footnote)
-                            Text(deviceCode.verificationUri).font(.headline)
-                            Text(String(localized: "Enter this code:"))
+                                .foregroundStyle(Color.gitpassSecondary)
+                        }
+                    } else {
+                        Section(String(localized: "GitHub OAuth App")) {
+                            TextField(String(localized: "OAuth App client ID"), text: $clientId)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                            TextField(String(localized: "Vault repository (owner/repo)"), text: $repo)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                            Text(String(localized: "The client ID is an OAuth App identifier, not a secret. Create one at github.com/settings/developers (do not enable a client secret flow for a public device app) and paste its client ID here. The token it issues is stored in the Keychain."))
                                 .font(.footnote)
-                            Text(deviceCode.userCode).font(.largeTitle.monospaced())
-                            Button(String(localized: "Copy code")) {
-                                store.copyToClipboard(deviceCode.userCode)
+                                .foregroundStyle(Color.gitpassSecondary)
+                        }
+                        Section {
+                            if let deviceCode {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(String(localized: "On another device, open:"))
+                                        .font(.footnote)
+                                    Text(deviceCode.verificationUri).font(.headline)
+                                    Text(String(localized: "Enter this code:"))
+                                        .font(.footnote)
+                                    Text(deviceCode.userCode).font(.largeTitle.monospaced())
+                                    Button(String(localized: "Copy code")) {
+                                        store.copyToClipboard(deviceCode.userCode)
+                                    }
+                                }
+                                Button(String(localized: "I authorized it — fetch token")) {
+                                    Task { await fetchToken() }
+                                }
+                                .disabled(isWorking)
+                            } else {
+                                Button(String(localized: "Connect with device code")) {
+                                    Task { await startDeviceFlow() }
+                                }
+                                .disabled(clientId.isEmpty || isWorking)
                             }
                         }
-                        Button(String(localized: "I authorized it — fetch token")) {
-                            Task { await fetchToken() }
-                        }
-                        .disabled(isWorking)
-                    } else {
-                        Button(String(localized: "Connect with device code")) {
-                            Task { await startDeviceFlow() }
-                        }
-                        .disabled(clientId.isEmpty || isWorking)
                     }
-                }
                 }
                 Section(String(localized: "Sync")) {
                     Button(String(localized: "Sync now")) {
@@ -178,6 +213,20 @@ struct SyncSetupView: View {
                     Button(String(localized: "Done")) { dismiss() }
                 }
             }
+        }
+    }
+
+    private func savePat() {
+        let trimmedPat = pat.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedPat.isEmpty else { return }
+        saveSettings()
+        do {
+            try KeychainStore.shared.saveGitHubToken(trimmedPat)
+            tokenPresent = true
+            pat = ""
+            status = String(localized: "Connected with Personal Access Token.")
+        } catch {
+            status = error.localizedDescription
         }
     }
 

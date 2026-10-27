@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><title>Strict WebAuthn RP (hyperbeat-like)</title></head><body>
+<h1>Add a new transaction passkey</h1>
+<button id="reg">Add passkey</button>
+<pre id="out"></pre>
+<script>
+// Option shapes modelled on a wallet "transaction passkey" flow: parent-domain rp.id, residentKey + UV required,
+// ES256 + RS256 (+EdDSA), non-empty excludeCredentials of passkeys from OTHER authenticators, attestation direct,
+// extensions, timeout, and a 64-byte user.id.
+const out = (o) => { document.getElementById('out').textContent = JSON.stringify(o); };
+const rnd = (n) => crypto.getRandomValues(new Uint8Array(n));
+const params = new URLSearchParams(location.search);
+const parent = location.hostname.split('.').slice(-2).join('.');
+document.getElementById('reg').onclick = async () => {
+  try {
+    const c = await navigator.credentials.create({ publicKey: {
+      challenge: rnd(32),
+      rp: { id: params.get('rp') || parent, name: 'Hyperbeat test' },
+      user: { id: rnd(Number(params.get('uid') || 64)), name: 'tester@example.invalid', displayName: 'tester@example.invalid' },
+      pubKeyCredParams: [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }, { type: 'public-key', alg: -8 }],
+      excludeCredentials: [{ type: 'public-key', id: rnd(32), transports: ['internal'] }, { type: 'public-key', id: rnd(16), transports: ['hybrid', 'usb'] }],
+      authenticatorSelection: { residentKey: 'required', requireResidentKey: true, userVerification: 'required', authenticatorAttachment: 'platform' },
+      attestation: 'direct', timeout: 60000,
+      extensions: { credProps: true },
+    } });
+    const ext = c.getClientExtensionResults ? c.getClientExtensionResults() : null;
+    out({ registered: true, id: c.id, type: c.type, attachment: c.authenticatorAttachment, ext, alg: c.response.getPublicKeyAlgorithm(), json: typeof c.toJSON === 'function' ? Object.keys(c.toJSON()) : null });
+  } catch (e) { out({ error: e.name, message: e.message }); }
+};
+</script></body></html>

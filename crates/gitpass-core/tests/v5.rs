@@ -282,3 +282,66 @@ fn legacy_item_without_v5_fields_merges_with_v5_record() {
     assert_eq!(m.item.password.as_deref(), Some("p2"));
     assert_eq!(m.tags, vec!["keep".to_string()]);
 }
+
+#[test]
+fn bulk_ops_use_one_commit_each() {
+    let (_d, _sk, s, v) = vault();
+    let v2 = s.create_vault("other").unwrap();
+    let ids: Vec<String> = (0..5).map(|i| s.add_record(&v, rec(Category::Login, &format!("i{i}"), sample(Category::Login))).unwrap()).collect();
+    let t: Vec<(String, String)> = ids.iter().map(|i| (v.clone(), i.clone())).collect();
+    let e0 = s.epoch().unwrap();
+    // duplicates are ignored
+    let mut dup = t.clone(); dup.push(t[0].clone());
+    assert_eq!(s.mutate_records(&dup, |r| r.favorite = true).unwrap(), 5);
+    assert_eq!(s.epoch().unwrap(), e0 + 1);
+    for i in &ids { let (ver, r) = s.read_record(&v, i).unwrap(); assert!(r.favorite); assert_eq!(ver, 2); }
+    // no-op change writes nothing
+    assert_eq!(s.mutate_records(&t, |r| r.favorite = true).unwrap(), 0);
+    assert_eq!(s.epoch().unwrap(), e0 + 1);
+    // tag + trash
+    assert_eq!(s.mutate_records(&t[..3], |r| { r.tags.push("bulk".into()); r.deleted_at = Some(1); }).unwrap(), 3);
+    assert_eq!(s.epoch().unwrap(), e0 + 2);
+    assert_eq!(s.read_record(&v, &ids[0]).unwrap().1.tags, vec!["bulk".to_string()]);
+    // a missing target aborts before writing anything
+    let mut bad = t.clone(); bad.push((v.clone(), "nope".into()));
+    assert!(s.mutate_records(&bad, |r| r.archived = true).is_err());
+    assert!(!s.read_record(&v, &ids[0]).unwrap().1.archived);
+    assert_eq!(s.epoch().unwrap(), e0 + 2);
+    assert!(s.remove_items(&bad).is_err());
+    assert!(s.read_record(&v, &ids[4]).is_ok());
+    // copy: one commit for records
+    let cp = s.copy_items_to(&t[3..], &v2).unwrap();
+    assert_eq!(cp.len(), 2);
+    assert_eq!(s.epoch().unwrap(), e0 + 3);
+    let (ver, r) = s.read_record(&v2, &cp[0]).unwrap();
+    assert_eq!((ver, r.item.title.as_str(), r.favorite), (1, "i3", true));
+    assert!(r.history.is_empty());
+    // move: copy commit + remove commit; items already in the target are skipped
+    let mv = s.move_items(&[(v.clone(), ids[3].clone()), (v2.clone(), cp[1].clone())], &v2).unwrap();
+    assert_eq!(mv.len(), 1);
+    assert_eq!(s.epoch().unwrap(), e0 + 5);
+    assert!(s.read_record(&v, &ids[3]).is_err());
+    assert_eq!(s.read_record(&v2, &mv[0].2).unwrap().1.item.title, "i3");
+    // purge three in one commit
+    assert_eq!(s.remove_items(&t[..3]).unwrap(), 3);
+    assert_eq!(s.epoch().unwrap(), e0 + 6);
+    for i in &ids[..3] { assert!(s.read_record(&v, i).is_err()); }
+    assert!(s.read_record(&v, &ids[4]).is_ok());
+}
+
+#[test]
+fn bulk_move_and_purge_keep_attachments_right() {
+    let (_d, _sk, s, v) = vault();
+    let v2 = s.create_vault("other").unwrap();
+    let a = s.add_record(&v, rec(Category::Document, "doc", sample(Category::Document))).unwrap();
+    let at = s.add_attachment(&v, &a, "scan.txt", "text/plain", b"FAKE scan").unwrap();
+    let b = s.add_record(&v, rec(Category::SecureNote, "note", sample(Category::SecureNote))).unwrap();
+    let mv = s.move_items(&[(v.clone(), a.clone()), (v.clone(), b.clone())], &v2).unwrap();
+    assert_eq!(mv.len(), 2);
+    let (_, r) = s.read_record(&v2, &mv[0].2).unwrap();
+    assert_eq!(s.read_attachment(&v2, &mv[0].2, &r.attachments[0].id).unwrap(), b"FAKE scan");
+    assert!(s.read_attachment(&v, &a, &at.id).is_err());
+    let t: Vec<(String, String)> = mv.iter().map(|m| (v2.clone(), m.2.clone())).collect();
+    assert_eq!(s.remove_items(&t).unwrap(), 2);
+    assert!(s.read_attachment(&v2, &mv[0].2, &r.attachments[0].id).is_err());
+}

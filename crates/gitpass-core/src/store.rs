@@ -256,7 +256,7 @@ pub(crate) fn write_json<T: Serialize>(p: &Path, v: &T) -> Result<String> {
 }
 pub(crate) fn read_json<T: for<'de> Deserialize<'de>>(p: &Path) -> Result<T> {
     let b = fs::read(p).with_context(|| format!("reading {}", p.display()))?;
-    Ok(serde_json::from_slice(&b).with_context(|| format!("parsing {}", p.display()))?)
+    serde_json::from_slice(&b).with_context(|| format!("parsing {}", p.display()))
 }
 
 pub fn read_format(root: &Path) -> Result<Format> {
@@ -356,14 +356,12 @@ fn list_enc(d: &Path) -> Vec<String> {
         .map(|p| p.file_stem().unwrap().to_string_lossy().to_string()).collect()).unwrap_or_default()
 }
 
+#[derive(Default)]
 pub struct UnlockOpts {
     /// Accept integrity/rollback failures and re-seal the manifest from what's on disk.
     pub accept_rollback: bool,
     /// KDF target; weaker stored params are auto-upgraded on unlock.
     pub target_kdf: KdfParams,
-}
-impl Default for UnlockOpts {
-    fn default() -> Self { UnlockOpts { accept_rollback: false, target_kdf: KdfParams::default() } }
 }
 
 /// Unlocked session holding the Account Key.
@@ -1255,6 +1253,12 @@ impl Session {
 }
 
 
+/// Targets without duplicates, first occurrence wins (keeps the caller's order).
+fn dedup_targets(t: &[(String, String)]) -> Vec<(String, String)> {
+    let mut seen = std::collections::HashSet::new();
+    t.iter().filter(|x| seen.insert((*x).clone())).cloned().collect()
+}
+
 // ---------- format v5: typed items, soft delete, history, attachments ----------
 impl Session {
     /// Add a v5 record (any category). Stamps legacy + v5 clocks and `created_at`; history starts empty.
@@ -1273,7 +1277,13 @@ impl Session {
     /// Overwrite item `iid` with `new` (local edit): changed fields get fresh clocks, and if the content
     /// (item fields / category / sections / tags) changed, the previous content is pushed onto the
     /// encrypted history (last [`crate::item::HISTORY_LIMIT`] kept).
-    pub fn update_record(&self, vid: &str, iid: &str, mut new: ItemRecord) -> Result<()> {
+    pub fn update_record(&self, vid: &str, iid: &str, new: ItemRecord) -> Result<()> {
+        let (v, rec) = self.prepare_update(vid, iid, new)?;
+        self.put_item(vid, iid, v, &rec)
+    }
+
+    /// The `update_record` logic without writing: returns (new version, finished record).
+    fn prepare_update(&self, vid: &str, iid: &str, mut new: ItemRecord) -> Result<(u64, ItemRecord)> {
         let (v, old) = self.read_record(vid, iid)?;
         let now = merge::now_ms();
         let mut cmp_new = new.snapshot(); cmp_new.item.updated_at.clear();
@@ -1291,7 +1301,112 @@ impl Session {
         if new.attachments.is_empty() { new.attachments = old.attachments.clone(); }
         new.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &new.item, now));
         merge::stamp_ext(Some(&old), &mut new, now);
-        self.put_item(vid, iid, v + 1, &new)
+        Ok((v + 1, new))
+    }
+
+    /// Write several items (any vaults) under ONE manifest commit: one epoch bump / re-seal / git change.
+    fn put_items(&self, writes: &[(String, String, u64, ItemRecord)]) -> Result<()> {
+        if writes.is_empty() { return Ok(()); }
+        self.ensure_not_revoked()?;
+        let mut keys: BTreeMap<String, Key32> = BTreeMap::new();
+        for (vid, ..) in writes { if !keys.contains_key(vid) { keys.insert(vid.clone(), self.vault_key(vid)?); } }
+        self.commit(|m| {
+            for (vid, iid, version, rec) in writes {
+                let ve = m.vaults.get_mut(vid).ok_or_else(|| anyhow!("vault {vid} not in manifest"))?;
+                let hash = Self::write_item_in(&self.vdir(vid), &keys[vid], vid, iid, *version, rec)?;
+                ve.items.insert(iid.clone(), ItemEntry { version: *version, hash });
+            }
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    /// Bulk edit: apply `f` to every (vault, item) in `targets` and write them all in one commit.
+    /// Items whose record does not change are skipped. Returns how many were written.
+    /// Fails before writing anything if any target cannot be read.
+    pub fn mutate_records<F: FnMut(&mut ItemRecord)>(&self, targets: &[(String, String)], mut f: F) -> Result<usize> {
+        let mut writes = Vec::with_capacity(targets.len());
+        for (vid, iid) in dedup_targets(targets) {
+            let (_, old) = self.read_record(&vid, &iid)?;
+            let mut r = old.clone();
+            f(&mut r);
+            if serde_json::to_vec(&r)? == serde_json::to_vec(&old)? { continue; }
+            let (v, rec) = self.prepare_update(&vid, &iid, r)?;
+            writes.push((vid, iid, v, rec));
+        }
+        self.put_items(&writes)?;
+        Ok(writes.len())
+    }
+
+    /// Permanently remove several items (and their attachment files) in one commit.
+    pub fn remove_items(&self, targets: &[(String, String)]) -> Result<usize> {
+        self.ensure_not_revoked()?;
+        let targets = dedup_targets(targets);
+        let mut plan = vec![];
+        for (vid, iid) in &targets {
+            let p = self.vdir(vid).join("items").join(format!("{iid}.enc"));
+            if !p.exists() { bail!("no item {iid}"); }
+            let fids: Vec<String> = self.read_record(vid, iid).map(|(_, r)| r.attachments.iter().map(|a| a.id.clone()).collect()).unwrap_or_default();
+            plan.push((vid.clone(), iid.clone(), p, fids));
+        }
+        if plan.is_empty() { return Ok(0); }
+        self.commit(|m| {
+            for (vid, iid, p, fids) in &plan {
+                fs::remove_file(p)?;
+                if let Some(ve) = m.vaults.get_mut(vid) {
+                    ve.items.remove(iid);
+                    for f in fids {
+                        let fp = self.vdir(vid).join(FILES_DIR).join(format!("{f}.enc"));
+                        if fp.exists() { fs::remove_file(&fp)?; }
+                        ve.files.remove(f);
+                    }
+                }
+            }
+            for (vid, ..) in &plan { fsutil::fsync_dir(&self.vdir(vid).join("items")); }
+            Ok(())
+        })?;
+        Ok(plan.len())
+    }
+
+    /// Copy several items to `to_vid`: all records land in one commit; attachments (if any) are then
+    /// re-encrypted per file. Returns the new ids in input order.
+    pub fn copy_items_to(&self, targets: &[(String, String)], to_vid: &str) -> Result<Vec<String>> {
+        self.vault_key(to_vid)?; // target must exist
+        let now = merge::now_ms();
+        let mut writes = vec![];
+        let mut atts = vec![];
+        for (vid, iid) in dedup_targets(targets) {
+            let (_, r) = self.read_record(&vid, &iid)?;
+            let mut n = ItemRecord::from_snapshot(&r.snapshot());
+            n.favorite = r.favorite;
+            n.archived = r.archived;
+            if n.item.updated_at.is_empty() { n.item.updated_at = (now / 1000).to_string(); }
+            n.created_at.get_or_insert(now / 1000);
+            n.clocks = Some(merge::stamp(None, &n.item, now));
+            merge::stamp_ext(None, &mut n, now);
+            n.history.clear();
+            let nid = uuid::Uuid::new_v4().to_string();
+            if !r.attachments.is_empty() { atts.push((vid.clone(), iid.clone(), nid.clone(), r.attachments.clone())); }
+            writes.push((to_vid.to_string(), nid, 1, n));
+        }
+        self.put_items(&writes)?;
+        for (vid, iid, nid, list) in atts {
+            for a in &list {
+                let bytes = zeroize::Zeroizing::new(self.read_attachment(&vid, &iid, &a.id)?);
+                self.add_attachment(to_vid, &nid, &a.name, &a.mime, &bytes)?;
+            }
+        }
+        Ok(writes.into_iter().map(|w| w.1).collect())
+    }
+
+    /// Move several items to `to_vid` (items already there are left alone): copy (one commit) then
+    /// remove the originals (one commit). Returns (old vault, old id, new id) for each moved item.
+    pub fn move_items(&self, targets: &[(String, String)], to_vid: &str) -> Result<Vec<(String, String, String)>> {
+        let movers: Vec<(String, String)> = dedup_targets(targets).into_iter().filter(|(v, _)| v != to_vid).collect();
+        if movers.is_empty() { return Ok(vec![]); }
+        let nids = self.copy_items_to(&movers, to_vid)?;
+        self.remove_items(&movers)?;
+        Ok(movers.into_iter().zip(nids).map(|((v, i), n)| (v, i, n)).collect())
     }
 
     fn mutate_record<F: FnOnce(&mut ItemRecord)>(&self, vid: &str, iid: &str, f: F) -> Result<()> {

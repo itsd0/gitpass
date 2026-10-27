@@ -10,9 +10,9 @@
 /* global chrome, GitpassPolicy */
 (function (root) {
   'use strict';
-  const TTL_MS = 3 * 60 * 1000;
+  const TTL_MS = 5 * 60 * 1000;
   const pendingSaves = new Map(); // tabId -> { origin, kind, username, password, item_id, prompt, ts }
-  const lastUsername = new Map(); // tabId -> { origin, username, ts }  (multi-step logins: step 1 value)
+  const lastUsername = new Map(); // tabId -> { origin, username, ts }  (multi-step logins: step 1 value, 5 min TTL)
   const PAGE_LISTABLE = new Set(['credit_card', 'identity']);
 
   function err(code, message) { const e = new Error(message || code); e.code = code; return e; }
@@ -43,13 +43,26 @@
     let items;
     try { items = await matchItems(host, origin); } catch (e) { return { prompt: 'save', items: null, error: e.code || e.message }; }
     const logins = items.filter((i) => !i.category || i.category === 'login');
-    const same = logins.filter((i) => (i.subtitle || '') === (cap.username || ''));
+    const same = logins.filter((i) => (i.subtitle || '').trim().toLowerCase() === (cap.username || '').trim().toLowerCase());
     for (const it of same) {
       try {
         const c = await host('fill', { item_id: it.id, origin });
-        if (c && c.password === cap.password) return null; // already saved, nothing to do
-        return { prompt: 'update', item_id: it.id, title: it.title };
-      } catch (_) { /* fall through to save */ }
+        if (c && c.password === cap.password && (!cap.username || c.username === cap.username)) return null; // already saved, nothing to do
+        return { prompt: 'update', item_id: it.id, title: it.title, hasUser: !!(it.subtitle || '').trim() };
+      } catch (_) { /* fall through to next */ }
+    }
+    // Offer "Update existing" only when that cannot overwrite a different account: the captured
+    // username is empty, or the single existing login has no username yet. Otherwise save new.
+    const capUser = (cap.username || '').trim();
+    const blank = logins.filter((i) => !(i.subtitle || '').trim());
+    const target = !capUser ? (logins.length === 1 ? logins[0] : null) : (blank.length === 1 ? blank[0] : null);
+    if (target) {
+      const existing = target;
+      try {
+        const c = await host('fill', { item_id: existing.id, origin });
+        if (c && c.password === cap.password && (!cap.username || c.username === cap.username)) return null;
+        return { prompt: 'update', item_id: existing.id, title: existing.title, hasUser: !!(existing.subtitle || '').trim() };
+      } catch (_) {}
     }
     return { prompt: 'save' };
   }
@@ -84,7 +97,9 @@
         if (!a.user_click) throw err('denied', 'card/identity fill needs an in-page click');
         const cmd = a.type === 'page:fill_card' ? 'fill_card' : 'fill_identity';
         const r = await host(cmd, { item_id: a.item_id, origin, source: 'inpage_click' });
-        return { origin, fields: (r && (r.fields || r)) || {} };
+        const fields = (r && (r.fields || r)) || {};
+        if (cmd === 'fill_card') await fillPaymentFrames(tabId, fields).catch(() => 0);
+        return { origin, fields };
       }
       case 'page:generate': {
         const r = await host('generate', { len: 20, digits: true, symbols: true });
@@ -101,7 +116,8 @@
         if (!['login', 'signup', 'change_password'].includes(kind)) throw err('bad_request', 'kind');
         if (typeof a.password !== 'string' || !a.password || a.password.length > 1024) throw err('bad_request', 'password');
         let user = username;
-        if (!user) { const lu = fresh(lastUsername, tabId, origin, true); if (lu) user = lu.username; }
+        if (!user) { const lu = fresh(lastUsername, tabId, origin, true); if (lu && lu.username) user = lu.username; }
+        else { lastUsername.set(tabId, { origin, username: user, ts: Date.now() }); }
         const cap = { origin, kind, username: user, password: a.password, ts: Date.now() };
         const d = await decide(host, origin, cap);
         if (!d) { pendingSaves.delete(tabId); return { prompt: null }; }
@@ -118,10 +134,16 @@
         if (!p) throw err('not_found', 'nothing to save');
         if (a.action === 'dismiss') return { done: false };
         if (!a.user_click) throw err('denied', 'needs a click');
-        if (p.prompt === 'update' && a.action === 'update') { await host('update_password', { item_id: p.item_id, password: p.password }); return { done: true, action: 'update' }; }
+        const user = p.username || '';
+        if (p.prompt === 'update' && a.action === 'update') {
+          const upArgs = { item_id: p.item_id, password: p.password }; // never an item id from the content side
+          if (user && !p.hasUser) upArgs.username = user;
+          await host('update_password', upArgs);
+          return { done: true, action: 'update' };
+        }
         if (a.action === 'save') {
           const title = new URL(p.origin).hostname.replace(/^www\./, '');
-          const r = await host('save_login', { origin: p.origin, title, username: p.username, password: p.password });
+          const r = await host('save_login', { origin: p.origin, title, username: user, password: p.password });
           return { done: true, action: 'save', item_id: r && r.item_id };
         }
         throw err('bad_request', 'action');
@@ -133,7 +155,28 @@
   function forgetTab(tabId) { pendingSaves.delete(tabId); lastUsername.delete(tabId); }
   if (root.chrome && chrome.tabs && chrome.tabs.onRemoved) chrome.tabs.onRemoved.addListener(forgetTab);
 
-  const api = { handle, forgetTab, _pendingSaves: pendingSaves };
+  /** Fill a card into the tab's payment-processor iframes (Stripe Elements & co., see GitpassPolicy.
+   *  isPaymentFrameOrigin), so one pick in the top frame fills number / expiry / CVC living in separate
+   *  frames. Step 1 asks every frame only for its origin (no data); step 2 sends the card only to allow-listed
+   *  child frames, and the injected code re-checks its own origin before touching anything (the frame may
+   *  have navigated in between). Returns the number of fields filled. */
+  async function fillPaymentFrames(tabId, fields) {
+    const S = root.chrome && chrome.scripting;
+    if (!S || typeof tabId !== 'number') return 0;
+    const probe = await S.executeScript({ target: { tabId, allFrames: true }, func: () => location.origin }).catch(() => []);
+    const frameIds = (probe || []).filter((x) => x && x.frameId !== 0 && GitpassPolicy.isPaymentFrameOrigin(x.result)).map((x) => x.frameId);
+    if (!frameIds.length) return 0;
+    await S.executeScript({ target: { tabId, frameIds }, files: ['lib/policy.js', 'lib/forms.js'] });
+    const res = await S.executeScript({
+      target: { tabId, frameIds },
+      func: (map) => (globalThis.GitpassPolicy && GitpassPolicy.isPaymentFrameOrigin(location.origin) && window !== top
+        ? GitpassForms.fillCardDocument(document, map) : 0),
+      args: [fields],
+    });
+    return (res || []).reduce((n, x) => n + (Number(x && x.result) || 0), 0);
+  }
+
+  const api = { handle, forgetTab, fillPaymentFrames, _pendingSaves: pendingSaves };
   root.GitpassPage = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

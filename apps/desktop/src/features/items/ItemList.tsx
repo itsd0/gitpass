@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowDownUp, ChevronDown, LayoutGrid, Star } from 'lucide-react';
+import { ArrowDownUp, Check, ChevronDown, LayoutGrid, Star } from 'lucide-react';
 import { api } from '../../api/client';
 import type { Filter } from '../../api/types';
 import { useApp } from '../../lib/store';
@@ -11,6 +11,8 @@ import { CategoryIcon } from '../../components/CategoryIcon';
 import { groupRows, type Row } from './grouping';
 import { useItemsUI } from './state';
 import { copyPrimarySecret, errText } from './actions';
+import { applySel, clickSelect, prune, readSel, selectAll } from './selection';
+import { requestDelete } from './BulkPane';
 
 /** Every row has a fixed, explicit height (the DOM enforces it), so virtual offsets are exact: no overlap, no stray gaps. */
 export const HEADER_H = 32, ITEM_H = 54;
@@ -24,6 +26,9 @@ export function ItemList() {
   const version = useApp((s) => s.itemsVersion);
   const selectedItemId = useApp((s) => s.selectedItemId);
   const selectItem = useApp((s) => s.selectItem);
+  const multiIds = useApp((s) => s.multiIds);
+  const multiSet = useMemo(() => new Set(multiIds), [multiIds]);
+  const multiOn = multiIds.length > 1;
   const { query, category, setCategory, sort, setSort, items, setItems, loading, setLoading } = useItemsUI();
   const base: Filter = route.name === 'items' ? route.filter : { kind: 'all' };
 
@@ -43,9 +48,23 @@ export function ItemList() {
 
   // auto-select first item when nothing selected
   useEffect(() => { if (!selectedItemId && items[0]) selectItem(items[0].id); }, [items, selectedItemId, selectItem]);
+  // drop selected ids that left the list (refresh, filter, search)
+  const order = useMemo(() => items.map((x) => x.id), [items]);
+  useEffect(() => { const s = readSel(); if (!s.multi.length) return; const p = prune(order, s); if (p !== s && (p.multi.length !== s.multi.length || p.selected !== s.selected)) applySel(p); }, [order]);
+  function onRowClick(e: React.MouseEvent, id: string) {
+    const toggle = e.metaKey || e.ctrlKey, range = e.shiftKey;
+    if (toggle || range) { e.preventDefault(); applySel(clickSelect(order, readSel(), id, { toggle, range })); }
+    else selectItem(id);
+    parentRef.current?.focus();
+  }
 
   function onKey(e: React.KeyboardEvent) {
     const idx = items.findIndex((x) => x.id === selectedItemId);
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'a') {
+      e.preventDefault(); applySel(selectAll(order, readSel())); return;
+    }
+    if (e.key === 'Escape' && multiOn) { e.preventDefault(); e.stopPropagation(); useApp.setState({ multiIds: [] }); return; }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && !e.altKey) { e.preventDefault(); requestDelete(); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       const n = Math.max(0, Math.min(items.length - 1, idx + (e.key === 'ArrowDown' ? 1 : -1)));
@@ -91,8 +110,14 @@ export function ItemList() {
                   {r.type === 'header' ? (
                     <div style={{ height: HEADER_H }} className="flex items-end px-4 pb-1.5 text-[11px] font-semibold tracking-wider text-muted" data-testid="group-header">{r.label}</div>
                   ) : (
-                    <div role="option" aria-selected={r.item.id === selectedItemId} onClick={() => { selectItem(r.item.id); parentRef.current?.focus(); }}
-                      style={{ height: ITEM_H - 2 }} className={cn('mx-1.5 my-px box-border flex cursor-default items-center gap-3 overflow-hidden rounded-md px-2.5', r.item.id === selectedItemId ? 'bg-active' : 'hover:bg-hover')}>
+                    <div role="option" aria-selected={multiOn ? multiSet.has(r.item.id) : r.item.id === selectedItemId} onClick={(e) => onRowClick(e, r.item.id)} onMouseDown={(e) => { if (e.shiftKey) e.preventDefault(); }}
+                      style={{ height: ITEM_H - 2 }} className={cn('group mx-1.5 my-px box-border flex cursor-default items-center gap-3 overflow-hidden rounded-md px-2.5', (multiOn ? multiSet.has(r.item.id) : r.item.id === selectedItemId) ? 'bg-active' : 'hover:bg-hover', multiOn && multiSet.has(r.item.id) && 'ring-1 ring-inset ring-accent/50')}>
+                      <span role="checkbox" aria-checked={multiOn && multiSet.has(r.item.id)} aria-label={`Select ${r.item.title}`} data-testid="row-check"
+                        onClick={(e) => { e.stopPropagation(); applySel(clickSelect(order, readSel(), r.item.id, { toggle: true })); parentRef.current?.focus(); }}
+                        className={cn('-ml-1 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-opacity',
+                          multiOn && multiSet.has(r.item.id) ? 'border-accent bg-accent text-white opacity-100' : 'border-border opacity-0 group-hover:opacity-100', multiOn && 'opacity-100')}>
+                        {multiOn && multiSet.has(r.item.id) && <Check size={11} strokeWidth={3} />}
+                      </span>
                       <ItemIcon item={r.item} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[14px] font-medium leading-5">{r.item.title}</div>

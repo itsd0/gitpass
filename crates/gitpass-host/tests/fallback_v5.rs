@@ -127,3 +127,30 @@ fn fill_totp_save_update_vaults_generate() {
     assert_eq!(st["app_running"], false);
     assert_eq!(err(&mut f.host, json!({"cmd":"request_unlock","reason":"x"})).0, "app_not_running");
 }
+
+#[test]
+fn create_item_any_category_standalone() {
+    let mut f = v5_vault();
+    let item = json!({"category":"api_credential","title":"Stripe test key","url":"https://dashboard.stripe.com","notes":"FAKE",
+        "sections":[{"id":"main","title":null,"fields":[{"id":"credential","label":"credential","kind":"concealed","value":"sk_test_FAKE"}]}]});
+    assert_eq!(err(&mut f.host, json!({"cmd":"create_item","item":item})).0, "locked");
+    ok(&mut f.host, json!({"cmd":"unlock","password":PW}));
+    let r = ok(&mut f.host, json!({"cmd":"create_item","item":item}));
+    assert_eq!(r["title"], "Stripe test key");
+    let d = ok(&mut f.host, json!({"cmd":"get_item","item_id":r["item_id"]}))["item"].clone();
+    assert_eq!(d["category"], "api_credential");
+    assert!(!d.to_string().contains("sk_test_FAKE"), "secret must stay concealed in detail");
+    let note = json!({"category":"secure_note","title":"N","sections":[{"id":"main","title":null,"fields":[{"id":"note","label":"note","kind":"multiline","value":"hello"}]}]});
+    assert_eq!(ok(&mut f.host, json!({"cmd":"list_items","category":"secure_note"}))["items"].as_array().unwrap().len(), 1);
+    ok(&mut f.host, json!({"cmd":"create_item","item":note}));
+    assert_eq!(ok(&mut f.host, json!({"cmd":"list_items","category":"secure_note"}))["items"].as_array().unwrap().len(), 2);
+    // validation (same rules as the desktop app)
+    assert_eq!(err(&mut f.host, json!({"cmd":"create_item","item":{"category":"login","title":"  "}})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"create_item","item":{"category":"passkey","title":"x"}})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"create_item","item":{"category":"bogus","title":"x"}})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"create_item","item":{"category":"login","title":"x","sections":[{"id":"m","title":null,"fields":[
+        {"id":"otp","label":"otp","kind":"totp","value":"not a secret!!"}]}]}})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"create_item","item":{"category":"login","title":"x","sections":[{"id":"m","title":null,"fields":[
+        {"id":"a","label":"a","kind":"text","value":"1"},{"id":"a","label":"a","kind":"text","value":"2"}]}]}})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"create_item","item":{"vaultId":"nope","category":"secure_note","title":"x"}})).0, "not_found");
+}

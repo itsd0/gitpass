@@ -52,7 +52,14 @@
     } catch { return false; }
   }
 
-  const api = { isFillableOrigin, originOf, findLoginFields, isVisible, sameSite };
+  /** Hosted card-field iframes of payment processors (Stripe Elements, Braintree Hosted Fields, Adyen Secured
+   *  Fields). A card picked in the TOP frame may be filled into these child frames only: they are where the
+   *  page is sending the card anyway. Any other cross-origin frame never receives card data. */
+  const PAYMENT_FRAME_HOSTS = ['js.stripe.com', 'assets.braintreegateway.com', 'checkoutshopper-live.adyen.com', 'checkoutshopper-test.adyen.com'];
+  function isPaymentFrameOrigin(origin) {
+    try { const u = new URL(origin); return u.protocol === 'https:' && !u.port && PAYMENT_FRAME_HOSTS.includes(u.hostname); } catch (_) { return false; }
+  }
+  const api = { isFillableOrigin, originOf, findLoginFields, isVisible, sameSite, isPaymentFrameOrigin, PAYMENT_FRAME_HOSTS };
   root.GitpassPolicy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

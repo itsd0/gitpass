@@ -48,6 +48,23 @@ pub fn find(s: &Session, rp_id: &str) -> Result<Vec<(String, String, Passkey)>> 
     Ok(out)
 }
 
+/// `passkey_query {origin, rp_id?, allow_credentials?}`
+pub fn query(s: &Session, q: &Value) -> Result<Value> {
+    let origin = req(q, "origin")?;
+    let rp = check_rp(origin, opt(q, "rp_id"))?;
+    let allow = b64_list(q, "allow_credentials");
+    let c: Vec<_> = find(s, &rp)?.into_iter()
+        .filter(|(_, _, p)| allow.is_empty() || allow.contains(&p.credential_id))
+        .map(|(_, _, p)| {
+            json!({
+                "credential_id": b64(&p.credential_id),
+                "user_name": p.user_name,
+                "user_handle": b64(&p.user_handle),
+            })
+        }).collect();
+    Ok(json!({ "rp_id": rp, "matching": c }))
+}
+
 /// `passkey_create {origin, rp_id?, rp_name?, challenge, user_id, user_name, user_display_name?, exclude_credentials?, algorithms?, vault_id?}`
 pub fn create(s: &Session, q: &Value) -> Result<Value> {
     let origin = req(q, "origin")?;
@@ -56,7 +73,7 @@ pub fn create(s: &Session, q: &Value) -> Result<Value> {
     unb64(challenge).map_err(|_| coded(code::BAD_REQUEST, "challenge must be base64url"))?;
     let user_id = unb64(req(q, "user_id")?).map_err(|_| coded(code::BAD_REQUEST, "user_id must be base64url"))?;
     if user_id.is_empty() || user_id.len() > 64 { return Err(coded(code::BAD_REQUEST, "user_id must be 1..64 bytes")); }
-    let user_name = opt(q, "user_name").unwrap_or("");
+    let user_name = opt(q, "user_name").or_else(|| opt(q, "user_display_name")).unwrap_or("");
     if let Some(a) = q.get("algorithms").and_then(Value::as_array) {
         if !a.is_empty() && !a.iter().any(|x| x.as_i64() == Some(-7)) { return Err(coded("not_supported", "only ES256 (-7) is supported")); }
     }

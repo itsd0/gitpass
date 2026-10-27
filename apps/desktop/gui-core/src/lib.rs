@@ -130,6 +130,16 @@ impl GuiState {
 
     /// Drop the session; password, Secret Key and account key are zeroized on drop.
     pub fn lock(&self) { if let Ok(mut g) = self.inner.lock() { g.unlocked = None; } }
+    /// Cheap change stamp for live sync: a hash of the sealed manifest, which every write (GUI, extension
+    /// via the agent, CLI, git sync) re-seals with a bumped epoch. `None` while locked. Not user activity.
+    pub fn change_stamp(&self) -> Option<u64> {
+        use std::hash::{Hash, Hasher};
+        let root = { let g = self.inner.lock().ok()?; g.unlocked.as_ref()?.session.root.clone() };
+        let b = std::fs::read(root.join("manifest.enc")).ok()?;
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        b.hash(&mut h);
+        Some(h.finish())
+    }
     pub fn is_unlocked(&self) -> bool { self.inner.lock().map(|g| g.unlocked.is_some()).unwrap_or(false) }
     /// Record user activity (resets the idle timer).
     pub fn touch(&self) { if let Ok(mut g) = self.inner.lock() { if !Self::expire(&mut g) { g.last_activity = Instant::now(); } } }

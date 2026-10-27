@@ -441,5 +441,8 @@
   },
   "catPasskey": {
     "message": "Passkeys"
+  },
+  "itemType": {
+    "message": "Type"
   }
 }

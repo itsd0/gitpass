@@ -588,3 +588,45 @@ fn card_subtitle_with_cardholder_first_and_imported_labels() {
     let listed = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap();
     assert!(listed.iter().any(|s| s.subtitle == "Visa •••• 4432"));
 }
+
+#[test]
+fn bulk_items_actions() {
+    let e = env();
+    let a = login(&e, "Alpha", "a", "FAKE-1");
+    let b = login(&e, "Beta", "b", "FAKE-2");
+    let c = login(&e, "Gamma", "c", "FAKE-3");
+    let r = |x: &ItemSummary| ItemRef { vault_id: e.vault.clone(), item_id: x.id.clone() };
+    let req = |action: &str, items: Vec<ItemRef>| BulkRequest { action: action.into(), items, tag: None, to_vault_id: None };
+    let f = |kind: FilterKind| Filter { kind, vault_id: None, tag: None, category: None, query: None, sort: None };
+    assert_eq!(e.app.bulk_items(&req("favorite", vec![r(&a), r(&b)])).unwrap().count, 2);
+    assert_eq!(e.app.list_items(&f(FilterKind::Favorites)).unwrap().len(), 2);
+    let mut t = req("add_tag", vec![r(&a), r(&c)]); t.tag = Some("  bulk ".into());
+    assert_eq!(e.app.bulk_items(&t).unwrap().count, 2);
+    assert_eq!(e.app.list_tags().unwrap(), vec!["bulk", "work"]);
+    t.tag = Some(" ".into());
+    assert!(e.app.bulk_items(&t).is_err());
+    t.action = "remove_tag".into(); t.tag = Some("bulk".into()); t.items = vec![r(&c)];
+    e.app.bulk_items(&t).unwrap();
+    assert!(e.app.get_item(&e.vault, &c.id).unwrap().summary.tags == vec!["work".to_string()]);
+    e.app.bulk_items(&req("archive", vec![r(&a), r(&b)])).unwrap();
+    assert_eq!(e.app.list_items(&f(FilterKind::Archive)).unwrap().len(), 2);
+    e.app.bulk_items(&req("unarchive", vec![r(&a), r(&b)])).unwrap();
+    e.app.bulk_items(&req("trash", vec![r(&a), r(&b), r(&c)])).unwrap();
+    assert_eq!(e.app.list_items(&f(FilterKind::Deleted)).unwrap().len(), 3);
+    e.app.bulk_items(&req("restore", vec![r(&c)])).unwrap();
+    assert_eq!(e.app.bulk_items(&req("purge", vec![r(&a), r(&b)])).unwrap().count, 2);
+    assert!(e.app.list_items(&f(FilterKind::Deleted)).unwrap().is_empty());
+    let v2 = e.app.create_vault("Second", None, None, None).unwrap();
+    let mut m = req("copy", vec![r(&c)]); m.to_vault_id = Some(v2.id.clone());
+    let cp = e.app.bulk_items(&m).unwrap();
+    assert_eq!(cp.items[0].vault_id, v2.id);
+    assert_eq!(&*e.app.reveal_field(&v2.id, &cp.items[0].item_id, "password").unwrap(), "FAKE-3");
+    m.action = "move".into();
+    let mv = e.app.bulk_items(&m).unwrap();
+    assert!(e.app.get_item(&e.vault, &c.id).is_err());
+    assert_eq!(e.app.get_item(&v2.id, &mv.items[0].item_id).unwrap().summary.title, "Gamma");
+    m.to_vault_id = Some("nope".into());
+    assert!(e.app.bulk_items(&m).is_err());
+    assert!(e.app.bulk_items(&req("explode", vec![])).unwrap().count == 0);
+    assert!(e.app.bulk_items(&req("explode", vec![r(&a)])).is_err());
+}

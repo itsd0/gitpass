@@ -44,8 +44,6 @@ targets:
       properties:
         com.apple.security.application-groups:
           - group.dev.gitpass.ios
-        keychain-access-groups:
-          - $(AppIdentifierPrefix)dev.gitpass.ios
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gitpass.ios
@@ -83,8 +81,6 @@ targets:
         com.apple.developer.authentication-services.autofill-credential-provider: true
         com.apple.security.application-groups:
           - group.dev.gitpass.ios
-        keychain-access-groups:
-          - $(AppIdentifierPrefix)dev.gitpass.ios
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gitpass.ios.autofill
