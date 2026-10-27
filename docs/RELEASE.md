@@ -21,12 +21,30 @@
 * `itsd0/gitpass` (source) is private, so installers + `latest.json` are published to the **public releases-only
   repo** `https://github.com/itsd0/gitpass-releases` (no source code there). `latest.json` URLs point at that repo's
   release assets.
-* Private signing key: only on the release Mac at `~/.gitpass-release/updater.key` (0600, no password) and in the
+* Private signing key: only on the release Mac at `~/.gitpass-release/updater.key` (0600) and in the
   repo Actions secret `TAURI_SIGNING_PRIVATE_KEY`. Losing it means existing installs can't verify future updates.
+* **Password-protect the signing key.** New signing keys must be generated with a password (the Tauri
+  signer prompts for one when generating). Store the key as the Actions secret `TAURI_SIGNING_PRIVATE_KEY`
+  and the password as `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`. The release workflow passes both through to
+  the build (see "Workflow changes for owner to commit" in the PR that introduced this — the workflow
+  file itself is not edited by the GitHub App). If the password secret is unset or empty, signing
+  behaves exactly as before, so an old unprotected key keeps working until it is replaced. No code
+  change was needed for this: the Tauri signer already reads `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+  from the environment at build time; the gap was that the workflow hardcoded it to `""`.
+* **Rotating the signing keypair needs a transition release.** Clients verify updates with the public
+  key embedded in `apps/desktop/src-tauri/tauri.conf.json` (`plugins.updater.pubkey`), so a new keypair
+  cannot be switched in one step: first ship a release signed with the *old* key that contains the
+  *new* public key, then switch the `TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+  secrets to the new keypair. Clients that never install the transition release cannot verify
+  anything signed with the new key — that is inherent to the updater's trust model, not a gitpass bug.
+  After the transition release, retire and destroy the old private key.
 * Settings → About → "Check for updates".
 * Release drafts on `gitpass-releases` must be **published** (and not marked pre-release) for `releases/latest` to resolve.
 * Local `npm run tauri build` now also produces updater artifacts and therefore needs
-  `TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.gitpass-release/updater.key)" TAURI_SIGNING_PRIVATE_KEY_PASSWORD=""`.
+  `TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.gitpass-release/updater.key)"` and
+  `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` set to the key's password (empty only for a legacy unprotected key).
+  Never put either value in a shell history file, a committed file, or chat — export them in the
+  current shell only.
 
 ### Required secret: `RELEASES_REPO_TOKEN` (one-time, manual)
 `GITHUB_TOKEN` of `itsd0/gitpass` cannot write to another repo. Create a **fine-grained personal access token**
@@ -42,3 +60,17 @@ Without it the tag-triggered `build + publish` step fails; `workflow_dispatch` b
 1. Bump the version in `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/package.json`, the Cargo manifests.
 2. `git tag vX.Y.Z && git push origin vX.Y.Z` (on `itsd0/gitpass`).
 3. Review the draft on `itsd0/gitpass-releases`, then publish it (non-prerelease) so the updater sees it.
+
+### Self-hosted Mac runner (since v0.6.1)
+
+CI, the iOS workflow and the macOS release builds run on a repo-level self-hosted runner on the
+maintainer's Mac (`~/actions-runner`, labels `self-hosted,macOS,gitpass-mac`), registered to the
+private repo **itsd0/gitpass only** — never attach it to a public repo (including gitpass-releases).
+
+- Service: `cd ~/actions-runner && ./svc.sh status|start|stop` (LaunchAgent; runs while the user is logged in).
+- Tests run with `HOME` set to a temp dir, so they never touch `~/.gitpass` or the app's agent socket.
+- macOS release signing uses the login-keychain identity `gitpass Local Signing`. The release job's
+  preflight step test-signs a file and fails with a clear error if the keychain is not reachable
+  (locked, or the service runs outside the user's session). Fix: log in / unlock the login keychain.
+- Windows/Linux builds are hosted (cost minutes) and only run via
+  `gh workflow run release.yml -f include_windows_linux=true` (artifacts only, not published).

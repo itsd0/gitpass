@@ -1,0 +1,122 @@
+# cargo-deny configuration for gitpass (cargo-deny 0.20 schema).
+#
+# Run locally with `cargo deny check` (install: `cargo install cargo-deny`).
+# CI proposal (see the PR description — the workflow file itself is not
+# edited by the GitHub App): a `supply-chain` job running
+# `cargo deny check` and `cargo audit` on ubuntu-latest.
+#
+# Policy in one line: no known-vulnerable dependencies, no copyleft or
+# unclear licenses, no git dependencies, no wildcard versions.
+# Anything this file rejects must be fixed by upgrading, replacing, or —
+# only with a written reason in the `ignore`/`exceptions` list below —
+# explicitly excepting it. Never silence a finding by deleting this file.
+
+[graph]
+# Only the crates.io registry is used; there are no git dependencies
+# (verified: the workspace Cargo.lock contains zero `git+` sources).
+targets = []
+all-features = false
+no-default-features = false
+
+[advisories]
+# A list of advisory IDs to ignore. Note that ignored advisories still
+# output a note when encountered.
+# Ignored today (each with a verified reason — re-check on every upgrade):
+ignore = [
+    # RUSTSEC-2026-0367, -0368, -0369 (zip 2.6.1): all three require
+    # `ZipArchive::extract` / `ZipStreamReader::extract`, which create
+    # files/symlinks from archive entries and apply archive permissions.
+    # gitpass never calls extract: the only zip use is 1Password .1pux
+    # import (`crates/gitpass-core/src/import.rs`), which opens the archive
+    # and reads a single named entry (`export.data`) into memory with
+    # `by_name` + `read_to_string`. No file, symlink, or permission is ever
+    # created from archive content, so these advisories are not reachable.
+    # Patched in zip >= 9.0.0; upgrading zip 2 -> 9 is a major migration
+    # (API changes in the import path) and is tracked as future work, not
+    # done silently here. Re-verify this reachability claim if import.rs
+    # ever gains an extract call.
+    "RUSTSEC-2026-0367",
+    "RUSTSEC-2026-0368",
+    "RUSTSEC-2026-0369",
+    # RUSTSEC-2026-0387 (crypto-bigint timing variability): cargo-deny
+    # has no per-crate vulnerability ignore, so this ID ignore is the only
+    # mechanism — but it is scoped by the lock, not by wishful thinking:
+    # after this PR, the ONLY crypto-bigint < 0.7.6 left in the tree is
+    # 0.5.5 via ssh-key 0.6 -> p256 0.13, used for ECDSA SSH keys. The
+    # direct passkey path already runs crypto-bigint 0.7.10 via p256 0.14.
+    # The ssh-key path cannot be fixed until ssh-key 0.7 is stable
+    # (0.7.0-rc.11 is the latest and is deliberately not used here).
+    # Risk assessment: a local timing side-channel on ECDSA signing only;
+    # no remote exposure, and a same-user local attacker who can precisely
+    # time many agent signatures is already past the point where this
+    # matters most. Remove this ignore the day ssh-key 0.7 stable lands.
+    { id = "RUSTSEC-2026-0387", reason = "only remaining copy is ssh-key 0.6 transitive (ECDSA SSH keys); fixed by ssh-key 0.7 stable, not yet released" },
+]
+
+[licenses]
+# List of explicitly allowed licenses (SPDX short identifiers).
+# Permissive licenses only, with two documented exceptions:
+# - MPL-2.0 (option-ext, via dirs, Windows-only): weak, file-scoped
+#   copyleft. Using the unmodified library imposes no obligation on
+#   gitpass's own code; if gitpass is ever distributed commercially,
+#   MPL compliance for that file (source offer) must be revisited.
+# - CDLA-Permissive-2.0 (webpki-roots): a permissive license for data
+#   (the TLS trust-anchor list), not code.
+# Unicode-3.0 covers the ICU stack and unicode-ident; BSL-1.0 (Boost)
+# covers clipboard-win / error-code (Windows-only, via arboard).
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "BSL-1.0",
+    "CDLA-Permissive-2.0",
+    "MPL-2.0",
+    "Zlib",
+    "CC0-1.0",
+]
+# The confidence threshold for detecting a license from license text.
+confidence-threshold = 0.8
+# Per-crate license exceptions. None today.
+exceptions = []
+
+[licenses.private]
+ignore = false
+registries = []
+
+[bans]
+# Lint level for when multiple versions of the same crate are detected.
+# Duplicates are common in Rust and are warned about, not failed, so an
+# upgrade path is visible without breaking builds.
+multiple-versions = "warn"
+# Lint level for when a crate version requirement is `*`. Wildcards hide
+# breaking changes; forbid them.
+wildcards = "deny"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
+allow-workspace = false
+# List of crates to deny. No crates are banned by name today. If a
+# dependency becomes untrustworthy, add it here with a reason, not by
+# deleting the lock entry.
+deny = []
+# Crates skipped during duplicate detection. None today.
+skip = []
+skip-tree = []
+
+[sources]
+# Lint level for crates from a registry / git repo not in the allow list.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+# No git dependencies are allowed. If one is ever needed, it must be added
+# here with its exact URL and a reason, and pinned to a full commit SHA.
+allow-git = []
+
+[sources.allow-org]
+github = []
+gitlab = []
+bitbucket = []

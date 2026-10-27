@@ -1,13 +1,13 @@
 [package]
 name = "gitpass-gui-core"
-version = "0.6.0"
+version = "0.6.1"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 description = "Tauri-free command layer for the gitpass desktop GUI (session state, DTOs, auto-lock)"
 
 [dependencies]
-gitpass-core = { version = "0.6.0", path = "../../../crates/gitpass-core" }
+gitpass-core = { version = "0.6.1", path = "../../../crates/gitpass-core" }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 zeroize = { version = "1", features = ["derive"] }
@@ -15,7 +15,7 @@ dirs = "5"
 serde_json = "1"
 rand = "0.8"
 base64 = "0.22"
-gitpass-host = { path = "../../../crates/gitpass-host" }
+gitpass-host = { version = "0.6.0", path = "../../../crates/gitpass-host" }
 libc = "0.2"
 url = "2"
 ureq = { version = "2.12", default-features = false, features = ["tls"] }

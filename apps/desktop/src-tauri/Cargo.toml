@@ -1,6 +1,6 @@
 [package]
 name = "gitpass-desktop"
-version = "0.6.0"
+version = "0.6.1"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT"
@@ -28,5 +28,5 @@ tauri-plugin-process = "2"
 security-framework = "3"
 objc2 = "0.6"
 block2 = "0.6"
-objc2-foundation = { version = "0.3", features = ["NSString", "NSError"] }
+objc2-foundation = { version = "0.3", features = ["NSString", "NSError", "NSData"] }
 objc2-local-authentication = { version = "0.3", features = ["LAContext", "LAError", "block2"] }

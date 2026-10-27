@@ -503,7 +503,11 @@ fn run() -> Result<()> {
             let s = unlock(&cli, &root)?;
             if let Ok(b) = std::fs::read(share) {
                 if let Ok(mf) = serde_json::from_slice::<store::MemberFile>(&b) {
-                    eprintln!("share claims to be from fingerprint {} (NOT authenticated: verify out of band)", mf.sender_fpr);
+                    // The signature itself is verified by accept_share below.
+                    // The signing key travels inside the file, so on first
+                    // contact with a sender, verify this signing fingerprint
+                    // out of band before trusting the sender's identity.
+                    eprintln!("share claims to be from fingerprint {} (signing fingerprint {}; accept verifies the share signature)", mf.sender_fpr, store::sender_sign_fingerprint(&mf));
                 }
             }
             let vid = s.accept_share(share)?;

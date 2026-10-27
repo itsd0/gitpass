@@ -1,10 +1,11 @@
 import * as T from '@radix-ui/react-toast';
 import { create } from 'zustand';
 interface ToastMsg { id: number; title: string; tone?: 'default' | 'danger' }
-const useToasts = create<{ list: ToastMsg[]; push: (t: Omit<ToastMsg, 'id'>) => void; remove: (id: number) => void }>((set) => ({
+export const useToasts = create<{ list: ToastMsg[]; push: (t: Omit<ToastMsg, 'id'>) => void; remove: (id: number) => void }>((set) => ({
   list: [], push: (t) => set((s) => ({ list: [...s.list, { ...t, id: Date.now() + Math.random() }] })), remove: (id) => set((s) => ({ list: s.list.filter((x) => x.id !== id) })),
 }));
-export const toast = (title: string, tone?: 'default' | 'danger') => useToasts.getState().push({ title, tone });
+// A locked vault is shown as the unlock screen, never as an error toast.
+export const toast = (title: string, tone?: 'default' | 'danger') => { if (/vault (is )?locked/i.test(String(title))) return; useToasts.getState().push({ title, tone }); };
 export function Toaster() {
   const { list, remove } = useToasts();
   return (

@@ -100,11 +100,29 @@ impl a::Clipboard for SysClipboard {
 /// Not in the contract: resets the idle timer (harmless extra; the contract UI may ignore it).
 #[tauri::command] pub fn touch(s: State<App>) { s.state.touch() }
 
-/// Background idle check; emits `locked` so the UI returns to the unlock screen.
+/// Background lock watcher: emits `locked` (payload = reason) on EVERY unlocked -> locked transition so the
+/// UI returns to the unlock screen, whatever caused it: idle auto-lock (this loop or the lazy expiry inside a
+/// command), manual lock, or the extension/agent `lock` command. It also locks after system sleep: the loop
+/// notices a wall-clock gap (macOS `Instant` does not advance while asleep, so the idle timer alone would not).
 pub fn spawn_idle_watcher(app: AppHandle) {
-    std::thread::spawn(move || loop {
-        std::thread::sleep(std::time::Duration::from_secs(5));
-        if app.state::<App>().state.check_idle() { let _ = app.emit("locked", "idle"); }
+    const TICK: std::time::Duration = std::time::Duration::from_secs(2);
+    const SLEEP_GAP: std::time::Duration = std::time::Duration::from_secs(30);
+    std::thread::spawn(move || {
+        let mut was_unlocked = app.state::<App>().state.is_unlocked();
+        let mut last_wall = std::time::SystemTime::now();
+        loop {
+            std::thread::sleep(TICK);
+            let st = app.state::<App>();
+            let now = std::time::SystemTime::now();
+            let slept = now.duration_since(last_wall).map(|d| d > SLEEP_GAP).unwrap_or(false);
+            last_wall = now;
+            let mut reason = "lock";
+            if slept && st.state.is_unlocked() { st.lock(); reason = "sleep"; }
+            else if st.state.check_idle() { reason = "idle"; }
+            let unlocked = st.state.is_unlocked();
+            if was_unlocked && !unlocked { let _ = app.emit("locked", reason); }
+            was_unlocked = unlocked;
+        }
     });
 }
 
