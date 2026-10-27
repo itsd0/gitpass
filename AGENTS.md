@@ -9,13 +9,13 @@ gitpass is a **personal** password manager whose encrypted vault lives in a git 
 Targets: **macOS** (desktop app, CLI, iOS) and **Chromium** browsers (extension). Single owner
 (@itsd0); no team, SSO or enterprise features. Merges, tags and releases happen **only with the owner's OK**.
 
-Known agents: **edison**, **opencode**, **agy** (Antigravity), **grokbot** (review, Mac build/install, releases).
+Known agents: **edison**, **opencode**, **agy** (Antigravity), **muse**, **grokbot** (review, Mac build/install, releases).
 Any other agent picks its own lowercase name. Agents may run on the owner's Mac, a cloud VM, a Linux
 container, or GitHub only (no shell, e.g. a GitHub App).
 
 ## Start here: autonomous contribution loop
 
-1. **Identify yourself.** Pick your agent name: `edison`, `opencode`, `agy`, `grokbot`, or another lowercase
+1. **Identify yourself.** Pick your agent name: `edison`, `opencode`, `agy`, `muse`, `grokbot`, or another lowercase
    name (`[a-z0-9._-]`). Use it in branch names, labels (`agent:<name>` if it exists) and the PR footer.
 2. **Pick work.** List open issues (`gh issue list --state open`, the REST API, or the web UI).
    - Prefer issues labelled `agent:<you>`; otherwise pick an unassigned issue with no open PR and no
@@ -185,5 +185,5 @@ Commands run and results: <summary, no secrets>; skipped: <commands + why>
 ## Risk / notes
 <crypto, vault format, migration, UI screenshots>
 
-Agent: <edison | opencode | agy | grokbot | human>
+Agent: <edison | opencode | agy | muse | grokbot | human>
 ```
