@@ -42,3 +42,17 @@ Without it the tag-triggered `build + publish` step fails; `workflow_dispatch` b
 1. Bump the version in `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/package.json`, the Cargo manifests.
 2. `git tag vX.Y.Z && git push origin vX.Y.Z` (on `itsd0/gitpass`).
 3. Review the draft on `itsd0/gitpass-releases`, then publish it (non-prerelease) so the updater sees it.
+
+### Self-hosted Mac runner (since v0.6.1)
+
+CI, the iOS workflow and the macOS release builds run on a repo-level self-hosted runner on the
+maintainer's Mac (`~/actions-runner`, labels `self-hosted,macOS,gitpass-mac`), registered to the
+private repo **itsd0/gitpass only** — never attach it to a public repo (including gitpass-releases).
+
+- Service: `cd ~/actions-runner && ./svc.sh status|start|stop` (LaunchAgent; runs while the user is logged in).
+- Tests run with `HOME` set to a temp dir, so they never touch `~/.gitpass` or the app's agent socket.
+- macOS release signing uses the login-keychain identity `gitpass Local Signing`. The release job's
+  preflight step test-signs a file and fails with a clear error if the keychain is not reachable
+  (locked, or the service runs outside the user's session). Fix: log in / unlock the login keychain.
+- Windows/Linux builds are hosted (cost minutes) and only run via
+  `gh workflow run release.yml -f include_windows_linux=true` (artifacts only, not published).
