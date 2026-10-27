@@ -14,4 +14,8 @@ describe('i18n', () => {
     const shell = Object.keys(en).filter((k) => k.startsWith('nav.'));
     for (const d of [dictionaries.my, dictionaries.th]) for (const k of shell) expect(d[k as keyof typeof en]).toBeTruthy();
   });
+  it('covers all kit.* strings in my and th', () => {
+    const kitKeys = Object.keys(en).filter((k) => k.startsWith('kit.'));
+    for (const d of [dictionaries.my, dictionaries.th]) for (const k of kitKeys) expect(d[k as keyof typeof en]).toBeTruthy();
+  });
 });
