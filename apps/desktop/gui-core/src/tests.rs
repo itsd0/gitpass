@@ -101,6 +101,16 @@ fn auto_lock_after_idle() {
 }
 
 #[test]
+fn auto_lock_after_wall_clock_sleep() {
+    let (_d, _enc, st) = setup();
+    st.set_auto_lock_duration(Duration::from_secs(300));
+    assert!(st.is_unlocked());
+    st.backdate_activity_wall(Duration::from_secs(301));
+    assert!(st.check_idle(), "must lock when wall clock indicates idle duration passed during sleep");
+    assert!(!st.is_unlocked());
+}
+
+#[test]
 fn devices_and_sync_without_git() {
     let (_d, _enc, st) = setup();
     let ds = st.devices().unwrap();

@@ -45,6 +45,18 @@ function host(cmd, args = {}) {
   });
 }
 
+// Auto-lock on screen lock / system sleep via chrome.idle
+if (typeof chrome !== 'undefined' && chrome.idle && chrome.idle.onStateChanged) {
+  chrome.idle.onStateChanged.addListener((state) => {
+    if (state === 'locked') {
+      host('lock').catch(() => {});
+      chrome.runtime.sendMessage({ type: 'popup:event', event: 'lock', reason: 'screen' }).catch(() => {});
+    } else if (state === 'idle') {
+      host('status').catch(() => {});
+    }
+  });
+}
+
 async function activeTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   return tab;

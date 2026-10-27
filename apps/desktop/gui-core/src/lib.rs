@@ -14,7 +14,7 @@ use gitpass_core::{search, totp};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 use zeroize::Zeroizing;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -62,7 +62,7 @@ pub(crate) struct Unlocked {
     opts_accept_rollback: bool,
 }
 
-pub(crate) struct Inner { unlocked: Option<Unlocked>, last_activity: Instant, auto_lock: Duration }
+pub(crate) struct Inner { unlocked: Option<Unlocked>, last_activity: Instant, last_activity_wall: SystemTime, auto_lock: Duration }
 
 /// Shared app state (wrap in Tauri `State`).
 pub struct GuiState { pub(crate) inner: Mutex<Inner> }
@@ -87,13 +87,14 @@ fn nonempty(o: Option<String>) -> Option<String> { o.map(|s| s.trim().to_string(
 
 impl GuiState {
     pub fn new(auto_lock_minutes: u64) -> Self {
-        GuiState { inner: Mutex::new(Inner { unlocked: None, last_activity: Instant::now(), auto_lock: Duration::from_secs(auto_lock_minutes * 60) }) }
+        GuiState { inner: Mutex::new(Inner { unlocked: None, last_activity: Instant::now(), last_activity_wall: SystemTime::now(), auto_lock: Duration::from_secs(auto_lock_minutes * 60) }) }
     }
 
     pub(crate) fn with<T>(&self, f: impl FnOnce(&mut Unlocked) -> Result<T>) -> Result<T> {
         let mut g = self.inner.lock().map_err(|_| anyhow!("state poisoned"))?;
         Self::expire(&mut g);
         g.last_activity = Instant::now();
+        g.last_activity_wall = SystemTime::now();
         let u = g.unlocked.as_mut().ok_or_else(|| anyhow!("vault is locked"))?;
         f(u)
     }
@@ -106,7 +107,9 @@ impl GuiState {
         f(u)
     }
     fn expire(g: &mut Inner) -> bool {
-        if g.unlocked.is_some() && !g.auto_lock.is_zero() && g.last_activity.elapsed() >= g.auto_lock { g.unlocked = None; return true; }
+        let idle_by_instant = !g.auto_lock.is_zero() && g.last_activity.elapsed() >= g.auto_lock;
+        let idle_by_wall = !g.auto_lock.is_zero() && SystemTime::now().duration_since(g.last_activity_wall).map(|d| d >= g.auto_lock).unwrap_or(false);
+        if g.unlocked.is_some() && (idle_by_instant || idle_by_wall) { g.unlocked = None; return true; }
         false
     }
     pub(crate) fn writable(u: &Unlocked) -> Result<()> { if u.session.device_revoked { bail!("this device is revoked; edits are refused") } Ok(()) }
@@ -124,6 +127,7 @@ impl GuiState {
         let mut g = self.inner.lock().map_err(|_| anyhow!("state poisoned"))?;
         g.unlocked = Some(Unlocked { session, password: Zeroizing::new(password.to_string()), secret, device_name, opts_accept_rollback: opts.accept_rollback });
         g.last_activity = Instant::now();
+        g.last_activity_wall = SystemTime::now();
         drop(g);
         self.status()
     }
@@ -142,12 +146,18 @@ impl GuiState {
     }
     pub fn is_unlocked(&self) -> bool { self.inner.lock().map(|g| g.unlocked.is_some()).unwrap_or(false) }
     /// Record user activity (resets the idle timer).
-    pub fn touch(&self) { if let Ok(mut g) = self.inner.lock() { if !Self::expire(&mut g) { g.last_activity = Instant::now(); } } }
+    pub fn touch(&self) { if let Ok(mut g) = self.inner.lock() { if !Self::expire(&mut g) { g.last_activity = Instant::now(); g.last_activity_wall = SystemTime::now(); } } }
     /// Lock if idle too long; returns true if it locked now. Call periodically.
     pub fn check_idle(&self) -> bool { self.inner.lock().map(|mut g| Self::expire(&mut g)).unwrap_or(false) }
     pub fn set_auto_lock_minutes(&self, m: u64) { if let Ok(mut g) = self.inner.lock() { g.auto_lock = Duration::from_secs(m * 60); } }
     #[doc(hidden)]
     pub fn set_auto_lock_duration(&self, d: Duration) { if let Ok(mut g) = self.inner.lock() { g.auto_lock = d; } }
+    #[doc(hidden)]
+    pub fn backdate_activity_wall(&self, d: Duration) {
+        if let Ok(mut g) = self.inner.lock() {
+            g.last_activity_wall = SystemTime::now().checked_sub(d).unwrap_or_else(SystemTime::now);
+        }
+    }
 
     pub fn status(&self) -> Result<StatusDto> {
         let g = self.inner.lock().map_err(|_| anyhow!("state poisoned"))?;
