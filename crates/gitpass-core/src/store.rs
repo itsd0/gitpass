@@ -256,7 +256,7 @@ pub(crate) fn write_json<T: Serialize>(p: &Path, v: &T) -> Result<String> {
 }
 pub(crate) fn read_json<T: for<'de> Deserialize<'de>>(p: &Path) -> Result<T> {
     let b = fs::read(p).with_context(|| format!("reading {}", p.display()))?;
-    Ok(serde_json::from_slice(&b).with_context(|| format!("parsing {}", p.display()))?)
+    serde_json::from_slice(&b).with_context(|| format!("parsing {}", p.display()))
 }
 
 pub fn read_format(root: &Path) -> Result<Format> {
@@ -356,14 +356,12 @@ fn list_enc(d: &Path) -> Vec<String> {
         .map(|p| p.file_stem().unwrap().to_string_lossy().to_string()).collect()).unwrap_or_default()
 }
 
+#[derive(Default)]
 pub struct UnlockOpts {
     /// Accept integrity/rollback failures and re-seal the manifest from what's on disk.
     pub accept_rollback: bool,
     /// KDF target; weaker stored params are auto-upgraded on unlock.
     pub target_kdf: KdfParams,
-}
-impl Default for UnlockOpts {
-    fn default() -> Self { UnlockOpts { accept_rollback: false, target_kdf: KdfParams::default() } }
 }
 
 /// Unlocked session holding the Account Key.

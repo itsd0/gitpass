@@ -180,7 +180,8 @@ pub fn serve_stream<S: Read + Write>(s: &mut S, p: &dyn KeyProvider) -> Result<(
 
 /// `KeyProvider` over a fixed key list (CLI `gitpass ssh agent`, tests). `approve(title, fingerprint)`
 /// is consulted before every signature.
-pub struct StaticKeys { pub ids: Vec<Identity>, pub approve: Box<dyn Fn(&str, &str) -> bool + Send + Sync> }
+pub type ApprovalFn = Box<dyn Fn(&str, &str) -> bool + Send + Sync>;
+pub struct StaticKeys { pub ids: Vec<Identity>, pub approve: ApprovalFn }
 impl KeyProvider for StaticKeys {
     fn identities(&self) -> Vec<(Vec<u8>, String)> { self.ids.iter().map(|i| (i.blob.clone(), i.title.clone())).collect() }
     fn sign(&self, blob: &[u8], data: &[u8], _flags: u32) -> Result<Vec<u8>> {

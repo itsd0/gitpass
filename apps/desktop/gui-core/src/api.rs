@@ -466,7 +466,11 @@ impl App {
         let (pw, sk) = self.biometric.load(&vp, "unlock gitpass")?;
         self.unlock(&vp, &pw, Some(&sk))
     }
-    pub fn lock(&self) { self.state.lock(); if let Ok(mut k) = self.fresh_kit.lock() { *k = None; } if let Ok(mut k) = self.fresh_secret.lock() { *k = None; } }
+    pub fn lock(&self) {
+        self.state.lock();
+        if let Ok(mut k) = self.fresh_kit.lock() { *k = None; }
+        if let Ok(mut k) = self.fresh_secret.lock() { *k = None; }
+    }
 
     // ---------------- vaults
     fn members_of(s: &Session, vid: &str, labels: &BTreeMap<String, String>) -> Result<Vec<Member>> {

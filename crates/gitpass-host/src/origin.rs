@@ -10,6 +10,7 @@
 //!    Otherwise the registrable domain (eTLD+1, from the Public Suffix List via the `psl`
 //!    crate) of both hosts must be equal. If a host has no registrable domain (it *is* a public
 //!    suffix, e.g. `github.io`), exact host equality is required.
+//!
 //! Consequence: `paypal.com.evil.io` has eTLD+1 `evil.io` and never matches `paypal.com`;
 //! `login.example.com` matches `www.example.com` (same site; standard password-manager behaviour).
 use url::{Host, Url};

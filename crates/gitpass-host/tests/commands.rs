@@ -123,7 +123,7 @@ fn unlock_with_provided_secret_key_no_file() {
     let sk = std::fs::read_to_string(&f.host.cfg.secret_key_path).unwrap();
     std::fs::remove_file(&f.host.cfg.secret_key_path).unwrap();
     assert_eq!(ok(&mut f.host, json!({"cmd":"status"}))["secret_key_file"], false);
-    assert!(err(&mut f.host, json!({"cmd":"unlock","password":PW,"secret_key":"A3-BOGUS"})).len() > 0);
+    assert!(!err(&mut f.host, json!({"cmd":"unlock","password":PW,"secret_key":"A3-BOGUS"})).is_empty());
     assert!(!f.host.is_unlocked());
     ok(&mut f.host, json!({"cmd":"unlock","password":PW,"secret_key":sk.trim()}));
     let m = ok(&mut f.host, json!({"cmd":"match","url":"https://www.paypal.com"}));

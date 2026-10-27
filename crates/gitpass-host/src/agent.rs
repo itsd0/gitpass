@@ -97,15 +97,10 @@ impl Agent {
             let alive = alive.clone();
             let ready = ready.clone();
             std::thread::spawn(move || {
-                loop {
-                    match read_message_max(&mut reader, MAX_SOCKET) {
-                        Ok(Some(v)) => {
-                            if v.get("event").is_some() { on_event(v); continue; }
-                            if let Some(id) = v.get("id").and_then(Value::as_u64) {
-                                if let Some(tx) = pending.lock().unwrap().remove(&id) { let _ = tx.send(v); }
-                            }
-                        }
-                        _ => break,
+                while let Ok(Some(v)) = read_message_max(&mut reader, MAX_SOCKET) {
+                    if v.get("event").is_some() { on_event(v); continue; }
+                    if let Some(id) = v.get("id").and_then(Value::as_u64) {
+                        if let Some(tx) = pending.lock().unwrap().remove(&id) { let _ = tx.send(v); }
                     }
                 }
                 alive.store(false, Ordering::SeqCst);

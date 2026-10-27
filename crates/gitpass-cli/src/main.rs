@@ -715,7 +715,7 @@ fn run() -> Result<()> {
             match cmd {
                 DeviceCmd::List => {
                     let reg = s.devices()?;
-                    println!("{:<36}  {:<20}  {:<20}  {}", "ID", "NAME", "LAST SEEN (UTC)", "STATUS");
+                    println!("{:<36}  {:<20}  {:<20}  STATUS", "ID", "NAME", "LAST SEEN (UTC)");
                     for d in &reg.devices {
                         let mut st = match &d.revoked_at { Some(t) if d.revoked => format!("REVOKED {t}"), _ if d.revoked => "REVOKED".into(), _ => "active".into() };
                         if d.id == s.device_id { st.push_str(" (this device)"); }

@@ -434,7 +434,7 @@ fn has_totp(r: &ItemRecord) -> bool { r.view_sections().iter().flat_map(|s| s.fi
 
 fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
     let subtitle = api::subtitle(r);
-    let favicon_host = r.item.url.as_deref().and_then(|u| url_host(u));
+    let favicon_host = r.item.url.as_deref().and_then(url_host);
     let mut v = json!({"id": format!("{vid}:{iid}"), "vault_id": vid, "vault_name": vname, "category": r.category.as_str(), "title": r.item.title,
         "subtitle": subtitle, "has_totp": has_totp(r), "favorite": r.favorite, "updated_at": ts(&r.item.updated_at)});
     if let Some(u) = &r.item.url { v["url"] = json!(u); }
