@@ -24,7 +24,7 @@
     switch (code) {
       case 'exists': return 'InvalidStateError';
       case 'origin_mismatch': return 'SecurityError';
-      case 'not_supported': case 'no_host': case 'not_found': case 'cancelled': return null;
+      case 'not_supported': case 'no_host': case 'not_found': case 'cancelled': case 'fallback_native': return null;
       default: return 'NotAllowedError'; // denied, locked, timeout, ...
     }
   }
@@ -85,7 +85,7 @@
     const res = await rFn(kind, args);
     if (res.ok) return credential(kind, res.result);
     // User cancelled or no matching credential: call original navigator.credentials method
-    if (res.code === 'not_found' || res.code === 'cancelled' || res.code === 'denied') {
+    if (res.code === 'not_found' || res.code === 'cancelled' || res.code === 'denied' || res.code === 'fallback_native') {
       try {
         return await orig(options);
       } catch (fallbackErr) {

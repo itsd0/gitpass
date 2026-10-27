@@ -62,10 +62,11 @@
             return;
           }
           if (response.approved) {
-            if (!host) { reqs.delete(id); reject(err('no_host', 'no host')); return; }
-            host('passkey_' + kind, { ...args, origin, source: 'popup', approved: true })
-              .then((res) => { reqs.delete(id); resolve(res); })
-              .catch((e) => { reqs.delete(id); reject(e); });
+            reqs.delete(id);
+            if (!host) { reject(err('no_host', 'no host')); return; }
+            const title = args.rp_name || rpId;
+            runApproved({ kind, host, args: { ...args, origin, source: 'popup', approved: true }, tabId: sender.tab.id, reqId: id, title })
+              .then(resolve, reject);
           } else {
             reqs.delete(id);
             reject(err('cancelled', 'The user cancelled'));
@@ -84,6 +85,38 @@
         reject(err('denied', 'No UI prompt mechanism available'));
       }
     });
+  }
+  /** Host error -> a sentence for the in-page dialog (never a silent failure). */
+  function describe(e) {
+    const c = e && e.code;
+    if (c === 'locked') return 'gitpass is locked. Unlock the gitpass app, then retry.';
+    if (c === 'exists') return 'A passkey for this account is already saved in gitpass.';
+    if (c === 'app_not_running' || c === 'no_host' || /native host|disconnected/i.test(String(e && e.message))) return 'The gitpass app or helper is not reachable. Open gitpass, then retry.';
+    if (c === 'origin_mismatch') return 'This site asked for a passkey for a different domain (rpId does not match the page).';
+    if (c === 'not_supported') return String((e && e.message) || 'Not supported by gitpass.');
+    return String((e && e.message) || c || 'unknown error') + (c ? ` (${c})` : '');
+  }
+  function askTab(tabId, msg, ms = 120000) {
+    return new Promise((resolve) => {
+      const to = setTimeout(() => resolve({ action: 'close' }), ms);
+      try {
+        chrome.tabs.sendMessage(tabId, msg, { frameId: 0 }, (r) => { clearTimeout(to); void (chrome.runtime && chrome.runtime.lastError); resolve(r || { action: 'close' }); });
+      } catch (_) { clearTimeout(to); resolve({ action: 'close' }); }
+    });
+  }
+  /** After the in-page approval: call the host, report the outcome in the page dialog, and on failure let
+   *  the user retry (unlocking first if needed), fall back to the browser's own passkey UI, or close. */
+  async function runApproved({ kind, host, args, tabId, reqId, title }) {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      let res, e;
+      try { res = await host('passkey_' + kind, args); } catch (x) { e = x; }
+      if (!e) { await askTab(tabId, { type: 'gitpass-passkey-result', reqId, ok: true, title }, 5000); return res; }
+      const choice = await askTab(tabId, { type: 'gitpass-passkey-result', reqId, ok: false, code: e.code || null, error: describe(e) });
+      if (choice.action === 'native') throw err('fallback_native', 'The user chose the device passkey');
+      if (choice.action !== 'retry') throw e;
+      if (e.code === 'locked') await host('request_unlock', { reason: kind === 'create' ? 'Save a passkey' : 'Use a passkey' }).catch(() => {});
+    }
+    throw err('denied', 'too many retries');
   }
   /** From the approval page (an extension page in its own window). */
   async function fromUi(msg, host) {
@@ -106,5 +139,5 @@
   if (root.chrome && chrome.windows && chrome.windows.onRemoved) chrome.windows.onRemoved.addListener((wid) => {
     for (const [id, r] of reqs) if (r.winId === wid) { reqs.delete(id); r.reject(err('denied', 'The user closed the gitpass prompt')); }
   });
-  root.GitpassPasskey = { fromPage, fromUi, isUiSender, _reqs: reqs };
+  root.GitpassPasskey = { fromPage, fromUi, isUiSender, describe, runApproved, _reqs: reqs };
 })(globalThis);

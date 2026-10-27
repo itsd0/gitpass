@@ -43,7 +43,10 @@
   .pk-field{display:flex;justify-content:space-between;align-items:center;font-size:12px}
   .pk-label{color:#969AA4}
   .pk-val{font-weight:600;color:#ECEDF0;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .pk-acts{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}`;
+  .pk-acts{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
+  .pk-status{font-size:12px;margin-top:4px;color:#969AA4;white-space:pre-wrap;word-break:break-word}
+  .pk-status.err{color:#ff8a80}
+  .pk-status.ok{color:#7ee2a8}`;
 
   // ---------- messaging ----------
   async function send(type, args) {
@@ -437,22 +440,67 @@
     // right under a click it solicited).
     const shownAt = performance.now();
     const armed = () => performance.now() - shownAt > 600;
+    const status = el('div', 'pk-status');
     const finish = (approved) => {
       if (answered) return;
       answered = true;
-      closePkPrompt();
+      // Approved: keep the dialog open and show progress; the background reports the outcome with
+      // `gitpass-passkey-result` (success, or the error plus retry / native fallback). Never silent.
+      if (approved) {
+        cancelBtn.disabled = true; okBtn.disabled = true;
+        status.className = 'pk-status';
+        status.textContent = msg.kind === 'create' ? t('pkSaving', 'Saving to gitpass…') : t('pkSigning', 'Signing in with gitpass…');
+        const mine = pkPrompt;
+        setTimeout(() => {
+          if (pkPrompt !== mine || mine.resulted) return;
+          status.className = 'pk-status err';
+          status.textContent = t('pkNoAnswer', 'No answer from gitpass (the extension may have restarted). Close this and try again.');
+          const c = el('button', 'btn', t('pkClose', 'Close')); c.type = 'button';
+          c.addEventListener('click', (e) => { if (e.isTrusted) closePkPrompt(); });
+          acts.textContent = ''; acts.append(c);
+        }, 45000);
+      } else closePkPrompt();
       try { sendResponse({ approved }); } catch (_) {}
     };
 
     cancelBtn.addEventListener('click', (e) => { if (!e.isTrusted) return; finish(false); });
     okBtn.addEventListener('click', (e) => { if (!e.isTrusted || !armed()) return; finish(true); });
-    overlay.addEventListener('keydown', (e) => { if (e.isTrusted && e.key === 'Escape') finish(false); });
+    overlay.addEventListener('keydown', (e) => { if (!e.isTrusted || e.key !== 'Escape') return; if (pkPrompt && pkPrompt.onEscape) pkPrompt.onEscape(e); else finish(false); });
 
     acts.append(cancelBtn, okBtn);
-    card.append(row, meta, acts);
+    card.append(row, meta, status, acts);
     overlay.append(card);
     root.append(overlay);
-    pkPrompt = { host, finish };
+    // Outcome from the background after the host call.
+    const showResult = (res, respond) => {
+      if (pkPrompt) pkPrompt.resulted = true;
+      acts.textContent = '';
+      if (res.ok) {
+        status.className = 'pk-status ok';
+        status.textContent = msg.kind === 'create'
+          ? t('pkSaved', 'Saved to gitpass') + (res.title ? ` — “${res.title}” (${t('catPasskey', 'Passkeys')})` : '')
+          : t('pkSignedIn', 'Signed in with gitpass');
+        setTimeout(closePkPrompt, 1800);
+        respond({ action: 'done' });
+        return;
+      }
+      status.className = 'pk-status err';
+      status.textContent = (msg.kind === 'create' ? t('pkSaveFailed', 'gitpass could not save this passkey:') : t('pkGetFailed', 'gitpass could not sign in:')) + '\n' + (res.error || res.code || 'unknown error');
+      let done = false;
+      const pick = (action) => (e) => {
+        if (!e.isTrusted || done) return;
+        done = true;
+        if (action === 'retry') { status.className = 'pk-status'; status.textContent = t('pkRetrying', 'Retrying…'); acts.textContent = ''; }
+        else closePkPrompt();
+        respond({ action });
+      };
+      const closeB = el('button', 'btn', t('pkClose', 'Close')); closeB.type = 'button'; closeB.addEventListener('click', pick('close'));
+      const retryB = el('button', 'btn', res.code === 'locked' ? t('pkUnlockRetry', 'Unlock & retry') : t('pkRetry', 'Retry')); retryB.type = 'button'; retryB.addEventListener('click', pick('retry'));
+      const nativeB = el('button', 'btn pri', t('pkUseDevice', 'Use device passkey')); nativeB.type = 'button'; nativeB.addEventListener('click', pick('native'));
+      if (res.code === 'exists') acts.append(closeB, nativeB); else acts.append(closeB, retryB, nativeB);
+      pkPrompt.onEscape = pick('close');
+    };
+    pkPrompt = { host, finish, reqId: msg.reqId, showResult };
     setTimeout(() => okBtn.focus(), 50);
   }
 
@@ -461,6 +509,11 @@
     if (msg.type === 'gitpass-passkey-prompt') {
       showPkPrompt(msg, sendResponse);
       return true; // async sendResponse
+    }
+    if (msg.type === 'gitpass-passkey-result') {
+      if (!pkPrompt || pkPrompt.reqId !== msg.reqId) { sendResponse({ action: 'close' }); return; }
+      pkPrompt.showResult(msg, sendResponse);
+      return true;
     }
     if (msg.origin !== location.origin) return; // page navigated meanwhile: drop
     const list = GitpassForms.detectForms(document);
