@@ -64,6 +64,15 @@ function handle(m) {
       // gitpass-core v5 template field ids (fake test data).
       return want === 'credit_card' ? { cardholder: 'ALICE TESTER', number: '4111 1111 1111 1111', expiry: '12/2028', cvv: '737', type: 'visa' }
         : { first: 'Naing', last: 'Oo', address: '99 Test Road\nBangkok', email: 'naing@example.com', phone: '+66812345678' }; }
+    case 'passkey_query': {
+      needUnlock();
+      const rp = m.rp_id || host(m.origin);
+      const allow = Array.isArray(m.allow_credentials) ? m.allow_credentials : [];
+      const matching = pkStore.list()
+        .filter((p) => p.rp_id === rp && (!allow.length || allow.includes(p.credential_id)))
+        .map((p) => ({ credential_id: p.credential_id, user_name: p.user_name, user_handle: p.user_handle }));
+      return { rp_id: rp, matching };
+    }
     case 'passkey_create': case 'passkey_get': needUnlock();
       if (!(m.source === 'popup' && m.approved === true)) throw Object.assign(new Error('approval required'), { code: 'denied' });
       return m.cmd === 'passkey_create' ? authn.create(pkStore, m) : authn.get(pkStore, m);
