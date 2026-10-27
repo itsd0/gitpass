@@ -8,6 +8,8 @@
 google.com	totp,passkey
 github.com	totp,passkey
 microsoft.com	totp,passkey
+live.com	totp,passkey
+microsoftonline.com	totp,passkey
 amazon.com	totp,passkey
 coinbase.com	totp,passkey
 binance.com	totp,passkey
@@ -19,11 +21,11 @@ bitwarden.com	totp,passkey
 shopify.com	totp,passkey
 adobe.com	totp,passkey
 apple.com	passkey
-paypal.com	passkey
-ebay.com	passkey
+paypal.com	totp,passkey
+ebay.com	totp,passkey
 walmart.com	passkey
-bestbuy.com	passkey
-uber.com	passkey
+bestbuy.com	totp,passkey
+uber.com	totp,passkey
 dashlane.com	totp
 dropbox.com	totp
 slack.com	totp
@@ -38,7 +40,6 @@ twitch.tv	totp
 zoom.us	totp
 proton.me	totp
 1password.com	totp
-steamcommunity.com	totp
 epicgames.com	totp
 npmjs.com	totp
 heroku.com	totp

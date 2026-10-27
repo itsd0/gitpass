@@ -240,6 +240,7 @@ fn watchtower_mfa_advice_and_passkey_suppression() {
     let r = e.app.watchtower(false).unwrap();
     assert!(r.totp_available.contains(&l.id));
     assert!(r.passkey_available.contains(&l.id));
+    assert!(!r.missing_totp.contains(&l.id));
     // A stored passkey on the same rp_id suppresses only the passkey advice.
     e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(), category: Category::Passkey, title: "GitHub passkey (fake)".into(), url: Some("https://github.com".into()),
@@ -249,6 +250,27 @@ fn watchtower_mfa_advice_and_passkey_suppression() {
     let r = e.app.watchtower(false).unwrap();
     assert!(r.totp_available.contains(&l.id));
     assert!(!r.passkey_available.contains(&l.id));
+
+    // Stored passkey on a subdomain (accounts.google.com) suppresses passkey advice for google.com
+    let g = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::Login, title: "Google Fake".into(), url: Some("https://google.com/login".into()),
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![
+            fld("username", FieldKind::Text, Some("fake@example.invalid")),
+            fld("password", FieldKind::Concealed, Some("FAKE-Xq7#vR2!mK9@pL4$wZ"))] }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+    let r = e.app.watchtower(false).unwrap();
+    assert!(r.passkey_available.contains(&g.id));
+    assert!(r.totp_available.contains(&g.id));
+    assert!(!r.missing_totp.contains(&g.id));
+
+    e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::Passkey, title: "Google passkey (fake)".into(), url: Some("https://accounts.google.com".into()),
+        sections: vec![Section { id: "main".into(), title: None, fields: vec![fld("rp_id", FieldKind::Text, Some("accounts.google.com"))] }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+    let r = e.app.watchtower(false).unwrap();
+    assert!(!r.passkey_available.contains(&g.id));
 }
 
 #[test]
