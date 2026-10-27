@@ -35,6 +35,44 @@ export function clickSelect(order: string[], s: Sel, id: string, m: Mods = {}): 
 export const selectAll = (order: string[], s: Sel): Sel =>
   order.length > 1 ? { selected: s.selected && order.includes(s.selected) ? s.selected : order[0], multi: [...order] } : { selected: order[0] ?? null, multi: [] };
 
+/**
+ * Arrow-key selection. Plain arrow returns to a single selection.
+ * Shift+arrow moves the focus row and selects anchor..focus, following the
+ * same convention as shift-click: `selected` is the anchor, `multi` is the
+ * contiguous range in list order. Moving back toward the anchor shrinks the
+ * range; moving past it expands it on the other side.
+ *
+ * The current focus is not stored separately: for a range selection it is
+ * the endpoint opposite the anchor (see `rangeFocus`), and for a single
+ * selection it is that item.
+ */
+export function arrowSelect(order: string[], s: Sel, delta: 1 | -1, shift = false): Sel {
+  if (!order.length) return s;
+  const anchor = s.selected && order.includes(s.selected) ? s.selected : null;
+  // Current focus: opposite endpoint of a range, else the single selection.
+  let focusIdx: number;
+  if (s.multi.length > 1 && anchor) {
+    const sorted = order.filter((x) => s.multi.includes(x));
+    const focus = anchor === sorted[0] ? sorted[sorted.length - 1] : sorted[0];
+    focusIdx = order.indexOf(focus);
+  } else {
+    focusIdx = anchor ? order.indexOf(anchor) : -1;
+  }
+  const nextIdx = Math.max(0, Math.min(order.length - 1, focusIdx + delta));
+  const nextId = order[nextIdx];
+  if (!shift) return { selected: nextId, multi: [] };
+  const rangeAnchor = anchor ?? nextId;
+  const a = order.indexOf(rangeAnchor), b = nextIdx;
+  const span = order.slice(Math.min(a, b), Math.max(a, b) + 1);
+  return span.length > 1 ? { selected: rangeAnchor, multi: span } : { selected: rangeAnchor, multi: [] };
+}
+
+/** Focus row for a selection: the range endpoint opposite the anchor, else the single selection. */
+export function rangeFocus(s: Sel): string | null {
+  if (s.multi.length > 1) return s.multi[0] === s.selected ? s.multi[s.multi.length - 1] : s.multi[0];
+  return s.selected;
+}
+
 /** Keep only ids still present after a list refresh. */
 export function prune(order: string[], s: Sel): Sel {
   const has = new Set(order);

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clickSelect, prune, selectAll, selectedIds } from './selection';
+import { arrowSelect, clickSelect, prune, rangeFocus, selectAll, selectedIds } from './selection';
 const order = ['a', 'b', 'c', 'd', 'e'];
 describe('item multi-select', () => {
   it('plain click selects one', () => {
@@ -23,6 +23,30 @@ describe('item multi-select', () => {
     // cmd+shift adds the range to the current selection
     expect(clickSelect(order, { selected: 'e', multi: ['a', 'e'] }, 'c', { range: true, toggle: true }).multi).toEqual(['a', 'c', 'd', 'e']);
     expect(clickSelect(order, { selected: 'c', multi: [] }, 'c', { range: true })).toEqual({ selected: 'c', multi: [] });
+  });
+  it('shift+arrow extends, shrinks and crosses the anchor; plain arrow returns to single', () => {
+    // Single selection: anchor is the starting item.
+    let s = arrowSelect(order, { selected: 'c', multi: [] }, 1, true);
+    expect(s).toEqual({ selected: 'c', multi: ['c', 'd'] });
+    expect(rangeFocus(s)).toBe('d');
+    // Extend further down.
+    s = arrowSelect(order, s, 1, true);
+    expect(s).toEqual({ selected: 'c', multi: ['c', 'd', 'e'] });
+    // Shrink back toward the anchor.
+    s = arrowSelect(order, s, -1, true);
+    expect(s).toEqual({ selected: 'c', multi: ['c', 'd'] });
+    s = arrowSelect(order, s, -1, true);
+    expect(s).toEqual({ selected: 'c', multi: [] });
+    // Cross the anchor to the other side.
+    s = arrowSelect(order, s, -1, true);
+    expect(s).toEqual({ selected: 'c', multi: ['b', 'c'] });
+    // Plain arrow from a range moves one step from the focus row and returns to a single selection.
+    expect(arrowSelect(order, { selected: 'c', multi: ['c', 'd', 'e'] }, 1)).toEqual({ selected: 'e', multi: [] });
+    expect(arrowSelect(order, { selected: 'c', multi: ['b', 'c'] }, -1)).toEqual({ selected: 'a', multi: [] });
+    // Clamped at the ends, and no selection starts at the first row.
+    expect(arrowSelect(order, { selected: 'e', multi: [] }, 1, true)).toEqual({ selected: 'e', multi: [] });
+    expect(arrowSelect(order, { selected: null, multi: [] }, 1, true)).toEqual({ selected: 'a', multi: [] });
+    expect(arrowSelect([], { selected: null, multi: [] }, 1, true)).toEqual({ selected: null, multi: [] });
   });
   it('select all, prune and selectedIds', () => {
     const s = selectAll(order, { selected: 'c', multi: [] });
