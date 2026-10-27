@@ -277,6 +277,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   import_file: (a: { dryRun: boolean }) => { if (!a.dryRun) onboarding = { ...onboarding, imported: true }; return delay<T.ImportResult>({ parsed: 12, added: a.dryRun ? 0 : 10, duplicates: 2, duplicateTitles: ['Example Mail', 'Example Mail'], warnings: ['row 4: skipped empty row'], categories: { login: 10, credit_card: 1, secure_note: 1 },
     preview: [{ title: 'Example Mail', category: 'login', username: 'alice@example.invalid', url: 'https://mail.example.invalid', hasPassword: true, hasTotp: true, tags: ['Work'], fields: 4, archived: false },
       { title: 'Fake Visa', category: 'credit_card', username: null, url: null, hasPassword: false, hasTotp: false, tags: [], fields: 5, archived: false }] }, 300); },
+  export_items: (a: { req: T.ExportRequest }) => delay<T.ExportResult>({ path: a.req.path, items: a.req.items?.length ?? [...db.values()].length, format: a.req.format, encrypted: a.req.encrypted }, 250),
   ssh_generate: (a: { vaultId: string; title: string; comment?: string | null }) => {
     const n = Math.floor(Math.random() * 1e6); const pub = `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5FAKE${n} ${a.comment || a.title}`; const fp = `SHA256:FAKE${n}`;
     return (mock.create_item({ input: { vaultId: a.vaultId, category: 'ssh_key', title: a.title || 'SSH Key', sections: [{ id: 'main', title: null, fields: [
