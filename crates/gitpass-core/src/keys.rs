@@ -95,3 +95,50 @@ pub fn open_sealed(kp: &KeyPair, b: &SealedBox, aad: &[u8]) -> Result<Zeroizing<
     let k = box_key(shared.as_bytes(), &eph, &kp.public);
     Ok(Zeroizing::new(open(&k, &b.envelope, aad).map_err(|_| anyhow!("sealed box failed authentication (wrong recipient or tampered)"))?))
 }
+
+// ---------- share signatures (Ed25519) ----------
+//
+// A sealed box alone does NOT authenticate the sender: anyone who knows a
+// recipient's X25519 public key can seal a vault key to them and claim to be
+// anyone. A share is therefore also signed with an Ed25519 key derived from
+// the sender's identity secret (HKDF domain separation — the raw X25519
+// secret is never used as an Ed25519 seed), and `accept_share` rejects
+// unsigned or invalidly signed shares.
+//
+// Honest limit: the verifying key travels inside the member file, so the
+// signature by itself proves "holder of this signing key signed this exact
+// share" and that nothing in the share was altered afterwards — it does not
+// prove the key belongs to the person named in `sender_fpr`. On first
+// contact with a sender, verify the sender's *signing* fingerprint out of
+// band (the CLI prints it on share and on accept), exactly as the X25519
+// fingerprint was verified before. After that, only the holder of the
+// sender's signing secret can produce a valid share for that identity;
+// knowing the public keys is no longer enough to forge one.
+
+/// HKDF domain for deriving the share-signing seed from an identity secret.
+pub const SHARE_SIGNING_INFO: &[u8] = b"gitpass/share-signing/v1";
+
+/// Ed25519 signing key derived from an X25519 identity secret. The seed is a
+/// `Key32` (zeroized on drop); the `SigningKey` itself zeroizes on drop when
+/// the `ed25519-dalek/zeroize` feature is enabled (see gitpass-core Cargo.toml).
+pub fn signing_key_from_identity_secret(secret: &[u8; 32]) -> ed25519_dalek::SigningKey {
+    let seed = hkdf32(secret, None, SHARE_SIGNING_INFO);
+    ed25519_dalek::SigningKey::from_bytes(&seed.0)
+}
+
+/// Ed25519 verifying key for an identity secret, as raw bytes.
+pub fn signing_public_from_identity_secret(secret: &[u8; 32]) -> [u8; 32] {
+    signing_key_from_identity_secret(secret).verifying_key().to_bytes()
+}
+
+pub fn sign_share_payload(signing: &ed25519_dalek::SigningKey, payload: &[u8]) -> [u8; 64] {
+    use signature::Signer;
+    signing.sign(payload).to_bytes()
+}
+
+pub fn verify_share_payload(verifying: &[u8; 32], payload: &[u8], sig: &[u8; 64]) -> Result<()> {
+    use signature::Verifier;
+    let vk = ed25519_dalek::VerifyingKey::from_bytes(verifying).map_err(|_| anyhow!("bad sender signing key"))?;
+    let signature = ed25519_dalek::Signature::from_bytes(sig);
+    vk.verify(payload, &signature).map_err(|_| anyhow!("share signature invalid"))
+}

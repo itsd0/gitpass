@@ -131,9 +131,38 @@ pub struct MemberFile {
     pub sender_fpr: String,
     pub sender_pub: String,
     pub sealed: crate::keys::SealedBox,
+    /// Ed25519 verifying key (base64) of the sender's share-signing key.
+    /// `#[serde(default)]` so pre-signature member files still parse — and
+    /// are then rejected as unsigned by `accept_share`.
+    #[serde(default)]
+    pub sender_sign_pub: String,
+    /// Ed25519 signature (base64) over `share_sig_payload` for this file.
+    #[serde(default)]
+    pub sender_sig: String,
 }
 pub fn member_aad(mf: &MemberFile) -> Vec<u8> {
     format!("gitpass/member/v4|{}|{}|{}|{}|{}|{}", mf.vault_id, mf.key_version, mf.recipient_fpr, mf.recipient_pub, mf.sender_fpr, mf.sender_pub).into_bytes()
+}
+
+/// Canonical payload a share signature covers: every field that decides what
+/// the recipient imports, including the sealed vault key itself. Changing any
+/// of them after signing invalidates the signature.
+pub fn share_sig_payload(mf: &MemberFile) -> Vec<u8> {
+    format!(
+        "gitpass/share-sig/v1|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
+        mf.vault_id, mf.key_version, mf.recipient_fpr, mf.recipient_pub, mf.sender_fpr, mf.sender_pub,
+        mf.sender_sign_pub, mf.sealed.alg, mf.sealed.eph, mf.sealed.envelope.alg, mf.sealed.envelope.nonce,
+        mf.sealed.envelope.ct
+    )
+    .into_bytes()
+}
+
+/// Fingerprint of a sender's Ed25519 signing key (base64), for out-of-band
+/// verification on first contact. Empty when the file carries no signing key.
+pub fn sender_sign_fingerprint(mf: &MemberFile) -> String {
+    let Ok(pk) = B64.decode(&mf.sender_sign_pub) else { return String::new() };
+    let Ok(pk): Result<[u8; 32], _> = pk.try_into() else { return String::new() };
+    crate::keys::fingerprint(&pk)
 }
 fn identity_key(ak: &Key32) -> Key32 { hkdf32(&ak.0, None, b"gitpass/identity/v4") }
 fn identity_aad(account_id: &str, public_b64: &str) -> Vec<u8> { format!("{account_id}|identity|4|{public_b64}").into_bytes() }
@@ -1082,8 +1111,15 @@ impl Session {
     fn write_member(dir: &Path, vid: &str, kv: u32, vk: &Key32, recipient: &[u8; 32], me: &crate::keys::KeyPair) -> Result<String> {
         let mut mf = MemberFile { format: 4, vault_id: vid.into(), key_version: kv, recipient_fpr: crate::keys::fingerprint(recipient),
             recipient_pub: B64.encode(recipient), sender_fpr: me.fingerprint(), sender_pub: B64.encode(me.public),
-            sealed: crate::keys::SealedBox { alg: String::new(), eph: String::new(), envelope: Envelope { alg: String::new(), nonce: String::new(), ct: String::new() } } };
+            sealed: crate::keys::SealedBox { alg: String::new(), eph: String::new(), envelope: Envelope { alg: String::new(), nonce: String::new(), ct: String::new() } },
+            sender_sign_pub: String::new(), sender_sig: String::new() };
         mf.sealed = crate::keys::seal_to(recipient, &vk.0, &member_aad(&mf))?;
+        // Sign the finished share (sealed box included) with the sender's
+        // share-signing key, derived from the identity secret.
+        let secret = me.secret_bytes();
+        let signing = crate::keys::signing_key_from_identity_secret(&secret);
+        mf.sender_sign_pub = B64.encode(signing.verifying_key().to_bytes());
+        mf.sender_sig = B64.encode(crate::keys::sign_share_payload(&signing, &share_sig_payload(&mf)));
         write_json(&dir.join("members").join(format!("{}.enc", mf.recipient_fpr)), &mf)
     }
 
@@ -1135,6 +1171,22 @@ impl Session {
         let mf: MemberFile = read_json(share)?;
         if mf.format != 4 { bail!("unsupported member file format {}", mf.format); }
         if mf.recipient_fpr != me.fingerprint() || mf.recipient_pub != B64.encode(me.public) { bail!("this share is not addressed to your identity ({})", me.fingerprint()); }
+        // Sender authentication: the sender's X25519 public key is self-asserted
+        // in the file, so the sealed box alone proves nothing about who sent
+        // this. Require a valid Ed25519 signature over the whole share.
+        // Pre-signature shares (no signature fields) are rejected, not
+        // grandfathered in — ask the sender to re-share with a current build.
+        if mf.sender_sig.is_empty() || mf.sender_sign_pub.is_empty() {
+            bail!("share is unsigned (created before share signatures, or stripped) — refusing; ask the sender to re-share");
+        }
+        let sender_pub = crate::keys::parse_pub(&mf.sender_pub)?;
+        if crate::keys::fingerprint(&sender_pub) != mf.sender_fpr {
+            bail!("share sender fingerprint does not match sender public key — refusing");
+        }
+        let sign_pub: [u8; 32] = B64.decode(&mf.sender_sign_pub).context("bad sender signing key")?.try_into().map_err(|_| anyhow!("bad sender signing key length"))?;
+        let sig: [u8; 64] = B64.decode(&mf.sender_sig).context("bad share signature")?.try_into().map_err(|_| anyhow!("bad share signature length"))?;
+        crate::keys::verify_share_payload(&sign_pub, &share_sig_payload(&mf), &sig)
+            .context("share signature invalid — wrong sender or tampered share")?;
         let pt = crate::keys::open_sealed(&me, &mf.sealed, &member_aad(&mf))?;
         let b: [u8; 32] = pt[..].try_into().map_err(|_| anyhow!("shared vault key has wrong length"))?;
         let vk = Key32(b);
@@ -1357,3 +1409,103 @@ pub fn now() -> String {
 /// unpushed local commits (after snapshotting their plaintext) and must accept the remote epoch, which
 /// the caller has checked is >= the epoch at the merge base.
 pub fn set_last_epoch(root: &Path, account_id: &str, epoch: u64) -> Result<()> { save_epoch(root, account_id, epoch) }
+
+#[cfg(test)]
+mod share_signature_tests {
+    use super::*;
+    use crate::crypto::KdfParams;
+
+    fn fast() -> KdfParams { KdfParams { alg: "argon2id".into(), m_kib: 8192, t: 1, p: 1 } }
+
+    fn unlock_fast(root: &Path, pw: &str, sk: &crate::crypto::SecretKey) -> Session {
+        Session::unlock_with(root, pw, sk, &UnlockOpts { accept_rollback: false, target_kdf: fast() }).unwrap()
+    }
+
+    struct Pair {
+        _a: tempfile::TempDir,
+        _b: tempfile::TempDir,
+        sb: Session,
+        vid: String,
+        member: PathBuf,
+    }
+
+    fn setup() -> Pair {
+        let a = tempfile::tempdir().unwrap();
+        let b = tempfile::tempdir().unwrap();
+        let ska = init(a.path(), "pw-a", fast()).unwrap();
+        let skb = init(b.path(), "pw-b", fast()).unwrap();
+        let sa = unlock_fast(a.path(), "pw-a", &ska);
+        let sb = unlock_fast(b.path(), "pw-b", &skb);
+        let vid = sa.create_vault_full("Shared", None, None, None).unwrap();
+        let (rec_pub, _) = sb.identity().unwrap();
+        let member = sa.share_vault(&vid, &rec_pub).unwrap();
+        Pair { _a: a, _b: b, sb, vid, member }
+    }
+
+    fn read_member(p: &Path) -> MemberFile {
+        serde_json::from_slice(&fs::read(p).unwrap()).unwrap()
+    }
+
+    fn write_member(p: &Path, mf: &MemberFile) {
+        fs::write(p, serde_json::to_vec_pretty(mf).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn signed_share_accepts_and_tamper_rejects() {
+        let p = setup();
+        // A genuine share carries a signature and accepts.
+        let mf = read_member(&p.member);
+        assert!(!mf.sender_sig.is_empty() && !mf.sender_sign_pub.is_empty());
+        assert_eq!(p.sb.accept_share(&p.member).unwrap(), p.vid);
+        assert!(p.sb.list_vaults().unwrap().iter().any(|(id, _)| id == &p.vid));
+    }
+
+    #[test]
+    fn tampered_sealed_box_rejects() {
+        let p = setup();
+        let mut mf = read_member(&p.member);
+        // Flip one character of the sealed vault-key ciphertext. The payload
+        // covers it, so the signature must fail before the box is opened.
+        let mut ct = mf.sealed.envelope.ct.clone();
+        let first = ct.chars().next().unwrap();
+        ct.replace_range(0..1, if first == 'A' { "B" } else { "A" });
+        mf.sealed.envelope.ct = ct;
+        write_member(&p.member, &mf);
+        assert!(p.sb.accept_share(&p.member).is_err());
+    }
+
+    #[test]
+    fn stripped_signature_rejects() {
+        let p = setup();
+        let mut mf = read_member(&p.member);
+        mf.sender_sig.clear();
+        mf.sender_sign_pub.clear();
+        write_member(&p.member, &mf);
+        let err = p.sb.accept_share(&p.member).unwrap_err().to_string();
+        assert!(err.contains("unsigned"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn forged_sender_rejects() {
+        let p = setup();
+        // Attacker re-labels the share with their own X25519 identity but
+        // cannot re-sign it: the original signature covers the sender fields.
+        let mut mf = read_member(&p.member);
+        let attacker = crate::keys::KeyPair::generate();
+        mf.sender_pub = B64.encode(attacker.public);
+        mf.sender_fpr = attacker.fingerprint();
+        write_member(&p.member, &mf);
+        assert!(p.sb.accept_share(&p.member).is_err());
+    }
+
+    #[test]
+    fn wrong_recipient_share_rejects() {
+        // A share sealed to someone else is not addressed to us, even with a
+        // valid signature — the recipient check still runs first.
+        let p = setup();
+        let c = tempfile::tempdir().unwrap();
+        let skc = init(c.path(), "pw-c", fast()).unwrap();
+        let sc = unlock_fast(c.path(), "pw-c", &skc);
+        assert!(sc.accept_share(&p.member).is_err());
+    }
+}
