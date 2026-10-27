@@ -27,7 +27,9 @@ const PKS = path.join(DIR, 'passkeys.json');
 const pkStore = { list: () => readJson(PKS, []), put: (pk) => { const l = readJson(PKS, []).filter((x) => x.credential_id !== pk.credential_id); l.push(pk); fs.writeFileSync(PKS, JSON.stringify(l)); } };
 const pub = (i) => { const o = { ...i }; delete o._u; delete o._p; return o; };
 const host = (s) => { try { return new URL(s).hostname; } catch { return ''; } };
-const matches = (o) => ITEMS.filter((i) => i.url && host(i.url) && host(i.url) === host(o));
+// control.json `no_match_hosts: ["localhost"]` simulates a site with no saved login.
+const noMatchHosts = () => { const l = readJson(CTRL, {}).no_match_hosts; return Array.isArray(l) ? l : []; };
+const matches = (o) => ITEMS.filter((i) => i.url && host(i.url) && host(i.url) === host(o) && !noMatchHosts().includes(host(o)));
 
 function send(obj) {
   const b = Buffer.from(JSON.stringify(obj)); const h = Buffer.alloc(4); h.writeUInt32LE(b.length);

@@ -182,6 +182,31 @@
   "noItems": {
     "message": "ไม่มีรายการ"
   },
+  "emptyCreateNamed": {
+    "message": "สร้างรายการชื่อ “$1”",
+    "placeholders": {
+      "query": {
+        "content": "$1"
+      }
+    }
+  },
+  "emptySaveLoginFor": {
+    "message": "บันทึกข้อมูลเข้าสู่ระบบสำหรับ $1",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
+    }
+  },
+  "emptyShowAll": {
+    "message": "แสดงรายการทั้งหมด"
+  },
+  "emptyVaultTitle": {
+    "message": "ห้องนิรภัยของคุณว่างเปล่า"
+  },
+  "emptyVaultBody": {
+    "message": "รายการที่คุณเพิ่มจะแสดงที่นี่"
+  },
   "selectItem": {
     "message": "เลือกรายการ"
   },
