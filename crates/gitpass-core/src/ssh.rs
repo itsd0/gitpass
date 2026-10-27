@@ -68,6 +68,11 @@ impl SshKey {
         let sig: ssh_key::Signature = signature::Signer::try_sign(&self.key, data).map_err(|e| anyhow!("sign: {e}"))?;
         let mut v = Vec::new(); sig.encode(&mut v).map_err(|e| anyhow!("encode: {e}"))?; Ok(v)
     }
+    /// Verify an SSH signature blob (`sig_blob`) for `data` against this key's public key.
+    pub fn verify(&self, data: &[u8], sig_blob: &[u8]) -> Result<()> {
+        let sig = <ssh_key::Signature as ssh_encoding::Decode>::decode(&mut &sig_blob[..]).map_err(|e| anyhow!("decode signature: {e}"))?;
+        signature::Verifier::verify(self.key.public_key().key_data(), data, &sig).map_err(|e| anyhow!("verify signature: {e}"))
+    }
     /// Build a v5 item record for this key.
     pub fn to_record(&self, title: &str) -> Result<ItemRecord> {
         let f = |id: &str, label: &str, kind: FieldKind, v: String| Field { id: id.into(), label: label.into(), kind, value: Some(v), removed: false };
@@ -94,6 +99,19 @@ impl SshKey {
 pub fn public_info(line: &str) -> Result<KeyInfo> {
     let p = ssh_key::PublicKey::from_openssh(line.trim()).map_err(|e| anyhow!("bad public key: {e}"))?;
     Ok(KeyInfo { key_type: p.algorithm().as_str().into(), public_key: p.to_openssh()?.trim().into(), fingerprint: p.fingerprint(HashAlg::Sha256).to_string(), comment: p.comment().into() })
+}
+
+/// Parse an OpenSSH public key line (`ssh-ed25519 AAAA...`) and return its wire-format public blob.
+pub fn public_blob_from_openssh(line: &str) -> Result<Vec<u8>> {
+    let p = ssh_key::PublicKey::from_openssh(line.trim()).map_err(|e| anyhow!("bad public key: {e}"))?;
+    p.to_bytes().map_err(|e| anyhow!("encode public key blob: {e}"))
+}
+
+/// Verify an SSH signature blob (`sig_blob`) for `data` against an OpenSSH wire-format public key blob.
+pub fn verify_blob(blob: &[u8], data: &[u8], sig_blob: &[u8]) -> Result<()> {
+    let p = ssh_key::PublicKey::from_bytes(blob).map_err(|e| anyhow!("parse public key blob: {e}"))?;
+    let sig = <ssh_key::Signature as ssh_encoding::Decode>::decode(&mut &sig_blob[..]).map_err(|e| anyhow!("decode signature: {e}"))?;
+    signature::Verifier::verify(p.key_data(), data, &sig).map_err(|e| anyhow!("verify signature: {e}"))
 }
 
 /// One agent identity backed by a vault item.
@@ -210,9 +228,14 @@ mod tests {
         let again = SshKey::import_openssh(&k.private_pem().unwrap(), None).unwrap();
         assert_eq!(again.info, k.info);
         let sig = k.sign(b"hello").unwrap();
-        let sig = <ssh_key::Signature as ssh_encoding::Decode>::decode(&mut &sig[..]).unwrap();
-        signature::Verifier::verify(k.key.public_key().key_data(), b"hello", &sig).unwrap();
-        assert!(signature::Verifier::verify(k.key.public_key().key_data(), b"hellO", &sig).is_err());
+        let decoded = <ssh_key::Signature as ssh_encoding::Decode>::decode(&mut &sig[..]).unwrap();
+        signature::Verifier::verify(k.key.public_key().key_data(), b"hello", &decoded).unwrap();
+        assert!(signature::Verifier::verify(k.key.public_key().key_data(), b"hellO", &decoded).is_err());
+        assert!(k.verify(b"hello", &sig).is_ok());
+        assert!(k.verify(b"hellO", &sig).is_err());
+        let blob = k.public_blob().unwrap();
+        assert!(verify_blob(&blob, b"hello", &sig).is_ok());
+        assert!(verify_blob(&blob, b"hellO", &sig).is_err());
     }
     #[test]
     fn protocol_identities_and_sign() {
