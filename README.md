@@ -178,11 +178,31 @@ gitpass run --env-file .env.gitpass -- ./server --port 8080
   is visible to same-user processes (e.g. `ps eww` on some systems).
 
 ```sh
-# config.yml.tpl
+# Stack multiple env files (e.g. shared settings + secret overrides)
+gitpass run --env-file .env.common --env-file .env.gitpass -- ./server --port 8080
+```
+
+* Supported fields: standard fields (`password`, `username`, `url`, `notes`, `title`, `totp`/`otp`
+  for generating current one-time codes) and custom section fields (by label or id, e.g. `secret_key`).
+* If multiple items share the same title, gitpass aborts with an error indicating collision; reference
+  the item by its unique item ID instead (`gp://<vault>/<item_id>/<field>`).
+* Pre-flight safety: references are resolved atomically before the child process is launched or any
+  file is written. If any vault, item, or field is missing (or empty), gitpass exits with code 1 and
+  does not run the command. Error messages never disclose secret values.
+
+`gitpass inject` renders templates, substituting `{{ gp://<vault>/<item>/<field> }}` placeholders:
+
+```sh
+# config.yml.tpl or .env.template:
+#   APP_ENV=production
 #   user: {{ gp://Dev/Postgres/username }}
 #   pass: {{ gp://Dev/Postgres/password }}
-gitpass inject -i config.yml.tpl            # rendered to stdout
+#   api_key: {{ gp://Dev/Stripe/secret_key }}
+#   untouched: {{ PASSTHROUGH_VAR }}
+
+gitpass inject -i config.yml.tpl                 # rendered to stdout
 gitpass inject -i config.yml.tpl -o config.yml   # written with mode 0600 (plaintext secrets on disk!)
+gitpass inject -i .env.template -o .env          # generate .env file with mode 0600
 ```
 `{{ ... }}` blocks that do not contain a `gp://` reference are left untouched.
 

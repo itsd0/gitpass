@@ -109,6 +109,159 @@ fn run_and_inject_end_to_end() {
     assert_eq!(std::fs::metadata(&outp).unwrap().permissions().mode() & 0o777, 0o600);
 }
 
+#[test]
+#[cfg(unix)]
+fn run_and_inject_missing_secret_errors() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Dev"], None).status.success());
+    let out_add1 = gp(&root, &["add", "Dev", "--title", "Postgres", "--username", "app"], Some("pg-FAKE-s3cret-9"));
+    assert!(out_add1.status.success());
+    let out_str = String::from_utf8_lossy(&out_add1.stdout);
+    let item1_id = out_str.trim().strip_prefix("added ").expect("item id").to_string();
+
+    // Add item with no password (empty field)
+    assert!(gp(&root, &["add", "Dev", "--title", "KeylessItem", "--username", "guest"], Some("")).status.success());
+    // Add a second Postgres item to trigger ambiguous title error
+    assert!(gp(&root, &["add", "Dev", "--title", "Postgres", "--username", "app2"], Some("pg-FAKE-s3cret-2")).status.success());
+
+    let canary = d.path().join("canary.txt");
+    let envf = d.path().join("test.env");
+
+    // 1. Missing vault fails before child runs
+    std::fs::write(&envf, "V=gp://NoSuchVault/Postgres/password\n").unwrap();
+    let o = gp(&root, &["run", "--env-file", envf.to_str().unwrap(), "--", "sh", "-c", &format!("touch {}", canary.display())], None);
+    assert!(!o.status.success(), "missing vault must fail");
+    assert!(!canary.exists(), "child must not run on missing vault");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("vault"), "stderr={err}");
+    assert!(!err.contains("pg-FAKE-s3cret"), "no secrets in stderr: {err}");
+
+    // 2. Missing item in existing vault fails before child runs
+    std::fs::write(&envf, "I=gp://Dev/NoSuchItem/password\n").unwrap();
+    let o = gp(&root, &["run", "--env-file", envf.to_str().unwrap(), "--", "sh", "-c", &format!("touch {}", canary.display())], None);
+    assert!(!o.status.success(), "missing item must fail");
+    assert!(!canary.exists(), "child must not run on missing item");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("item"), "stderr={err}");
+    assert!(!err.contains("pg-FAKE-s3cret"), "no secrets in stderr: {err}");
+
+    // 3. Missing field on existing item fails before child runs
+    let env_fld = format!("F=gp://Dev/{item1_id}/nonexistent_field\n");
+    std::fs::write(&envf, &env_fld).unwrap();
+    let o = gp(&root, &["run", "--env-file", envf.to_str().unwrap(), "--", "sh", "-c", &format!("touch {}", canary.display())], None);
+    assert!(!o.status.success(), "missing field must fail");
+    assert!(!canary.exists(), "child must not run on missing field");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("no such field"), "stderr={err}");
+    assert!(!err.contains("pg-FAKE-s3cret"), "no secrets in stderr: {err}");
+
+    // 4. Empty/absent password field fails before child runs
+    std::fs::write(&envf, "E=gp://Dev/KeylessItem/password\n").unwrap();
+    let o = gp(&root, &["run", "--env-file", envf.to_str().unwrap(), "--", "sh", "-c", &format!("touch {}", canary.display())], None);
+    assert!(!o.status.success(), "empty field must fail");
+    assert!(!canary.exists(), "child must not run on empty field");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("has no such field"), "stderr={err}");
+
+    // 5. Ambiguous item title fails, but item ID succeeds
+    std::fs::write(&envf, "A=gp://Dev/Postgres/password\n").unwrap();
+    let o = gp(&root, &["run", "--env-file", envf.to_str().unwrap(), "--", "sh", "-c", &format!("touch {}", canary.display())], None);
+    assert!(!o.status.success(), "ambiguous title must fail");
+    assert!(!canary.exists(), "child must not run on ambiguous title");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("items have that title; use the item id"), "stderr={err}");
+
+    // Exact item ID reference succeeds even when title is ambiguous
+    std::fs::write(&envf, format!("VALID=gp://Dev/{item1_id}/password\n")).unwrap();
+    let o = gp(&root, &["run", "--env-file", envf.to_str().unwrap(), "--", "sh", "-c",
+        "test \"$VALID\" = pg-FAKE-s3cret-9 && echo OK"], None);
+    assert!(o.status.success(), "stderr={}", String::from_utf8_lossy(&o.stderr));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("OK"));
+
+    // 6. Non-existent env file fails before child runs
+    let o = gp(&root, &["run", "--env-file", d.path().join("does_not_exist.env").to_str().unwrap(), "--", "sh", "-c", &format!("touch {}", canary.display())], None);
+    assert!(!o.status.success());
+    assert!(!canary.exists());
+
+    // 7. Inject fails on missing secret and does NOT create output file
+    let bad_tpl = d.path().join("missing.tpl");
+    let bad_out = d.path().join("missing.out");
+    std::fs::write(&bad_tpl, "pass: {{ gp://Dev/NoSuchItem/password }}\n").unwrap();
+    let o = gp(&root, &["inject", "-i", bad_tpl.to_str().unwrap(), "-o", bad_out.to_str().unwrap()], None);
+    assert!(!o.status.success(), "inject with missing secret must fail");
+    assert!(!bad_out.exists(), "output file must not be created on inject failure");
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(!err.contains("pg-FAKE-s3cret"), "no secrets in stderr: {err}");
+}
+
+#[test]
+#[cfg(unix)]
+fn run_and_inject_env_file_output_and_features() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Dev"], None).status.success());
+    assert!(gp(&root, &["add", "Dev", "--title", "Postgres", "--username", "app"], Some("pg-FAKE-s3cret-9")).status.success());
+    assert!(gp(&root, &["add", "Dev", "--title", "Svc", "--username", "svc", "--totp", "JBSWY3DPEHPK3PXP"], Some("svc-FAKE-pass-1")).status.success());
+
+    // Import record with custom sections and custom fields
+    let import_file = d.path().join("custom.json");
+    std::fs::write(&import_file, r#"{
+        "gitpass_export": 1,
+        "items": [
+            {
+                "title": "Stripe",
+                "category": "api_credential",
+                 "updated_at": "1700000000",
+                "sections": [
+                    {
+                        "id": "keys",
+                        "title": "API Keys",
+                        "fields": [
+                            { "id": "f_sec", "label": "secret_key", "kind": "concealed", "value": "sk_live_FAKE_SECRET_987" }
+                        ]
+                    }
+                ]
+            }
+        ]
+    }"#).unwrap();
+    assert!(gp(&root, &["import", "--from", "gitpass-json", "Dev", import_file.to_str().unwrap()], None).status.success());
+
+    // 1. Multiple --env-file stacking and custom fields + TOTP
+    let env1 = d.path().join(".env.base");
+    let env2 = d.path().join(".env.secrets");
+    std::fs::write(&env1, "# Base configuration\nAPP_ENV=staging\nPORT=8080\n").unwrap();
+    std::fs::write(&env2, "DB_PASS=gp://Dev/Postgres/password\nSTRIPE_KEY=gp://Dev/Stripe/secret_key\nOTP=gp://Dev/Svc/totp\n").unwrap();
+
+    let o = gp(&root, &["run", "--env-file", env1.to_str().unwrap(), "--env-file", env2.to_str().unwrap(), "--", "sh", "-c",
+        "test \"$APP_ENV\" = staging && test \"$PORT\" = 8080 && test \"$DB_PASS\" = pg-FAKE-s3cret-9 && test \"$STRIPE_KEY\" = sk_live_FAKE_SECRET_987 && test ${#OTP} -eq 6 && echo \"p=$DB_PASS s=$STRIPE_KEY o=$OTP\""], None);
+    let out = String::from_utf8_lossy(&o.stdout);
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(o.status.success(), "stderr={err}");
+    assert!(out.contains(&format!("p={MASK} s={MASK} o={MASK}")), "stdout={out}");
+    assert!(!out.contains("pg-FAKE-s3cret-9") && !out.contains("sk_live_FAKE_SECRET_987"));
+
+    // 2. .env file generation via `gitpass inject`
+    let env_tpl = d.path().join(".env.template");
+    let env_out = d.path().join(".env");
+    std::fs::write(&env_tpl, "# Autogenerated .env file\nAPP_ENV=production\nDB_URL=\"postgres://{{ gp://Dev/Postgres/username }}:{{ gp://Dev/Postgres/password }}@db:5432/app\"\nAPI_KEY={{ gp://Dev/Stripe/secret_key }}\nPASSTHROUGH={{ UNTOUCHED_VAR }}\n").unwrap();
+
+    let o = gp(&root, &["inject", "-i", env_tpl.to_str().unwrap(), "-o", env_out.to_str().unwrap()], None);
+    assert!(o.status.success(), "stderr={}", String::from_utf8_lossy(&o.stderr));
+    assert!(env_out.exists(), ".env must exist");
+
+    use std::os::unix::fs::PermissionsExt;
+    assert_eq!(std::fs::metadata(&env_out).unwrap().permissions().mode() & 0o777, 0o600, ".env must be mode 0600");
+
+    let env_content = std::fs::read_to_string(&env_out).unwrap();
+    assert!(env_content.contains("APP_ENV=production"));
+    assert!(env_content.contains("DB_URL=\"postgres://app:pg-FAKE-s3cret-9@db:5432/app\""));
+    assert!(env_content.contains("API_KEY=sk_live_FAKE_SECRET_987"));
+    assert!(env_content.contains("PASSTHROUGH={{ UNTOUCHED_VAR }}"));
+}
+
 fn walk(p: &Path) -> Vec<std::path::PathBuf> {
     let mut v = vec![];
     if let Ok(rd) = std::fs::read_dir(p) { for e in rd.flatten() { let q = e.path(); if q.is_dir() { v.extend(walk(&q)); } v.push(q); } }
