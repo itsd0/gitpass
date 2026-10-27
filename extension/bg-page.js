@@ -51,9 +51,13 @@
         return { prompt: 'update', item_id: it.id, title: it.title, hasUser: !!(it.subtitle || '').trim() };
       } catch (_) { /* fall through to next */ }
     }
-    // Offer "Update existing" when an item for the origin already exists
-    if (logins.length > 0) {
-      const existing = logins[0];
+    // Offer "Update existing" only when that cannot overwrite a different account: the captured
+    // username is empty, or the single existing login has no username yet. Otherwise save new.
+    const capUser = (cap.username || '').trim();
+    const blank = logins.filter((i) => !(i.subtitle || '').trim());
+    const target = !capUser ? (logins.length === 1 ? logins[0] : null) : (blank.length === 1 ? blank[0] : null);
+    if (target) {
+      const existing = target;
       try {
         const c = await host('fill', { item_id: existing.id, origin });
         if (c && c.password === cap.password && (!cap.username || c.username === cap.username)) return null;
@@ -128,9 +132,9 @@
         if (!p) throw err('not_found', 'nothing to save');
         if (a.action === 'dismiss') return { done: false };
         if (!a.user_click) throw err('denied', 'needs a click');
-        const user = p.username || a.username || '';
+        const user = p.username || '';
         if (p.prompt === 'update' && a.action === 'update') {
-          const upArgs = { item_id: p.item_id || a.item_id, password: p.password };
+          const upArgs = { item_id: p.item_id, password: p.password }; // never an item id from the content side
           if (user && !p.hasUser) upArgs.username = user;
           await host('update_password', upArgs);
           return { done: true, action: 'update' };

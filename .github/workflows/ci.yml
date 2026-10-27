@@ -45,8 +45,8 @@ jobs:
           git config --global user.name "gitpass ci"
           git config --global user.email "ci@gitpass.invalid"
           cargo test --workspace --locked
-      - name: cargo clippy (report only)
-        run: cargo clippy --workspace --locked --all-targets || echo "::warning::clippy reported issues"
+      - name: cargo clippy (gating, -D warnings)
+        run: cargo clippy --workspace --locked --all-targets -- -D warnings
       - name: desktop UI tests + build
         working-directory: apps/desktop
         run: |
@@ -54,9 +54,11 @@ jobs:
           npm ci
           npm test
           npm run build
-      - name: desktop app cargo check
+      - name: desktop app cargo check + clippy (gating)
         working-directory: apps/desktop/src-tauri
-        run: cargo check --locked
+        run: |
+          cargo check --locked
+          cargo clippy --locked --all-targets -- -D warnings
       - name: extension tests
         working-directory: extension
         run: |

@@ -305,36 +305,20 @@
   let inMemoryUsername = null;
   let inMemoryUsernameTs = 0;
 
+  // Extension memory only. Never the page's sessionStorage/localStorage: those are readable and
+  // writable by the page itself. Across page loads the background keeps the value per tab+origin
+  // (bg-page.js `lastUsername`, 5 min TTL), and page:capture falls back to it.
   function getStoredUsername() {
-    const now = Date.now();
-    if (inMemoryUsername && (now - inMemoryUsernameTs < USERNAME_TTL_MS)) return inMemoryUsername;
-    try {
-      const key = 'gitpass_user_' + location.origin;
-      const raw = sessionStorage.getItem(key);
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        if (parsed && parsed.username && (now - parsed.ts < USERNAME_TTL_MS)) {
-          inMemoryUsername = parsed.username;
-          inMemoryUsernameTs = parsed.ts;
-          return parsed.username;
-        }
-        sessionStorage.removeItem(key);
-      }
-    } catch (_) {}
+    if (inMemoryUsername && (Date.now() - inMemoryUsernameTs < USERNAME_TTL_MS)) return inMemoryUsername;
     return null;
   }
 
   function storeUsername(user) {
     if (!user || typeof user !== 'string') return;
     const trimmed = user.trim().slice(0, 512);
-    if (!trimmed) return;
-    const now = Date.now();
+    if (!trimmed || trimmed === inMemoryUsername) { inMemoryUsernameTs = Date.now(); return; }
     inMemoryUsername = trimmed;
-    inMemoryUsernameTs = now;
-    try {
-      const key = 'gitpass_user_' + location.origin;
-      sessionStorage.setItem(key, JSON.stringify({ username: trimmed, ts: now }));
-    } catch (_) {}
+    inMemoryUsernameTs = Date.now();
     send('page:capture', { kind: 'username', username: trimmed }).catch(() => {});
   }
 
@@ -406,8 +390,8 @@
       return;
     }
   }
-  document.addEventListener('input', (e) => handlePotentialUsername(e.target), true);
-  document.addEventListener('change', (e) => handlePotentialUsername(e.target), true);
+  document.addEventListener('input', (e) => { if (e.isTrusted) handlePotentialUsername(e.target); }, true);
+  document.addEventListener('change', (e) => { if (e.isTrusted) handlePotentialUsername(e.target); }, true);
   document.addEventListener('submit', (e) => capture(e.target), true);
   document.addEventListener('click', (e) => {
     if (!e.isTrusted) return;
@@ -449,6 +433,10 @@
     const okBtn = el('button', 'btn pri', msg.kind === 'create' ? t('pkSave', 'Save passkey') : t('pkSignIn', 'Sign in')); okBtn.type = 'button';
 
     let answered = false;
+    // Anti-clickjacking: ignore clicks that land in the first 600 ms (a page can trigger the prompt
+    // right under a click it solicited).
+    const shownAt = performance.now();
+    const armed = () => performance.now() - shownAt > 600;
     const finish = (approved) => {
       if (answered) return;
       answered = true;
@@ -457,8 +445,8 @@
     };
 
     cancelBtn.addEventListener('click', (e) => { if (!e.isTrusted) return; finish(false); });
-    okBtn.addEventListener('click', (e) => { if (!e.isTrusted) return; finish(true); });
-    overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') finish(false); });
+    okBtn.addEventListener('click', (e) => { if (!e.isTrusted || !armed()) return; finish(true); });
+    overlay.addEventListener('keydown', (e) => { if (e.isTrusted && e.key === 'Escape') finish(false); });
 
     acts.append(cancelBtn, okBtn);
     card.append(row, meta, acts);

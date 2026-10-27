@@ -400,15 +400,17 @@
   /** Read what the user typed, for the save/update banner. Returns null if nothing worth saving. */
   function captureCredentials(form) {
     const F = form.fields;
+    // Usernames are trimmed; passwords are taken verbatim (leading/trailing spaces are legal).
     const val = (e) => (e && typeof e.value === 'string' ? e.value.trim() : '');
+    const raw = (e) => (e && typeof e.value === 'string' ? e.value : '');
     let u = val(F.username);
     if (!u && form.scope) {
       const h = findHiddenUsername(form.scope);
       if (h) u = val(h);
     }
-    if (form.kind === 'login') { const p = val(F.password); return p ? { kind: 'login', username: u, password: p } : null; }
-    if (form.kind === 'signup') { const p = val(F.newPassword); if (!p || (F.confirm && val(F.confirm) !== p)) return null; return { kind: 'signup', username: u, password: p }; }
-    if (form.kind === 'change_password') { const p = val(F.newPassword); if (!p || (F.confirm && val(F.confirm) !== p)) return null; return { kind: 'change_password', username: u, password: p }; }
+    if (form.kind === 'login') { const p = raw(F.password); return p ? { kind: 'login', username: u, password: p } : null; }
+    if (form.kind === 'signup') { const p = raw(F.newPassword); if (!p || (F.confirm && raw(F.confirm) !== p)) return null; return { kind: 'signup', username: u, password: p }; }
+    if (form.kind === 'change_password') { const p = raw(F.newPassword); if (!p || (F.confirm && raw(F.confirm) !== p)) return null; return { kind: 'change_password', username: u, password: p }; }
     if (form.kind === 'login_username') { return u ? { kind: 'username', username: u } : null; }
     return null;
   }
