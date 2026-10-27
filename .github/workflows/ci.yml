@@ -1,14 +1,16 @@
 name: CI
-# Runs on the self-hosted Mac (repo-level runner, private repo only). Hosted Windows/Linux/macOS
-# matrices were dropped from per-push CI to save Actions minutes; release.yml can still build them.
-# Isolation: every test step runs with HOME pointed at a fresh temp dir, so nothing can read or write
-# the user's real ~/.gitpass, ~/.gitconfig or the running app's agent socket (~/Library/Application Support/gitpass).
+# Runs on GitHub-hosted runners only (ubuntu-latest for Rust/frontend/extension/supply chain,
+# macos-latest for the Tauri desktop crate). The self-hosted Mac is NEVER used for push/PR CI:
+# it is reserved for release.yml on v* tags pushed by the owner (fork PRs must not reach it).
+# Isolation: test steps run with HOME pointed at a fresh temp dir, so tests can never touch a real
+# ~/.gitpass or ~/.gitconfig even if this file is later run somewhere else.
+#
+# Required status check for branch protection: "ci-ok". It always runs (also on docs-only PRs) and
+# passes when every code job either succeeded or was skipped because no code changed.
 on:
   push:
     branches: [main]
-    paths-ignore: ["**/*.md", "docs/**", "LICENSE", ".github/workflows/ios.yml", ".github/workflows/release.yml"]
   pull_request:
-    paths-ignore: ["**/*.md", "docs/**", "LICENSE"]
   workflow_dispatch:
 
 permissions:
@@ -20,19 +22,51 @@ concurrency:
 
 env:
   CARGO_TERM_COLOR: never
+  RUST_TOOLCHAIN: "1.90.0"
 
 jobs:
-  mac:
-    name: rust + frontend (self-hosted Mac)
-    runs-on: [self-hosted, macOS, gitpass-mac]
-    timeout-minutes: 60
+  changes:
+    name: detect changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code: ${{ steps.f.outputs.code }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+          fetch-depth: 0
+      - id: f
+        name: code changed? (anything other than *.md, docs/, LICENSE)
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.sha }}
+        run: |
+          code=true
+          if [ "$EVENT" != workflow_dispatch ] && [ -n "$BASE" ] && [ "$BASE" != 0000000000000000000000000000000000000000 ] \
+             && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            files=$(git diff --name-only "$BASE" "$HEAD")
+            echo "$files"
+            if [ -n "$files" ] && ! echo "$files" | grep -vqE '(\.md$|^docs/|^LICENSE$)'; then code=false; fi
+          fi
+          echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+
+  rust:
+    name: rust (test + clippy)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          node-version: 22
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; version pinned below
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: isolated HOME
         run: |
           echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> "$GITHUB_ENV"
@@ -47,6 +81,22 @@ jobs:
           cargo test --workspace --locked
       - name: cargo clippy (gating, -D warnings)
         run: cargo clippy --workspace --locked --all-targets -- -D warnings
+
+  frontend:
+    name: desktop UI + extension
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - name: isolated HOME
+        run: T="$RUNNER_TEMP/home"; mkdir -p "$T"; echo "TEST_HOME=$T" >> "$GITHUB_ENV"
       - name: desktop UI tests + build
         working-directory: apps/desktop
         run: |
@@ -54,11 +104,6 @@ jobs:
           npm ci
           npm test
           npm run build
-      - name: desktop app cargo check + clippy (gating)
-        working-directory: apps/desktop/src-tauri
-        run: |
-          cargo check --locked
-          cargo clippy --locked --all-targets -- -D warnings
       - name: extension tests
         working-directory: extension
         run: |
@@ -67,17 +112,53 @@ jobs:
           npm test
           npm run check
 
+  tauri-macos:
+    name: desktop app crate (macOS)
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; version pinned below
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: apps/desktop/src-tauri
+      - name: frontend dist (needed by tauri build script)
+        working-directory: apps/desktop
+        run: |
+          npm ci
+          npm run build
+      - name: cargo check + clippy (gating)
+        working-directory: apps/desktop/src-tauri
+        run: |
+          cargo check --locked
+          cargo clippy --locked --all-targets -- -D warnings
+
   supply-chain:
     name: supply chain (cargo deny + cargo audit)
-    runs-on: [self-hosted, macOS, gitpass-mac]
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: tools present
-        run: |
-          command -v cargo-deny && command -v cargo-audit || { echo "::error::install on the runner Mac: cargo install --locked cargo-deny cargo-audit"; exit 1; }
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; version pinned below
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-deny,cargo-audit
       - name: cargo deny check
         run: cargo deny --locked check
       - name: cargo audit (workspace, gating)
@@ -89,6 +170,19 @@ jobs:
             --ignore RUSTSEC-2026-0367 --ignore RUSTSEC-2026-0368 --ignore RUSTSEC-2026-0369 \
             --ignore RUSTSEC-2026-0387 --ignore RUSTSEC-2023-0071
       - name: cargo audit (desktop app lock, report only)
-        # Tauri-transitive findings (quick-xml via plist, time via cookie, unic-*/glib warnings) need
-        # upstream bumps / a newer MSRV; reported, not gating, until those land.
         run: cargo audit --file apps/desktop/src-tauri/Cargo.lock || echo "::warning::cargo audit found advisories in apps/desktop/src-tauri/Cargo.lock"
+
+  ci-ok:
+    name: ci-ok
+    if: always()
+    needs: [changes, rust, frontend, tauri-macos, supply-chain]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: all code jobs passed or were skipped
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "results: $RESULTS"
+          for r in $RESULTS; do case "$r" in success|skipped) ;; *) echo "::error::a CI job ended with '$r'"; exit 1;; esac; done
+          [ "${{ needs.changes.result }}" = success ] || { echo "::error::change detection failed"; exit 1; }

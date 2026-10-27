@@ -1,5 +1,6 @@
 name: iOS
 
+# GitHub-hosted macos-latest only (never the self-hosted Mac, which is release-only).
 # Builds the gitpass iOS app on macOS: the UniFFI XCFramework, the
 # Rust FFI tests, and an unsigned simulator build + test run.
 # This workflow never signs, never needs a team, and never touches
@@ -10,18 +11,21 @@ on:
     paths:
       - "ios/**"
       - "crates/gitpass-core/**"
-      - "crates/gitpass-ios-ffi/**"
+      - "Cargo.lock"
       - ".github/workflows/ios.yml"
   pull_request:
     paths:
       - "ios/**"
       - "crates/gitpass-core/**"
-      - "crates/gitpass-ios-ffi/**"
+      - "Cargo.lock"
       - ".github/workflows/ios.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  RUST_TOOLCHAIN: "1.90.0"
 
 concurrency:
   group: ios-${{ github.ref }}
@@ -30,27 +34,38 @@ concurrency:
 jobs:
   rust-ffi:
     name: Rust FFI tests
-    runs-on: [self-hosted, macOS, gitpass-mac]
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; version pinned via env
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
       - name: FFI crate tests (real vault, real crypto)
         run: |
+          export RUNNER_HOME_CARGO="${CARGO_HOME:-$HOME/.cargo}" RUNNER_HOME_RUSTUP="${RUSTUP_HOME:-$HOME/.rustup}"
           export HOME="$RUNNER_TEMP/home"; rm -rf "$HOME"; mkdir -p "$HOME"
-          export CARGO_HOME=/Users/naynaingoo/.cargo RUSTUP_HOME=/Users/naynaingoo/.rustup
+          export CARGO_HOME="$RUNNER_HOME_CARGO" RUSTUP_HOME="$RUNNER_HOME_RUSTUP"
           cargo test -p gitpass-ios-ffi --locked
 
   ios:
     name: iOS simulator build + test
-    runs-on: [self-hosted, macOS, gitpass-mac]
+    runs-on: macos-latest
     needs: rust-ffi
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Check XcodeGen (preinstalled on the self-hosted Mac)
-        run: command -v xcodegen
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; version pinned via env
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-apple-ios,aarch64-apple-ios-sim,x86_64-apple-ios
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+      - name: Install XcodeGen
+        run: command -v xcodegen || brew install xcodegen
       - name: Build XCFramework + Swift bindings
         run: |
           chmod +x ios/scripts/build-xcframework.sh

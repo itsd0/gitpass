@@ -1,0 +1,29 @@
+# Security policy
+
+gitpass is a password manager, so security reports are taken seriously.
+
+## Reporting a vulnerability
+
+**Please do not open a public issue, pull request or discussion for a security problem.**
+
+Report it privately through GitHub Security Advisories:
+<https://github.com/itsd0/gitpass/security/advisories/new>
+(repository **Security** tab → **Report a vulnerability**).
+
+Please include:
+
+- the affected component (core, CLI, desktop app, browser extension / native host, iOS) and version or commit;
+- steps to reproduce or a proof of concept;
+- the impact you expect (for example: vault data disclosure, key or secret leakage, autofill on the wrong origin).
+
+Never include real vault data, real passwords or real secret keys in a report. Use test data.
+
+## What to expect
+
+This is a small project maintained in spare time. Reports are acknowledged as soon as possible, a fix is
+developed in a private advisory fork, and the advisory is published together with the fixed release.
+Reporters are credited unless they ask not to be.
+
+## Supported versions
+
+Only the latest release receives security fixes.

@@ -1,9 +1,12 @@
 name: Release
 # Tag push v* -> draft GitHub Release on the PUBLIC repo itsd0/gitpass-releases with installers + latest.json
-# (updater endpoint). Source stays private; only built artifacts are published there.
+# (updater endpoint). Only built artifacts are published there.
 # Requires secret RELEASES_REPO_TOKEN: fine-grained PAT, repo itsd0/gitpass-releases only, Contents: read & write.
 # workflow_dispatch -> same builds, uploaded as workflow artifacts only (no release).
 #
+# Self-hosted runner policy: the self-hosted Mac (label gitpass-mac) is used ONLY by this workflow, which has
+# no pull_request / pull_request_target trigger, and every self-hosted job is guarded so it runs only in
+# itsd0/gitpass (never a fork) and only when the owner itsd0 pushed the v* tag or dispatched the run.
 # Cost control: macOS builds run on the self-hosted Mac (label gitpass-mac, free). Windows/Linux use hosted
 # runners and only run on a manual dispatch with include_windows_linux=true, so a tag release is macOS-only.
 # Signing: macOS bundles are signed with the self-signed keychain identity "gitpass Local Signing" (not
@@ -29,6 +32,7 @@ concurrency:
 jobs:
   macos:
     name: desktop (${{ matrix.name }})
+    if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0'
     runs-on: [self-hosted, macOS, gitpass-mac]
     timeout-minutes: 90
     strategy:
@@ -92,7 +96,7 @@ jobs:
 
   other-os:
     name: desktop (${{ matrix.name }}, hosted)
-    if: github.event_name == 'workflow_dispatch' && inputs.include_windows_linux
+    if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0' && github.event_name == 'workflow_dispatch' && inputs.include_windows_linux
     strategy:
       fail-fast: false
       matrix:
@@ -139,6 +143,7 @@ jobs:
 
   cli-host:
     name: cli + native host (macOS arm64)
+    if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0'
     runs-on: [self-hosted, macOS, gitpass-mac]
     timeout-minutes: 30
     steps:
