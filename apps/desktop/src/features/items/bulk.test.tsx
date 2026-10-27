@@ -80,4 +80,36 @@ describe('item list multi-select', () => {
     fireEvent.keyDown(list, { key: 'Delete' });
     expect(useApp.getState().bulkConfirm).toBe('trash');
   });
+
+  it('shift+arrow extends and shrinks the selection; plain arrow returns to single', async () => {
+    const items = await load();
+    useApp.setState({ selectedItemId: items[0].id });
+    render(<ItemList />);
+    await screen.findAllByRole('option');
+    const list = screen.getByRole('listbox');
+    fireEvent.keyDown(list, { key: 'ArrowDown', shiftKey: true });
+    expect(useApp.getState().multiIds).toEqual([items[0].id, items[1].id]);
+    fireEvent.keyDown(list, { key: 'ArrowDown', shiftKey: true });
+    expect(useApp.getState().multiIds).toEqual([items[0].id, items[1].id, items[2].id]);
+    fireEvent.keyDown(list, { key: 'ArrowUp', shiftKey: true });
+    expect(useApp.getState().multiIds).toEqual([items[0].id, items[1].id]);
+    // Plain arrow moves one step from the focus row and collapses to single.
+    fireEvent.keyDown(list, { key: 'ArrowDown' });
+    expect(useApp.getState().multiIds).toEqual([]);
+    expect(useApp.getState().selectedItemId).toBe(items[2].id);
+  });
+
+  it('cmd-A then plain arrow moves from the anchor, not the opposite end', async () => {
+    const items = await load();
+    useApp.setState({ selectedItemId: items[2].id });
+    render(<ItemList />);
+    await screen.findAllByRole('option');
+    const list = screen.getByRole('listbox');
+    fireEvent.keyDown(list, { key: 'a', metaKey: true });
+    expect(useApp.getState().multiIds.length).toBe(items.length);
+    expect(useApp.getState().selectedItemId).toBe(items[2].id);
+    fireEvent.keyDown(list, { key: 'ArrowDown' });
+    expect(useApp.getState().multiIds).toEqual([]);
+    expect(useApp.getState().selectedItemId).toBe(items[3].id);
+  });
 });
