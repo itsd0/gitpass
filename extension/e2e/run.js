@@ -57,6 +57,46 @@ async function findInShadow(page, re) {
 }
 
 
+// Persistent CDP sessions for the in-page passkey prompt. A WebAuthn virtual-authenticator
+// environment lives on the session, and closed-shadow buttons are found with the same session —
+// so do not detach these. Only buttons inside a <gitpass-ui> shadow root match (the RP page has
+// its own "Sign in" button).
+const cdpSessions = new WeakMap();
+async function cdpSession(page) { if (!cdpSessions.has(page)) cdpSessions.set(page, await page.context().newCDPSession(page)); return cdpSessions.get(page); }
+async function shadowButton(page, re) {
+  const s = await cdpSession(page);
+  try {
+    const { root } = await s.send('DOM.getDocument', { depth: -1, pierce: true });
+    const found = [];
+    const walk = (n, ours) => {
+      if (n.nodeName === 'BUTTON' && ours) found.push(n);
+      for (const sr of (n.shadowRoots || [])) walk(sr, ours || n.nodeName === 'GITPASS-UI');
+      for (const k of (n.children || [])) walk(k, ours);
+    };
+    walk(root, false);
+    for (const b of found) {
+      const txt = (b.children || []).map((c) => c.nodeValue || '').join('');
+      if (!re.test(txt)) continue;
+      try { const { model } = await s.send('DOM.getBoxModel', { nodeId: b.nodeId }); const q = model.content; return { text: txt.trim(), x: (q[0] + q[4]) / 2, y: (q[1] + q[5]) / 2 }; } catch (_) { /* not rendered */ }
+    }
+    return null;
+  } catch (_) { return null; }
+}
+async function shadowText(page) {
+  const s = await cdpSession(page);
+  try {
+    const { root } = await s.send('DOM.getDocument', { depth: -1, pierce: true });
+    const t = [];
+    const walk = (n, ours) => {
+      if (n.nodeType === 3 && ours) t.push(n.nodeValue);
+      for (const sr of (n.shadowRoots || [])) walk(sr, ours || n.nodeName === 'GITPASS-UI');
+      for (const k of (n.children || [])) walk(k, ours);
+    };
+    walk(root, false);
+    return t.join(' | ');
+  } catch (_) { return ''; }
+}
+
 // The REAL action popup (chrome.action.openPopup) is not a Playwright page; drive it over CDP.
 // It runs as a genuine popup (no sender.tab), with the given tab active, exactly like a user click.
 async function openRealPopup(ctx, sw, tabPage, EXT) {
@@ -254,35 +294,85 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     rec('identity fill via popup Fill', ...await viaPop('Home Identity', ID_IDS, ID_WANT, 'fill_identity'));
     await cardPage.close();
 
-    // --- Passkeys: local WebAuthn RP page verifies with WebCrypto; approval window must be clicked.
+    // --- Passkeys: the in-page prompt (closed shadow DOM) approves create/get; cancel or a get
+    // with no gitpass match falls back to the browser's own authenticator (CDP virtual authenticator)
+    // and must not open a gitpass window.
     {
       const WA = `http://localhost:${server.address().port}/webauthn`;
-      const wa = await ctx.newPage(); await wa.goto(WA); await sleep(500);
-      const outJson = async () => { try { return JSON.parse((await wa.locator('#out').textContent()) || 'null'); } catch { return null; } };
-      const seen = new Set();
-      const approvalWin = () => until(() => { const w = ctx.pages().find((p) => p.url().startsWith(`${EXT}/popup/passkey.html`) && !p.isClosed() && !seen.has(p)); if (w) seen.add(w); return w; }, T(6000));
-      const step = async (btn, decide) => {
-        await wa.evaluate(() => { document.getElementById('out').textContent = ''; });
-        await wa.click(btn); const w = await approvalWin(); if (!w) return { error: 'no approval window' };
-        const title = await until(async () => (await w.locator('#title').textContent()) || '', T(3000));
-        const site = await w.locator('#site').textContent().catch(() => '');
-        await w.click(decide, { noWaitAfter: true }).catch(() => {}); const r = await until(outJson, T(6000)); return { ...(r || { error: 'no result' }), _title: title, _site: site };
+      const outJson = async (pg) => { try { return JSON.parse((await pg.locator('#out').textContent()) || 'null'); } catch { return null; } };
+      const clearOut = (pg) => pg.evaluate(() => { document.getElementById('out').textContent = ''; });
+      const passkeyWindows = () => ctx.pages().filter((p) => p.url().startsWith(`${EXT}/popup/passkey.html`)).length;
+      const waitPrompt = (pg, re) => until(() => shadowButton(pg, re), T(8000));
+      const clickShadow = async (pg, re) => { const b = await waitPrompt(pg, re); if (!b) return false; await pg.bringToFront(); await pg.mouse.click(b.x, b.y); return true; };
+      const promptGone = (pg, re) => until(async () => !(await shadowButton(pg, re)), T(6000));
+      const clickContinue = async (pg) => { // native fallback can need a fresh user gesture after cancel
+        const btn = await until(async () => { const l = pg.getByRole('button', { name: 'Continue' }); return (await l.count()) ? l.first() : null; }, T(2000));
+        if (btn) await btn.click().catch(() => {});
+        return !!btn;
       };
-      const before = cmdsIn(mockDir).length;
-      const reg = await step('#reg', '#approve');
-      rec('passkey create: approval window -> credential verified by RP page', reg.registered === true, JSON.stringify(reg));
+      const noNewWindow = (pages) => passkeyWindows() === 0 && ctx.pages().length === pages;
+      const act = async (pg, sel, promptRe, native) => {
+        await clearOut(pg); await pg.bringToFront(); await pg.click(sel);
+        if (promptRe) {
+          if (!(await waitPrompt(pg, promptRe))) return { error: 'no in-page prompt' };
+          await sleep(800); // the primary button ignores trusted clicks for its first 600 ms
+          if (native) await clickShadow(pg, /^Cancel$/); else await clickShadow(pg, promptRe);
+        } else { // no prompt expected: gitpass has no matching credential
+          const unexpected = await until(() => shadowButton(pg, /^Sign in$/), T(1200));
+          if (unexpected) return { error: 'unexpected in-page prompt', text: unexpected.text };
+        }
+        if (native) await clickContinue(pg);
+        const r = await until(() => outJson(pg), T(12000));
+        return r || { error: 'no result' };
+      };
+
+      // 1. Cancel (create) and no matching passkey (get) hand the request to the browser.
+      const nativePage = await ctx.newPage(); await nativePage.goto(WA); await sleep(500); await nativePage.bringToFront();
+      const cdp = await cdpSession(nativePage);
+      await cdp.send('WebAuthn.enable', { enableUI: false });
+      await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+      let pages = ctx.pages().length;
+      let mark = cmdsIn(mockDir).length;
+      const cancelReg = await act(nativePage, '#reg', /^Save passkey$/, true);
+      const cancelCmds = cmdsIn(mockDir).slice(mark).filter((m) => /^passkey_/.test(m.cmd));
+      rec('passkey create cancelled -> browser passkey, no gitpass window',
+        cancelReg.registered === true && noNewWindow(pages) && (REAL || !cancelCmds.some((m) => m.cmd === 'passkey_create')),
+        JSON.stringify(cancelReg) + (REAL ? ' (real host; not logged)' : `; cmds=${JSON.stringify(cancelCmds.map((m) => m.cmd))}`));
+      pages = ctx.pages().length; mark = cmdsIn(mockDir).length;
+      const noMatch = await act(nativePage, '#login', null, true);
+      const noMatchCmds = cmdsIn(mockDir).slice(mark).filter((m) => /^passkey_/.test(m.cmd));
+      rec('passkey get with no gitpass match -> native fallback verified',
+        noMatch.verified === true && noNewWindow(pages) && (REAL || !noMatchCmds.some((m) => m.cmd === 'passkey_get')),
+        JSON.stringify(noMatch) + (REAL ? ' (real host; not logged)' : `; cmds=${JSON.stringify(noMatchCmds.map((m) => m.cmd))}`));
+      await nativePage.close();
+
+      // 2. In-page prompt approval: create, get (ES256 verified by the RP), signCount, duplicates.
+      const wa = await ctx.newPage(); await wa.goto(WA); await sleep(500); await wa.bringToFront();
+      pages = ctx.pages().length; const before = cmdsIn(mockDir).length;
+      const save = await act(wa, '#reg', /^Save passkey$/, false);
+      rec('passkey create: in-page approve -> credential verified by RP page', save.registered === true, JSON.stringify(save));
       const pkCmds = cmdsIn(mockDir).slice(before).filter((m) => /^passkey_/.test(m.cmd));
-      rec('passkey_create sent with browser origin + popup approval', pkCmds.some((m) => m.cmd === 'passkey_create' && m.origin === new URL(WA).origin && m.source === 'popup' && m.approved === true),
-        JSON.stringify(pkCmds.map((m) => ({ cmd: m.cmd, origin: m.origin, source: m.source, approved: m.approved }))));
-      const g1 = await step('#login', '#approve');
+      rec('passkey_create sent with browser origin + in-page approval',
+        REAL || pkCmds.some((m) => m.cmd === 'passkey_create' && m.origin === new URL(WA).origin && m.source === 'popup' && m.approved === true),
+        REAL ? 'real host (not logged)' : JSON.stringify(pkCmds.map((m) => ({ cmd: m.cmd, origin: m.origin, source: m.source, approved: m.approved }))));
+      await promptGone(wa, /^Save passkey$/);
+
+      const g1 = await act(wa, '#login', /^Sign in$/, false);
       rec('passkey get: ES256 signature verified by RP page (signCount 1)', g1.verified === true && g1.signCount === 1 && g1.userHandle === 'user-42', JSON.stringify(g1));
-      const g2 = await step('#login', '#approve');
+      await promptGone(wa, /^Sign in$/);
+      const g2 = await act(wa, '#login', /^Sign in$/, false);
       rec('passkey get again: signCount increments', g2.verified === true && g2.signCount === 2, JSON.stringify(g2));
-      const n0 = cmdsIn(mockDir).filter((m) => m.cmd === 'passkey_get').length;
-      const den = await step('#login', '#deny');
-      rec('passkey get denied in approval window -> NotAllowedError, host not called', den.error === 'NotAllowedError' && cmdsIn(mockDir).filter((m) => m.cmd === 'passkey_get').length === n0, JSON.stringify(den));
-      const dup = await step('#reg', '#approve');
-      rec('passkey create with excludeCredentials match -> InvalidStateError', dup.error === 'InvalidStateError', JSON.stringify(dup));
+      await promptGone(wa, /^Sign in$/);
+
+      // Duplicate: the prompt reports "already saved"; Close resolves the page as InvalidStateError.
+      await clearOut(wa); await wa.click('#reg');
+      if (await waitPrompt(wa, /^Save passkey$/)) { await sleep(800); await clickShadow(wa, /^Save passkey$/); }
+      const closeB = await until(() => shadowButton(wa, /^Close$/), T(8000));
+      rec('duplicate create shows the error with Close', !!closeB, closeB ? 'Close shown' : await shadowText(wa));
+      if (closeB) await clickShadow(wa, /^Close$/);
+      const dup = await until(() => outJson(wa), T(8000));
+      rec('passkey create with excludeCredentials match -> InvalidStateError', dup && dup.error === 'InvalidStateError', JSON.stringify(dup));
+      rec('passkey flows never opened a gitpass window', noNewWindow(pages), `pages=${ctx.pages().length}, passkey windows=${passkeyWindows()}`);
       await wa.close();
     }
 
