@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // Mock gitpass-host: speaks the v0.6 contract over native messaging with fake data. Test-only.
 // Env: GITPASS_MOCK_DIR (log.jsonl + control.json). Starts LOCKED. Unlocks on request_unlock,
-// on legacy `unlock`, or when control.json contains {"unlocked":true}; pushes {"event":"unlock"|"lock"}.
+// on legacy `unlock`, or when control.json contains {"unlocked":true}; pushes {"event":"unlock"|"lock"|"changed"}.
 'use strict';
 const fs = require('fs'), path = require('path');
 const DIR = process.env.GITPASS_MOCK_DIR || path.join(__dirname, '.mock');
 fs.mkdirSync(DIR, { recursive: true });
-const LOG = path.join(DIR, 'log.jsonl'), CTRL = path.join(DIR, 'control.json'), STATE = path.join(DIR, 'state.json');
+const LOG = path.join(DIR, 'log.jsonl'), CTRL = path.join(DIR, 'control.json'), STATE = path.join(DIR, 'state.json'), ITEMS_FILE = path.join(DIR, 'items.json');
 const log = (o) => fs.appendFileSync(LOG, JSON.stringify({ t: Date.now(), pid: process.pid, ...o }) + '\n');
 const readJson = (p, d) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return d; } };
 // Shared across host processes (Chrome may spawn several): unlocked state lives in state.json.
@@ -15,13 +15,21 @@ const setUnlocked = (v) => fs.writeFileSync(STATE, JSON.stringify({ unlocked: v 
 
 const V = { id: 'v1', name: 'Personal' };
 const now = '2026-10-26T00:00:00Z';
-const ITEMS = [
+const DEFAULT_ITEMS = [
   { id: 'v1:i1', category: 'login', title: 'Localhost Test Login', subtitle: 'alice@example.com', url: 'http://localhost', favicon_host: 'localhost', has_totp: true, favorite: true, _u: 'alice@example.com', _p: 'Corr3ct-H0rse-Battery' },
   { id: 'v1:i2', category: 'login', title: 'GitHub', subtitle: 'alice', url: 'https://github.com', favicon_host: 'github.com', has_totp: false, favorite: false, _u: 'alice', _p: 'gh-pass-123' },
   { id: 'v1:i3', category: 'credit_card', title: 'Visa', subtitle: '•••• 1234', has_totp: false, favorite: false },
   { id: 'v1:i5', category: 'identity', title: 'Home Identity', subtitle: 'Naing Oo', has_totp: false, favorite: false },
   { id: 'v1:i4', category: 'secure_note', title: 'Wi-Fi notes', subtitle: '', has_totp: false, favorite: false },
 ].map((i) => ({ vault_id: V.id, vault_name: V.name, updated_at: now, ...i }));
+
+const saveItems = (items) => fs.writeFileSync(ITEMS_FILE, JSON.stringify(items));
+const getItems = () => {
+  const stored = readJson(ITEMS_FILE, null);
+  if (Array.isArray(stored)) return stored;
+  saveItems(DEFAULT_ITEMS);
+  return DEFAULT_ITEMS;
+};
 const authn = require('./passkey-authn');
 const PKS = path.join(DIR, 'passkeys.json');
 const pkStore = { list: () => readJson(PKS, []), put: (pk) => { const l = readJson(PKS, []).filter((x) => x.credential_id !== pk.credential_id); l.push(pk); fs.writeFileSync(PKS, JSON.stringify(l)); } };
@@ -29,7 +37,7 @@ const pub = (i) => { const o = { ...i }; delete o._u; delete o._p; return o; };
 const host = (s) => { try { return new URL(s).hostname; } catch { return ''; } };
 // control.json `no_match_hosts: ["localhost"]` simulates a site with no saved login.
 const noMatchHosts = () => { const l = readJson(CTRL, {}).no_match_hosts; return Array.isArray(l) ? l : []; };
-const matches = (o) => ITEMS.filter((i) => i.url && host(i.url) && host(i.url) === host(o) && !noMatchHosts().includes(host(o)));
+const matches = (o) => getItems().filter((i) => i.url && host(i.url) && host(i.url) === host(o) && !noMatchHosts().includes(host(o)));
 
 function send(obj) {
   const b = Buffer.from(JSON.stringify(obj)); const h = Buffer.alloc(4); h.writeUInt32LE(b.length);
@@ -44,24 +52,31 @@ function handle(m) {
     case 'status': return { unlocked: isUnlocked(), app_running: true, account: { name: 'Mock User', email: 'alice@example.com', vault_count: 1 }, idle_timeout_secs: 600 };
     case 'request_unlock': case 'unlock': setTimeout(() => { setUnlocked(true); send({ event: 'unlock' }); }, 0); return { unlocked: true };
     case 'lock': setUnlocked(false); setTimeout(() => send({ event: 'lock' }), 0); return { unlocked: false };
-    case 'list_items': case 'search': { needUnlock(); const q = (m.query || '').toLowerCase(); let r = ITEMS.filter((i) => !q || i.title.toLowerCase().includes(q)); if (m.category) r = r.filter((i) => i.category === m.category); return { items: r.slice(0, m.limit || 100).map(pub) }; }
+    case 'list_items': case 'search': { needUnlock(); const q = (m.query || '').toLowerCase(); let r = getItems().filter((i) => !q || i.title.toLowerCase().includes(q)); if (m.category) r = r.filter((i) => i.category === m.category); return { items: r.slice(0, m.limit || 100).map(pub) }; }
     case 'match': needUnlock(); return { items: matches(origin).map(pub) };
-    case 'get_item': { needUnlock(); const i = ITEMS.find((x) => x.id === m.item_id); if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
-      return { item: { ...pub(i), fields: i._u ? [{ name: 'username', label: 'username', value: i._u, concealed: false, kind: 'text' }, { name: 'password', label: 'password', concealed: true, kind: 'password' }] : [], tags: [], created_at: now } }; }
-    case 'reveal': { needUnlock(); const i = ITEMS.find((x) => x.id === m.item_id); return { value: i && m.field === 'password' ? i._p : (i && i._u) || '' }; }
-    case 'fill': { needUnlock(); const i = ITEMS.find((x) => x.id === m.item_id); if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
-      if (!matches(origin).includes(i)) throw Object.assign(new Error('origin mismatch'), { code: 'origin_mismatch' });
+    case 'get_item': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
+      const fields = i.fields ? i.fields : (i._u ? [{ name: 'username', label: 'username', value: i._u, concealed: false, kind: 'text' }, { name: 'password', label: 'password', concealed: true, kind: 'password' }] : []);
+      return { item: { ...pub(i), fields, tags: i.tags || [], created_at: i.created_at || now } }; }
+    case 'reveal': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); return { value: i && m.field === 'password' ? i._p : (i && i._u) || '' }; }
+    case 'fill': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
+      if (!matches(origin).some((x) => x.id === i.id)) throw Object.assign(new Error('origin mismatch'), { code: 'origin_mismatch' });
       return { username: i._u, password: i._p, totp: i.has_totp ? '123456' : undefined }; }
     case 'totp': needUnlock(); return { code: '123456', remaining: 20, period: 30 };
-    case 'save_login': needUnlock(); return { item_id: 'v1:new' + Date.now() };
+    case 'save_login': { needUnlock();
+      const id = 'v1:new' + Date.now();
+      const items = getItems();
+      items.push({ vault_id: V.id, vault_name: V.name, id, category: 'login', title: m.title || host(m.origin) || 'New Login', subtitle: m.username || '', url: m.origin || '', favorite: false, updated_at: new Date().toISOString(), _u: m.username, _p: m.password });
+      saveItems(items);
+      return { item_id: id };
+    }
     case 'update_password': needUnlock(); return { ok: true };
     case 'generate': return { password: 'Gen-' + 'x'.repeat(Math.max(4, (m.len || 20) - 4)) };
-    case 'list_vaults': needUnlock(); return { vaults: [{ ...V, item_count: ITEMS.length }] };
+    case 'list_vaults': needUnlock(); return { vaults: [{ ...V, item_count: getItems().length }] };
     case 'open_in_app': return {};
     case 'fill_card': case 'fill_identity': { needUnlock();
       // Same rule as the real host: popup-initiated or after an in-page click only.
       if (!['popup', 'inpage_click'].includes(m.source)) throw Object.assign(new Error('needs user action'), { code: 'denied' });
-      const i = ITEMS.find((x) => x.id === m.item_id); const want = m.cmd === 'fill_card' ? 'credit_card' : 'identity';
+      const i = getItems().find((x) => x.id === m.item_id); const want = m.cmd === 'fill_card' ? 'credit_card' : 'identity';
       if (!i || i.category !== want) throw Object.assign(new Error('wrong item'), { code: 'bad_request' });
       // gitpass-core v5 template field ids (fake test data).
       return want === 'credit_card' ? { cardholder: 'ALICE TESTER', number: '4111 1111 1111 1111', expiry: '12/2028', cvv: '737', type: 'visa' }
@@ -99,6 +114,44 @@ let lastCtrl = '';
 setInterval(() => {
   let c; try { c = fs.readFileSync(CTRL, 'utf8'); } catch { return; }
   if (c === lastCtrl) return; lastCtrl = c;
-  const v = readJson(CTRL, {}); if (typeof v.unlocked !== 'boolean') return;
-  if (v.unlocked !== isUnlocked() || v.seq) { setUnlocked(v.unlocked); send({ event: v.unlocked ? 'unlock' : 'lock' }); }
+  const v = readJson(CTRL, {});
+  let emitEvent = v.event || null;
+
+  if (v.add_item) {
+    const items = getItems().filter((x) => x.id !== v.add_item.id);
+    items.push({
+      vault_id: V.id,
+      vault_name: V.name,
+      updated_at: new Date().toISOString(),
+      ...v.add_item,
+    });
+    saveItems(items);
+    if (!emitEvent) emitEvent = 'changed';
+  }
+  if (v.edit_item) {
+    const items = getItems();
+    const idx = items.findIndex((x) => x.id === v.edit_item.id);
+    if (idx >= 0) {
+      items[idx] = { ...items[idx], ...v.edit_item, updated_at: new Date().toISOString() };
+      saveItems(items);
+    }
+    if (!emitEvent) emitEvent = 'changed';
+  }
+  if (v.delete_item) {
+    const targetId = v.delete_item.id || v.delete_item;
+    const items = getItems().filter((x) => x.id !== targetId);
+    saveItems(items);
+    if (!emitEvent) emitEvent = 'changed';
+  }
+  if (typeof v.unlocked === 'boolean') {
+    if (v.unlocked !== isUnlocked() || v.seq) {
+      setUnlocked(v.unlocked);
+      if (!emitEvent) emitEvent = v.unlocked ? 'unlock' : 'lock';
+    }
+  }
+  if (emitEvent) {
+    if (emitEvent === 'lock') setUnlocked(false);
+    else if (emitEvent === 'unlock') setUnlocked(true);
+    send({ event: emitEvent });
+  }
 }, 100);
