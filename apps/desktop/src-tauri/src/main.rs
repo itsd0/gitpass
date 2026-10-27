@@ -2,6 +2,8 @@
 mod agent_ui;
 mod biometric;
 mod commands;
+#[cfg(test)]
+mod updater_tests;
 use commands as c;
 use std::sync::Arc;
 
