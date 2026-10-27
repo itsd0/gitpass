@@ -212,6 +212,7 @@ fn tools_generate_strength_watchtower_hibp() {
     assert!(r.weak.contains(&a.id) && r.weak.contains(&b.id));
     assert_eq!(r.reused.len(), 1);
     assert_eq!(r.missing_totp.len(), 3);
+    assert!(r.totp_available.is_empty() && r.passkey_available.is_empty());
     assert!(r.score < 100);
     // HIBP is opt-in: without Settings.hibpCheck no network check happens even if asked.
     assert!(!e.app.get_settings().hibp_check);
@@ -223,6 +224,31 @@ fn tools_generate_strength_watchtower_hibp() {
     let mut br = r.breached.clone(); br.sort();
     let mut want = vec![a.id.clone(), b.id.clone()]; want.sort();
     assert_eq!(br, want);
+}
+
+#[test]
+fn watchtower_mfa_advice_and_passkey_suppression() {
+    let e = env();
+    // Fake credentials; the URL is a real domain only to exercise the bundled offline list.
+    let l = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::Login, title: "GitHub Fake".into(), url: Some("https://github.com/login".into()),
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![
+            fld("username", FieldKind::Text, Some("fake@example.invalid")),
+            fld("password", FieldKind::Concealed, Some("FAKE-Xq7#vR2!mK9@pL4$wZ"))] }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+    let r = e.app.watchtower(false).unwrap();
+    assert!(r.totp_available.contains(&l.id));
+    assert!(r.passkey_available.contains(&l.id));
+    // A stored passkey on the same rp_id suppresses only the passkey advice.
+    e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::Passkey, title: "GitHub passkey (fake)".into(), url: Some("https://github.com".into()),
+        sections: vec![Section { id: "main".into(), title: None, fields: vec![fld("rp_id", FieldKind::Text, Some("github.com"))] }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+    let r = e.app.watchtower(false).unwrap();
+    assert!(r.totp_available.contains(&l.id));
+    assert!(!r.passkey_available.contains(&l.id));
 }
 
 #[test]

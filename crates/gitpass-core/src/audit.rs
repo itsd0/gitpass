@@ -1,9 +1,10 @@
-//! Security audit: weak, reused, old passwords; missing TOTP; optional HIBP Pwned Passwords check.
-//! Findings carry titles/ids only — never passwords.
+//! Security audit: weak, reused, old passwords; missing TOTP; offline 2FA/passkey availability;
+//! optional HIBP Pwned Passwords check. Findings carry titles/ids only — never passwords.
 use crate::store::Item;
 use anyhow::{bail, Result};
 use sha1::{Digest, Sha1};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::OnceLock;
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Finding {
@@ -12,6 +13,10 @@ pub enum Finding {
     Reused { group: usize, others: usize },
     Old { days: u64 },
     MissingTotp,
+    /// `site` (from the bundled offline list) documents TOTP, but the item has none.
+    TotpAvailable { site: String },
+    /// `site` documents passkeys, but the item (and the vault) has none for it.
+    PasskeyAvailable { site: String },
     Pwned { count: u64 },
 }
 
@@ -32,10 +37,91 @@ impl Default for AuditOpts {
 pub struct AuditReport {
     pub items_checked: usize,
     pub weak: usize, pub reused: usize, pub reused_groups: usize, pub old: usize, pub missing_totp: usize, pub pwned: usize,
+    pub totp_available: usize, pub passkey_available: usize,
     pub per_item: Vec<ItemFindings>,
 }
 
 const COMMON: &[&str] = &["password", "123456", "12345678", "qwerty", "letmein", "welcome", "admin", "iloveyou", "monkey", "dragon", "abc123", "111111", "passw0rd", "trustno1", "football", "baseball", "sunshine", "master"];
+
+/// Documented MFA capabilities of a site (offline list).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SiteSupport { pub totp: bool, pub passkey: bool }
+
+/// Bundled offline list of sites with documented TOTP and/or passkey support.
+/// Source and licence are noted in the file; no network lookup happens at audit time.
+const MFA_SITES_TSV: &str = include_str!("../data/mfa-sites.tsv");
+
+/// Parse the bundled TSV format (`domain<TAB>totp,passkey`). Comments (`#`) and blank lines are
+/// ignored, unknown capability words are ignored, and duplicate domains are merged. Exposed so
+/// tests and future user-supplied lists can reuse the matcher.
+pub fn parse_mfa_site_list(src: &str) -> Vec<(String, SiteSupport)> {
+    let mut out: Vec<(String, SiteSupport)> = vec![];
+    for line in src.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') { continue; }
+        let Some((domain, caps)) = line.split_once('\t') else { continue };
+        let domain = domain.trim().trim_matches('.').to_ascii_lowercase();
+        let domain = domain.strip_prefix("www.").unwrap_or(&domain).to_string();
+        let mut s = SiteSupport::default();
+        for cap in caps.split(',') {
+            match cap.trim() { "totp" => s.totp = true, "passkey" => s.passkey = true, _ => {} }
+        }
+        if !domain.is_empty() && (s.totp || s.passkey) { out.push((domain, s)); }
+    }
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    let mut merged: Vec<(String, SiteSupport)> = Vec::with_capacity(out.len());
+    for (domain, s) in out {
+        let dup = merged.last().is_some_and(|(d, _)| *d == domain);
+        if dup {
+            let last = merged.last_mut().expect("checked above");
+            last.1.totp |= s.totp;
+            last.1.passkey |= s.passkey;
+        } else {
+            merged.push((domain, s));
+        }
+    }
+    merged
+}
+
+/// Lowercased host of a URL (or bare host): scheme, userinfo, port, path and a leading `www.` are
+/// dropped. Returns `None` for empty input or IPv6 literals, which the list does not carry.
+fn host_of(input: &str) -> Option<String> {
+    let s = input.trim();
+    if s.is_empty() { return None; }
+    let rest = s.split_once("://").map_or(s, |(_, r)| r);
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host = authority.rsplit('@').next().unwrap_or("").split(':').next().unwrap_or("");
+    let host = host.trim_matches('.').to_ascii_lowercase();
+    if host.is_empty() || host.starts_with('[') { return None; }
+    Some(host.strip_prefix("www.").unwrap_or(&host).to_string())
+}
+
+/// True when `host` equals `domain` or is a subdomain of it (`evil-domain.test` does not match).
+fn domain_matches(host: &str, domain: &str) -> bool {
+    host == domain || host.strip_suffix(domain).is_some_and(|prefix| prefix.ends_with('.'))
+}
+
+/// Look up a URL (or bare host) in an offline site list. Returns the matched domain and its
+/// capabilities. The first (sorted) matching entry wins.
+pub fn lookup_mfa_site<'a>(sites: &'a [(String, SiteSupport)], url: &str) -> Option<(&'a str, SiteSupport)> {
+    let host = host_of(url)?;
+    sites.iter().find(|(domain, _)| domain_matches(&host, domain)).map(|(domain, s)| (domain.as_str(), *s))
+}
+
+fn bundled_mfa_sites() -> &'static [(String, SiteSupport)] {
+    static SITES: OnceLock<Vec<(String, SiteSupport)>> = OnceLock::new();
+    SITES.get_or_init(|| parse_mfa_site_list(MFA_SITES_TSV))
+}
+
+/// The compiled-in offline site list (`crates/gitpass-core/data/mfa-sites.tsv`).
+pub fn mfa_sites() -> &'static [(String, SiteSupport)] { bundled_mfa_sites() }
+
+/// Look up a URL (or bare host) in the bundled offline list.
+pub fn site_support(url: &str) -> Option<(&'static str, SiteSupport)> { lookup_mfa_site(bundled_mfa_sites(), url) }
+
+fn has_passkey_for(passkey_sites: &BTreeSet<String>, host: &str) -> bool {
+    passkey_sites.iter().any(|rp_id| domain_matches(host, rp_id))
+}
 
 /// Naive entropy estimate: length * log2(pool size of the character classes used).
 pub fn entropy_bits(pw: &str) -> f64 {
@@ -83,9 +169,21 @@ pub fn pwned_count(client: &dyn PwnedRangeClient, pw: &str, cache: &mut HashMap<
     Ok(0)
 }
 
-/// Audit `(vault, id, item)` triples.
+/// Audit `(vault, id, item)` triples with the bundled site list and no passkey context.
 pub fn audit(items: &[(String, String, Item)], o: &AuditOpts, hibp: Option<&dyn PwnedRangeClient>) -> Result<AuditReport> {
+    audit_with_sites(items, &BTreeSet::new(), bundled_mfa_sites(), o, hibp)
+}
+
+/// Audit with the vault's existing passkey `rp_id`s: a login on a passkey-capable site is not
+/// flagged when a stored passkey already covers the host.
+pub fn audit_with_passkeys(items: &[(String, String, Item)], passkey_sites: &BTreeSet<String>, o: &AuditOpts, hibp: Option<&dyn PwnedRangeClient>) -> Result<AuditReport> {
+    audit_with_sites(items, passkey_sites, bundled_mfa_sites(), o, hibp)
+}
+
+/// Audit with an explicit offline site list (the bundled list via [`audit`] / [`audit_with_passkeys`]).
+pub fn audit_with_sites(items: &[(String, String, Item)], passkey_sites: &BTreeSet<String>, sites: &[(String, SiteSupport)], o: &AuditOpts, hibp: Option<&dyn PwnedRangeClient>) -> Result<AuditReport> {
     if o.min_length == 0 { bail!("min_length must be > 0"); }
+    let passkey_domains: BTreeSet<String> = passkey_sites.iter().filter_map(|s| host_of(s)).collect();
     let mut r = AuditReport { items_checked: items.len(), ..Default::default() };
     // reuse groups: keyed by blake3(password); hashes live in memory only and are never printed.
     let mut groups: BTreeMap<[u8; 32], Vec<usize>> = BTreeMap::new();
@@ -109,8 +207,20 @@ pub fn audit(items: &[(String, String, Item)], o: &AuditOpts, hibp: Option<&dyn 
                 if days > o.max_age_days { f.push(Finding::Old { days }); r.old += 1; }
             }
         }
-        if it.url.as_deref().is_some_and(|u| !u.trim().is_empty()) && it.totp.as_deref().is_none_or(|t| t.trim().is_empty()) {
+        let url = it.url.as_deref().filter(|u| !u.trim().is_empty());
+        let no_totp = it.totp.as_deref().is_none_or(|t| t.trim().is_empty());
+        let host = url.and_then(host_of);
+        let support = host.as_deref().and_then(|h| lookup_mfa_site(sites, h));
+        if url.is_some() && no_totp {
+            if let Some((site, s)) = support {
+                if s.totp { f.push(Finding::TotpAvailable { site: site.to_string() }); r.totp_available += 1; }
+            }
             f.push(Finding::MissingTotp); r.missing_totp += 1;
+        }
+        if let (Some(host), Some((site, s))) = (host.as_deref(), support) {
+            if s.passkey && !has_passkey_for(&passkey_domains, host) {
+                f.push(Finding::PasskeyAvailable { site: site.to_string() }); r.passkey_available += 1;
+            }
         }
         if !f.is_empty() { r.per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), findings: f }); }
     }
@@ -124,6 +234,8 @@ impl std::fmt::Display for Finding {
             Finding::Reused { group, others } => write!(f, "reused password (group #{group}, shared with {others} other item(s))"),
             Finding::Old { days } => write!(f, "password not changed in {days} days"),
             Finding::MissingTotp => write!(f, "has a URL but no TOTP configured"),
+            Finding::TotpAvailable { site } => write!(f, "site supports TOTP 2FA ({site}) but this login has none"),
+            Finding::PasskeyAvailable { site } => write!(f, "site supports passkeys ({site}) but this login has none"),
             Finding::Pwned { count } => write!(f, "password appears in {count} known breaches (HIBP)"),
         }
     }

@@ -158,7 +158,7 @@ enum Cmd {
     },
     /// SSH keys: generate / import / list / public key, `~/.ssh/config` line, and a standalone agent
     Ssh { #[command(subcommand)] cmd: SshCmd },
-    /// Security audit: weak / reused / old passwords, missing TOTP, optional HIBP check
+    /// Security audit: weak / reused / old passwords, missing TOTP, offline 2FA/passkey availability, optional HIBP check
     Audit {
         /// Vault (default: all vaults)
         vault: Option<String>,
@@ -798,20 +798,36 @@ fn run() -> Result<()> {
             println!("exported {} item(s) to {}{}", items.len(), out.display(), if *encrypted { " (encrypted)" } else { " (PLAINTEXT)" });
         }
         Cmd::Audit { vault, hibp, max_age_days } => {
-            use gitpass_core::audit;
+            use gitpass_core::{audit, passkey, Category};
             let s = unlock(&cli, &root)?;
             let vids: Vec<(String, String)> = match vault {
                 Some(v) => { let id = s.resolve_vault(v)?; vec![(id.clone(), s.vault_meta(&id)?.name.clone())] }
                 None => s.list_vaults()?.into_iter().map(|(id, m)| (id, m.name.clone())).collect(),
             };
             let mut all = vec![];
-            for (vid, name) in &vids { for (iid, it) in s.list_items(vid)? { all.push((name.clone(), iid, it)); } }
+            let mut passkeys = std::collections::BTreeSet::new();
+            for (vid, name) in &vids {
+                let mut rows = vec![];
+                for (iid, _, rec) in s.list_records(vid)? {
+                    if rec.deleted_at.is_some() { continue; }
+                    match rec.category {
+                        Category::Login if !rec.archived => rows.push((name.clone(), iid, rec.item.clone())),
+                        Category::Passkey if !rec.archived => {
+                            if let Some(v) = rec.find_field(passkey::F_RP_ID).and_then(|f| f.value) { passkeys.insert(v); }
+                        }
+                        _ => {}
+                    }
+                }
+                rows.sort_by(|a, b| a.2.title.to_lowercase().cmp(&b.2.title.to_lowercase()));
+                all.extend(rows);
+            }
             let client = UreqHibp(ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(15)).build());
             let opts = audit::AuditOpts { max_age_days: *max_age_days, ..Default::default() };
-            let r = audit::audit(&all, &opts, if *hibp { Some(&client) } else { None })?;
+            let r = audit::audit_with_passkeys(&all, &passkeys, &opts, if *hibp { Some(&client) } else { None })?;
             println!("audited {} item(s) in {} vault(s){}", r.items_checked, vids.len(), if *hibp { " (with HIBP)" } else { "" });
-            println!("  weak: {}  reused: {} ({} group(s))  old (>{max_age_days}d): {}  missing TOTP: {}{}",
-                r.weak, r.reused, r.reused_groups, r.old, r.missing_totp, if *hibp { format!("  pwned: {}", r.pwned) } else { String::new() });
+            println!("  weak: {}  reused: {} ({} group(s))  old (>{max_age_days}d): {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}",
+                r.weak, r.reused, r.reused_groups, r.old, r.missing_totp, r.totp_available, r.passkey_available,
+                if *hibp { format!("  pwned: {}", r.pwned) } else { String::new() });
             for f in &r.per_item {
                 println!("\n[{}] {} ({})", f.vault, f.title, &f.id[..f.id.len().min(8)]);
                 for x in &f.findings { println!("  - {x}"); }

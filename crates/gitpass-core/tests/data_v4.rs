@@ -4,6 +4,7 @@ use gitpass_core::crypto::KdfParams;
 use gitpass_core::import::{self, ImportFormat, ImportOpts};
 use gitpass_core::store::{self, Item, Session};
 use std::cell::RefCell;
+use std::collections::BTreeSet;
 
 fn fast() -> KdfParams { KdfParams { alg: "argon2id".into(), m_kib: 8192, t: 1, p: 1 } }
 
@@ -207,6 +208,89 @@ fn audit_weak_reused_old_missing_totp() {
     // custom age threshold
     let r = audit::audit(&rows(vec![item("x", Some(strong), None)]), &AuditOpts { max_age_days: 0, now_secs: store::now().parse::<u64>().unwrap() + 2 * 86400, ..Default::default() }, None).unwrap();
     assert_eq!(r.old, 1);
+}
+
+#[test]
+fn mfa_site_list_parsing_and_lookup() {
+    let sites = audit::parse_mfa_site_list(
+        "# comment\nExample.TEST\ttotp,passkey\nWWW.example.test\tpasskey\nfoo.test\ttotp\nbad line without tab\nempty.test\t\n");
+    assert_eq!(sites.len(), 2);
+    assert_eq!((sites[0].0.as_str(), sites[0].1.totp, sites[0].1.passkey), ("example.test", true, true));
+    assert_eq!((sites[1].0.as_str(), sites[1].1.totp, sites[1].1.passkey), ("foo.test", true, false));
+    let hit = audit::lookup_mfa_site(&sites, "https://Login.Example.test:8443/signin?q=1");
+    assert_eq!(hit.map(|(d, s)| (d, s.totp, s.passkey)), Some(("example.test", true, true)));
+    assert!(audit::lookup_mfa_site(&sites, "https://example.test.").is_some());
+    assert!(audit::lookup_mfa_site(&sites, "user:fake@sub.foo.test").is_some());
+    assert!(audit::lookup_mfa_site(&sites, "https://notexample.test").is_none());
+    assert!(audit::lookup_mfa_site(&sites, "https://example.test.evil.invalid").is_none());
+    assert!(audit::lookup_mfa_site(&sites, "   ").is_none());
+}
+
+#[test]
+fn bundled_mfa_site_list_is_well_formed() {
+    let src = include_str!("../data/mfa-sites.tsv");
+    let data_lines = src.lines().map(str::trim).filter(|l| !l.is_empty() && !l.starts_with('#')).count();
+    let sites = audit::mfa_sites();
+    assert_eq!(sites.len(), data_lines, "every bundled data line must parse");
+    assert!(sites.len() >= 20);
+    assert!(sites.iter().all(|(d, s)| !d.is_empty() && !d.contains('/') && (s.totp || s.passkey)));
+    assert!(sites.iter().any(|(d, s)| d == "github.com" && s.totp && s.passkey));
+    assert!(sites.iter().any(|(d, s)| d == "apple.com" && s.passkey && !s.totp));
+    let mut domains: Vec<&str> = sites.iter().map(|(d, _)| d.as_str()).collect();
+    let n = domains.len(); domains.sort_unstable(); domains.dedup(); assert_eq!(domains.len(), n);
+    // Bundled lookups: subdomains and case match, lookalikes do not.
+    assert_eq!(audit::site_support("https://accounts.GitHub.com/login").map(|(d, _)| d), Some("github.com"));
+    assert!(audit::site_support("https://github.com.evil.invalid").is_none());
+}
+
+#[test]
+fn audit_flags_totp_and_passkey_availability_offline() {
+    let now = 2_000_000_000u64;
+    let sites = audit::parse_mfa_site_list("example.test\ttotp,passkey\npasskey.test\tpasskey\ntotp.test\ttotp\n");
+    let strong = "Xq7#vR2!mK9@pL4$wZ";
+    let mut with_totp = item("WithTotp", Some(strong), Some("https://example.test"));
+    with_totp.totp = Some("JBSWY3DPEHPK3PXP".into());
+    let mut passkey_item = item("PasskeySite", Some(strong), Some("https://passkey.test"));
+    passkey_item.totp = Some("JBSWY3DPEHPK3PXP".into());
+    let mut items = vec![
+        item("TotpMissing", Some(strong), Some("https://login.example.test/signin")),
+        with_totp,
+        passkey_item,
+        item("TotpOnly", Some(strong), Some("https://accounts.totp.test")),
+        item("Lookalike", Some(strong), Some("https://example.test.evil.invalid")),
+        item("Unknown", Some(strong), Some("https://unknown.invalid")),
+        item("NoUrl", Some(strong), None),
+    ];
+    for it in items.iter_mut() { it.updated_at = (now - 10 * 86400).to_string(); }
+    let mut passkeys = BTreeSet::new();
+    passkeys.insert("passkey.test".to_string());
+    let o = AuditOpts { now_secs: now, ..Default::default() };
+    let r = audit::audit_with_sites(&rows(items), &passkeys, &sites, &o, None).unwrap();
+    let f = |t: &str| r.per_item.iter().find(|x| x.title == t).map(|x| x.findings.clone()).unwrap_or_default();
+    assert!(f("TotpMissing").contains(&Finding::TotpAvailable { site: "example.test".into() }));
+    assert!(f("TotpMissing").contains(&Finding::PasskeyAvailable { site: "example.test".into() }));
+    assert!(f("TotpMissing").contains(&Finding::MissingTotp));
+    // TOTP present: no TOTP advice, but a passkey is still suggested (no passkey recorded for example.test).
+    assert!(!f("WithTotp").iter().any(|x| matches!(x, Finding::TotpAvailable { .. })));
+    assert!(f("WithTotp").contains(&Finding::PasskeyAvailable { site: "example.test".into() }));
+    // A stored passkey for the site suppresses the passkey advice.
+    assert!(!f("PasskeySite").iter().any(|x| matches!(x, Finding::PasskeyAvailable { .. })));
+    assert!(f("TotpOnly").contains(&Finding::TotpAvailable { site: "totp.test".into() }));
+    assert!(!f("TotpOnly").iter().any(|x| matches!(x, Finding::PasskeyAvailable { .. })));
+    // Lookalikes / unknown sites get the generic missing-TOTP finding but no site advice.
+    for t in ["Lookalike", "Unknown"] {
+        assert!(f(t).contains(&Finding::MissingTotp));
+        assert!(!f(t).iter().any(|x| matches!(x, Finding::TotpAvailable { .. } | Finding::PasskeyAvailable { .. })));
+    }
+    assert!(!f("NoUrl").iter().any(|x| matches!(x, Finding::MissingTotp | Finding::TotpAvailable { .. } | Finding::PasskeyAvailable { .. })));
+    assert_eq!((r.totp_available, r.passkey_available, r.missing_totp), (2, 2, 4));
+    // A passkey rp_id covers subdomains of itself, not its parent domain.
+    let mut sub_only = BTreeSet::new();
+    sub_only.insert("login.example.test".to_string());
+    let mut parent = item("ParentHost", Some(strong), Some("https://example.test"));
+    parent.updated_at = (now - 10 * 86400).to_string();
+    let r = audit::audit_with_sites(&rows(vec![parent]), &sub_only, &sites, &o, None).unwrap();
+    assert!(r.per_item[0].findings.contains(&Finding::PasskeyAvailable { site: "example.test".into() }));
 }
 
 struct MockHibp { body: String, calls: RefCell<Vec<String>> }
