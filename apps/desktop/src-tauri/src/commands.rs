@@ -49,6 +49,7 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn delete_item(s: State<App>, vault_id: String, item_id: String) -> R<()> { s.delete_item(&vault_id, &item_id).map_err(e) }
 #[tauri::command] pub fn restore_item(s: State<App>, vault_id: String, item_id: String) -> R<()> { s.restore_item(&vault_id, &item_id).map_err(e) }
 #[tauri::command] pub fn purge_item(s: State<App>, vault_id: String, item_id: String) -> R<()> { s.purge_item(&vault_id, &item_id).map_err(e) }
+#[tauri::command] pub fn bulk_items(s: State<App>, req: a::BulkRequest) -> R<a::BulkResult> { s.bulk_items(&req).map_err(e) }
 #[tauri::command] pub fn move_item(s: State<App>, vault_id: String, item_id: String, to_vault_id: String) -> R<a::ItemSummary> { s.move_item(&vault_id, &item_id, &to_vault_id).map_err(e) }
 #[tauri::command] pub fn duplicate_item(s: State<App>, vault_id: String, item_id: String) -> R<a::ItemSummary> { s.duplicate_item(&vault_id, &item_id).map_err(e) }
 #[tauri::command] pub fn item_version(s: State<App>, vault_id: String, item_id: String, version: u64) -> R<a::ItemDetail> { s.item_version(&vault_id, &item_id, version).map_err(e) }

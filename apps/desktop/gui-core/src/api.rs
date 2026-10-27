@@ -51,6 +51,22 @@ pub struct ItemDetail {
     pub sections: Vec<Section>, pub notes: Option<String>, pub attachments: Vec<Attachment>,
     pub history: Vec<HistoryRef>, pub password_strength: Option<u8>, pub has_totp: bool,
 }
+/// One item reference for bulk commands.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemRef { pub vault_id: String, pub item_id: String }
+/// Multi-select bulk operation (`bulk_items`). `action`: trash | restore | purge | archive | unarchive |
+/// favorite | unfavorite | add_tag | remove_tag | move | copy.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkRequest { pub action: String, pub items: Vec<ItemRef>, #[serde(default)] pub tag: Option<String>, #[serde(default)] pub to_vault_id: Option<String> }
+/// `count` = items changed; `items` = resulting refs (new ids for move/copy, else the inputs that still exist).
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct BulkResult { pub count: usize, pub items: Vec<ItemRef> }
+/// Upper bound for one bulk request (keeps a single commit reasonable).
+pub const BULK_MAX: usize = 5000;
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemInput {
@@ -659,6 +675,47 @@ impl App {
     pub fn delete_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.soft_delete(vault_id, item_id)) }
     pub fn restore_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.restore(vault_id, item_id)) }
     pub fn purge_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.purge_item(vault_id, item_id)) }
+    /// Bulk action on many items: one vault write (single manifest commit) for every action except
+    /// move (copy commit + remove commit) and items with attachments on move/copy (one extra commit per file).
+    pub fn bulk_items(&self, req: &BulkRequest) -> Result<BulkResult> {
+        if req.items.is_empty() { return Ok(BulkResult { count: 0, items: vec![] }); }
+        if req.items.len() > BULK_MAX { bail!("too many items selected (max {BULK_MAX})"); }
+        let t: Vec<(String, String)> = req.items.iter().map(|r| (r.vault_id.clone(), r.item_id.clone())).collect();
+        let tag = || -> Result<String> {
+            let x = req.tag.as_deref().map(str::trim).unwrap_or_default();
+            if x.is_empty() { bail!("tag is required"); }
+            if x.chars().count() > 64 { bail!("tag is too long"); }
+            Ok(x.to_string())
+        };
+        let same = |count: usize| BulkResult { count, items: req.items.clone() };
+        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
+        self.write(|u| {
+            let s = &u.session;
+            Ok(match req.action.as_str() {
+                "trash" => same(s.mutate_records(&t, |r| { if r.deleted_at.is_none() { r.deleted_at = Some(now); } })?),
+                "restore" => same(s.mutate_records(&t, |r| { r.deleted_at = None; })?),
+                "archive" => same(s.mutate_records(&t, |r| r.archived = true)?),
+                "unarchive" => same(s.mutate_records(&t, |r| r.archived = false)?),
+                "favorite" => same(s.mutate_records(&t, |r| r.favorite = true)?),
+                "unfavorite" => same(s.mutate_records(&t, |r| r.favorite = false)?),
+                "add_tag" => { let g = tag()?; same(s.mutate_records(&t, |r| if !r.tags.contains(&g) { r.tags.push(g.clone()); })?) }
+                "remove_tag" => { let g = tag()?; same(s.mutate_records(&t, |r| r.tags.retain(|x| x != &g))?) }
+                "purge" => BulkResult { count: s.remove_items(&t)?, items: vec![] },
+                "move" | "copy" => {
+                    let to = req.to_vault_id.as_deref().filter(|x| !x.is_empty()).ok_or_else(|| anyhow!("toVaultId is required"))?;
+                    if !s.list_vaults()?.iter().any(|(v, _)| v == to) { bail!("no vault {to}"); }
+                    if req.action == "copy" {
+                        let n = s.copy_items_to(&t, to)?;
+                        BulkResult { count: n.len(), items: n.into_iter().map(|i| ItemRef { vault_id: to.to_string(), item_id: i }).collect() }
+                    } else {
+                        let n = s.move_items(&t, to)?;
+                        BulkResult { count: n.len(), items: n.into_iter().map(|(_, _, i)| ItemRef { vault_id: to.to_string(), item_id: i }).collect() }
+                    }
+                }
+                other => bail!("unknown bulk action '{other}'"),
+            })
+        })
+    }
     pub fn move_item(&self, vault_id: &str, item_id: &str, to_vault_id: &str) -> Result<ItemSummary> {
         self.write(|u| {
             let nid = u.session.move_item(vault_id, item_id, to_vault_id)?;

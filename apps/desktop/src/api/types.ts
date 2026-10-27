@@ -22,3 +22,8 @@ export interface ImportPreviewItem { title: string; category: string; username: 
 export interface ImportResult { parsed: number; added: number; duplicates: number; duplicateTitles?: string[]; warnings?: string[]; categories?: Record<string, number>; preview?: ImportPreviewItem[]; }
 export interface SshKeyCreated { item: ItemSummary; publicKey: string; fingerprint: string; keyType: string; }
 export interface SshAgentInfo { socketPath: string; configLine: string; running: boolean; approveEachUse: boolean; }
+
+export interface ItemRef { vaultId: string; itemId: string }
+export type BulkAction = 'trash' | 'restore' | 'purge' | 'archive' | 'unarchive' | 'favorite' | 'unfavorite' | 'add_tag' | 'remove_tag' | 'move' | 'copy';
+export interface BulkRequest { action: BulkAction; items: ItemRef[]; tag?: string | null; toVaultId?: string | null }
+export interface BulkResult { count: number; items: ItemRef[] }

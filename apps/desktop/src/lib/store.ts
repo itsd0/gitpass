@@ -19,6 +19,12 @@ export interface AppState {
   closeModal: () => void;
   selectedItemId: string | null;
   selectItem: (id: string | null) => void;
+  /** multi-select: ids of every selected item when more than one row is selected ([] = single mode) */
+  multiIds: string[];
+  setMultiIds: (ids: string[]) => void;
+  /** pending destructive confirm triggered from the list keyboard (Delete) or the bulk pane */
+  bulkConfirm: 'trash' | 'purge' | null;
+  setBulkConfirm: (c: 'trash' | 'purge' | null) => void;
   locked: boolean;
   /** page the user was on when the vault locked; restored after unlock */
   resumeRoute: Route | null;
@@ -41,17 +47,21 @@ export const defaultRoute: Route = { name: 'items', filter: { kind: 'all', sort:
 
 export const useApp = create<AppState>((set, get) => ({
   route: defaultRoute,
-  setRoute: (route) => set({ route, selectedItemId: null, editing: false }),
+  setRoute: (route) => set({ route, selectedItemId: null, multiIds: [], bulkConfirm: null, editing: false }),
   modal: null,
   openModal: (id, props) => set({ modal: { id, props } }),
   closeModal: () => set({ modal: null }),
   selectedItemId: null,
-  selectItem: (selectedItemId) => set({ selectedItemId, editing: false }),
+  selectItem: (selectedItemId) => set({ selectedItemId, multiIds: [], editing: false }),
+  multiIds: [],
+  setMultiIds: (multiIds) => set({ multiIds, editing: false }),
+  bulkConfirm: null,
+  setBulkConfirm: (bulkConfirm) => set({ bulkConfirm }),
   locked: true,
   // Clearing UI state on lock; secrets never live here anyway.
   resumeRoute: null,
   // Clearing UI state on lock (AppShell unmounts, dropping cached vault/item lists); remembers the page.
-  lock: () => { const s = get(); set({ locked: true, selectedItemId: null, modal: null, editing: false, route: defaultRoute, resumeRoute: s.locked ? s.resumeRoute : s.route }); },
+  lock: () => { const s = get(); set({ locked: true, selectedItemId: null, multiIds: [], bulkConfirm: null, modal: null, editing: false, route: defaultRoute, resumeRoute: s.locked ? s.resumeRoute : s.route }); },
   unlock: () => set((s) => ({ locked: false, route: s.resumeRoute ?? s.route, resumeRoute: null, itemsVersion: s.itemsVersion + 1 })),
   account: null,
   setAccount: (account) => set({ account }),
