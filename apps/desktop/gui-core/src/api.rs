@@ -67,6 +67,22 @@ pub struct BulkResult { pub count: usize, pub items: Vec<ItemRef> }
 /// Upper bound for one bulk request (keeps a single commit reasonable).
 pub const BULK_MAX: usize = 5000;
 
+/// `export_items`: export a whole vault or an explicit `{vaultId,itemId}` selection to `path`.
+/// `format`: `gitpass-json` (full records) or `csv` (login fields only); encrypted is gitpass-json only.
+#[derive(Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportRequest {
+    #[serde(default)] pub vault_id: Option<String>,
+    #[serde(default)] pub items: Option<Vec<ItemRef>>,
+    pub format: String,
+    pub encrypted: bool,
+    #[serde(default)] pub passphrase: Option<String>,
+    pub path: String,
+}
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ExportResult { pub path: String, pub items: usize, pub format: String, pub encrypted: bool }
+
 #[derive(Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemInput {
@@ -805,8 +821,11 @@ impl App {
             let with_pw = items.iter().filter(|(_, _, i)| i.password.as_deref().is_some_and(|p| !p.is_empty())).count();
             if with_pw > 0 {
                 let bad: BTreeSet<&String> = out.weak.iter().chain(out.breached.iter()).chain(out.reused.iter().flatten()).collect();
+                // Sites with documented TOTP surface as TotpAvailable instead of MissingTotp, but both mean
+                // "2FA not set up", so both keep the same weight in the score.
+                let missing_totp = out.missing_totp.len() + out.totp_available.len();
                 let penalty = bad.len() as f64 / with_pw as f64 * 80.0 + out.old.len() as f64 / with_pw as f64 * 10.0
-                    + out.missing_totp.len() as f64 / items.len().max(1) as f64 * 10.0;
+                    + missing_totp as f64 / items.len().max(1) as f64 * 10.0;
                 out.score = (100.0 - penalty).round().clamp(0.0, 100.0) as u8;
             }
             Ok(out)
@@ -832,6 +851,47 @@ impl App {
         let r = if dry_run { self.with(f) } else { self.write(f) }?;
         if !dry_run && r.added > 0 { let _ = self.update_local(|l| l.onboarding.imported = true); }
         Ok(r)
+    }
+    /// Export a whole vault or an explicit selection to a user-chosen path. `csv` is login fields only;
+    /// encrypted exports are gitpass-json. The file is written atomically and, on Unix, mode 0600.
+    /// The passphrase and item contents never go into errors or logs.
+    pub fn export_items(&self, req: &ExportRequest) -> Result<ExportResult> {
+        let format = req.format.as_str();
+        if !matches!(format, "gitpass-json" | "csv") { bail!("unknown export format '{}'", req.format); }
+        if format == "csv" && req.encrypted { bail!("encrypted export only supports gitpass-json"); }
+        let raw = req.path.trim();
+        if raw.is_empty() { bail!("export path is required"); }
+        let path = if let Some(rest) = raw.strip_prefix("~/") { dirs::home_dir().map(|h| h.join(rest)).unwrap_or_else(|| PathBuf::from(raw)) } else { PathBuf::from(raw) };
+        let path = std::path::absolute(&path)?;
+        self.with(|u| {
+            let recs: Vec<ItemRecord> = match (&req.items, &req.vault_id) {
+                (Some(refs), _) if !refs.is_empty() => {
+                    let mut seen = BTreeSet::new(); let mut out = vec![];
+                    for r in refs {
+                        if !seen.insert((r.vault_id.clone(), r.item_id.clone())) { continue; }
+                        let (_, rec) = u.session.read_record(&r.vault_id, &r.item_id)?;
+                        if rec.deleted_at.is_none() { out.push(rec); }
+                    }
+                    out
+                }
+                (Some(_), _) => bail!("no items selected"),
+                (None, Some(vid)) => u.session.list_records(vid)?.into_iter().filter(|(_, _, r)| r.deleted_at.is_none()).map(|(_, _, r)| r).collect(),
+                (None, None) => bail!("export needs a vault or a list of items"),
+            };
+            if recs.is_empty() { bail!("nothing to export"); }
+            let body = if req.encrypted {
+                let pass = Zeroizing::new(req.passphrase.clone().unwrap_or_default());
+                Zeroizing::new(import::export_records_encrypted(&recs, &pass, &import::export_kdf_default())?)
+            } else if format == "gitpass-json" {
+                Zeroizing::new(import::export_records_json(&recs)?)
+            } else {
+                let items: Vec<Item> = recs.iter().map(|r| r.item.clone()).collect();
+                Zeroizing::new(import::export_csv(&items)?)
+            };
+            gitpass_core::fsutil::atomic_write(&path, body.as_bytes())?;
+            #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600))?; }
+            Ok(ExportResult { path: path.display().to_string(), items: recs.len(), format: format.to_string(), encrypted: req.encrypted })
+        })
     }
 
     // ---------------- sharing

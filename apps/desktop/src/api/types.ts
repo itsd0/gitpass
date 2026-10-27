@@ -20,6 +20,8 @@ export interface CreateAccountResult { vaultPath: string; secretKey: string; }
 export interface EmergencyKitData { accountId: string; vaultPath: string; remote: string | null; deviceName: string | null; createdAt: string; secretKeyAvailable: boolean; secretKey: string | null; }
 export interface ImportPreviewItem { title: string; category: string; username: string | null; url: string | null; hasPassword: boolean; hasTotp: boolean; tags: string[]; fields: number; archived: boolean; }
 export interface ImportResult { parsed: number; added: number; duplicates: number; duplicateTitles?: string[]; warnings?: string[]; categories?: Record<string, number>; preview?: ImportPreviewItem[]; }
+export interface ExportRequest { vaultId?: string; items?: ItemRef[]; format: 'gitpass-json'|'csv'; encrypted: boolean; passphrase?: string; path: string; }
+export interface ExportResult { path: string; items: number; format: string; encrypted: boolean; }
 export interface SshKeyCreated { item: ItemSummary; publicKey: string; fingerprint: string; keyType: string; }
 export interface SshAgentInfo { socketPath: string; configLine: string; running: boolean; approveEachUse: boolean; }
 

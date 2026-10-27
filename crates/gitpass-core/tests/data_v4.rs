@@ -211,6 +211,77 @@ fn audit_weak_reused_old_missing_totp() {
 }
 
 #[test]
+fn audit_entropy_edge_cases_unicode_long_and_empty() {
+    // Empty input: no character classes, no length.
+    assert_eq!(audit::entropy_bits(""), 0.0);
+    // Pool sizes: 26 lowercase + 26 uppercase + 10 digits + 33 other ASCII.
+    assert!((audit::entropy_bits("a") - 26f64.log2()).abs() < 1e-9);
+    assert!((audit::entropy_bits("aA1!") - 4.0 * 95f64.log2()).abs() < 1e-9);
+    // Symbols contribute their pool once, not per character.
+    assert!((audit::entropy_bits("!!!") - 3.0 * 33f64.log2()).abs() < 1e-9);
+    // Non-ASCII characters share one 100-character pool, counted per char not per UTF-8 byte
+    // ("秘密" is 2 chars / 6 bytes).
+    assert!((audit::entropy_bits("秘密") - 2.0 * 100f64.log2()).abs() < 1e-9);
+    // Very long input stays finite and linear in length.
+    let long = "a".repeat(10_000);
+    let bits = audit::entropy_bits(&long);
+    assert!(bits.is_finite() && (bits - 10_000.0 * 26f64.log2()).abs() < 1e-6, "{bits}");
+}
+
+#[test]
+fn audit_weakness_edge_cases_unicode_long_and_empty() {
+    let o = AuditOpts::default();
+    // audit() skips empty passwords; this is only the direct contract.
+    assert_eq!(audit::weakness("", &o), Some("too short (0 < 12)".into()));
+    // Per-character entropy: a 2-char non-ASCII secret is low entropy despite 6 UTF-8 bytes.
+    let per_char = AuditOpts { min_length: 1, ..Default::default() };
+    assert_eq!(audit::weakness("秘密", &per_char), Some("low estimated entropy (~13 bits)".into()));
+    // 12 Cyrillic chars clear both the length threshold and the naive 100-char pool estimate.
+    assert_eq!(audit::weakness("парольпароль", &o), None);
+    // Very long mixed input: enough distinct chars, no common substring, huge estimate.
+    let long = "Xq7#".repeat(2_500);
+    assert_eq!(long.chars().count(), 10_000);
+    assert_eq!(audit::weakness(&long, &o), None);
+    // Long Unicode input is still caught by the distinct-character rule.
+    assert_eq!(audit::weakness(&"密".repeat(20), &o), Some("too few distinct characters".into()));
+}
+
+#[test]
+fn audit_reuse_spans_vaults_and_ignores_empty_passwords() {
+    let now = 2_000_000_000u64;
+    let shared = "Xq7#vR2!mK9@pL4$wZ";
+    let mk = |title: &str, pw: Option<&str>| { let mut it = item(title, pw, None); it.updated_at = (now - 10 * 86400).to_string(); it };
+    let rows = vec![
+        ("vault-1".to_string(), "a".to_string(), mk("A", Some(shared))),
+        ("vault-2".to_string(), "b".to_string(), mk("B", Some(shared))),
+        ("vault-2".to_string(), "c".to_string(), mk("C", Some(shared))),
+        ("vault-1".to_string(), "d".to_string(), mk("D", Some("Another#Strong9Pass!x"))),
+        ("vault-1".to_string(), "e1".to_string(), mk("E1", Some(""))),
+        ("vault-2".to_string(), "e2".to_string(), mk("E2", Some(""))),
+        ("vault-1".to_string(), "n1".to_string(), mk("N1", None)),
+    ];
+    let r = audit::audit(&rows, &AuditOpts { now_secs: now, ..Default::default() }, None).unwrap();
+    let findings = |v: &str, id: &str| r.per_item.iter().find(|x| x.vault == v && x.id == id).map(|x| x.findings.clone()).unwrap_or_default();
+    let group = |v: &str, id: &str| findings(v, id).into_iter().find_map(|x| match x {
+        Finding::Reused { group, others } => Some((group, others)),
+        _ => None,
+    });
+    // One group of three across two vaults; each item sees the other two.
+    let a = group("vault-1", "a").expect("A is reused");
+    assert_eq!(a.1, 2);
+    assert_eq!(group("vault-2", "b"), Some(a));
+    assert_eq!(group("vault-2", "c"), Some(a));
+    // A different password and empty/missing passwords are never grouped.
+    assert_eq!(group("vault-1", "d"), None);
+    assert_eq!(group("vault-1", "e1"), None);
+    assert_eq!(group("vault-2", "e2"), None);
+    assert_eq!(group("vault-1", "n1"), None);
+    assert_eq!((r.reused, r.reused_groups), (3, 1));
+    // Findings never contain the shared password.
+    assert!(!format!("{:?}", r.per_item).contains(shared));
+}
+
+#[test]
 fn mfa_site_list_parsing_and_lookup() {
     let sites = audit::parse_mfa_site_list(
         "# comment\nExample.TEST\ttotp,passkey\nWWW.example.test\tpasskey\nfoo.test\ttotp\nbad line without tab\nempty.test\t\n");
