@@ -270,6 +270,15 @@ value = conflict, local kept and reported; `None` with a clock is a tombstone. v
   unless one is a clear winner or `--pick <n>` is given.
 - Build without clipboard support: `cargo build --no-default-features`.
 
+## Security audit (Watchtower)
+
+`gitpass audit [VAULT] [--max-age-days N] [--hibp]` checks live login items for weak, reused and old
+passwords, missing TOTP, and suggests TOTP/passkeys from a bundled offline site list. `--hibp` opts in
+to a k-anonymity breach check (only 5 hex characters of a SHA-1 leave the machine). The desktop app's
+Watchtower shows the same findings plus a 0–100 score.
+
+How the entropy estimate, reuse detection and score weighting work: [docs/WATCHTOWER.md](docs/WATCHTOWER.md).
+
 ## Contributing
 
 Recommended prompt for any AI agent:
