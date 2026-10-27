@@ -30,6 +30,8 @@ export function useAgentEvents() {
       import('@tauri-apps/api/event').then(({ listen }) => {
         // agent_ui.rs emits `open-item` and also dispatches the DOM event; selecting twice is idempotent.
         listen<OpenItemPayload>('open-item', (ev) => openItemFromAgent(ev.payload)).then((u) => unlisten.push(u));
+        // Backend lock on any path (idle, sleep, manual, extension/agent): back to the unlock screen.
+        listen<string>('locked', () => { const s = useApp.getState(); if (!s.locked) s.lock(); }).then((u) => unlisten.push(u));
         // Unlocked from the extension (Touch ID): refresh state in place instead of reloading the window.
         listen('unlocked', () => {
           api.status().then((st) => {

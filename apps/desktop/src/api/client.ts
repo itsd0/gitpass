@@ -2,7 +2,18 @@ import { invoke } from '@tauri-apps/api/core';
 import type * as T from './types';
 import { mock } from './mock';
 const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-const call = <R>(cmd: string, args?: Record<string, unknown>): Promise<R> => isTauri ? invoke<R>(cmd, args) : (mock as any)[cmd](args ?? {});
+import { useApp } from '../lib/store';
+const raw = <R>(cmd: string, args?: Record<string, unknown>): Promise<R> => isTauri ? invoke<R>(cmd, args) : (mock as any)[cmd](args ?? {});
+/** True for the backend's "vault is locked" error (gui-core GuiState::with). */
+export const isLockedError = (e: unknown) => /vault is locked/i.test(typeof e === 'string' ? e : (e as any)?.message ?? String(e));
+/** Thrown instead of the raw backend message; the UI switches to the unlock screen. */
+export class VaultLockedError extends Error { constructor() { super('Vault locked'); this.name = 'VaultLockedError'; } }
+const NO_LOCK_CMDS = new Set(['status', 'unlock', 'unlock_biometric', 'create_account', 'lock']);
+const call = <R>(cmd: string, args?: Record<string, unknown>): Promise<R> =>
+  Promise.resolve().then(() => raw<R>(cmd, args)).catch((e) => {
+    if (!NO_LOCK_CMDS.has(cmd) && isLockedError(e)) { const s = useApp.getState(); if (!s.locked) s.lock(); throw new VaultLockedError(); }
+    throw e;
+  });
 export const api = {
   status: () => call<T.UnlockState>('status'),
   unlock: (a:{vaultPath:string; password:string; secretKey?:string|null}) => call<T.UnlockState>('unlock', a),

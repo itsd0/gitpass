@@ -952,7 +952,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-cli"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "arboard",
@@ -968,7 +968,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-core"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "argon2",
@@ -1001,7 +1001,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-gui-core"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "base64",
@@ -1020,7 +1020,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-host"
-version = "0.6.0"
+version = "0.6.1"
 dependencies = [
  "anyhow",
  "base64",
