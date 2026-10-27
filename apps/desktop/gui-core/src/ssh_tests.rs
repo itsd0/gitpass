@@ -116,3 +116,145 @@ fn agent_socket_passkey_needs_approval() {
     let r = call(json!({"cmd":"passkey_get","source":"popup","approved":true,"origin":"https://evil.com","rp_id":"example.com","challenge":"Yg"}));
     assert_eq!(r["error"], "origin_mismatch", "{r}");
 }
+
+#[test]
+fn ssh_agent_socket_wire_protocol_add_list_remove_and_sign() {
+    let e = env();
+    let a = crate::ssh_agent::start(e.app.clone(), e.ui.clone(), &e.sock.path().join("gitpass")).unwrap();
+    let mut s = std::os::unix::net::UnixStream::connect(&a.socket_path).unwrap();
+
+    let req_ids = |s: &mut std::os::unix::net::UnixStream| -> Vec<(Vec<u8>, String)> {
+        use std::io::{Read, Write};
+        let req = [0u8, 0, 0, 1, gitpass_core::ssh::SSH_AGENTC_REQUEST_IDENTITIES];
+        s.write_all(&req).unwrap();
+        s.flush().unwrap();
+        let mut len_b = [0u8; 4];
+        s.read_exact(&mut len_b).unwrap();
+        let len = u32::from_be_bytes(len_b) as usize;
+        let mut resp = vec![0u8; len];
+        s.read_exact(&mut resp).unwrap();
+        assert_eq!(resp[0], gitpass_core::ssh::SSH_AGENT_IDENTITIES_ANSWER);
+        let n = u32::from_be_bytes(resp[1..5].try_into().unwrap()) as usize;
+        let mut at = 5;
+        let mut out = Vec::with_capacity(n);
+        for _ in 0..n {
+            let blen = u32::from_be_bytes(resp[at..at + 4].try_into().unwrap()) as usize;
+            at += 4;
+            let blob = resp[at..at + blen].to_vec();
+            at += blen;
+            let clen = u32::from_be_bytes(resp[at..at + 4].try_into().unwrap()) as usize;
+            at += 4;
+            let comment = String::from_utf8(resp[at..at + clen].to_vec()).unwrap();
+            at += clen;
+            out.push((blob, comment));
+        }
+        out
+    };
+
+    let sign_req = |s: &mut std::os::unix::net::UnixStream, blob: &[u8], data: &[u8]| -> Result<Vec<u8>, u8> {
+        use std::io::{Read, Write};
+        let mut body = vec![gitpass_core::ssh::SSH_AGENTC_SIGN_REQUEST];
+        body.extend_from_slice(&(blob.len() as u32).to_be_bytes());
+        body.extend_from_slice(blob);
+        body.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        body.extend_from_slice(data);
+        body.extend_from_slice(&0u32.to_be_bytes());
+
+        let len = (body.len() as u32).to_be_bytes();
+        s.write_all(&len).unwrap();
+        s.write_all(&body).unwrap();
+        s.flush().unwrap();
+
+        let mut len_b = [0u8; 4];
+        s.read_exact(&mut len_b).unwrap();
+        let resp_len = u32::from_be_bytes(len_b) as usize;
+        let mut resp = vec![0u8; resp_len];
+        s.read_exact(&mut resp).unwrap();
+
+        if resp[0] == gitpass_core::ssh::SSH_AGENT_SIGN_RESPONSE {
+            let sig_len = u32::from_be_bytes(resp[1..5].try_into().unwrap()) as usize;
+            Ok(resp[5..5 + sig_len].to_vec())
+        } else {
+            Err(resp[0])
+        }
+    };
+
+    // 1. Initial state: 0 identities
+    let ids = req_ids(&mut s);
+    assert_eq!(ids.len(), 0);
+
+    // 2. Add identity via app (Ed25519)
+    let k1 = e.app.ssh_generate(&e.vault, "Deploy key", "deploy@test.example").unwrap();
+    let k1_blob = gitpass_core::ssh::public_blob_from_openssh(&k1.public_key).unwrap();
+    let ids = req_ids(&mut s);
+    assert_eq!(ids.len(), 1);
+    assert_eq!(ids[0].1, "Deploy key");
+    assert_eq!(&ids[0].0, &k1_blob);
+
+    // 3. Sign request over socket succeeds and signature verifies
+    let payload = b"commit 42: zero-knowledge gitpass ssh test payload";
+    let sig = sign_req(&mut s, &k1_blob, payload).expect("sign succeeds");
+    assert!(gitpass_core::ssh::verify_blob(&k1_blob, payload, &sig).is_ok());
+    assert!(gitpass_core::ssh::verify_blob(&k1_blob, b"tampered payload", &sig).is_err());
+
+    // 4. Sign request with unknown key returns failure (SSH_AGENT_FAILURE = 5)
+    let bad_blob = b"not-a-valid-ssh-key-blob";
+    assert_eq!(sign_req(&mut s, bad_blob, payload), Err(gitpass_core::ssh::SSH_AGENT_FAILURE));
+
+    // 5. Add second identity
+    let k2 = e.app.ssh_generate(&e.vault, "Personal key", "me@home.example").unwrap();
+    let k2_blob = gitpass_core::ssh::public_blob_from_openssh(&k2.public_key).unwrap();
+    let ids = req_ids(&mut s);
+    assert_eq!(ids.len(), 2);
+    let titles: Vec<&str> = ids.iter().map(|(_, c)| c.as_str()).collect();
+    assert!(titles.contains(&"Deploy key") && titles.contains(&"Personal key"));
+
+    let sig2 = sign_req(&mut s, &k2_blob, payload).expect("second key sign succeeds");
+    assert!(gitpass_core::ssh::verify_blob(&k2_blob, payload, &sig2).is_ok());
+
+    // 6. Remove first identity (k1) from vault
+    e.app.delete_item(&e.vault, &k1.item.id).unwrap();
+    let ids = req_ids(&mut s);
+    assert_eq!(ids.len(), 1);
+    assert_eq!(ids[0].1, "Personal key");
+
+    // Signing with removed key now fails
+    assert_eq!(sign_req(&mut s, &k1_blob, payload), Err(gitpass_core::ssh::SSH_AGENT_FAILURE));
+    // Signing with remaining key still succeeds
+    assert!(sign_req(&mut s, &k2_blob, payload).is_ok());
+
+    // 7. Remove second identity (k2) from vault
+    e.app.delete_item(&e.vault, &k2.item.id).unwrap();
+    let ids = req_ids(&mut s);
+    assert_eq!(ids.len(), 0);
+    assert_eq!(sign_req(&mut s, &k2_blob, payload), Err(gitpass_core::ssh::SSH_AGENT_FAILURE));
+
+    // 8. Add key again to test lock/unlock
+    let k3 = e.app.ssh_generate(&e.vault, "Key 3", "k3@example").unwrap();
+    let k3_blob = gitpass_core::ssh::public_blob_from_openssh(&k3.public_key).unwrap();
+    assert_eq!(req_ids(&mut s).len(), 1);
+
+    // Lock the vault
+    e.app.lock();
+    assert_eq!(req_ids(&mut s).len(), 0);
+    assert_eq!(sign_req(&mut s, &k3_blob, payload), Err(gitpass_core::ssh::SSH_AGENT_FAILURE));
+
+    // Unlock the vault again
+    e.app.unlock(&e.dir, "correct horse", Some(&e.sk)).unwrap();
+    assert_eq!(req_ids(&mut s).len(), 1);
+    assert!(sign_req(&mut s, &k3_blob, payload).is_ok());
+
+    // 9. Per-use approval
+    e.app.set_settings(Settings { ssh_approve_each_use: true, ..e.app.get_settings() }).unwrap();
+    e.ui.allow.store(false, Ordering::SeqCst);
+    assert_eq!(sign_req(&mut s, &k3_blob, payload), Err(gitpass_core::ssh::SSH_AGENT_FAILURE));
+    e.ui.allow.store(true, Ordering::SeqCst);
+    assert!(sign_req(&mut s, &k3_blob, payload).is_ok());
+
+    // 10. Check socket and directory permissions (0600 on socket, 0700 on parent dir)
+    use std::os::unix::fs::PermissionsExt;
+    let smeta = std::fs::metadata(&a.socket_path).unwrap();
+    assert_eq!(smeta.permissions().mode() & 0o777, 0o600);
+    let dmeta = std::fs::metadata(a.socket_path.parent().unwrap()).unwrap();
+    assert_eq!(dmeta.permissions().mode() & 0o777, 0o700);
+}
