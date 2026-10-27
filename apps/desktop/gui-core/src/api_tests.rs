@@ -163,6 +163,32 @@ fn copy_field_clears_clipboard_only_if_unchanged() {
 }
 
 #[test]
+fn copy_field_cleared_on_vault_lock() {
+    let e = env();
+    let mut s = e.app.get_settings();
+    s.clipboard_clear_secs = 60;
+    e.app.set_settings(s).unwrap();
+    let l = login(&e, "Beta", "b", "pw-FAKE-secret-lock");
+    e.app.copy_field(&e.vault, &l.id, "password").unwrap();
+    assert_eq!(e.clip.get_text().as_deref(), Some("pw-FAKE-secret-lock"));
+    e.app.lock();
+    assert_eq!(e.clip.get_text().as_deref(), Some(""));
+}
+
+#[test]
+fn copy_field_not_cleared_on_vault_lock_if_user_copied_else() {
+    let e = env();
+    let mut s = e.app.get_settings();
+    s.clipboard_clear_secs = 60;
+    e.app.set_settings(s).unwrap();
+    let l = login(&e, "Gamma", "g", "pw-FAKE-secret-lock-2");
+    e.app.copy_field(&e.vault, &l.id, "password").unwrap();
+    e.clip.set_text("external confidential text").unwrap();
+    e.app.lock();
+    assert_eq!(e.clip.get_text().as_deref(), Some("external confidential text"));
+}
+
+#[test]
 fn totp_now_and_totp_field_copy() {
     let e = env();
     let it = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "2FA".into(), url: None,
