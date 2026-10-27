@@ -275,6 +275,72 @@ fn watchtower_mfa_advice_and_passkey_suppression() {
 }
 
 #[test]
+fn watchtower_score_weighting_weak_and_missing_totp() {
+    // 2 logins, one weak; both have a URL and no TOTP (example.invalid is not in the offline list):
+    // penalty = 80·(1/2) + 10·(2/2) = 50 → score 50.
+    let e = env();
+    login(&e, "Weak fake", "weak@example.invalid", "password");
+    login(&e, "Strong fake", "strong@example.invalid", "Xq7#vR2!mK9@pL4$wZ");
+    let r = e.app.watchtower(false).unwrap();
+    assert_eq!((r.weak.len(), r.reused.len(), r.old.len(), r.breached.len(), r.missing_totp.len()), (1, 0, 0, 0, 2));
+    assert_eq!(r.score, 50);
+}
+
+#[test]
+fn watchtower_score_weighting_reuse_counts_every_item() {
+    // Both items of a reuse group are in `bad`: 80·(2/2) + 10·(2/2) = 90 → score 10.
+    let e = env();
+    login(&e, "Reuse A", "a@example.invalid", "Xq7#vR2!mK9@pL4$wZ");
+    login(&e, "Reuse B", "b@example.invalid", "Xq7#vR2!mK9@pL4$wZ");
+    let r = e.app.watchtower(false).unwrap();
+    assert_eq!((r.reused.len(), r.missing_totp.len()), (1, 2));
+    assert_eq!(r.score, 10);
+}
+
+#[test]
+fn watchtower_score_rounds_to_nearest_integer() {
+    // 3 logins, one weak: 80/3 + 10·(3/3) = 36.67 → 100 − 36.67 = 63.33 → 63.
+    let e = env();
+    login(&e, "Weak fake", "w@example.invalid", "password");
+    login(&e, "Strong one", "s1@example.invalid", "Xq7#vR2!mK9@pL4$wZ");
+    login(&e, "Strong two", "s2@example.invalid", "Another#Strong9Pass!x");
+    assert_eq!(e.app.watchtower(false).unwrap().score, 63);
+}
+
+#[test]
+fn watchtower_score_counts_documented_totp_sites_as_missing_2fa() {
+    // github.com is in the offline list, so the finding is TotpAvailable, not MissingTotp. It still
+    // means "2FA not set up" and keeps the 10-point missing-TOTP weight: 10·(1/1) → score 90.
+    let e = env();
+    e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "GitHub Fake".into(),
+        url: Some("https://github.com/login".into()), sections: vec![Section { id: "login".into(), title: None,
+        fields: vec![fld("username", FieldKind::Text, Some("fake@example.invalid")),
+            fld("password", FieldKind::Concealed, Some("Xq7#vR2!mK9@pL4$wZ"))] }], notes: None, tags: None, favorite: None }).unwrap();
+    let r = e.app.watchtower(false).unwrap();
+    assert_eq!((r.missing_totp.len(), r.totp_available.len()), (0, 1));
+    assert_eq!(r.score, 90);
+}
+
+#[test]
+fn watchtower_score_without_passwords_and_with_an_old_password() {
+    // No password anywhere: the score stays 100 even though TOTP is missing.
+    let e = env();
+    e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "No password".into(),
+        url: Some("https://example.invalid".into()), sections: vec![Section { id: "login".into(), title: None,
+        fields: vec![fld("username", FieldKind::Text, Some("nopw@example.invalid"))] }], notes: None, tags: None, favorite: None }).unwrap();
+    let r = e.app.watchtower(false).unwrap();
+    assert_eq!((r.missing_totp.len(), r.score), (1, 100));
+
+    // A backdated import exercises the old term: 10·(1/1) + 10·(2/2) = 20 → score 80.
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("old-fake.json");
+    std::fs::write(&f, r#"{"encrypted":false,"items":[{"id":"1","type":1,"name":"Old fake","revisionDate":"2020-01-02T03:04:05.000Z","login":{"username":"old@example.invalid","password":"Xq7#vR2!mK9@pL4$wZ","uris":[{"uri":"https://example.invalid"}]}}]}"#).unwrap();
+    e.app.import_file(&e.vault, "bitwarden-json", &f.display().to_string(), false).unwrap();
+    let r = e.app.watchtower(false).unwrap();
+    assert_eq!((r.old.len(), r.missing_totp.len(), r.score), (1, 2, 80));
+}
+
+#[test]
 fn import_file_dry_run_and_real() {
     let e = env();
     let dir = tempfile::tempdir().unwrap();
