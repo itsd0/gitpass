@@ -37,7 +37,7 @@ document.getElementById('login').onclick = async () => {
     if (!ok) throw new Error('bad signature');
     if (count <= RP.stored.count) throw new Error('signCount did not increase');
     RP.stored.count = count;
-    out({ verified: true, id: a.id, signCount: count, userHandle: new TextDecoder().decode(a.response.userHandle) });
+    out({ verified: true, id: a.id, signCount: count, userHandle: a.response.userHandle ? new TextDecoder().decode(a.response.userHandle) : null });
   } catch (e) { out({ error: e.name, message: e.message }); }
 };
 </script></body></html>
