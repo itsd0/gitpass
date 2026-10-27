@@ -142,5 +142,9 @@ export const en = {
   "detail.emptyTitle": "This vault is empty",
   "detail.emptyBody": "Add your first login, card or note to this vault.",
   "detail.newItem": "New Item",
+  "watchtower.totpAvailable": "2FA available",
+  "watchtower.totpAvailableDesc": "The site supports authenticator-app codes, but this login has no TOTP saved.",
+  "watchtower.passkeyAvailable": "Passkeys available",
+  "watchtower.passkeyAvailableDesc": "The site supports passkeys, but no passkey is saved for it.",
 } as const;
 export type Key = keyof typeof en;
