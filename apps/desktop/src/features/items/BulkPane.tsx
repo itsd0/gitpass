@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Archive, ArchiveRestore, Copy, FolderInput, RotateCcw, Star, StarOff, Tag, Trash2, X } from 'lucide-react';
+import { Archive, ArchiveRestore, Copy, Download, FolderInput, RotateCcw, Star, StarOff, Tag, Trash2, X } from 'lucide-react';
 import { api } from '../../api/client';
-import type { BulkAction, BulkRequest } from '../../api/types';
+import type { BulkAction, BulkRequest, ItemRef } from '../../api/types';
+import { useT } from '../../i18n';
 import { useApp } from '../../lib/store';
 import { useVaultsAndTags } from '../../lib/data';
 import { Button, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Input, toast } from '../../ui';
+import { ExportDialog } from '../export';
 import { ItemIcon } from './categories';
 import { errText } from './actions';
 import { useItemsUI } from './state';
@@ -34,9 +36,11 @@ export async function runBulk(action: BulkAction, extra: Partial<BulkRequest> = 
 function viewKind() { const r = useApp.getState().route; return r.name === 'items' ? r.filter.kind : 'all'; }
 
 export function BulkPane() {
+  const t = useT();
   const multi = useApp((s) => s.multiIds);
   const route = useApp((s) => s.route);
   const items = useItemsUI((s) => s.items);
+  const [exportRefs, setExportRefs] = useState<ItemRef[] | null>(null);
   const { vaults, tags } = useVaultsAndTags();
   const [tag, setTag] = useState('');
   const kind = route.name === 'items' ? route.filter.kind : 'all';
@@ -77,8 +81,10 @@ export function BulkPane() {
           <Button variant="outline" onClick={() => void runBulk('archive')}><Archive size={15} className="text-accent" />Archive</Button>
           <Button variant="outline" className="text-danger" onClick={() => useApp.getState().setBulkConfirm('trash')}><Trash2 size={15} />Move to Trash…</Button>
         </>)}
+        {kind !== 'deleted' && <Button variant="outline" disabled={!n} onClick={() => { const refs = refsFor(items, selectedIds(readSel())); if (refs.length) setExportRefs(refs); }}><Download size={15} className="text-accent" />{t('export.buttonSelected')}</Button>}
       </div>
       <p className="mt-6 max-w-sm text-center text-xs text-muted">⌘-click to add or remove items · ⇧-click to select a range · ⌘A selects all · Delete moves to Trash</p>
+      <ExportDialog open={!!exportRefs} onOpenChange={(o) => !o && setExportRefs(null)} items={exportRefs ?? []} />
     </div>
   );
 }
