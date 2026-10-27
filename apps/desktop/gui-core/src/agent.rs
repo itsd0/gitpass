@@ -374,6 +374,11 @@ impl Agent {
                 let b = |k: &str| q.get(k).and_then(|v| v.as_bool()).unwrap_or(true);
                 Ok(json!({"password": api::generate(len, b("symbols"), b("digits"), false)}))
             }
+            "passkey_query" => {
+                self.app.state.with(|x| {
+                    gitpass_host::passkey::query(&x.session, q)
+                }).map_err(host_err)
+            }
             "passkey_create" | "passkey_get" => {
                 let origin = req("origin")?;
                 let approved = gitpass_host::passkey::popup_approved(q) || {

@@ -430,6 +430,10 @@ impl Host {
                 }
                 Ok(json!({"vaults": out}))
             }
+            "passkey_query" => {
+                let s = self.sess()?;
+                crate::passkey::query(s, req)
+            }
             "passkey_create" | "passkey_get" => {
                 if !crate::passkey::popup_approved(req) { return Err(coded(code::DENIED, format!("{cmd} needs approval in the gitpass popup"))); }
                 let s = self.sess()?;

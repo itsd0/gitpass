@@ -134,7 +134,7 @@ async function openFill(msg) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     if (typeof msg.type === 'string' && msg.type.startsWith('passkey-ui:')) { if (!GitpassPasskey.isUiSender(sender)) throw new Error('unknown message'); return GitpassPasskey.fromUi(msg, host); }
-    if (typeof msg.type === 'string' && msg.type.startsWith('passkey:') && sender.tab) return GitpassPasskey.fromPage(msg, sender);
+    if (typeof msg.type === 'string' && msg.type.startsWith('passkey:') && sender.tab) return GitpassPasskey.fromPage(msg, sender, host);
     const fromExtensionPage = sender.id === chrome.runtime.id && !sender.tab;
     if (fromExtensionPage) {
       if (typeof msg.type === 'string' && msg.type.startsWith('popup:')) return popupRoute(msg);

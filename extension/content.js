@@ -33,7 +33,17 @@
   .banner .row{display:flex;align-items:center;gap:10px}
   .banner .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
   .btn{border:1px solid #3c3e44;background:#2a2b30;color:#ECEDF0;border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
-  .btn.pri{background:#F28C28;border-color:#F28C28;color:#1C1C1E;font-weight:600}`;
+  .btn.pri{background:#F28C28;border-color:#F28C28;color:#1C1C1E;font-weight:600}
+  .pk-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;z-index:2147483647;backdrop-filter:blur(2px)}
+  .pk-card{width:360px;background:#1C1C1E;color:#ECEDF0;border:1px solid #3c3e44;border-radius:12px;box-shadow:0 16px 48px rgba(0,0,0,.6);font:13px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px}
+  .pk-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .pk-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;background:#2a2b30;flex-shrink:0}
+  .pk-title{font-size:15px;font-weight:600;color:#ECEDF0}
+  .pk-meta{background:#25262a;border-radius:8px;padding:12px;margin:12px 0;display:flex;flex-direction:column;gap:8px}
+  .pk-field{display:flex;justify-content:space-between;align-items:center;font-size:12px}
+  .pk-label{color:#969AA4}
+  .pk-val{font-weight:600;color:#ECEDF0;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pk-acts{display:flex;justify-content:flex-end;gap:10px;margin-top:16px}`;
 
   // ---------- messaging ----------
   async function send(type, args) {
@@ -408,9 +418,62 @@
     if (e.key === 'Enter' && e.isTrusted && e.target && e.target.tagName === 'INPUT' && !dd) capture(e.target.form || document);
   }, true);
 
-  // ---------- popup "Open & Fill" (background sends to frame 0 only; sender must be our extension) ----------
-  chrome.runtime.onMessage.addListener((msg, sender) => {
+  // ---------- popup "Open & Fill" and in-page prompts (frame 0 only) ----------
+  let pkPrompt = null;
+  function closePkPrompt() { if (pkPrompt) { pkPrompt.host.remove(); pkPrompt = null; } }
+  function showPkPrompt(msg, sendResponse) {
+    closePkPrompt();
+    const { host, root } = shadowHost(true);
+    host.style.zIndex = '2147483647'; host.style.inset = '0'; host.style.position = 'fixed';
+    const overlay = el('div', 'pk-overlay');
+    const card = el('div', 'pk-card');
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+
+    const row = el('div', 'pk-row');
+    const ic = el('div', 'pk-icon');
+    const img = el('img'); img.src = LOGO; img.alt = 'gitpass'; img.style.cssText = 'width:20px;height:20px;border-radius:4px';
+    ic.append(img);
+    const ti = el('div', 'pk-title', msg.kind === 'create' ? t('pkCreateTitle', 'Save a passkey?') : t('pkGetTitle', 'Sign in with a passkey?'));
+    row.append(ic, ti);
+
+    const meta = el('div', 'pk-meta');
+    const siteRow = el('div', 'pk-field');
+    siteRow.append(el('span', 'pk-label', t('pkSite', 'Site:')), el('span', 'pk-val', msg.rpId));
+    const userRow = el('div', 'pk-field');
+    userRow.append(el('span', 'pk-label', t('pkAccount', 'Account:')), el('span', 'pk-val', msg.userName || '—'));
+    meta.append(siteRow, userRow);
+
+    const acts = el('div', 'pk-acts');
+    const cancelBtn = el('button', 'btn', t('pkCancel', 'Cancel')); cancelBtn.type = 'button';
+    const okBtn = el('button', 'btn pri', msg.kind === 'create' ? t('pkSave', 'Save passkey') : t('pkSignIn', 'Sign in')); okBtn.type = 'button';
+
+    let answered = false;
+    const finish = (approved) => {
+      if (answered) return;
+      answered = true;
+      closePkPrompt();
+      try { sendResponse({ approved }); } catch (_) {}
+    };
+
+    cancelBtn.addEventListener('click', (e) => { if (!e.isTrusted) return; finish(false); });
+    okBtn.addEventListener('click', (e) => { if (!e.isTrusted) return; finish(true); });
+    overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') finish(false); });
+
+    acts.append(cancelBtn, okBtn);
+    card.append(row, meta, acts);
+    overlay.append(card);
+    root.append(overlay);
+    pkPrompt = { host, finish };
+    setTimeout(() => okBtn.focus(), 50);
+  }
+
+  chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || (sender && sender.id && sender.id !== chrome.runtime.id)) return;
+    if (msg.type === 'gitpass-passkey-prompt') {
+      showPkPrompt(msg, sendResponse);
+      return true; // async sendResponse
+    }
     if (msg.origin !== location.origin) return; // page navigated meanwhile: drop
     const list = GitpassForms.detectForms(document);
     if (msg.type === 'gitpass-fill') {

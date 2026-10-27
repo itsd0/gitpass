@@ -90,4 +90,14 @@ fn policy_approval_rpid_exclude() {
     ok(&mut f.host, json!({"cmd":"unlock","password":PW}));
     let l = ok(&mut f.host, json!({"cmd":"passkey_create","source":"popup","approved":true,"origin":"http://localhost:8123","challenge":"YQ","user_id":"dQ","user_name":"x"}));
     assert_eq!(l["rp_id"], "localhost");
+
+    // passkey_query returns real username without requiring popup approval
+    let q = ok(&mut f.host, json!({"cmd":"passkey_query","origin":ORIGIN,"rp_id":"example.com"}));
+    let matches = q["matching"].as_array().unwrap();
+    assert_eq!(matches.len(), 1);
+    assert_eq!(matches[0]["user_name"], "alice@example.com");
+
+    // query for unknown rp returns empty matching list
+    let q_empty = ok(&mut f.host, json!({"cmd":"passkey_query","origin":"https://other.example","rp_id":"other.example"}));
+    assert_eq!(q_empty["matching"].as_array().unwrap().len(), 0);
 }
