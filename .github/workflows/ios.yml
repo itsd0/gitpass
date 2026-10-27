@@ -11,18 +11,17 @@ on:
       - "ios/**"
       - "crates/gitpass-core/**"
       - "crates/gitpass-ios-ffi/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
       - ".github/workflows/ios.yml"
   pull_request:
     paths:
       - "ios/**"
       - "crates/gitpass-core/**"
       - "crates/gitpass-ios-ffi/**"
-      - "Cargo.toml"
-      - "Cargo.lock"
       - ".github/workflows/ios.yml"
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 concurrency:
   group: ios-${{ github.ref }}
@@ -31,24 +30,27 @@ concurrency:
 jobs:
   rust-ffi:
     name: Rust FFI tests
-    runs-on: macos-latest
+    runs-on: [self-hosted, macOS, gitpass-mac]
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
       - name: FFI crate tests (real vault, real crypto)
-        run: cargo test -p gitpass-ios-ffi --locked
+        run: |
+          export HOME="$RUNNER_TEMP/home"; rm -rf "$HOME"; mkdir -p "$HOME"
+          export CARGO_HOME=/Users/naynaingoo/.cargo RUSTUP_HOME=/Users/naynaingoo/.rustup
+          cargo test -p gitpass-ios-ffi --locked
 
   ios:
     name: iOS simulator build + test
-    runs-on: macos-latest
+    runs-on: [self-hosted, macOS, gitpass-mac]
     needs: rust-ffi
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Check XcodeGen (preinstalled on the self-hosted Mac)
+        run: command -v xcodegen
       - name: Build XCFramework + Swift bindings
         run: |
           chmod +x ios/scripts/build-xcframework.sh
@@ -105,7 +107,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO
           ls -la "$RUNNER_TEMP/Gitpass.xcarchive"
       - name: Upload unsigned app artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
           name: gitpass-ios-unsigned
