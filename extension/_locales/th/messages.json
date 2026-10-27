@@ -416,7 +416,7 @@
   },
   "stepPinBody": {
     "message": "คลิกไอคอนจิ๊กซอว์ในแถบเครื่องมือ แล้วคลิกหมุดข้าง gitpass คุณยังเปิดได้ทุกเมื่อด้วย",
-    "description": "NEEDS NATIVE REVIEW (v0.6 machine draft)"
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "pinDone": {
     "message": "ปักหมุดแล้ว",

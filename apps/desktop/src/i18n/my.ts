@@ -4,15 +4,37 @@ import type { Key } from './en';
 // (unshare.body, devices.rotateHelp, invite.warning) and terms "vault" (သော့ခတ်သေတ္တာ) and "fingerprint" (လက်ဗွေ).
 // Brand/product terms (Watchtower, Secret Key, Emergency Kit) intentionally kept in English.
 export const my: Partial<Record<Key, string>> = {
-  // emergency kit (partial; other kit.* keys fall back to English — TODO translate)
+  // emergency kit: drafted by agy, marked for native speaker review
   'kit.title': 'gitpass Emergency Kit',
+  'kit.subtitle': 'ဤစာရွက်ကို လုံခြုံသောနေရာတွင် အော့ဖ်လိုင်း သိမ်းဆည်းထားပါ။ ၎င်းဖြင့် စက်အသစ်တွင် သင့် vault ကို ဖွင့်နိုင်ပါသည်။',
   'kit.created': 'ဖန်တီးသည့်ရက်',
   'kit.device': 'စက်',
   'kit.accountId': 'အကောင့် ID',
+  'kit.vaultFolder': 'Vault ဖိုဒါ',
+  'kit.remote': 'Git remote',
+  'kit.noRemote': 'Remote မသတ်မှတ်ရသေးပါ (ဆက်တင်များ → ချိန်ကိုက်ရန်)',
+  'kit.qrAlt': 'အကောင့်အသေးစိတ်ပါသော QR ကုဒ်',
+  'kit.qrWithKey': 'အကောင့်အသေးစိတ်နှင့် Secret Key ပါဝင်သည်',
+  'kit.qrNoKey': 'အကောင့်အသေးစိတ် ပါဝင်သည် (Secret Key မပါပါ)',
   'kit.secretKey': 'Secret Key',
+  'kit.secretMissing': 'Secret Key ကို ဝှက်ထားသည်။ ပြသရန် သင့် မာစတာ စကားဝှက်ကို ပြန်ရိုက်ပါ၊ သို့မဟုတ် kit အသစ် ပုံနှိပ်ရန် အသစ်လဲပါ။',
+  'kit.reveal': 'Secret Key ပြရန်',
+  'kit.revealPrompt': 'ဤ kit ပေါ်တွင် Secret Key ပြရန် သင့် မာစတာ စကားဝှက်ကို ရိုက်ထည့်ပါ။',
+  'kit.rotateToPrint': 'Kit အသစ် ပုံနှိပ်ရန် Secret Key အသစ်လဲပါ',
+  'kit.rotatePrompt': 'Sync လုပ်ပြီးနောက် စက်အားလုံးတွင် Secret Key အသစ်က လက်ရှိတစ်ခုကို အစားထိုးပါမည်။ Kit အဟောင်းများ အလုပ်မလုပ်တော့ပါ။',
+  'kit.rotateConfirm': 'ယခု လဲရန်',
   'kit.masterPassword': 'မာစတာ စကားဝှက်',
+  'kit.masterHint': 'လက်ရေးဖြင့် ရေးထားပါ။ gitpass သည် ၎င်းကို မည်သည့်အခါမျှ ပုံနှိပ်ခြင်း သို့မဟုတ် သိမ်းဆည်းခြင်း မပြုပါ။',
+  'kit.howTo': 'စက်အသစ်တွင် သင့် vault ကို ဖွင့်နည်း',
+  'kit.step1': 'gitpass ကို ထည့်သွင်းပြီး သော့ဖွင့်မျက်နှာပြင်တွင် “Vault folder & Secret Key” ကို ရွေးပါ။',
+  'kit.step2': 'အထက်ပါ Git remote မှ သင့် vault ကို clone လုပ်ပါ (သို့မဟုတ် vault ဖိုဒါကို ကူးယူပါ)။',
+  'kit.step3': 'ဤ kit မှ Secret Key နှင့် သင့် မာစတာ စကားဝှက်ကို ရိုက်ထည့်ပါ။',
+  'kit.step4': 'ဤ kit ကို အော့ဖ်လိုင်း သိမ်းဆည်းထားပါ။ ပျောက်ဆုံးသွားပါက သို့မဟုတ် ပေါက်ကြားသွားပါက ဆက်တင်များ တွင် သင့် Secret Key ကို အသစ်လဲပါ။',
+  'kit.footer': 'gitpass — သင့်ကိုယ်ပိုင် Git repository တွင် အစအဆုံး ကုဒ်ဝှက်ထားသော စကားဝှက်များ။ ဤ kit နှင့် သင့် မာစတာ စကားဝှက်ရှိသူ မည်သူမဆို သင့် vault ကို ဖွင့်နိုင်ပါသည်။',
+  'kit.toolbarHint': 'A4 ဖြင့် ပုံနှိပ်ပါ သို့မဟုတ် PDF အဖြစ် သိမ်းဆည်းပြီး လုံခြုံစွာ သိမ်းထားပါ။',
   'kit.print': 'ပုံနှိပ် / PDF သိမ်းရန်',
   'kit.close': 'ပိတ်ရန်',
+  'kit.openPrintable': 'ပုံနှိပ်နိုင်သော kit ကို ဖွင့်ရန်',
   'nav.home': 'ပင်မ', 'nav.allItems': 'အရာအားလုံး', 'nav.favorites': 'အကြိုက်ဆုံးများ', 'nav.watchtower': 'Watchtower', 'nav.vaults': 'သော့ခတ်သေတ္တာများ', 'nav.tags': 'တဂ်များ',
   'nav.archive': 'မှတ်တမ်းသိမ်း', 'nav.deleted': 'မကြာသေးမီက ဖျက်ထားသည်', 'nav.newItem': 'အရာအသစ်', 'nav.search': 'ရှာဖွေရန်', 'nav.lock': 'သော့ခတ်ရန်', 'nav.settings': 'ဆက်တင်များ', 'nav.people': 'လူများ',
   'common.cancel': 'မလုပ်တော့ပါ', 'common.save': 'သိမ်းရန်', 'common.close': 'ပိတ်ရန်', 'common.copy': 'ကူးယူရန်', 'common.copied': 'ကူးယူပြီးပါပြီ', 'common.loading': 'ခဏစောင့်ပါ…', 'common.error': 'အမှားဖြစ်သွားသည်- {msg}', 'common.saved': 'သိမ်းပြီး',
@@ -21,6 +43,13 @@ export const my: Partial<Record<Key, string>> = {
   'people.publicKey': 'Public key', 'people.fingerprint': 'လက်ဗွေ', 'people.copyKey': 'Public key ကူးယူရန်', 'people.qr': 'သင့် public key ၏ QR ကုဒ်',
   'people.vaultMembers': 'သော့ခတ်သေတ္တာ အဖွဲ့ဝင်များ', 'people.you': 'သင်', 'people.unnamed': 'အမည်မဲ့ အဖွဲ့ဝင်', 'people.invite': 'ဖိတ်ရန် / မျှဝေရန်', 'people.remove': 'ဖယ်ရှားရန်',
   'people.noMembers': 'ဤသော့ခတ်သေတ္တာကို သင်သာ ဝင်ရောက်နိုင်သည်။', 'people.noVaults': 'သော့ခတ်သေတ္တာ မရှိသေးပါ။',
+  // ssh agent
+  'settings.ssh': 'SSH Agent',
+  'ssh.status': 'Agent အခြေအနေ', 'ssh.running': 'အလုပ်လုပ်နေသည်', 'ssh.stopped': 'ရပ်တန့်ထားသည်', 'ssh.config': 'SSH config',
+  'ssh.configHelp': 'ssh နှင့် git တို့က gitpass မှ သော့များကို သုံးနိုင်ရန် ၎င်းကို ~/.ssh/config တွင် ထည့်ပါ။ gitpass သော့ဖွင့်ထားစဉ်တွင်သာ သော့များကို ထုတ်ပေးပါမည်။',
+  'ssh.copy': 'Config ကူးယူရန်', 'ssh.copied': 'ကလစ်ဘုတ်သို့ ကူးယူပြီးပါပြီ', 'ssh.approve': 'အသုံးပြုမှုတိုင်းကို အတည်ပြုချက်တောင်းရန်',
+  'ssh.approveHelp': 'လက်မှတ်ထိုးမှုတိုင်း (ဥပမာ- git push သို့မဟုတ် ssh login တိုင်း) မတိုင်မီ ခွင့်ပြုချက်တောင်းပါ။',
+  'ssh.cli': 'Command line', 'ssh.cliHelp': 'gitpass ssh generate | import | list | public | config | agent',
   'share.title': '“{vault}” ကို မျှဝေရန်', 'share.desc': 'လက်ခံသူ၏ public key ကို ကူးထည့်ပါ။ ၎င်းတို့သည် ဤသော့ခတ်သေတ္တာရှိ အရာအားလုံးကို ဖတ်ပြီး ပြင်ဆင်နိုင်ပါမည်။',
   'share.key': 'လက်ခံသူ၏ public key', 'share.label': 'အမည်တံဆိပ် (မထည့်လည်းရ)',
   'share.verify': 'အခြားနည်းလမ်းဖြင့် အတည်ပြုပါ', 'share.verifyHelp': 'ဤကုဒ်ကို ဖုန်းဖြင့် သို့မဟုတ် လူချင်းတွေ့၍ လက်ခံသူအား ဖတ်ပြပါ။ ၎င်းတို့၏ gitpass တွင် ပြသော ကုဒ်နှင့် တူရမည်။',
@@ -52,8 +81,12 @@ export const my: Partial<Record<Key, string>> = {
   'share.labelPlaceholder': 'ဥပမာ- Alex ၏ laptop', 'sync.ahead': '{n} ခု ရှေ့ရောက်နေသည်', 'sync.behind': '{n} ခု နောက်ကျနေသည်', 'sync.dirty': 'commit မလုပ်ရသေးသော ပြောင်းလဲမှုများ',
   'palette.label': 'Command palette', 'cmd.watchtower': 'Watchtower သို့', 'shortcuts.palette': 'Command palette ဖွင့်ရန်', 'shortcuts.help': 'ဤအကူအညီကို ပြရန်',
   'shortcuts.newItem': 'အရာအသစ်', 'shortcuts.lock': 'သော့ခတ်ရန်', 'qa.label': 'အမြန်ဝင်ရောက်ရန်', 'qa.hint': 'သော့ခတ်သေတ္တာများတွင် ရှာရန် စာရိုက်ပါ',
-  // TODO(i18n-review): intentionally left to English fallback (unsure of precise Burmese security phrasing):
-  // settings.rotateKeyHelp, devices.revokeBody, devices.rotate, devices.rotateHelp, about.license
+  // TODO(i18n-review): drafted by agy; needs native Burmese speaker sign-off:
+  'settings.rotateKeyHelp': 'Secret Key အသစ်တစ်ခု ထုတ်ပေးမည်။ အခြားစက်များ ဝင်ရောက်ရန် Emergency Kit အသစ် လိုအပ်ပါမည်။',
+  'devices.revokeBody': 'ဤစက်ကို နောက်နောင် sync လုပ်ခြင်းများမှ ဖယ်ရှားပါမည်။ ရုပ်သိမ်းခြင်းသည် ထိုစက်သို့ ကူးယူပြီးသား အချက်အလက်များကို မဖျက်နိုင်ပါ။',
+  'devices.rotate': 'Vault သော့များနှင့် Secret Key ကိုပါ အသစ်လဲရန် (စက် ပျောက်ဆုံးခြင်း သို့မဟုတ် အခိုးခံရပါက အကြံပြုပါသည်)',
+  'devices.rotateHelp': 'သော့အသစ်လဲခြင်းသည် vault များကို ပြန်လည်ကုဒ်ဝှက်သဖြင့် ရုပ်သိမ်းထားသော စက်သည် ပြောင်းလဲမှုအသစ်များကို မဖတ်နိုင်တော့ပါ။ ၎င်းတွေ့မြင်ခဲ့ပြီးသော စကားဝှက်များကို သိရှိနေဆဲဖြစ်သဖြင့် အရေးကြီးသည်များကို ပြောင်းလဲပါ။',
+  // Note: about.license is intentionally left to English fallback for i18n test coverage.
   // sync: connect GitHub + onboarding repo card
   "sync.status": "အခြေအနေ",
   "sync.connectTitle": "GitHub ချိတ်ဆက်ရန်",
@@ -90,6 +123,9 @@ export const my: Partial<Record<Key, string>> = {
   "onb.repo.recheck": "ပြန်စစ်ရန်",
   "onb.repo.stillNot": "မချိတ်ဆက်ရသေးပါ။",
   "settings.vaults": "Vault များ",
+  'settings.vault': 'Vault', 'settings.vaultName': 'အမည်', 'settings.vaultDescription': 'ဖော်ပြချက်', 'settings.vaultItems': 'Item များ', 'settings.vaultOpen': 'Vault ဖွင့်ရန်',
+  'settings.vaultMissing': 'ဤ vault မရှိတော့ပါ။', 'settings.vaultEditHint': 'ဤဗားရှင်းတွင် vault အမည်ပြောင်းခြင်းနှင့် ဖျက်ခြင်း မရနိုင်သေးပါ။',
+  'share.keyPlaceholder': 'gitpass-x25519:…',
   "vault.edit": "Vault ကို ပြင်ရန်…",
   "vault.delete": "Vault ကို ဖျက်ရန်…",
   "vault.editTitle": "Vault ကို ပြင်ရန်",
