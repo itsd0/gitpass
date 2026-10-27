@@ -1,0 +1,127 @@
+# gitpass for iOS — XcodeGen project.
+#
+# The project is generated, never committed, so signing stays local:
+#   cd ios && ./scripts/build-xcframework.sh && xcodegen generate
+# then open Gitpass.xcodeproj, pick your personal team in Signing &
+# Capabilities, and run on your iPhone. CI does the same steps with
+# CODE_SIGNING_ALLOWED=NO and uploads the unsigned .app as an artifact.
+#
+# No DEVELOPMENT_TEAM is committed here on purpose. The bundle IDs
+# below are the ones the app uses; a free personal team works for
+# local installs (AutoFill and app groups need a team, which Xcode
+# supplies from your Apple ID when you pick it locally).
+name: Gitpass
+options:
+  deploymentTarget:
+    iOS: "17.0"
+  bundleIdPrefix: dev.gitpass.ios
+  createIntermediateGroups: true
+targets:
+  GitpassApp:
+    type: application
+    platform: iOS
+    sources:
+      - Sources/GitpassApp
+      - Generated/gitpass_ios_ffi.swift
+    # XcodeGen rewrites these files from `properties` on every
+    # `xcodegen generate`, so the keys must live here, not only in
+    # the plist/entitlements files (otherwise they are wiped).
+    info:
+      path: Sources/GitpassApp/Info.plist
+      properties:
+        CFBundleDisplayName: gitpass
+        CFBundleName: gitpass
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSFaceIDUsageDescription: Face ID unlocks your gitpass vault without typing the master password.
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    entitlements:
+      path: Sources/GitpassApp/GitpassApp.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - group.dev.gitpass.ios
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)dev.gitpass.ios
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gitpass.ios
+        # Sources/GitpassApp/Assets.xcassets/AppIcon.appiconset (single 1024px).
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      # Static library XCFramework: link only, nothing to embed.
+      - framework: Frameworks/GitpassCore.xcframework
+        embed: false
+      # Ship the AutoFill extension inside the app (PlugIns/).
+      - target: GitpassAutoFill
+        embed: true
+  GitpassAutoFill:
+    type: app-extension
+    platform: iOS
+    sources:
+      - Sources/AutoFill
+      - Generated/gitpass_ios_ffi.swift
+    info:
+      path: Sources/AutoFill/Info.plist
+      properties:
+        CFBundleDisplayName: gitpass
+        CFBundleName: gitpass AutoFill
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.authentication-services-credential-provider-ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CredentialProviderViewController
+    entitlements:
+      path: Sources/AutoFill/GitpassAutoFill.entitlements
+      properties:
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+        com.apple.security.application-groups:
+          - group.dev.gitpass.ios
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)dev.gitpass.ios
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gitpass.ios.autofill
+        CODE_SIGN_STYLE: Automatic
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - framework: Frameworks/GitpassCore.xcframework
+        embed: false
+  GitpassTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - Tests
+      - Generated/gitpass_ios_ffi.swift
+      # Keychain + Sync are compiled into the test bundle directly so
+      # the tests do not need to import the app target as a library.
+      - path: Sources/GitpassApp/Keychain.swift
+      - path: Sources/GitpassApp/SyncService.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.gitpass.ios.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+    dependencies:
+      - target: GitpassApp
+      - framework: Frameworks/GitpassCore.xcframework
+        embed: false
+schemes:
+  Gitpass:
+    build:
+      targets:
+        GitpassApp: all
+        GitpassAutoFill: all
+    test:
+      targets:
+        - GitpassTests
+    run:
+      config: Debug

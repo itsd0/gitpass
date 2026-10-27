@@ -50,6 +50,10 @@ ignore = [
     # no remote exposure, and a same-user local attacker who can precisely
     # time many agent signatures is already past the point where this
     # matters most. Remove this ignore the day ssh-key 0.7 stable lands.
+    # RUSTSEC-2026-0374 (basic-toml unmaintained, not a vulnerability): build-time only, via
+    # uniffi_bindgen -> askama_derive (proc-macro) for the iOS FFI crate; never in a shipped binary's
+    # runtime code and never fed untrusted TOML. Drop when uniffi moves off askama 0.13.
+    { id = "RUSTSEC-2026-0374", reason = "build-time only (uniffi bindgen proc-macro), unmaintained notice, no vulnerability" },
     { id = "RUSTSEC-2026-0387", reason = "only remaining copy is ssh-key 0.6 transitive (ECDSA SSH keys); fixed by ssh-key 0.7 stable, not yet released" },
 ]
 

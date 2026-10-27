@@ -1,0 +1,117 @@
+name: iOS
+
+# Builds the gitpass iOS app on macOS: the UniFFI XCFramework, the
+# Rust FFI tests, and an unsigned simulator build + test run.
+# This workflow never signs, never needs a team, and never touches
+# any vault repository — it only builds and tests the app itself.
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths:
+      - "ios/**"
+      - "crates/gitpass-core/**"
+      - "crates/gitpass-ios-ffi/**"
+      - ".github/workflows/ios.yml"
+  pull_request:
+    paths:
+      - "ios/**"
+      - "crates/gitpass-core/**"
+      - "crates/gitpass-ios-ffi/**"
+      - ".github/workflows/ios.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  rust-ffi:
+    name: Rust FFI tests
+    runs-on: [self-hosted, macOS, gitpass-mac]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: FFI crate tests (real vault, real crypto)
+        run: |
+          export HOME="$RUNNER_TEMP/home"; rm -rf "$HOME"; mkdir -p "$HOME"
+          export CARGO_HOME=/Users/naynaingoo/.cargo RUSTUP_HOME=/Users/naynaingoo/.rustup
+          cargo test -p gitpass-ios-ffi --locked
+
+  ios:
+    name: iOS simulator build + test
+    runs-on: [self-hosted, macOS, gitpass-mac]
+    needs: rust-ffi
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Check XcodeGen (preinstalled on the self-hosted Mac)
+        run: command -v xcodegen
+      - name: Build XCFramework + Swift bindings
+        run: |
+          chmod +x ios/scripts/build-xcframework.sh
+          ./ios/scripts/build-xcframework.sh
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+      - name: Build for simulator (unsigned)
+        working-directory: ios
+        run: |
+          # No hardcoded device name: the simulator set on a fresh
+          # macos runner changes with the Xcode version (iPhone 16
+          # was not present and failed the run with exit code 70).
+          xcodebuild build \
+            -project Gitpass.xcodeproj \
+            -scheme Gitpass \
+            -destination 'generic/platform=iOS Simulator' \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO
+      - name: Test on simulator (unsigned)
+        working-directory: ios
+        run: |
+          # Pick whatever iPhone simulator this runner actually has
+          # instead of naming one that may not exist.
+          UDID=$(xcrun simctl list devices available -j | jq -r '[.devices[] | .[] | select(.name | startswith("iPhone"))][0].udid')
+          if [ -z "$UDID" ] || [ "$UDID" = "null" ]; then
+            echo "No available iPhone simulator found on this runner."
+            xcrun simctl list devices available
+            exit 1
+          fi
+          echo "Testing on simulator $UDID"
+          # Ad-hoc signing ("-", no team, no secrets): a fully unsigned
+          # bundle has no entitlements, so the simulator keychain
+          # rejects it with errSecMissingEntitlement (-34018) and the
+          # Keychain tests fail. Ad-hoc signing is simulator-only.
+          xcodebuild test \
+            -project Gitpass.xcodeproj \
+            -scheme Gitpass \
+            -destination "id=$UDID" \
+            -configuration Debug \
+            CODE_SIGN_IDENTITY=- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=
+      - name: Build unsigned archive for inspection
+        working-directory: ios
+        run: |
+          xcodebuild archive \
+            -project Gitpass.xcodeproj \
+            -scheme Gitpass \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Gitpass.xcarchive" \
+            -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO
+          ls -la "$RUNNER_TEMP/Gitpass.xcarchive"
+      - name: Upload unsigned app artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: gitpass-ios-unsigned
+          path: |
+            ${{ runner.temp }}/Gitpass.xcarchive
+            ios/Frameworks/GitpassCore.xcframework
+          if-no-files-found: warn
