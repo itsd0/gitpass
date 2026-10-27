@@ -10,9 +10,9 @@
 /* global chrome, GitpassPolicy */
 (function (root) {
   'use strict';
-  const TTL_MS = 3 * 60 * 1000;
+  const TTL_MS = 5 * 60 * 1000;
   const pendingSaves = new Map(); // tabId -> { origin, kind, username, password, item_id, prompt, ts }
-  const lastUsername = new Map(); // tabId -> { origin, username, ts }  (multi-step logins: step 1 value)
+  const lastUsername = new Map(); // tabId -> { origin, username, ts }  (multi-step logins: step 1 value, 5 min TTL)
   const PAGE_LISTABLE = new Set(['credit_card', 'identity']);
 
   function err(code, message) { const e = new Error(message || code); e.code = code; return e; }
@@ -43,13 +43,22 @@
     let items;
     try { items = await matchItems(host, origin); } catch (e) { return { prompt: 'save', items: null, error: e.code || e.message }; }
     const logins = items.filter((i) => !i.category || i.category === 'login');
-    const same = logins.filter((i) => (i.subtitle || '') === (cap.username || ''));
+    const same = logins.filter((i) => (i.subtitle || '').trim().toLowerCase() === (cap.username || '').trim().toLowerCase());
     for (const it of same) {
       try {
         const c = await host('fill', { item_id: it.id, origin });
-        if (c && c.password === cap.password) return null; // already saved, nothing to do
-        return { prompt: 'update', item_id: it.id, title: it.title };
-      } catch (_) { /* fall through to save */ }
+        if (c && c.password === cap.password && (!cap.username || c.username === cap.username)) return null; // already saved, nothing to do
+        return { prompt: 'update', item_id: it.id, title: it.title, hasUser: !!(it.subtitle || '').trim() };
+      } catch (_) { /* fall through to next */ }
+    }
+    // Offer "Update existing" when an item for the origin already exists
+    if (logins.length > 0) {
+      const existing = logins[0];
+      try {
+        const c = await host('fill', { item_id: existing.id, origin });
+        if (c && c.password === cap.password && (!cap.username || c.username === cap.username)) return null;
+        return { prompt: 'update', item_id: existing.id, title: existing.title, hasUser: !!(existing.subtitle || '').trim() };
+      } catch (_) {}
     }
     return { prompt: 'save' };
   }
@@ -101,7 +110,8 @@
         if (!['login', 'signup', 'change_password'].includes(kind)) throw err('bad_request', 'kind');
         if (typeof a.password !== 'string' || !a.password || a.password.length > 1024) throw err('bad_request', 'password');
         let user = username;
-        if (!user) { const lu = fresh(lastUsername, tabId, origin, true); if (lu) user = lu.username; }
+        if (!user) { const lu = fresh(lastUsername, tabId, origin, true); if (lu && lu.username) user = lu.username; }
+        else { lastUsername.set(tabId, { origin, username: user, ts: Date.now() }); }
         const cap = { origin, kind, username: user, password: a.password, ts: Date.now() };
         const d = await decide(host, origin, cap);
         if (!d) { pendingSaves.delete(tabId); return { prompt: null }; }
@@ -118,10 +128,16 @@
         if (!p) throw err('not_found', 'nothing to save');
         if (a.action === 'dismiss') return { done: false };
         if (!a.user_click) throw err('denied', 'needs a click');
-        if (p.prompt === 'update' && a.action === 'update') { await host('update_password', { item_id: p.item_id, password: p.password }); return { done: true, action: 'update' }; }
+        const user = p.username || a.username || '';
+        if (p.prompt === 'update' && a.action === 'update') {
+          const upArgs = { item_id: p.item_id || a.item_id, password: p.password };
+          if (user && !p.hasUser) upArgs.username = user;
+          await host('update_password', upArgs);
+          return { done: true, action: 'update' };
+        }
         if (a.action === 'save') {
           const title = new URL(p.origin).hostname.replace(/^www\./, '');
-          const r = await host('save_login', { origin: p.origin, title, username: p.username, password: p.password });
+          const r = await host('save_login', { origin: p.origin, title, username: user, password: p.password });
           return { done: true, action: 'save', item_id: r && r.item_id };
         }
         throw err('bad_request', 'action');

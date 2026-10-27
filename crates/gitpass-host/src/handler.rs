@@ -396,8 +396,14 @@ impl Host {
             }
             "update_password" => {
                 let password = arg_str(req, "password")?.to_string();
+                let username = req.get("username").and_then(Value::as_str).filter(|u| !u.trim().is_empty());
                 let (vid, iid, mut r) = self.record(arg_str(req, "item_id")?)?;
                 r.item.password = Some(password);
+                if let Some(u) = username {
+                    if r.item.username.as_deref().unwrap_or("").trim().is_empty() {
+                        r.item.username = Some(u.to_string());
+                    }
+                }
                 self.sess()?.update_record(&vid, &iid, r)?;
                 Ok(json!({"ok": true}))
             }

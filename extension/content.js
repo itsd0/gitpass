@@ -290,6 +290,57 @@
     return forms.find((f) => f.scope === form.scope && f.kind === form.kind) || form;
   }
 
+  // ---------- username tracking across multi-step flows ----------
+  const USERNAME_TTL_MS = 5 * 60 * 1000;
+  let inMemoryUsername = null;
+  let inMemoryUsernameTs = 0;
+
+  function getStoredUsername() {
+    const now = Date.now();
+    if (inMemoryUsername && (now - inMemoryUsernameTs < USERNAME_TTL_MS)) return inMemoryUsername;
+    try {
+      const key = 'gitpass_user_' + location.origin;
+      const raw = sessionStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && parsed.username && (now - parsed.ts < USERNAME_TTL_MS)) {
+          inMemoryUsername = parsed.username;
+          inMemoryUsernameTs = parsed.ts;
+          return parsed.username;
+        }
+        sessionStorage.removeItem(key);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function storeUsername(user) {
+    if (!user || typeof user !== 'string') return;
+    const trimmed = user.trim().slice(0, 512);
+    if (!trimmed) return;
+    const now = Date.now();
+    inMemoryUsername = trimmed;
+    inMemoryUsernameTs = now;
+    try {
+      const key = 'gitpass_user_' + location.origin;
+      sessionStorage.setItem(key, JSON.stringify({ username: trimmed, ts: now }));
+    } catch (_) {}
+    send('page:capture', { kind: 'username', username: trimmed }).catch(() => {});
+  }
+
+  function handlePotentialUsername(el) {
+    if (!el || el.tagName !== 'INPUT') return;
+    const type = (el.getAttribute('type') || 'text').toLowerCase();
+    if (type === 'password' || type === 'hidden') return;
+    const toks = (el.getAttribute('autocomplete') || '').toLowerCase().split(/\s+/);
+    const h = GitpassForms.hints ? GitpassForms.hints(el) : ((el.name || '') + ' ' + (el.id || '') + ' ' + (el.placeholder || ''));
+    if (toks.includes('username') || toks.includes('email') || type === 'email' || GitpassForms.RX.username.test(h) || GitpassForms.RX.email.test(h)) {
+      if (typeof el.value === 'string' && el.value.trim().length >= 1) {
+        storeUsername(el.value);
+      }
+    }
+  }
+
   // ---------- save / update banner ----------
   let banner = null;
   function closeBanner() { if (banner) { banner.host.remove(); banner = null; } }
@@ -311,8 +362,18 @@
     yes.addEventListener('click', async (e) => {
       if (!e.isTrusted) return;
       yes.disabled = true;
-      try { await send('page:save_decision', { action: p.prompt === 'update' ? 'update' : 'save', user_click: true }); m.firstChild.textContent = p.prompt === 'update' ? t('csUpdated', 'Password updated') : t('csSaved', 'Saved to gitpass'); acts.remove(); setTimeout(closeBanner, 1800); }
-      catch (err) { yes.disabled = false; const code = err.code || codeOf(err.message); m.lastChild.textContent = code === 'locked' ? t('csLockedShort', 'Unlock gitpass first, then try again') : 'gitpass: ' + err.message; if (code === 'locked') send('page:request_unlock').catch(() => {}); }
+      try {
+        await send('page:save_decision', { action: p.prompt === 'update' ? 'update' : 'save', username: p.username, item_id: p.item_id, user_click: true });
+        m.firstChild.textContent = p.prompt === 'update' ? t('csUpdated', 'Password updated') : t('csSaved', 'Saved to gitpass');
+        acts.remove();
+        setTimeout(closeBanner, 1800);
+      }
+      catch (err) {
+        yes.disabled = false;
+        const code = err.code || codeOf(err.message);
+        m.lastChild.textContent = code === 'locked' ? t('csLockedShort', 'Unlock gitpass first, then try again') : 'gitpass: ' + err.message;
+        if (code === 'locked') send('page:request_unlock').catch(() => {});
+      }
     });
     acts.append(no, yes); b.append(row, acts); banner.root.append(b);
   }
@@ -326,11 +387,17 @@
     for (const f of (cand.length ? cand : list)) {
       let c = GitpassForms.captureCredentials(f);
       if (!c) continue;
+      if (!c.username) {
+        const fallback = getStoredUsername();
+        if (fallback) c.username = fallback;
+      }
       send('page:capture', c).then(showBanner).catch(() => {});
       c = null; // the password now lives only in the background's memory
       return;
     }
   }
+  document.addEventListener('input', (e) => handlePotentialUsername(e.target), true);
+  document.addEventListener('change', (e) => handlePotentialUsername(e.target), true);
   document.addEventListener('submit', (e) => capture(e.target), true);
   document.addEventListener('click', (e) => {
     if (!e.isTrusted) return;

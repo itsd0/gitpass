@@ -343,11 +343,17 @@ impl Agent {
             "update_password" => {
                 let (vid, iid) = split_id(&req("item_id")?)?;
                 let pw = Zeroizing::new(req("password")?);
+                let username = s("username").filter(|u| !u.trim().is_empty());
                 self.app.state.with(|x| {
                     crate::GuiState::writable(x).map_err(|e| err("denied", e.to_string()))?;
                     let (_, mut r) = x.session.read_record(&vid, &iid)?;
                     if r.category != Category::Login { return Err(err("bad_request", "update_password needs a login item")); }
                     r.item.password = Some(pw.to_string());
+                    if let Some(u) = username {
+                        if r.item.username.as_deref().unwrap_or("").trim().is_empty() {
+                            r.item.username = Some(u);
+                        }
+                    }
                     x.session.update_record(&vid, &iid, r)
                 })?;
                 Ok(json!({"ok": true}))

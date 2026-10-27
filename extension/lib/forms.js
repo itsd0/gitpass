@@ -179,6 +179,20 @@
     return null;
   }
 
+  function findHiddenUsername(scope) {
+    if (!scope || !scope.querySelectorAll) return null;
+    const candidates = scope.querySelectorAll('input[type=hidden], input[hidden], input[disabled], input[readonly], input[style*="display: none"], input[style*="visibility: hidden"], [aria-hidden="true"] input');
+    for (const el of candidates) {
+      const toks = acTokens(el);
+      if (toks.includes('username') || toks.includes('email')) return el;
+      const type = (el.getAttribute('type') || '').toLowerCase();
+      if (type === 'email') return el;
+      const h = hints(el);
+      if (RX.username.test(h) || RX.email.test(h)) return el;
+    }
+    return null;
+  }
+
   function classifyGroup(scope, list) {
     const pw = list.filter((x) => /password$/.test(x.role));
     const fh = formHints(scope === scope.ownerDocument ? null : scope);
@@ -214,7 +228,7 @@
         fields.newPassword = (restNoCur.find((x) => x.role !== 'confirm_password') || restNoCur[0]).el;
         fields.confirm = conf || (restNoCur.find((x) => x.el !== fields.newPassword) || {}).el || null;
       }
-      fields.username = pickUsername(list, pw[0].el);
+      fields.username = pickUsername(list, pw[0].el) || findHiddenUsername(scope);
       return { kind, scope, fields };
     }
     if (fields.totp) return { kind: 'totp', scope, fields };
@@ -386,15 +400,20 @@
   /** Read what the user typed, for the save/update banner. Returns null if nothing worth saving. */
   function captureCredentials(form) {
     const F = form.fields;
-    const val = (e) => (e && typeof e.value === 'string' ? e.value : '');
-    if (form.kind === 'login') { const p = val(F.password); return p ? { kind: 'login', username: val(F.username), password: p } : null; }
-    if (form.kind === 'signup') { const p = val(F.newPassword); if (!p || (F.confirm && val(F.confirm) !== p)) return null; return { kind: 'signup', username: val(F.username), password: p }; }
-    if (form.kind === 'change_password') { const p = val(F.newPassword); if (!p || (F.confirm && val(F.confirm) !== p)) return null; return { kind: 'change_password', username: val(F.username), password: p }; }
-    if (form.kind === 'login_username') { const u = val(F.username); return u ? { kind: 'username', username: u } : null; }
+    const val = (e) => (e && typeof e.value === 'string' ? e.value.trim() : '');
+    let u = val(F.username);
+    if (!u && form.scope) {
+      const h = findHiddenUsername(form.scope);
+      if (h) u = val(h);
+    }
+    if (form.kind === 'login') { const p = val(F.password); return p ? { kind: 'login', username: u, password: p } : null; }
+    if (form.kind === 'signup') { const p = val(F.newPassword); if (!p || (F.confirm && val(F.confirm) !== p)) return null; return { kind: 'signup', username: u, password: p }; }
+    if (form.kind === 'change_password') { const p = val(F.newPassword); if (!p || (F.confirm && val(F.confirm) !== p)) return null; return { kind: 'change_password', username: u, password: p }; }
+    if (form.kind === 'login_username') { return u ? { kind: 'username', username: u } : null; }
     return null;
   }
 
-  const api = { RX, classifyField, detectForms, locate, anchorFields, isVisible, hints, setValue, fillLogin, fillNewPassword, fillTotp, fillCard, fillIdentity, cardValues, identityValues, captureCredentials, CARD_ROLES, ID_ROLES };
+  const api = { RX, classifyField, detectForms, locate, anchorFields, isVisible, hints, setValue, fillLogin, fillNewPassword, fillTotp, fillCard, fillIdentity, cardValues, identityValues, captureCredentials, findHiddenUsername, CARD_ROLES, ID_ROLES };
   root.GitpassForms = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
