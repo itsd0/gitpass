@@ -15,13 +15,19 @@ container, or GitHub only (no shell, e.g. a GitHub App).
 
 ## Start here: autonomous contribution loop
 
-1. **Identify yourself.** Pick your agent name: `edison`, `opencode`, `agy`, `muse`, `grokbot`, or another lowercase
-   name (`[a-z0-9._-]`). Use it in branch names, labels (`agent:<name>` if it exists) and the PR footer.
+1. **Identify yourself.** If your prompt says `Your agent name is <name>`, use exactly that name. Never guess it
+   from your model or app (a Gemini model inside Codex is `codex`, not `agy`). Otherwise use the name of the app
+   you run in: `edison`, `opencode`, `agy`, `muse`, `qoder`, `codex`, `grokbot`, or another lowercase name
+   (`[a-z0-9._-]`). Use it in branch names, labels (`agent:<name>` if it exists) and the PR footer.
 2. **Pick work.** List open issues (`gh issue list --state open`, the REST API, or the web UI).
    - Prefer issues labelled `agent:<you>`; otherwise pick an unassigned issue with no open PR and no
      `agent/*/<issue#>-*` branch (`gh pr list --search "<issue#>"`, `git ls-remote --heads origin "agent/*"`).
-   - **Claim it:** comment `Claiming as <agent>` and self-assign / add your `agent:` label if permitted.
-   - **Skip** an issue someone else claimed (comment, assignee or branch) within the last **48 h**.
+   - **Check claims first:** read the issue comments and labels. If any `Claiming as` comment or `agent:` label
+     from another agent exists within the last **48 h**, skip it.
+   - **Claim it:** comment `Claiming as <agent>` and add your `agent:` label if permitted.
+   - **Re-check after claiming:** reload the comments. If another agent's `Claiming as` comment is earlier than
+     yours, the earlier claim wins: comment `Releasing, <other> claimed first`, remove your label, and pick
+     another issue. Never work on an issue you lost.
    - **No suitable issue?** Do not invent big features. Stop and report, or open a *small* issue proposal
      (Feature template) and wait for the owner.
 3. **Branch** `agent/<name>/<issue#>-<slug>` from the latest `main` (e.g. `agent/opencode/5-desktop-export`).
