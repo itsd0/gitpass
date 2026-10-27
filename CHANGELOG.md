@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased — feat/dev-roadmap (Week 1: security hardening)
+- Desktop (macOS): Touch ID unlock secret is now stored in the Keychain with a `SecAccessControl`
+  (`.biometryCurrentSet` + `AccessibleWhenUnlockedThisDeviceOnly`); saving deletes the old item and
+  adds a new one so a legacy item without biometry protection cannot survive a re-save. Master-password
+  unlock remains the fallback. Manual test on a Mac required (see the PR checklist).
+- Updater signing: password-protected `TAURI_SIGNING_PRIVATE_KEY` is documented in `docs/RELEASE.md`
+  (`TAURI_SIGNING_PRIVATE_KEY_PASSWORD` secret, passed through by the release workflow when set, else empty) plus the transition-release procedure for rotating the keypair.
+- Supply chain: new `deny.toml` (`cargo deny check` passes: advisories, licenses, bans, sources).
+  p256 0.13 → 0.14 (crypto-bigint 0.5.5 → 0.7.10) with the passkey API fixes it needs; zip advisories
+  and the remaining ssh-key-transitive crypto-bigint advisory are documented ignores in `deny.toml`
+  (see the PR description for the reachability analysis and the ssh-key 0.7 upgrade path).
+- Sharing: vault shares are now Ed25519-signed; `vault accept` rejects unsigned or invalidly signed
+  shares. On first contact with a sender, verify the signing fingerprint out of band.
+- Not done in this PR: iOS fine-grained PAT support (see the PR description — `ios/` lives only on
+  the unmerged `feat/ios` branch, not on `main`, so it cannot land on a `main`-based branch without
+  duplicating the file). Week 2–4 tasks are not started.
+
 ## 0.6.1 — 2026-10-27
 
 ### Desktop

@@ -42,13 +42,21 @@ impl Passkey {
     pub fn generate(rp_id: &str, user_handle: &[u8], user_name: &str) -> Self {
         let mut id = vec![0u8; 32];
         rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut id);
-        Passkey { rp_id: rp_id.into(), credential_id: id, user_handle: user_handle.to_vec(), user_name: user_name.into(), key: SigningKey::random(&mut rand::rngs::OsRng), sign_count: 0 }
+        // p256 0.14's `SigningKey::random` needs a rand_core 0.10 CryptoRng,
+        // which core's rand 0.8 OsRng does not satisfy, so generate from
+        // raw random bytes instead (retry on the negligible chance the
+        // scalar is out of range). PKCS#8 storage format is unchanged.
+        let key = loop {
+            let b = crate::crypto::random_bytes::<32>();
+            if let Ok(k) = SigningKey::from_slice(&b) { break k; }
+        };
+        Passkey { rp_id: rp_id.into(), credential_id: id, user_handle: user_handle.to_vec(), user_name: user_name.into(), key, sign_count: 0 }
     }
     pub fn verifying_key(&self) -> VerifyingKey { *self.key.verifying_key() }
 
     /// COSE_Key (EC2, P-256, ES256) of the public key.
     pub fn cose_public_key(&self) -> Vec<u8> {
-        let p = self.verifying_key().to_encoded_point(false);
+        let p = self.verifying_key().to_sec1_point(false);
         let (x, y) = (p.x().unwrap(), p.y().unwrap());
         let mut c = Cbor::default();
         c.map(5);

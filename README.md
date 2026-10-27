@@ -199,6 +199,12 @@ $A init --save-secret-key; $B init --save-secret-key
 $A vault create team; GITPASS_ITEM_PASSWORD=s3cret $A add team --title db
 $B identity show             # prints Bob's fingerprint; writes $T/bob/identity.pub
 $A vault share team --to $T/bob/identity.pub   # verify the fingerprint out of band
+# Every share is Ed25519-signed by the sender (signing key derived from the
+# sender identity secret). `vault accept` rejects unsigned or invalidly
+# signed shares. On first contact with a sender, also verify the *signing*
+# fingerprint out of band — accept prints it — since the signing key travels
+# inside the member file itself. Pre-signature shares are rejected, not
+# grandfathered: ask the sender to re-share with a current build.
 $A remote add $T/remote.git --allow-local       # pushes the encrypted vault
 git clone -q $T/remote.git $T/alice-clone
 $B vault accept $T/alice-clone/vaults/<vault-id>/members/<bob-fpr>.enc

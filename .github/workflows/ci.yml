@@ -64,3 +64,29 @@ jobs:
           npm ci
           npm test
           npm run check
+
+  supply-chain:
+    name: supply chain (cargo deny + cargo audit)
+    runs-on: [self-hosted, macOS, gitpass-mac]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: tools present
+        run: |
+          command -v cargo-deny && command -v cargo-audit || { echo "::error::install on the runner Mac: cargo install --locked cargo-deny cargo-audit"; exit 1; }
+      - name: cargo deny check
+        run: cargo deny --locked check
+      - name: cargo audit (workspace, gating)
+        # Same ignores as deny.toml (reasons there), plus RUSTSEC-2023-0071 (rsa): it is only a stale
+        # Cargo.lock entry (ssh-key's optional rsa feature is off; `cargo tree -i rsa --target all` is
+        # empty), so it is never compiled. cargo deny walks the real graph and does not flag it.
+        run: |
+          cargo audit --file Cargo.lock \
+            --ignore RUSTSEC-2026-0367 --ignore RUSTSEC-2026-0368 --ignore RUSTSEC-2026-0369 \
+            --ignore RUSTSEC-2026-0387 --ignore RUSTSEC-2023-0071
+      - name: cargo audit (desktop app lock, report only)
+        # Tauri-transitive findings (quick-xml via plist, time via cookie, unic-*/glib warnings) need
+        # upstream bumps / a newer MSRV; reported, not gating, until those land.
+        run: cargo audit --file apps/desktop/src-tauri/Cargo.lock || echo "::warning::cargo audit found advisories in apps/desktop/src-tauri/Cargo.lock"
