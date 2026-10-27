@@ -1,0 +1,48 @@
+# gitpass offline 2FA / passkey site list
+#
+# Source: hand-compiled from public vendor security/help documentation in October 2026.
+# Licence: CC0-1.0 (factual data); the rest of the repository remains MIT.
+# Format: <registrable-domain><TAB><capabilities>   capabilities: totp,passkey (comma-separated)
+# Only registrable domains are listed; subdomains match. The list is deliberately conservative
+# and not exhaustive. It is consulted offline at audit time (no per-item network lookup).
+google.com	totp,passkey
+github.com	totp,passkey
+microsoft.com	totp,passkey
+amazon.com	totp,passkey
+coinbase.com	totp,passkey
+binance.com	totp,passkey
+kraken.com	totp,passkey
+cloudflare.com	totp,passkey
+gitlab.com	totp,passkey
+atlassian.com	totp,passkey
+bitwarden.com	totp,passkey
+shopify.com	totp,passkey
+adobe.com	totp,passkey
+apple.com	passkey
+paypal.com	passkey
+ebay.com	passkey
+walmart.com	passkey
+bestbuy.com	passkey
+uber.com	passkey
+dashlane.com	totp
+dropbox.com	totp
+slack.com	totp
+x.com	totp
+twitter.com	totp
+facebook.com	totp
+instagram.com	totp
+linkedin.com	totp
+reddit.com	totp
+discord.com	totp
+twitch.tv	totp
+zoom.us	totp
+proton.me	totp
+1password.com	totp
+steamcommunity.com	totp
+epicgames.com	totp
+npmjs.com	totp
+heroku.com	totp
+digitalocean.com	totp
+namecheap.com	totp
+fastmail.com	totp
+tutanota.com	totp

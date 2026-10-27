@@ -99,7 +99,8 @@ pub struct Filter {
 #[serde(rename_all = "camelCase")]
 pub struct WatchtowerReport {
     pub score: u8, pub weak: Vec<String>, pub reused: Vec<Vec<String>>, pub old: Vec<String>, pub breached: Vec<String>,
-    pub missing_totp: Vec<String>, pub checked_at: String, pub hibp_checked: bool,
+    pub missing_totp: Vec<String>, pub totp_available: Vec<String>, pub passkey_available: Vec<String>,
+    pub checked_at: String, pub hibp_checked: bool,
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -774,11 +775,17 @@ impl App {
         let hibp = hibp && self.get_settings().hibp_check;
         let client: Option<&dyn PwnedRangeClient> = if hibp { Some(self.hibp.as_ref() as &dyn PwnedRangeClient) } else { None };
         self.with(|u| {
-            let items: Vec<(String, String, Item)> = Self::all_records(&u.session)?.into_iter()
+            let records = Self::all_records(&u.session)?;
+            let passkey_sites: BTreeSet<String> = records.iter()
+                .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
+                .filter_map(|(_, _, r)| r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value))
+                .collect();
+            let items: Vec<(String, String, Item)> = records.into_iter()
                 .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Login)
                 .map(|(v, i, r)| (v, i, r.item.clone())).collect();
-            let rep = audit::audit(&items, &AuditOpts::default(), client)?;
+            let rep = audit::audit_with_passkeys(&items, &passkey_sites, &AuditOpts::default(), client)?;
             let mut out = WatchtowerReport { score: 100, weak: vec![], reused: vec![], old: vec![], breached: vec![], missing_totp: vec![],
+                totp_available: vec![], passkey_available: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
             let mut groups: BTreeMap<usize, Vec<String>> = BTreeMap::new();
             for f in &rep.per_item {
@@ -789,6 +796,8 @@ impl App {
                         Finding::Old { .. } => out.old.push(f.id.clone()),
                         Finding::Pwned { .. } => out.breached.push(f.id.clone()),
                         Finding::MissingTotp => out.missing_totp.push(f.id.clone()),
+                        Finding::TotpAvailable { .. } => out.totp_available.push(f.id.clone()),
+                        Finding::PasskeyAvailable { .. } => out.passkey_available.push(f.id.clone()),
                     }
                 }
             }
