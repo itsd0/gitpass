@@ -1,0 +1,26 @@
+name: Bug
+description: Something is broken
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes: { label: What happened, description: "Use fake data only; no secrets or real vault contents." }
+    validations: { required: true }
+  - type: textarea
+    id: steps
+    attributes: { label: Steps to reproduce }
+    validations: { required: true }
+  - type: textarea
+    id: expected
+    attributes: { label: Expected }
+  - type: input
+    id: version
+    attributes: { label: Version / build, placeholder: "0.6.2+pr3d, Chrome 1xx, macOS 15" }
+  - type: dropdown
+    id: area
+    attributes: { label: Area, options: [core, desktop, extension, ios, cli] }
+    validations: { required: true }
+  - type: dropdown
+    id: agent
+    attributes: { label: Suggested agent, options: [edison, opencode, agy, grokbot, human] }
+    validations: { required: true }

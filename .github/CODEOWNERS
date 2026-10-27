@@ -1,0 +1,9 @@
+# Owner reviews everything. Explicit entries document the most sensitive paths.
+*                                   @itsd0
+/.github/                           @itsd0
+/crates/gitpass-core/src/crypto.rs  @itsd0
+/crates/gitpass-core/src/keys.rs    @itsd0
+/crates/gitpass-core/src/store.rs   @itsd0
+/apps/desktop/src-tauri/tauri.conf.json @itsd0
+/docs/RELEASE.md                    @itsd0
+/deny.toml                          @itsd0
