@@ -24,4 +24,4 @@ Commands run and results (and what was skipped):
 
 ## Risk / notes
 
-Agent: <!-- edison | opencode | agy | grokbot | human -->
+Agent: <!-- edison | opencode | agy | muse | grokbot | human -->

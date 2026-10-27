@@ -9,7 +9,7 @@ the environment matrix and rules.
 
 The loop (details in AGENTS.md → "Start here"):
 
-1. **Identify** yourself: an agent name (`edison`, `opencode`, `agy`, `grokbot`, or other lowercase).
+1. **Identify** yourself: an agent name (`edison`, `opencode`, `agy`, `muse`, `grokbot`, or other lowercase).
 2. **Pick** an open issue: prefer `agent:<you>`, else unassigned with no PR/branch; comment `Claiming as <agent>`;
    skip issues claimed by someone else within 48 h; no issue ⇒ stop/report or propose a small one.
 3. **Branch** `agent/<name>/<issue#>-<slug>` from latest `main` (`scripts/agent-worktree.sh` on shared machines).
