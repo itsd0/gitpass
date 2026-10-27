@@ -12,10 +12,12 @@ Closes #
 - [ ] `apps/desktop`: `npm test`, `npx tsc --noEmit`
 - [ ] `extension`: `npm test`, `npm run check`
 
-Commands run and results:
+Verified in env: <!-- macOS … | Linux (distro, arch) | GitHub-only (relies on CI) -->
+
+Commands run and results (and what was skipped):
 
 ## Checklist (see AGENTS.md)
-- [ ] Branch `agent/<agent>/<feature>`; labels `agent:*` + `area:*`
+- [ ] Branch `agent/<agent>/<issue#>-<slug>`; labels `agent:*` + `area:*`
 - [ ] No edits to `.github/workflows`, no secrets, no real vault / Keychain access
 - [ ] Crypto / vault format / release changes called out below
 - [ ] UI: screenshot with fake data (desktop orange, iOS monochrome)

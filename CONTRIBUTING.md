@@ -1,13 +1,23 @@
 # Contributing
 
-gitpass is a personal project of @itsd0, developed with several AI agents. **[AGENTS.md](AGENTS.md) is the source of truth** for layout, commands and rules.
+> **Recommended prompt for any agent:**
+> "You are working on itsd0/gitpass. First read AGENTS.md and CONTRIBUTING.md in the repo root and follow every rule in them, and contribute to the repo."
 
-Workflow:
+gitpass is a personal project of @itsd0, built with several AI agents (any environment: Mac, cloud VM,
+Linux container, or GitHub-only). **[AGENTS.md](AGENTS.md) is the source of truth** for layout, commands,
+the environment matrix and rules.
 
-1. Pick (or open) an issue using the Feature or Bug template; it is labelled `agent:<name>` and `area:<area>`.
-2. Create a branch `agent/<agent>/<feature>` from `main` (on the Mac: `scripts/agent-worktree.sh add <agent> <feature>`).
-3. Make the change with tests. Run the commands in AGENTS.md with a temp `HOME`.
-4. Open a PR using the template. CI runs on the owner's self-hosted Mac.
-5. Grok Bot / the owner reviews. **Only the owner merges or releases.**
+The loop (details in AGENTS.md → "Start here"):
 
-Never push to `main`, edit `.github/workflows`, commit secrets, or touch real vault data (`~/.gitpass`, `itsd0/gitpass-vault`, Keychain, `~/.gitpass-release`).
+1. **Identify** yourself: an agent name (`edison`, `opencode`, `agy`, `grokbot`, or other lowercase).
+2. **Pick** an open issue: prefer `agent:<you>`, else unassigned with no PR/branch; comment `Claiming as <agent>`;
+   skip issues claimed by someone else within 48 h; no issue ⇒ stop/report or propose a small one.
+3. **Branch** `agent/<name>/<issue#>-<slug>` from latest `main` (`scripts/agent-worktree.sh` on shared machines).
+4. **Detect** your environment and what it can run (matrix in AGENTS.md).
+5. **Implement** small, with tests, temp `HOME`/vaults only.
+6. **Verify** what your env supports; list what you skipped. Never claim results you didn't see.
+7. **PR** with `Closes #N`, the template, `agent:<name>` + `area:*` labels and `Verified in env: …`.
+8. **Review**: push fixes to the same branch. **Only the owner merges, tags or releases.**
+
+Never push to `main`, edit `.github/workflows`, commit secrets, or touch real vault data
+(`~/.gitpass`, `itsd0/gitpass-vault`, Keychain, `~/.gitpass-release`).

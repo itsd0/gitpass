@@ -269,3 +269,11 @@ value = conflict, local kept and reported; `None` with a clock is a tombstone. v
 - `gitpass list <vault> --query <q>` ranked filter. `get` with several matches lists ranked candidates and exits 1
   unless one is a clear winner or `--pick <n>` is given.
 - Build without clipboard support: `cargo build --no-default-features`.
+
+## Contributing
+
+Recommended prompt for any AI agent:
+
+> "You are working on itsd0/gitpass. First read AGENTS.md and CONTRIBUTING.md in the repo root and follow every rule in them, and contribute to the repo."
+
+See [AGENTS.md](AGENTS.md) (full workflow, commands, environment matrix, rules) and [CONTRIBUTING.md](CONTRIBUTING.md).

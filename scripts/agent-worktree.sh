@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Per-agent git worktrees: ~/gitpass-wt/<agent>/<feature> on branch agent/<agent>/<feature>.
+# Per-agent git worktrees: ~/gitpass-wt/<agent>/<feature> on branch agent/<agent>/<feature> (feature = <issue#>-<slug>).
 # Usage:
 #   scripts/agent-worktree.sh add <agent> <feature> [base]   (base defaults to origin/main)
 #   scripts/agent-worktree.sh remove <agent> <feature>       (refuses with uncommitted changes)
