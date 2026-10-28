@@ -154,6 +154,38 @@ fn filters_favorite_archive_delete_restore_purge_move_duplicate() {
 }
 
 #[test]
+fn empty_trash_purges_only_trashed_items_in_one_commit() {
+    let e = env();
+    let active = login(&e, "Active", "active", "pw-FAKE-active");
+    let archived = login(&e, "Archived", "archived", "pw-FAKE-archived");
+    let trashed = login(&e, "Trashed", "trashed", "pw-FAKE-trashed");
+    let trashed_archived = login(&e, "Trashed archived", "ta", "pw-FAKE-ta");
+    e.app.archive_item(&e.vault, &archived.id, true).unwrap();
+    e.app.delete_item(&e.vault, &trashed.id).unwrap();
+    e.app.delete_item(&e.vault, &trashed_archived.id).unwrap();
+    e.app.archive_item(&e.vault, &trashed_archived.id, true).unwrap();
+    // a second vault proves the purge spans vaults in one commit
+    let v2 = e.app.create_vault("Other", None, None, None).unwrap();
+    let elsewhere = e.app.create_item(&ItemInput { vault_id: v2.id.clone(), category: Category::SecureNote, title: "Elsewhere".into(),
+        sections: vec![Section { id: "s".into(), title: None, fields: vec![fld("body", FieldKind::Multiline, Some("FAKE"))] }],
+        notes: None, tags: None, favorite: None, url: None }).unwrap();
+    e.app.delete_item(&v2.id, &elsewhere.id).unwrap();
+
+    let epoch = e.app.session_epoch().unwrap();
+    assert_eq!(e.app.empty_trash().unwrap(), 3);
+    assert_eq!(e.app.session_epoch().unwrap(), epoch + 1, "all purges land in one commit");
+    for id in [&active.id, &archived.id] { assert!(e.app.get_item(&e.vault, id).is_ok(), "live items untouched"); }
+    for id in [&trashed.id, &trashed_archived.id] { assert!(e.app.get_item(&e.vault, id).is_err()); }
+    assert!(e.app.get_item(&v2.id, &elsewhere.id).is_err());
+    assert!(e.app.list_items(&Filter { kind: FilterKind::Deleted, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap().is_empty());
+
+    // no-op on an empty trash: nothing purged, no extra commit
+    let epoch = e.app.session_epoch().unwrap();
+    assert_eq!(e.app.empty_trash().unwrap(), 0);
+    assert_eq!(e.app.session_epoch().unwrap(), epoch);
+}
+
+#[test]
 fn copied_secrets_carry_pasteboard_markers() {
     let e = env();
     let l = login(&e, "Marked", "user", "pw-FAKE-marked");

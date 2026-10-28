@@ -106,7 +106,10 @@ gitpass list personal
 gitpass get personal github [--password-only]     # query = id, id prefix or title substring
 gitpass edit personal <id|query> --notes "..." [--password | --generate 20]
 gitpass rm personal <id|query>
-gitpass gen 32
+gitpass gen 32               # random password (default 24; --no-symbols, --no-digits)
+gitpass gen --words 5 [--separator .] [--capitalize]   # memorable passphrase (128-word list)
+gitpass gen --pin 6          # digits-only PIN
+gitpass gen --copy 32 [--clear-secs 30]   # copy as concealed/transient; never printed
 gitpass sync                 # lock, commit, backup, pull --rebase, push, then verify the manifest
 gitpass vault create work --description "work logins"   # name + description are encrypted
 gitpass passwd               # new master password (GITPASS_NEW_PASSWORD for scripts)
@@ -120,6 +123,29 @@ Options and environment variables:
 - `--path DIR` or `GITPASS_PATH` sets the vault dir (default `~/.gitpass`).
 - The Secret Key is read in this order: `GITPASS_SECRET_KEY`, then `<path>/secret.key` (mode 0600, git-ignored, written by `init --save-secret-key`), then an interactive prompt.
 - `GITPASS_PASSWORD` and `GITPASS_ITEM_PASSWORD` supply passwords without prompting. They are meant for scripts and tests only, because environment variables can leak.
+
+## Shell completions
+
+Generate tab completions for `zsh`, `bash`, or `fish` directly to stdout:
+
+```bash
+# zsh (place in ~/.zfunc or any directory on your $fpath)
+mkdir -p ~/.zfunc
+gitpass completions zsh > ~/.zfunc/_gitpass
+# Ensure ~/.zshrc contains:
+#   fpath=(~/.zfunc $fpath)
+#   autoload -Uz compinit && compinit
+
+# bash
+mkdir -p ~/.local/share/bash-completion/completions
+gitpass completions bash > ~/.local/share/bash-completion/completions/gitpass
+# or source on demand in ~/.bashrc:
+#   source <(gitpass completions bash)
+
+# fish
+mkdir -p ~/.config/fish/completions
+gitpass completions fish > ~/.config/fish/completions/gitpass.fish
+```
 
 ## GitHub sync
 ```bash
@@ -291,6 +317,26 @@ value = conflict, local kept and reported; `None` with a clock is a tombstone. v
 - `gitpass list <vault> --query <q>` ranked filter. `get` with several matches lists ranked candidates and exits 1
   unless one is a clear winner or `--pick <n>` is given.
 - Build without clipboard support: `cargo build --no-default-features`.
+
+## Scripting with --json
+
+`gitpass list`, `gitpass find` and `gitpass get` support `--json` output for automation and shell scripting:
+
+- `gitpass list <vault> [--query <q>] --json` and `gitpass find <vault> <q> --json` print a JSON array of item summaries (`id`, `title`, `category`, `username`, `url`, `tags`, `favorite`, `updated_at`). No secrets (password, TOTP seed, concealed fields, notes) appear in list/find output.
+- `gitpass get <vault> <query> --json` prints an item object with metadata and its fields (`label`, `kind`, `value`). Concealed values (passwords, TOTP seeds, secret custom fields) are `null` unless `--reveal` is also passed. `--json --password-only` is rejected with an error.
+- Ambiguous queries keep `--pick <n>` behavior. In `--json` mode, ambiguity errors go to stderr with non-zero exit so stdout stays clean.
+- Archived and deleted items are excluded by default unless `--include-archived` is passed.
+
+Example with `jq`:
+
+```bash
+# Find an item ID by title and extract its revealed password
+ITEM_ID=$(gitpass list Personal --query "github" --json | jq -r '.[0].id')
+PASSWORD=$(gitpass get Personal "$ITEM_ID" --json --reveal | jq -r '.fields[] | select(.label == "password") | .value')
+
+# List usernames for all login items
+gitpass list Personal --json | jq -r '.[] | select(.category == "login") | "\(.title): \(.username)"'
+```
 
 ## Security audit (Watchtower)
 

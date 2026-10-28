@@ -15,6 +15,8 @@ import { useItemsUI } from './state';
 import { copyPrimarySecret, errText } from './actions';
 import { applySel, arrowSelect, clickSelect, prune, rangeFocus, readSel, selectAll } from './selection';
 import { requestDelete } from './BulkPane';
+import { TrashBar, TrashEmptyState } from './TrashBar';
+import { trashHint } from './trash';
 
 /** Every row has a fixed, explicit height (the DOM enforces it), so virtual offsets are exact: no overlap, no stray gaps. */
 export const HEADER_H = 32, ITEM_H = 54;
@@ -104,11 +106,14 @@ export function ItemList() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      {base.kind === 'deleted' && <TrashBar />}
       <div ref={parentRef} tabIndex={0} onKeyDown={onKey} className="flex-1 overflow-y-auto outline-none" role="listbox" aria-label="Items" data-item-list>
         {loading && items.length === 0 ? (
           <div className="space-y-3 p-3">{Array.from({ length: 8 }, (_, i) => <div key={i} className="flex gap-3"><Skeleton className="h-8 w-8" /><div className="flex-1 space-y-1.5"><Skeleton className="h-3 w-3/4" /><Skeleton className="h-2.5 w-1/2" /></div></div>)}</div>
         ) : items.length === 0 ? (
-          <div className="p-8 text-center text-muted">{query ? `No items match “${query}”` : 'No items here yet'}</div>
+          query ? <div className="p-8 text-center text-muted">{`No items match “${query}”`}</div>
+            : base.kind === 'deleted' ? <TrashEmptyState />
+              : <div className="p-8 text-center text-muted">No items here yet</div>
         ) : (
           <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
             {virt.getVirtualItems().map((v) => {
@@ -129,7 +134,10 @@ export function ItemList() {
                       <ItemIcon item={r.item} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[14px] font-medium leading-5">{r.item.title}</div>
-                        {r.item.subtitle ? <div className="truncate text-xs leading-4 text-muted">{r.item.subtitle}</div> : null}
+                        {base.kind === 'deleted' ? (() => {
+                          const hint = trashHint(r.item.deletedAt, Date.now(), t);
+                          return hint ? <div data-testid="trash-days" className={cn('truncate text-xs leading-4', hint.danger ? 'text-danger' : 'text-muted')}>{hint.text}</div> : null;
+                        })() : r.item.subtitle ? <div className="truncate text-xs leading-4 text-muted">{r.item.subtitle}</div> : null}
                       </div>
                       {(() => {
                         const expiry = getItemExpiry(r.item, undefined, t);

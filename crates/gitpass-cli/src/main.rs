@@ -1,8 +1,11 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use gitpass_core::crypto::{generate_password, KdfParams, SecretKey};
+use gitpass_core::item::{Category, FieldKind};
+use gitpass_core::merge::ItemRecord;
 use gitpass_core::store::{self, Item, Session, UnlockOpts};
 use gitpass_pasteboard::PasteboardMarkers;
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
@@ -50,15 +53,34 @@ enum Cmd {
         generate: Option<usize>,
     },
     /// Decrypt and print an item (query = id, id prefix, or fuzzy match on title/username/url)
-    Get { vault: String, query: String, /// Print only the password
-        #[arg(long)] password_only: bool,
+    Get {
+        vault: String,
+        query: String,
+        /// Print only the password
+        #[arg(long)]
+        password_only: bool,
         /// Choose the n-th (1-based) ranked candidate when several match
-        #[arg(long)] pick: Option<usize>,
+        #[arg(long)]
+        pick: Option<usize>,
         /// Copy the password (or --field) to the clipboard instead of printing the item
-        #[arg(long)] copy: bool,
-        #[arg(long, value_enum, default_value_t = Field::Password)] field: Field,
-        #[arg(long, default_value_t = 30)] clear_secs: u64,
-        #[arg(long)] quiet: bool },
+        #[arg(long)]
+        copy: bool,
+        #[arg(long, value_enum, default_value_t = Field::Password)]
+        field: Field,
+        #[arg(long, default_value_t = 30)]
+        clear_secs: u64,
+        #[arg(long)]
+        quiet: bool,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+        /// Reveal concealed field values in --json mode
+        #[arg(long)]
+        reveal: bool,
+        /// Include archived and deleted items
+        #[arg(long)]
+        include_archived: bool,
+    },
     /// Copy an item field (default password) to the clipboard; blocks up to --clear-secs, then clears it
     Copy { vault: String, query: String,
         #[arg(long, value_enum, default_value_t = Field::Password)] field: Field,
@@ -73,10 +95,29 @@ enum Cmd {
         #[arg(long)] copy: bool,
         #[arg(long, default_value_t = 30)] clear_secs: u64 },
     /// Ranked fuzzy search over title/username/url
-    Find { vault: String, query: String },
+    Find {
+        vault: String,
+        query: String,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+        /// Include archived and deleted items
+        #[arg(long)]
+        include_archived: bool,
+    },
     /// List items in a vault
-    List { vault: String, /// Fuzzy filter (ranked)
-        #[arg(long)] query: Option<String> },
+    List {
+        vault: String,
+        /// Fuzzy filter (ranked)
+        #[arg(long, short = 'q')]
+        query: Option<String>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+        /// Include archived and deleted items
+        #[arg(long)]
+        include_archived: bool,
+    },
     /// Edit an item
     Edit {
         vault: String, id: String,
@@ -92,8 +133,35 @@ enum Cmd {
     },
     /// Remove an item
     Rm { vault: String, id: String },
-    /// Generate a random password
-    Gen { #[arg(default_value_t = 24)] len: usize },
+    /// Generate a random password, a memorable passphrase or a PIN
+    Gen {
+        /// Length of the random password (default 24)
+        len: Option<usize>,
+        /// Memorable passphrase of N words (3-20) from a 128-word list
+        #[arg(long, value_name = "N")]
+        words: Option<usize>,
+        /// Digits-only PIN of N digits (4-16)
+        #[arg(long, value_name = "N")]
+        pin: Option<usize>,
+        /// Passphrase word separator (default '-' or '.' with --no-symbols)
+        #[arg(long, value_name = "CHAR")]
+        separator: Option<char>,
+        /// Capitalize the first letter of each passphrase word
+        #[arg(long)]
+        capitalize: bool,
+        /// Exclude symbols from random passwords (with --words, use '.' between words)
+        #[arg(long)]
+        no_symbols: bool,
+        /// Exclude digits from random passwords (with --words, drop the passphrase digit)
+        #[arg(long)]
+        no_digits: bool,
+        /// Copy the result to the clipboard as concealed/transient instead of printing it
+        #[arg(long)]
+        copy: bool,
+        /// Seconds before the clipboard is cleared (0 = don't wait/clear)
+        #[arg(long, default_value_t = gitpass_cli::gen::DEFAULT_CLEAR_SECS, requires = "copy")]
+        clear_secs: u64,
+    },
     /// Run a command with secrets from gp://<vault>/<item>/<field> references injected into its
     /// environment only (never written to disk); resolved values are masked in its stdout/stderr
     Run {
@@ -171,6 +239,41 @@ enum Cmd {
         /// Show findings that were ignored by the user
         #[arg(long)] include_ignored: bool,
     },
+    /// Generate shell completion scripts for zsh, bash, or fish
+    #[command(hide = true, alias = "completion")]
+    Completions {
+        /// Shell to generate completions for (zsh, bash, fish)
+        shell: ShellTarget,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+#[value(rename_all = "lower")]
+enum ShellTarget {
+    Bash,
+    Zsh,
+    Fish,
+}
+
+impl From<ShellTarget> for clap_complete::Shell {
+    fn from(s: ShellTarget) -> Self {
+        match s {
+            ShellTarget::Bash => clap_complete::Shell::Bash,
+            ShellTarget::Zsh => clap_complete::Shell::Zsh,
+            ShellTarget::Fish => clap_complete::Shell::Fish,
+        }
+    }
+}
+
+fn print_completions(shell: ShellTarget) {
+    use clap::CommandFactory;
+    let mut cmd = Cli::command();
+    clap_complete::generate(
+        clap_complete::Shell::from(shell),
+        &mut cmd,
+        "gitpass",
+        &mut std::io::stdout(),
+    );
 }
 
 #[derive(Clone, Copy, PartialEq, clap::ValueEnum)]
@@ -373,25 +476,130 @@ fn field_value(it: &Item, f: Field) -> Result<Zeroizing<String>> {
     v.map(Zeroizing::new).ok_or_else(|| anyhow::anyhow!("item '{}' has no such field", it.title))
 }
 
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliItemSummary {
+    id: String,
+    title: String,
+    category: Category,
+    username: Option<String>,
+    url: Option<String>,
+    tags: Vec<String>,
+    favorite: bool,
+    updated_at: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliField {
+    label: String,
+    kind: FieldKind,
+    value: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliItemDetail {
+    id: String,
+    title: String,
+    category: Category,
+    username: Option<String>,
+    url: Option<String>,
+    tags: Vec<String>,
+    favorite: bool,
+    archived: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deleted_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created_at: Option<String>,
+    updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    notes: Option<String>,
+    fields: Vec<CliField>,
+}
+
+fn ts(s: &str) -> String {
+    s.trim().parse::<i64>().map(gitpass_core::device::iso8601).unwrap_or_else(|_| s.to_string())
+}
+
+fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
+    CliItemSummary {
+        id: id.to_string(),
+        title: r.item.title.clone(),
+        category: r.category,
+        username: r.item.username.clone().filter(|u| !u.trim().is_empty()),
+        url: r.item.url.clone().filter(|u| !u.trim().is_empty()),
+        tags: r.tags.clone(),
+        favorite: r.favorite,
+        updated_at: ts(&r.item.updated_at),
+    }
+}
+
+fn item_detail(id: &str, r: &ItemRecord, reveal: bool) -> CliItemDetail {
+    let mut fields = Vec::new();
+    for section in r.view_sections() {
+        for f in section.fields {
+            let val = if f.kind.is_secret() {
+                if reveal { f.value } else { None }
+            } else {
+                f.value
+            };
+            fields.push(CliField {
+                label: f.label,
+                kind: f.kind,
+                value: val,
+            });
+        }
+    }
+    CliItemDetail {
+        id: id.to_string(),
+        title: r.item.title.clone(),
+        category: r.category,
+        username: r.item.username.clone().filter(|u| !u.trim().is_empty()),
+        url: r.item.url.clone().filter(|u| !u.trim().is_empty()),
+        tags: r.tags.clone(),
+        favorite: r.favorite,
+        archived: r.archived,
+        deleted_at: r.deleted_at.map(|d| gitpass_core::device::iso8601(d as i64)),
+        created_at: r.created_at.map(|c| gitpass_core::device::iso8601(c as i64)),
+        updated_at: ts(&r.item.updated_at),
+        notes: r.item.notes.clone().filter(|n| !n.trim().is_empty()),
+        fields,
+    }
+}
+
 /// Ranked lookup; errors (listing candidates) unless one clear winner or --pick.
-fn pick_item(s: &Session, vid: &str, query: &str, pick: Option<usize>) -> Result<(String, Item)> {
-    let r = gitpass_core::search::rank(query, s.list_items(vid)?);
-    if r.is_empty() { bail!("no item matches '{query}'"); }
+fn pick_record(s: &Session, vid: &str, query: &str, pick: Option<usize>, include_archived: bool) -> Result<(String, ItemRecord)> {
+    let mut recs = s.list_records(vid)?;
+    if !include_archived {
+        recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
+    }
+    let mut ranked: Vec<(i64, String, ItemRecord)> = recs
+        .into_iter()
+        .filter_map(|(id, _, rec)| gitpass_core::search::score_item(query, &id, &rec.item).map(|sc| (sc, id, rec)))
+        .collect();
+    ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+
+    if ranked.is_empty() {
+        bail!("no item matches '{query}'");
+    }
     let idx = match pick {
-        Some(n) if n >= 1 && n <= r.len() => n - 1,
-        Some(n) => bail!("--pick {n} out of range (1..={})", r.len()),
-        None => match gitpass_core::search::clear_winner(&r) {
+        Some(n) if n >= 1 && n <= ranked.len() => n - 1,
+        Some(n) => bail!("--pick {n} out of range (1..={})", ranked.len()),
+        None => match gitpass_core::search::clear_winner(&ranked) {
             Some(i) => i,
             None => {
-                for (i, (sc, id, it)) in r.iter().enumerate() {
-                    eprintln!("{:>3}. {id}  {}  {}  (score {sc})", i + 1, it.title, it.username.clone().unwrap_or_default());
+                for (i, (sc, id, rec)) in ranked.iter().enumerate() {
+                    eprintln!("{:>3}. {id}  {}  {}  (score {sc})", i + 1, rec.item.title, rec.item.username.clone().unwrap_or_default());
                 }
-                bail!("{} items match '{query}'; use --pick <n> or the item id", r.len());
+                bail!("{} items match '{query}'; use --pick <n> or the item id", ranked.len());
             }
         },
     };
-    let (_, id, it) = r.into_iter().nth(idx).unwrap();
-    Ok((id, it))
+    let (_, id, rec) = ranked.into_iter().nth(idx).unwrap();
+    Ok((id, rec))
+}
+
+fn pick_item(s: &Session, vid: &str, query: &str, pick: Option<usize>) -> Result<(String, Item)> {
+    let (id, rec) = pick_record(s, vid, query, pick, false)?;
+    Ok((id, rec.item.clone()))
 }
 
 /// Clipboard markers for a copied field: passwords and TOTP codes are secrets; the rest are plain.
@@ -450,6 +658,10 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
+    if let Cmd::Completions { shell } = &cli.cmd {
+        print_completions(*shell);
+        return Ok(());
+    }
     let root = root(&cli)?;
     match &cli.cmd {
         Cmd::Init { save_secret_key } => {
@@ -562,13 +774,26 @@ fn run() -> Result<()> {
                 notes: notes.clone(), totp: totp.clone(), updated_at: store::now() };
             println!("added {}", s.add_item(&vid, &it)?);
         }
-        Cmd::Get { vault, query, password_only, pick, copy, field, clear_secs, quiet } => {
+        Cmd::Get { vault, query, password_only, pick, copy, field, clear_secs, quiet, json, reveal, include_archived } => {
+            if *json && *password_only {
+                bail!("cannot combine --json and --password-only");
+            }
+            if *json && *copy {
+                bail!("cannot combine --json and --copy");
+            }
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            let (id, it) = pick_item(&s, &vid, query, *pick)?;
-            if *copy { do_copy(&field_value(&it, *field)?, *clear_secs, *quiet, "field", field_markers(*field))?; }
-            else if *password_only { println!("{}", it.password.clone().unwrap_or_default()); }
-            else { print_item(&id, &it); }
+            let (id, rec) = pick_record(&s, &vid, query, *pick, *include_archived)?;
+            if *json {
+                let detail = item_detail(&id, &rec, *reveal);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else if *copy {
+                do_copy(&field_value(&rec.item, *field)?, *clear_secs, *quiet, "field", field_markers(*field))?;
+            } else if *password_only {
+                println!("{}", rec.item.password.clone().unwrap_or_default());
+            } else {
+                print_item(&id, &rec.item);
+            }
         }
         Cmd::Copy { vault, query, field, pick, clear_secs, quiet } => {
             let s = unlock(&cli, &root)?;
@@ -585,22 +810,55 @@ fn run() -> Result<()> {
             println!("{code}  ({rem}s remaining)");
             if *copy { do_copy(&code, *clear_secs, true, "TOTP code", Some(PasteboardMarkers::SECRET))?; }
         }
-        Cmd::Find { vault, query } => {
+        Cmd::Find { vault, query, json, include_archived } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            for (sc, id, it) in gitpass_core::search::rank(query, s.list_items(&vid)?) {
-                println!("{id}  {}  {}  {}  (score {sc})", it.title, it.username.clone().unwrap_or_default(), it.url.clone().unwrap_or_default());
+            let mut recs = s.list_records(&vid)?;
+            if !include_archived {
+                recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
+            }
+            let mut ranked: Vec<(i64, String, ItemRecord)> = recs
+                .into_iter()
+                .filter_map(|(id, _, rec)| gitpass_core::search::score_item(query, &id, &rec.item).map(|sc| (sc, id, rec)))
+                .collect();
+            ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+            if *json {
+                let summaries: Vec<CliItemSummary> = ranked.iter().map(|(_, id, rec)| item_summary(id, rec)).collect();
+                println!("{}", serde_json::to_string_pretty(&summaries)?);
+            } else {
+                for (sc, id, rec) in ranked {
+                    println!("{id}  {}  {}  {}  (score {sc})", rec.item.title, rec.item.username.clone().unwrap_or_default(), rec.item.url.clone().unwrap_or_default());
+                }
             }
         }
-        Cmd::List { vault, query } => {
+        Cmd::List { vault, query, json, include_archived } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            let items: Vec<(String, Item)> = match query {
-                Some(q) => gitpass_core::search::rank(q, s.list_items(&vid)?).into_iter().map(|(_, id, it)| (id, it)).collect(),
-                None => s.list_items(&vid)?,
+            let mut recs = s.list_records(&vid)?;
+            if !include_archived {
+                recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
+            }
+            let items: Vec<(String, ItemRecord)> = match query {
+                Some(q) => {
+                    let mut ranked: Vec<(i64, String, ItemRecord)> = recs
+                        .into_iter()
+                        .filter_map(|(id, _, rec)| gitpass_core::search::score_item(q, &id, &rec.item).map(|sc| (sc, id, rec)))
+                        .collect();
+                    ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+                    ranked.into_iter().map(|(_, id, rec)| (id, rec)).collect()
+                }
+                None => {
+                    recs.sort_by(|a, b| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()));
+                    recs.into_iter().map(|(id, _, rec)| (id, rec)).collect()
+                }
             };
-            for (id, it) in items {
-                println!("{id}  {}  {}", it.title, it.username.clone().unwrap_or_default());
+            if *json {
+                let summaries: Vec<CliItemSummary> = items.iter().map(|(id, rec)| item_summary(id, rec)).collect();
+                println!("{}", serde_json::to_string_pretty(&summaries)?);
+            } else {
+                for (id, rec) in items {
+                    println!("{id}  {}  {}", rec.item.title, rec.item.username.clone().unwrap_or_default());
+                }
             }
         }
         Cmd::Edit { vault, id, title, username, url, notes, totp, password, generate } => {
@@ -626,7 +884,12 @@ fn run() -> Result<()> {
             s.remove_item(&vid, &iid)?;
             println!("removed {iid}");
         }
-        Cmd::Gen { len } => println!("{}", generate_password(*len)),
+        Cmd::Gen { len, words, pin, separator, capitalize, no_symbols, no_digits, copy, clear_secs } => {
+            let args = gitpass_cli::gen::Args { len: *len, words: *words, pin: *pin, separator: *separator,
+                capitalize: *capitalize, no_symbols: *no_symbols, no_digits: *no_digits, copy: *copy, clear_secs: *clear_secs };
+            let mut out = std::io::stdout();
+            gitpass_cli::gen::run(&args, gitpass_cli::clip::system, &mut out, std::thread::sleep)?;
+        }
         Cmd::Run { env_file, no_masking, cmd } => {
             use gitpass_cli::inject;
             let s = unlock(&cli, &root)?;
@@ -858,6 +1121,7 @@ fn run() -> Result<()> {
             let sk = load_secret_key(&root)?;
             do_migrate(&root, &pw, &sk)?;
         }
+        Cmd::Completions { .. } => unreachable!(),
     }
     Ok(())
 }
