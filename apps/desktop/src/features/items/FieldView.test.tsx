@@ -39,4 +39,55 @@ describe('FieldRow', () => {
     await act(async () => { fireEvent.click(screen.getByLabelText('Copy password')); });
     expect(spy).toHaveBeenCalledWith({ vaultId: 'v', itemId: 'i', fieldId: 'f4' });
   });
+  it("shows expired pill and relative hint for expired credit card expiry field", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-15T12:00:00Z"));
+    render(
+      <TooltipProvider>
+        <FieldRow
+          field={{ id: "expiry", label: "expiry date", kind: "month_year", value: "03/2026" }}
+          ctx={ctx}
+          category="credit_card"
+        />
+      </TooltipProvider>
+    );
+    const pill = screen.getByTestId("expiry-pill");
+    expect(pill).toBeInTheDocument();
+    expect(pill.textContent).toBe("Expired");
+    expect(screen.getByTestId("expiry-hint").textContent).toBe("Expired 2 months ago");
+    vi.useRealTimers();
+  });
+
+  it("shows expires soon pill and relative hint for expiring api credential expires field", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-15T12:00:00Z"));
+    render(
+      <TooltipProvider>
+        <FieldRow
+          field={{ id: "expires", label: "expires", kind: "date", value: "2026-05-27" }}
+          ctx={ctx}
+          category="api_credential"
+        />
+      </TooltipProvider>
+    );
+    const pill = screen.getByTestId("expiry-pill");
+    expect(pill).toBeInTheDocument();
+    expect(pill.textContent).toBe("Expires soon");
+    expect(screen.getByTestId("expiry-hint").textContent).toBe("Expires in 12 days");
+    vi.useRealTimers();
+  });
+
+  it("does not show expiry pill for non-expiry date fields such as birth date", () => {
+    render(
+      <TooltipProvider>
+        <FieldRow
+          field={{ id: "birth", label: "birth date", kind: "date", value: "1990-01-01" }}
+          ctx={ctx}
+          category="identity"
+        />
+      </TooltipProvider>
+    );
+    expect(screen.queryByTestId("expiry-pill")).toBeNull();
+    expect(screen.queryByTestId("expiry-hint")).toBeNull();
+  });
 });

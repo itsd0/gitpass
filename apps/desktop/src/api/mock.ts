@@ -121,7 +121,17 @@ const devices: T.DeviceInfo[] = [
 ];
 
 const summary = (d: T.ItemDetail): T.ItemSummary => {
-  const { sections: _s, notes: _n, attachments: _a, history: _h, passwordStrength: _p, hasTotp: _t, ...s } = d; return s;
+  const { sections: _s, notes: _n, attachments: _a, history: _h, passwordStrength: _p, hasTotp: _t, ...s } = d;
+  const flds = d.sections?.flatMap((sec) => sec.fields) ?? [];
+  let expiry: string | null = null;
+  if (d.category === "credit_card") {
+    const fld = flds.find((x) => x.id === "expiry" || x.label === "expiry date" || x.kind === "month_year");
+    expiry = fld?.value ?? null;
+  } else if (d.category === "api_credential") {
+    const fld = flds.find((x) => x.id === "expires" || x.label === "expires" || x.kind === "date");
+    expiry = fld?.value ?? null;
+  }
+  return { ...s, ...(expiry ? { expiry } : {}) };
 };
 const get = (id: string) => { const r = db.get(id); if (!r) throw new Error(`item not found: ${id}`); return r; };
 const vaultInfo = () => vaults.map((v) => ({ ...v, itemCount: [...db.values()].filter((r) => r.detail.vaultId === v.id && !r.detail.deletedAt).length }));
