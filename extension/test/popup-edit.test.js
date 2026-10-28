@@ -163,22 +163,33 @@ test('⌘E opens edit and ⌘↩ saves title, username, websites and notes', asy
   assert.strictEqual(w.document.activeElement, editBtn(w), 'focus returns to Edit');
 });
 
-test('host errors stay inline in the form and Save can retry', async (t) => {
-  let fail = true;
-  const { dom, w, sent } = popup({ updateLogin: (m) => fail ? Promise.reject(Object.assign(new Error('vault is read-only'), { code: 'internal' })) : Promise.resolve({ ok: true }) });
+test('saving shows the spinner, host errors stay inline, and Save can retry', async (t) => {
+  let calls = 0, rejectFirst;
+  const { dom, w, sent } = popup({
+    updateLogin: () => {
+      calls++;
+      if (calls > 1) return Promise.resolve({ ok: true });
+      return new Promise((res, rej) => { rejectFirst = rej; });
+    },
+  });
   t.after(() => dom.window.close());
   await openEdit(w);
 
   field(w, 'edit-username').value = 'changed';
   form(w).requestSubmit();
+  await sleep(10);
+  let save = q(w, '#detail .edit-acts .btn-primary');
+  assert.strictEqual(save.disabled, true, 'Save is disabled while pending');
+  assert.ok(save.querySelector('.spinner'), 'Save shows the existing loading spinner');
+
+  rejectFirst(Object.assign(new Error('vault is read-only'), { code: 'internal' }));
   await settle();
   assert.strictEqual(q(w, '#detail .err').textContent, 'vault is read-only');
   assert.ok(form(w), 'form stays open on error');
-  const save = q(w, '#detail .edit-acts .btn-primary');
+  save = q(w, '#detail .edit-acts .btn-primary');
   assert.strictEqual(save.disabled, false, 'Save is enabled again');
   assert.strictEqual(save.querySelector('.spinner'), null);
 
-  fail = false;
   form(w).requestSubmit();
   await settle();
   await settle();
