@@ -71,6 +71,33 @@ async function findInShadow(page, re) {
 }
 
 
+// Computed styles of the first element matching `selector` inside any <gitpass-ui> closed shadow root.
+// CSS.getComputedStyleForNode (with CSS.enable) sees shadow-DOM nodes found via DOM.getDocument pierce,
+// so prefers-color-scheme emulation can be asserted without opening the shadow root.
+async function shadowComputed(page, selector) {
+  const s = await cdpSession(page);
+  await s.send('DOM.enable');
+  await s.send('CSS.enable');
+  const { root } = await s.send('DOM.getDocument', { depth: -1, pierce: true });
+  const roots = [];
+  const walk = (n) => {
+    if (n.nodeName === 'GITPASS-UI') roots.push(...(n.shadowRoots || []));
+    for (const k of (n.children || [])) walk(k);
+  };
+  walk(root);
+  for (const sr of roots) {
+    let nodeIds = [];
+    try { ({ nodeIds } = await s.send('DOM.querySelectorAll', { nodeId: sr.nodeId, selector })); } catch (_) { continue; }
+    if (!nodeIds.length) continue;
+    const { computedStyle } = await s.send('CSS.getComputedStyleForNode', { nodeId: nodeIds[0] });
+    const out = {};
+    for (const p of computedStyle) out[p.name] = p.value;
+    return out;
+  }
+  return null;
+}
+const ORANGE = /rgba?\(242, 140, 40\b/;
+
 // Persistent CDP sessions for the in-page passkey prompt. A WebAuthn virtual-authenticator
 // environment lives on the session, and closed-shadow buttons are found with the same session —
 // so do not detach these. Only buttons inside a <gitpass-ui> shadow root match (the RP page has
@@ -408,6 +435,33 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     const isFilled = async () => (await page.inputValue('#p')) === PW && (await page.inputValue('#u')) === 'alice@example.com';
     await page.bringToFront(); await page.click('#u'); await sleep(800);
     const hits = await until(async () => { const h = await findInShadow(page, /Localhost Test Login|alice@example\.com/); return h.length && h; }, T(5000));
+
+    // --- Theme (#74): injected UI follows prefers-color-scheme; the orange accent is constant.
+    const themeStyles = async (sel) => {
+      await page.emulateMedia({ colorScheme: 'dark' });
+      const dark = await shadowComputed(page, sel);
+      await page.emulateMedia({ colorScheme: 'light' });
+      const light = await shadowComputed(page, sel);
+      await page.emulateMedia({ colorScheme: 'dark' });
+      return { dark, light };
+    };
+    const menuTheme = hits ? await themeStyles('.menu') : { dark: null, light: null };
+    rec('in-page menu follows prefers-color-scheme (dark/light)',
+      !!menuTheme.dark && !!menuTheme.light &&
+      menuTheme.dark['background-color'] === 'rgb(28, 28, 30)' && menuTheme.light['background-color'] === 'rgb(255, 255, 255)' &&
+      menuTheme.dark.color === 'rgb(236, 237, 240)' && menuTheme.light.color === 'rgb(28, 28, 30)',
+      `dark ${menuTheme.dark && menuTheme.dark['background-color']}/${menuTheme.dark && menuTheme.dark.color}; light ${menuTheme.light && menuTheme.light['background-color']}/${menuTheme.light && menuTheme.light.color}`);
+    const rowTheme = hits ? await themeStyles('.it.active') : { dark: null, light: null };
+    rec('active menu row keeps the orange accent in both themes',
+      !!rowTheme.dark && !!rowTheme.light && ORANGE.test(rowTheme.dark['box-shadow'] || '') && ORANGE.test(rowTheme.light['box-shadow'] || ''),
+      `dark ${rowTheme.dark && rowTheme.dark['background-color']}; light ${rowTheme.light && rowTheme.light['background-color']}`);
+    const badgeTheme = await themeStyles('.badge');
+    rec('field badge follows prefers-color-scheme and keeps the orange ring',
+      !!badgeTheme.dark && !!badgeTheme.light &&
+      badgeTheme.dark['background-color'] === 'rgb(28, 28, 30)' && badgeTheme.light['background-color'] === 'rgb(255, 255, 255)' &&
+      ORANGE.test(badgeTheme.dark['box-shadow'] || '') && ORANGE.test(badgeTheme.light['box-shadow'] || ''),
+      `dark ${badgeTheme.dark && badgeTheme.dark['background-color']}; light ${badgeTheme.light && badgeTheme.light['background-color']}`);
+
     let hitsUsed = hits, badgeInfo = '';
     if (!hits) {
       // Older UI: a field badge opens the menu. Click the badge, then the entry.
@@ -419,6 +473,16 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     const hits2 = hitsUsed;
     const inpage = await until(isFilled, T(3000));
     rec('fill via in-page dropdown', !!inpage, (hits2 ? `clicked ${hits2[0].tag} "${hits2[0].text}"` : 'no dropdown entry found in shadow DOM') + badgeInfo + `; u=${JSON.stringify(await page.inputValue('#u'))}`);
+    // Keyboard regression (#74): the theme work is CSS-only; the menu still opens with Alt+ArrowDown
+    // and closes with Escape, leaving the field value untouched.
+    await page.focus('#u');
+    await page.keyboard.down('Alt'); await page.keyboard.press('ArrowDown'); await page.keyboard.up('Alt');
+    const reopened = await until(async () => !!(await shadowComputed(page, '.menu')), T(3000));
+    await page.keyboard.press('Escape');
+    const escaped = await until(async () => (await shadowComputed(page, '.menu')) === null, T(3000));
+    rec('inline menu keyboard: Alt+ArrowDown opens, Escape closes (value untouched)',
+      !!reopened && !!escaped && (await page.inputValue('#u')) === 'alice@example.com',
+      `opened=${!!reopened} closed=${!!escaped} u=${JSON.stringify(await page.inputValue('#u'))}`);
     await page.fill('#u', ''); await page.fill('#p', '');
     let viaPopup = false, how = '';
     try {
@@ -467,6 +531,17 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     await page.goto(LOGIN); await sleep(1000);
     await page.fill('#u', 'newuser@example.com'); await page.fill('#p', 'Brand-New-Pass-42'); await page.click('#go');
     const banner = await until(async () => { const h = await findInShadow(page, /^\s*(Save|บันทึก|သိမ်းရန်)\s*$/i)  /* the button, not the 'Save login to gitpass?' title */; return h.length && h; }, T(6000));
+    const bannerTheme = banner ? await themeStyles('.banner') : { dark: null, light: null };
+    rec('save banner follows prefers-color-scheme (dark/light)',
+      !!bannerTheme.dark && !!bannerTheme.light &&
+      bannerTheme.dark['background-color'] === 'rgb(28, 28, 30)' && bannerTheme.light['background-color'] === 'rgb(255, 255, 255)' &&
+      bannerTheme.dark.color === 'rgb(236, 237, 240)' && bannerTheme.light.color === 'rgb(28, 28, 30)',
+      `dark ${bannerTheme.dark && bannerTheme.dark['background-color']}/${bannerTheme.dark && bannerTheme.dark.color}; light ${bannerTheme.light && bannerTheme.light['background-color']}/${bannerTheme.light && bannerTheme.light.color}`);
+    const primaryTheme = banner ? await themeStyles('.btn.pri') : { dark: null, light: null };
+    rec('save banner primary button keeps the orange accent in both themes',
+      !!primaryTheme.dark && !!primaryTheme.light &&
+      [primaryTheme.dark, primaryTheme.light].every((s) => s['background-color'] === 'rgb(242, 140, 40)' && s.color === 'rgb(28, 28, 30)'),
+      `dark ${primaryTheme.dark && primaryTheme.dark['background-color']}; light ${primaryTheme.light && primaryTheme.light['background-color']}`);
     if (banner) { await page.mouse.click(banner[0].x, banner[0].y); }
     const saved = await until(() => cmdsIn(mockDir).find((m) => m.cmd === 'save_login' && m.username === 'newuser@example.com'), T(4000));
     if (REAL) rec('save-login prompt after submit (real host)', !!banner, banner ? `banner button "${banner[0].text}" clicked` : 'no Save button found', 'test'); else
@@ -597,10 +672,19 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
         return !!btn;
       };
       const noNewWindow = (pages) => passkeyWindows() === 0 && ctx.pages().length === pages;
+      let pkTheme = null;
       const act = async (pg, sel, promptRe, native) => {
         await clearOut(pg); await pg.bringToFront(); await pg.click(sel);
         if (promptRe) {
           if (!(await waitPrompt(pg, promptRe))) return { error: 'no in-page prompt' };
+          if (!pkTheme) { // #74: the passkey card follows the system theme too
+            await pg.emulateMedia({ colorScheme: 'dark' });
+            const dark = await shadowComputed(pg, '.pk-card');
+            await pg.emulateMedia({ colorScheme: 'light' });
+            const light = await shadowComputed(pg, '.pk-card');
+            await pg.emulateMedia({ colorScheme: 'dark' });
+            pkTheme = { dark, light };
+          }
           await sleep(800); // the primary button ignores trusted clicks for its first 600 ms
           if (native) await clickShadow(pg, /^Cancel$/); else await clickShadow(pg, promptRe);
         } else { // no prompt expected: gitpass has no matching credential
@@ -621,6 +705,11 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       let mark = cmdsIn(mockDir).length;
       const cancelReg = await act(nativePage, '#reg', /^Save passkey$/, true);
       const cancelCmds = cmdsIn(mockDir).slice(mark).filter((m) => /^passkey_/.test(m.cmd));
+      rec('passkey overlay follows prefers-color-scheme (dark/light)',
+        !!pkTheme && !!pkTheme.dark && !!pkTheme.light &&
+        pkTheme.dark['background-color'] === 'rgb(28, 28, 30)' && pkTheme.light['background-color'] === 'rgb(255, 255, 255)' &&
+        pkTheme.dark.color === 'rgb(236, 237, 240)' && pkTheme.light.color === 'rgb(28, 28, 30)',
+        `dark ${pkTheme && pkTheme.dark && pkTheme.dark['background-color']}/${pkTheme && pkTheme.dark && pkTheme.dark.color}; light ${pkTheme && pkTheme.light && pkTheme.light['background-color']}/${pkTheme && pkTheme.light && pkTheme.light.color}`);
       rec('passkey create cancelled -> browser passkey, no gitpass window',
         cancelReg.registered === true && noNewWindow(pages) && (REAL || !cancelCmds.some((m) => m.cmd === 'passkey_create')),
         JSON.stringify(cancelReg) + (REAL ? ' (real host; not logged)' : `; cmds=${JSON.stringify(cancelCmds.map((m) => m.cmd))}`));
