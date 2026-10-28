@@ -1,18 +1,20 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 import { api } from '../../api/client';
+import { mock } from '../../api/mock';
 import { useSettings } from '../settings/useSettings';
-const it3 = { id: 'i3', vaultId: 'v-private', category: 'login' as const, title: 'Fake Forum', subtitle: 'demo', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: '', createdAt: '' };
-const it3x = { ...it3, id: 'i3x', title: 'Fake 2FA Site' };
-const itExp = { ...it3, id: 'i-exp', category: 'credit_card' as const, title: 'Expired Card' };
-const itSoon = { ...it3, id: 'i-soon', category: 'api_credential' as const, title: 'Expiring API Key' };
+const it3 = { id: 'i3', vaultId: 'v-private', category: 'login' as const, title: 'Fake Forum', subtitle: 'demo', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: '', createdAt: '', url: 'https://forum.example.org' };
+const it3x = { ...it3, id: 'i3x', title: 'Fake 2FA Site', url: 'https://2fa.example.org' };
+const itExp = { ...it3, id: 'i-exp', category: 'credit_card' as const, title: 'Expired Card', url: null };
+const itSoon = { ...it3, id: 'i-soon', category: 'api_credential' as const, title: 'Expiring API Key', url: 'https://api.example.org' };
+const itInsecure = { ...it3, id: 'i-insecure', title: 'Insecure Website', url: 'http://insecure.example.com/login?token=abc' };
 let hibpOn = false;
 beforeEach(() => {
   hibpOn = false; useSettings.setState({ settings: null });
   vi.spyOn(api, 'getSettings').mockImplementation(async () => ({ autoLockMinutes: 10, clipboardClearSecs: 30, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: hibpOn }));
   vi.spyOn(api, 'setSettings').mockImplementation(async (a: any) => { hibpOn = !!a.settings.hibpCheck; });
-  vi.spyOn(api, 'listItems').mockResolvedValue([it3, it3x, itExp, itSoon]);
-  vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'], passkeyAvailable: ['i3x'], expired: ['i-exp'], expiringSoon: ['i-soon'], checkedAt: '', hibpChecked: on }; });
+  vi.spyOn(api, 'listItems').mockResolvedValue([it3, it3x, itExp, itSoon, itInsecure]);
+  vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'], passkeyAvailable: ['i3x'], expired: ['i-exp'], expiringSoon: ['i-soon'], insecureUrls: ['i-insecure'], checkedAt: '', hibpChecked: on }; });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -76,5 +78,42 @@ describe('watchtower score', () => {
     expect(screen.getByText('Expiring API Key')).toBeTruthy();
     fireEvent.click(screen.getByText('Expired Card'));
     expect(useApp.getState().selectedItemId).toBe('i-exp');
+  });
+  it('extracts insecureUrls issue IDs and renders Unsecured websites card with actions', async () => {
+    const r = { score: 0, weak: [], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [], expired: [], expiringSoon: [], insecureUrls: ['i-insecure'], checkedAt: '', hibpChecked: false };
+    expect(issueIds(r, 'insecureUrls')).toEqual(['i-insecure']);
+
+    render(<WatchtowerPage />);
+    await screen.findByTestId('score');
+    expect(screen.getByTestId('count-insecureUrls').textContent).toBe('1');
+    expect(screen.getByText('Insecure Website')).toBeTruthy();
+    expect(screen.getByText('http://insecure.example.com/login?token=abc')).toBeTruthy();
+
+    const openHttpsLink = screen.getByRole('link', { name: 'Open HTTPS version for Insecure Website' }) as HTMLAnchorElement;
+    expect(openHttpsLink).toBeTruthy();
+    expect(openHttpsLink.href).toBe('https://insecure.example.com/login?token=abc');
+    expect(openHttpsLink.target).toBe('_blank');
+
+    const editBtn = screen.getByRole('button', { name: 'Edit URL for Insecure Website' });
+    expect(editBtn).toBeTruthy();
+    fireEvent.click(editBtn);
+    expect(useApp.getState().selectedItemId).toBe('i-insecure');
+    expect(useApp.getState().editing).toBe(true);
+    expect(useApp.getState().route).toEqual({ name: 'items', filter: { kind: 'vault', vaultId: 'v-private' } });
+  });
+  it('renders unsecured websites card and per-item finding with mock data', async () => {
+    vi.restoreAllMocks();
+    useSettings.setState({ settings: null });
+    vi.spyOn(api, 'getSettings').mockImplementation(mock.get_settings);
+    vi.spyOn(api, 'listItems').mockImplementation(mock.list_items);
+    vi.spyOn(api, 'watchtower').mockImplementation(mock.watchtower);
+
+    render(<WatchtowerPage />);
+    await screen.findByTestId('score');
+    expect(Number(screen.getByTestId('count-insecureUrls').textContent)).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Placeholder Forum').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText('http://forum.example.io')).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Open HTTPS version for Placeholder Forum' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Edit URL for Placeholder Forum' })).toBeTruthy();
   });
 });

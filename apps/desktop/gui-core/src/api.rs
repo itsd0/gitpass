@@ -119,6 +119,7 @@ pub struct WatchtowerReport {
     pub score: u8, pub weak: Vec<String>, pub reused: Vec<Vec<String>>, pub old: Vec<String>, pub breached: Vec<String>,
     pub missing_totp: Vec<String>, pub totp_available: Vec<String>, pub passkey_available: Vec<String>,
     pub expired: Vec<String>, pub expiring_soon: Vec<String>,
+    pub insecure_urls: Vec<String>,
     pub checked_at: String, pub hibp_checked: bool,
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -955,6 +956,7 @@ impl App {
             let rep = audit::audit_with_passkeys(&items, &passkey_sites, &AuditOpts::default(), client)?;
             let mut out = WatchtowerReport { score: 100, weak: vec![], reused: vec![], old: vec![], breached: vec![], missing_totp: vec![],
                 totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
+                insecure_urls: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
             let mut groups: BTreeMap<usize, Vec<String>> = BTreeMap::new();
             for f in &rep.per_item {
@@ -969,6 +971,7 @@ impl App {
                         Finding::PasskeyAvailable { .. } => out.passkey_available.push(f.id.clone()),
                         Finding::Expired { .. } => out.expired.push(f.id.clone()),
                         Finding::ExpiringSoon { .. } => out.expiring_soon.push(f.id.clone()),
+                        Finding::InsecureUrl { .. } => out.insecure_urls.push(f.id.clone()),
                     }
                 }
             }
