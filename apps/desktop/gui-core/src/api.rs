@@ -140,11 +140,16 @@ pub struct Settings {
     #[serde(default)] pub hibp_check: bool,
     /// Ask before every SSH agent signature (default off: unlocked vault = keys usable).
     #[serde(default)] pub ssh_approve_each_use: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_mode: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_length: Option<u64>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_digits: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_symbols: Option<bool>,
 }
 impl Default for Settings {
     fn default() -> Self {
         Settings { auto_lock_minutes: 5, clipboard_clear_secs: crate::CLIPBOARD_CLEAR_SECS, theme: Theme::Dark, language: Language::En,
-            biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false, ssh_approve_each_use: false }
+            biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false, ssh_approve_each_use: false,
+            generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None }
     }
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -424,12 +429,17 @@ const WORDS: &[&str] = &["acorn","amber","anchor","apple","arrow","aspen","atlas
     "reef","ripple","river","rocket","saffron","salmon","sapphire","savanna","sequoia","shadow","sierra","silver","sparrow","spruce","summit","sunset",
     "thistle","thunder","tiger","topaz","tulip","tundra","turtle","velvet","violet","walnut","willow","winter","zebra","zenith","yarrow","yonder"];
 
-/// Generate a password (`words`: `length` words from a 128-word list joined by '-', ~7 bits/word).
-pub fn generate(length: usize, symbols: bool, digits: bool, words: bool) -> String {
+/// Generate a password (`words`: `length` words from a 128-word list joined by '-', ~7 bits/word, `pin`: `length` digits).
+pub fn generate(length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String {
     use rand::rngs::OsRng;
     use rand::seq::SliceRandom;
     use rand::Rng;
     let mut rng = OsRng;
+    if pin {
+        let n = length.clamp(4, 16);
+        let dg = b"0123456789";
+        return (0..n).map(|_| *dg.choose(&mut rng).unwrap() as char).collect();
+    }
     if words {
         let n = length.clamp(3, 20);
         let mut w: Vec<String> = (0..n).map(|_| WORDS.choose(&mut rng).unwrap().to_string()).collect();
@@ -690,6 +700,29 @@ impl App {
         }
         Ok(())
     }
+    /// Copy a password/secret to the clipboard; cleared after `clipboardClearSecs` only if the clipboard still holds this value and nothing newer was copied.
+    pub fn copy_password(&self, password: &str) -> Result<()> {
+        let v = Zeroizing::new(password.to_string());
+        self.clipboard.set_text(&v)?;
+        if let Ok(mut lc) = self.last_copied.lock() {
+            *lc = Some(Zeroizing::new(v.to_string()));
+        }
+        let gen = self.clip_gen.fetch_add(1, Ordering::SeqCst) + 1;
+        let secs = self.get_settings().clipboard_clear_secs;
+        if secs > 0 {
+            let (cb, g, lc) = (self.clipboard.clone(), self.clip_gen.clone(), self.last_copied.clone());
+            std::thread::spawn(move || {
+                std::thread::sleep(std::time::Duration::from_secs(secs));
+                if g.load(Ordering::SeqCst) == gen && cb.get_text().as_deref() == Some(v.as_str()) {
+                    let _ = cb.set_text("");
+                    if let Ok(mut l) = lc.lock() {
+                        if l.as_ref().map(|s| s.as_str()) == Some(v.as_str()) { *l = None; }
+                    }
+                }
+            });
+        }
+        Ok(())
+    }
     pub fn totp_now(&self, vault_id: &str, item_id: &str) -> Result<TotpNow> {
         self.with(|u| {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
@@ -854,7 +887,7 @@ impl App {
     }
 
     // ---------------- tools
-    pub fn generate_password(&self, length: usize, symbols: bool, digits: bool, words: bool) -> String { generate(length, symbols, digits, words) }
+    pub fn generate_password(&self, length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String { generate(length, symbols, digits, words, pin) }
     pub fn password_strength(&self, password: &str) -> u8 { strength(password) }
 
     /// Watchtower over live login items, reusing core `audit` (HIBP only when `hibp`).
