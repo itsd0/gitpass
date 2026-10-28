@@ -14,7 +14,7 @@
   const pendingSaves = new Map(); // tabId -> { origin, kind, username, password, item_id, prompt, ts }
   const lastUsername = new Map(); // tabId -> { origin, username, ts }  (multi-step logins: step 1 value, 5 min TTL)
   const lastSaved = new Map(); // tabId -> { origin, item_id, ts }  ("Open in gitpass" after a banner save)
-  const inflightDecisions = new Set(); // tabIds with a save/update in progress (no replay)
+  const inflightDecisions = new Map(); // tabId -> promise settled when the write ends (no replay, see waitInflight)
   const PAGE_LISTABLE = new Set(['credit_card', 'identity']);
   let neverSaveFallback = [];
 
@@ -122,6 +122,12 @@
     if (itemId) lastSaved.set(tabId, { origin, item_id: itemId, ts: Date.now() });
   }
 
+  /** A content script booting after a redirect must see the outcome of the save that is still writing. */
+  async function waitInflight(tabId) {
+    const pending = inflightDecisions.get(tabId);
+    if (pending) await pending.catch(() => {});
+  }
+
   /** Decide save vs update for a captured login. Returns the banner descriptor or null. */
   async function decide(host, origin, cap) {
     let items;
@@ -203,7 +209,7 @@
         if (kind === 'username') { if (username) lastUsername.set(tabId, { origin, username, ts: Date.now() }); return { prompt: null }; }
         if (!['login', 'signup', 'change_password'].includes(kind)) throw err('bad_request', 'kind');
         if (typeof a.password !== 'string' || !a.password || a.password.length > 1024) throw err('bad_request', 'password');
-        if (inflightDecisions.has(tabId)) return { prompt: null }; // don't replace the capture being written
+        await waitInflight(tabId); // process this capture after the save that is still writing
         if (await isExceptedSite(origin)) {
           pendingSaves.delete(tabId);
           return { prompt: null };
@@ -218,7 +224,7 @@
         return { prompt: d.prompt, username: user, title: d.title || null, vaults: await vaultChoices(host) };
       }
       case 'page:pending': {
-        if (inflightDecisions.has(tabId)) return { prompt: null }; // the banner on screen is still saving
+        await waitInflight(tabId); // a redirect during Saving… still gets the success/failure outcome
         if (await isExceptedSite(origin)) {
           pendingSaves.delete(tabId);
           return { prompt: null };
@@ -239,7 +245,8 @@
         if (!p) throw err('not_found', 'nothing to save');
         if (a.action === 'dismiss') { pendingSaves.delete(tabId); return { done: false }; }
         if (!a.user_click) throw err('denied', 'needs a click');
-        inflightDecisions.add(tabId);
+        let settle;
+        inflightDecisions.set(tabId, new Promise((res) => { settle = res; }));
         try {
           const user = p.username || '';
           if (a.action === 'update') {
@@ -269,6 +276,7 @@
           throw err('bad_request', 'action');
         } finally {
           inflightDecisions.delete(tabId);
+          settle();
         }
       }
     }
