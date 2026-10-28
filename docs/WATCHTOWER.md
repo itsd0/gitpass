@@ -28,17 +28,19 @@ reports, logs or the UI**.
 
 ## Weak password checks
 
-`weakness()` applies the rules in this order and reports the first one that matches:
+`contains_personal_info()` and `weakness()` apply the rules in this order and report the first one that matches:
 
 | # | Rule | Default |
 |---|------|---------|
-| 1 | Contains a bundled common password as a substring (case-insensitive; e.g. `password`, `qwerty`, `master`). | 18-entry list |
-| 2 | At least 4 characters but at most 2 distinct characters (`aaaa`, `abab`). | — |
-| 3 | Shorter than `min_length` characters (Unicode scalar values, not bytes). | 12 |
-| 4 | Estimated entropy below `min_entropy_bits`. | 60 bits |
+| 1 | Contains the item's username (or email local part) or registrable site name from the URL (at least 4 characters; case-insensitive, ignoring common separators and leetspeak substitutions: `0→o`, `1→l/i`, `3→e`, `4/@→a`, `5/$→s`). | — |
+| 2 | Contains a bundled common password as a substring (case-insensitive; e.g. `password`, `qwerty`, `master`). | 18-entry list |
+| 3 | At least 4 characters but at most 2 distinct characters (`aaaa`, `abab`). | — |
+| 4 | Shorter than `min_length` characters (Unicode scalar values, not bytes). | 12 |
+| 5 | Estimated entropy below `min_entropy_bits`. | 60 bits |
 
 The rules are substring/character based on purpose: they are cheap, deterministic and explainable.
-Rule 1 matches *inside* a longer password, so `MyPassword2024!!` is still flagged.
+Rule 1 matches personal information (username and site name) even inside longer passwords like `github-alice-2024!` or `aliceGithub#99`.
+Rule 2 matches *inside* a longer password, so `MyPassword2024!!` is still flagged.
 
 ## Entropy estimate
 

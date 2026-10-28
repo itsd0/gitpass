@@ -1230,3 +1230,39 @@ fn watchtower_groups_duplicate_logins() {
     assert_eq!(group, expected);
     assert!(!group.contains(&l3.id));
 }
+
+#[test]
+fn watchtower_flags_passwords_containing_personal_info() {
+    let e = env();
+    let item1 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "User Password Test".into(),
+        url: Some("https://gitlab.com".into()),
+        sections: vec![Section {
+            id: "login".into(),
+            title: None,
+            fields: vec![fld("username", FieldKind::Text, Some("alice")), fld("password", FieldKind::Concealed, Some("github-alice-2024!"))],
+        }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+
+    let item2 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "Site Password Test".into(),
+        url: Some("https://login.github.com".into()),
+        sections: vec![Section {
+            id: "login".into(),
+            title: None,
+            fields: vec![fld("username", FieldKind::Text, Some("charlie")), fld("password", FieldKind::Concealed, Some("G1thub#99-Secure!"))],
+        }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+
+    let rep = e.app.watchtower(false).unwrap();
+    assert!(rep.weak.contains(&item1.id));
+    assert!(rep.weak.contains(&item2.id));
+    assert_eq!(rep.weak_reasons.get(&item1.id).map(String::as_str), Some("contains the username"));
+    assert_eq!(rep.weak_reasons.get(&item2.id).map(String::as_str), Some("contains the site name"));
+}

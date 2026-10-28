@@ -16,7 +16,7 @@ use gitpass_core::store::{Item, Session, UnlockOpts};
 use gitpass_core::{import, item, totp};
 use gitpass_pasteboard::PasteboardMarkers;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -143,6 +143,8 @@ pub struct WatchtowerReport {
     pub expired: Vec<String>, pub expiring_soon: Vec<String>,
     pub insecure_urls: Vec<String>,
     pub duplicates: Vec<Vec<String>>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub weak_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ignored: Vec<IgnoredFindingItem>,
     pub checked_at: String, pub hibp_checked: bool,
@@ -1006,6 +1008,7 @@ impl App {
                 totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
                 insecure_urls: vec![],
                 duplicates: vec![],
+                weak_reasons: HashMap::new(),
                 ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
             let mut groups: BTreeMap<usize, Vec<String>> = BTreeMap::new();
@@ -1013,7 +1016,10 @@ impl App {
             for f in &rep.per_item {
                 for x in &f.findings {
                     match x {
-                        Finding::Weak { .. } => out.weak.push(f.id.clone()),
+                        Finding::Weak { reason } => {
+                            out.weak.push(f.id.clone());
+                            out.weak_reasons.insert(f.id.clone(), reason.clone());
+                        }
                         Finding::Reused { group, .. } => groups.entry(*group).or_default().push(f.id.clone()),
                         Finding::Old { .. } => out.old.push(f.id.clone()),
                         Finding::Pwned { .. } => out.breached.push(f.id.clone()),
