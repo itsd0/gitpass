@@ -317,6 +317,10 @@
     "message": "ไว้ทีหลัง",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "csNever": {
+    "message": "ไม่ต้องสำหรับไซต์นี้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
   "csUpdate": {
     "message": "อัปเดต",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
@@ -407,6 +411,30 @@
   },
   "optSaveBody": {
     "message": "ถามเพื่อบันทึกหรืออัปเดตรหัสผ่านหลังจากคุณลงชื่อเข้าใช้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optNeverSave": {
+    "message": "ไม่ต้องบันทึกในไซต์เหล่านี้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optNeverSaveBody": {
+    "message": "gitpass จะไม่เสนอให้บันทึกหรืออัปเดตรหัสผ่านในไซต์เหล่านี้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optNeverSaveEmpty": {
+    "message": "ไม่มีไซต์ที่ยกเว้น",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "remove": {
+    "message": "ลบ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "savingOff": {
+    "message": "การบันทึกถูกปิดสำหรับไซต์นี้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "undo": {
+    "message": "เลิกทำ",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optShortcut": {

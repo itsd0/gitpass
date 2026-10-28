@@ -60,6 +60,8 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command(async)] pub fn add_attachment(s: State<'_, App>, vault_id: String, item_id: String, path: String) -> R<a::Attachment> { s.add_attachment(&vault_id, &item_id, &path).map_err(e) }
 #[tauri::command(async)] pub fn save_attachment(s: State<'_, App>, vault_id: String, item_id: String, attachment_id: String, dest_path: String) -> R<()> { s.save_attachment(&vault_id, &item_id, &attachment_id, &dest_path).map_err(e) }
 #[tauri::command] pub fn list_tags(s: State<App>) -> R<Vec<String>> { s.list_tags().map_err(e) }
+#[tauri::command] pub fn rename_tag(s: State<App>, old: String, new: String) -> R<a::BulkResult> { s.rename_tag(&old, &new).map_err(e) }
+#[tauri::command] pub fn delete_tag(s: State<App>, name: String) -> R<a::BulkResult> { s.delete_tag(&name).map_err(e) }
 #[tauri::command] pub fn generate_password(s: State<App>, length: usize, symbols: bool, digits: bool, words: Option<bool>, pin: Option<bool>) -> String { s.generate_password(length, symbols, digits, words.unwrap_or(false), pin.unwrap_or(false)) }
 #[tauri::command] pub fn copy_password(s: State<App>, password: String) -> R<()> { s.copy_password(&password).map_err(e) }
 #[tauri::command] pub fn password_strength(s: State<App>, password: String) -> u8 { s.password_strength(&Zeroizing::new(password)) }
