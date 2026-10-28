@@ -8,6 +8,8 @@ if (typeof importScripts === 'function' && !globalThis.GitpassPage) importScript
 if (typeof importScripts === 'function') importScripts('bg-onboard.js');
 // v0.7 passkeys (approval window + host passkey_create/get)
 if (typeof importScripts === 'function' && !globalThis.GitpassPasskey) importScripts('bg-passkey.js');
+// ⌘⇧L / Ctrl+Shift+L "fill-login" command (#124)
+if (typeof importScripts === 'function' && !globalThis.GitpassCommand) importScripts('bg-command.js');
 
 const HOST = 'com.gitpass.host';
 let port = null;
@@ -63,10 +65,11 @@ async function activeTab() {
 }
 
 /** Fill creds into the top frame of a tab; the content script re-checks the origin. */
-async function fillTab(tabId, origin, itemId) {
+async function fillTab(tabId, origin, itemId, extra) {
   if (!GitpassPolicy.isFillableOrigin(origin)) throw new Error('refusing to fill: page is not https');
   const creds = await host('fill', { item_id: itemId, origin }); // host enforces origin match
-  await chrome.tabs.sendMessage(tabId, { type: 'gitpass-fill', origin, username: creds.username, password: creds.password }, { frameId: 0 });
+  const via = extra && extra.via === 'command' ? { via: 'command' } : {};
+  await chrome.tabs.sendMessage(tabId, { type: 'gitpass-fill', origin, username: creds.username, password: creds.password, ...via }, { frameId: 0 });
   return true;
 }
 
@@ -109,22 +112,51 @@ async function popupRoute(msg) {
     case 'get_item': return host('get_item', { item_id: msg.item_id });
     case 'reveal': return host('reveal', { item_id: msg.item_id, field: msg.field, source: 'popup' });
     case 'totp': return host('totp', { item_id: msg.item_id });
-    case 'generate': return host('generate', { len: msg.len, digits: !!msg.digits, symbols: !!msg.symbols });
+    case 'generate': return host('generate', { len: msg.len, digits: !!msg.digits, symbols: !!msg.symbols, words: !!msg.words, pin: !!msg.pin });
     case 'create_item': {
       const it = msg.item && typeof msg.item === 'object' ? msg.item : null;
       if (!it || typeof it.category !== 'string' || it.category === 'passkey') throw Object.assign(new Error('bad item'), { code: 'bad_request' });
       return host('create_item', { item: it });
     }
+    case 'update_login': {
+      const args = { item_id: msg.item_id, source: 'popup' }; // extension pages only; content scripts can't reach popup:*
+      for (const k of ['title', 'username', 'password', 'notes']) if (msg[k] != null) args[k] = String(msg[k]);
+      if (Array.isArray(msg.urls)) args.urls = msg.urls.map(String);
+      return host('update_login', args);
+    }
     case 'save_login': return host('save_login', { origin: msg.origin, title: msg.title, username: msg.username, password: msg.password, vault_id: msg.vault_id });
     case 'set_favorite': return host('set_favorite', { item_id: msg.item_id, favorite: !!msg.favorite });
     case 'open_in_app': return host('open_in_app', msg.item_id ? { item_id: msg.item_id } : {});
+    case 'can_fill_generated': return canFillGenerated();
+    case 'fill_generated': return fillGenerated(msg.password);
     case 'open_fill': return openFill(msg);
   }
   throw new Error('unknown popup message');
 }
 
-/** Open & Fill: fill the active tab if it matches; for logins with a URL otherwise open that URL first. */
-async function openFill(msg) {
+/** Whether the active page has a focused password field (the generator's Fill action). */
+async function canFillGenerated() {
+  const { tab, origin } = await activeOrigin();
+  if (!tab || !origin) return { canFill: false };
+  try {
+    const r = await chrome.tabs.sendMessage(tab.id, { type: 'gitpass-can-fill-generated', origin }, { frameId: 0 });
+    return { canFill: !!(r && r.canFill) };
+  } catch (_) {
+    return { canFill: false }; // no content script on this page (chrome://, Web Store, ...)
+  }
+}
+
+/** Fill a generated password into the focused password field. No vault item is involved. */
+async function fillGenerated(password) {
+  const { tab, origin } = await activeOrigin();
+  if (!tab || !origin) throw Object.assign(new Error('page is not https'), { code: 'bad_request' });
+  if (typeof password !== 'string' || !password || password.length > 1024) throw Object.assign(new Error('password is required'), { code: 'bad_request' });
+  const r = await chrome.tabs.sendMessage(tab.id, { type: 'gitpass-fill-generated', origin, password }, { frameId: 0 });
+  if (!r || !r.filled) throw Object.assign(new Error('no focused password field'), { code: 'bad_request' });
+  return { filled: true };
+}
+
+/** Open & Fill: fill the active tab if it matches; for logins with a URL otherwise open that URL first. */async function openFill(msg) {
   let { tab, origin } = await activeOrigin();
   if (msg.kind === 'login') {
     const want = msg.url && GitpassPolicy.originOf(msg.url);
@@ -146,6 +178,20 @@ async function openFill(msg) {
   await chrome.tabs.sendMessage(tab.id, { type: 'gitpass-fill-fields', kind: msg.kind, origin, fields }, { frameId: 0 });
   if (msg.kind === 'card') await GitpassPage.fillPaymentFrames(tab.id, fields).catch(() => 0); // Stripe-style card iframes
   return true;
+}
+
+// ⌘⇧L / Ctrl+Shift+L: fill the best-matching login on the active tab without opening the popup (#124).
+function fillLoginCommand() {
+  return GitpassCommand.run({
+    activeTab,
+    host,
+    fillTab,
+    sendToTab: (tabId, msg) => chrome.tabs.sendMessage(tabId, msg, { frameId: 0 }),
+  });
+}
+globalThis.gitpassFillLoginCommand = fillLoginCommand; // e2e drives the command from the service worker
+if (chrome.commands && chrome.commands.onCommand) {
+  chrome.commands.onCommand.addListener((cmd) => { if (cmd === GitpassCommand.COMMAND) fillLoginCommand().catch(() => {}); });
 }
 
 // Messages from the popup (extension pages) and content scripts.

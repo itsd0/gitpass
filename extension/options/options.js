@@ -1,62 +1,340 @@
 /* global chrome, GitpassOnboard, GitpassI18n */
 'use strict';
-const $ = (id) => document.getElementById(id);
+
+/**
+ * Pure state mapping for connection status.
+ * Returns state ('unlocked' | 'locked' | 'not_found'), label key, and whether Retry/Docs should appear.
+ */
+function connectionState(probeResult, err) {
+  if (err || !probeResult) {
+    return {
+      state: 'not_found',
+      labelKey: 'statusAppNotFound',
+      defaultLabel: 'Desktop app not found',
+      canRetry: true,
+    };
+  }
+
+  // Handle probe result from onboard-probe ({ host, app, unlocked })
+  if ('host' in probeResult || 'app' in probeResult) {
+    if (!probeResult.host || probeResult.app === false) {
+      return {
+        state: 'not_found',
+        labelKey: 'statusAppNotFound',
+        defaultLabel: 'Desktop app not found',
+        canRetry: true,
+      };
+    }
+    if (probeResult.unlocked) {
+      return {
+        state: 'unlocked',
+        labelKey: 'statusConnectedUnlocked',
+        defaultLabel: 'Connected to gitpass (unlocked)',
+        canRetry: false,
+      };
+    }
+    return {
+      state: 'locked',
+      labelKey: 'statusAppLocked',
+      defaultLabel: 'gitpass is locked',
+      canRetry: false,
+    };
+  }
+
+  // Handle direct status object ({ unlocked, app_running })
+  if (probeResult.app_running === false) {
+    return {
+      state: 'not_found',
+      labelKey: 'statusAppNotFound',
+      defaultLabel: 'Desktop app not found',
+      canRetry: true,
+    };
+  }
+  if (probeResult.unlocked) {
+    return {
+      state: 'unlocked',
+      labelKey: 'statusConnectedUnlocked',
+      defaultLabel: 'Connected to gitpass (unlocked)',
+      canRetry: false,
+    };
+  }
+  return {
+    state: 'locked',
+    labelKey: 'statusAppLocked',
+    defaultLabel: 'gitpass is locked',
+    canRetry: false,
+  };
+}
+
+/**
+ * Pure function to remove a domain from a list (case-insensitive).
+ */
+function removeDomain(list, domain) {
+  const norm = (domain || '').trim().toLowerCase();
+  if (!norm) return Array.isArray(list) ? [...list] : [];
+  return (list || []).filter((d) => (d || '').trim().toLowerCase() !== norm);
+}
+
+/**
+ * Pure function to restore a domain at a specific index (or append) without duplicates.
+ */
+function restoreDomain(list, domain, index) {
+  const norm = (domain || '').trim().toLowerCase();
+  if (!norm) return Array.isArray(list) ? [...list] : [];
+  const current = (list || []).filter((d) => (d || '').trim().toLowerCase() !== norm);
+  const targetIndex = (typeof index === 'number' && index >= 0 && index <= current.length)
+    ? index
+    : current.length;
+  current.splice(targetIndex, 0, norm);
+  return current;
+}
+
+// Browser DOM logic
+const $ = (id) => (typeof document !== 'undefined' ? document.getElementById(id) : null);
+const t = (k, f, subs) => (globalThis.GitpassI18n ? GitpassI18n.t(k, f, subs) : f);
+
+let toastTimer = null;
+function showToast(msg) {
+  const el = $('saved');
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    if (el.textContent === msg) {
+      el.classList.add('hidden');
+      el.textContent = '';
+    }
+  }, 1400);
+}
+
+let lastRemoved = null;
+
+function hideUndoBanner() {
+  const banner = $('never-save-undo-banner');
+  if (banner) banner.classList.add('hidden');
+  if (lastRemoved && lastRemoved.timer) {
+    clearTimeout(lastRemoved.timer);
+    lastRemoved.timer = null;
+  }
+}
+
+function showUndoBanner(domain) {
+  const banner = $('never-save-undo-banner');
+  const textEl = $('never-save-undo-text');
+  const undoBtn = $('never-save-undo-btn');
+  if (!banner || !textEl) return;
+
+  textEl.textContent = t('siteRemoved', `Removed ${domain}`, [domain]);
+  banner.classList.remove('hidden');
+
+  if (undoBtn) {
+    undoBtn.onclick = async () => {
+      await onUndoRemove();
+    };
+  }
+}
+
+async function onRemoveDomain(domain) {
+  const current = await GitpassOnboard.getNeverSave();
+  const idx = current.findIndex((d) => (d || '').toLowerCase() === domain.toLowerCase());
+  const next = removeDomain(current, domain);
+  await GitpassOnboard.setNeverSave(next);
+
+  if (lastRemoved && lastRemoved.timer) clearTimeout(lastRemoved.timer);
+  lastRemoved = {
+    domain,
+    index: idx >= 0 ? idx : next.length,
+    timer: setTimeout(() => {
+      hideUndoBanner();
+      lastRemoved = null;
+    }, 8000),
+  };
+
+  showUndoBanner(domain);
+  showToast(t('saved', 'Saved'));
+  await renderNeverSave();
+}
+
+async function onUndoRemove() {
+  if (!lastRemoved) return;
+  const { domain, index, timer } = lastRemoved;
+  if (timer) clearTimeout(timer);
+  lastRemoved = null;
+
+  const current = await GitpassOnboard.getNeverSave();
+  const next = restoreDomain(current, domain, index);
+  await GitpassOnboard.setNeverSave(next);
+
+  hideUndoBanner();
+  showToast(t('saved', 'Saved'));
+  await renderNeverSave();
+}
 
 async function renderNeverSave() {
   const listEl = $('never-save-list');
   const emptyEl = $('never-save-empty');
+  const emptyDescEl = $('never-save-empty-desc');
   if (!listEl || !emptyEl) return;
+
   const domains = await GitpassOnboard.getNeverSave();
   listEl.textContent = '';
+
   if (!domains.length) {
     emptyEl.style.display = 'block';
+    if (emptyDescEl) emptyDescEl.classList.remove('hidden');
     return;
   }
+
   emptyEl.style.display = 'none';
+  if (emptyDescEl) emptyDescEl.classList.add('hidden');
+
   for (const domain of domains) {
     const row = document.createElement('div');
-    row.className = 't';
-    row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:16px;padding:10px 0;border-bottom:1px solid var(--line)';
-    const span = document.createElement('span');
+    row.className = 't setting-row never-save-row';
+
+    const info = document.createElement('div');
+    info.className = 'never-save-info';
     const b = document.createElement('b');
+    b.className = 'domain-name';
     b.textContent = domain;
-    span.append(b);
+    info.append(b);
+
+    const actions = document.createElement('div');
+    actions.className = 'setting-control';
     const btn = document.createElement('button');
-    btn.className = 'sec';
+    btn.className = 'btn btn-sec sec';
     btn.type = 'button';
     btn.setAttribute('data-domain', domain);
-    btn.textContent = globalThis.GitpassI18n ? GitpassI18n.t('remove', 'Remove') : 'Remove';
-    btn.onclick = async () => {
-      await GitpassOnboard.removeNeverSave(domain);
-      const statusEl = $('saved');
-      if (statusEl) {
-        statusEl.textContent = globalThis.GitpassI18n ? GitpassI18n.t('saved', 'Saved') : 'Saved';
-        setTimeout(() => { if (statusEl.textContent === (globalThis.GitpassI18n ? GitpassI18n.t('saved', 'Saved') : 'Saved')) statusEl.textContent = ''; }, 1200);
-      }
-      await renderNeverSave();
-    };
-    row.append(span, btn);
+    btn.textContent = t('remove', 'Remove');
+    btn.onclick = () => onRemoveDomain(domain);
+
+    actions.append(btn);
+    row.append(info, actions);
     listEl.append(row);
   }
 }
 
-(async () => {
-  if (globalThis.GitpassI18n) GitpassI18n.apply(document);
+async function checkStatus() {
+  const card = $('connection-card');
+  const dot = $('status-dot');
+  const text = $('status-text');
+  const actions = $('status-troubleshoot-wrap');
+  if (!card || !dot || !text) return;
+
+  dot.className = 'status-dot checking';
+  text.textContent = t('checking', 'Checking…');
+  if (actions) actions.classList.add('hidden');
+
+  let probe = null;
+  let err = null;
+  try {
+    probe = await GitpassOnboard.send({ type: 'onboard-probe' });
+  } catch (e) {
+    err = e;
+  }
+
+  const st = connectionState(probe, err);
+  card.className = 'card status-card status-' + st.state;
+  dot.className = 'status-dot ' + st.state;
+  text.textContent = t(st.labelKey, st.defaultLabel);
+
+  if (actions) {
+    actions.classList.toggle('hidden', !st.canRetry);
+  }
+}
+
+async function initSettings() {
   const s = await GitpassOnboard.getSettings();
   for (const k of Object.keys(GitpassOnboard.DEFAULTS)) {
     const el = $(k);
     if (!el) continue;
     el.checked = !!s[k];
-    el.onchange = async () => { await GitpassOnboard.setSettings({ [k]: el.checked }); $('saved').textContent = 'Saved'; setTimeout(() => { $('saved').textContent = ''; }, 1200); };
+    el.onchange = async () => {
+      await GitpassOnboard.setSettings({ [k]: el.checked });
+      showToast(t('saved', 'Saved'));
+    };
   }
-  try { const r = await GitpassOnboard.send({ type: 'onboard-shortcut' }); $('shortcut').textContent = r.shortcut || 'not set'; } catch (_) { $('shortcut').textContent = 'Cmd+Shift+X'; }
+}
+
+async function renderShortcut() {
+  const shortcutEl = $('shortcut');
+  const fillShortcutEl = $('fill-shortcut');
+  if (shortcutEl || fillShortcutEl) {
+    try {
+      const r = await GitpassOnboard.send({ type: 'onboard-shortcut' });
+      if (shortcutEl) shortcutEl.textContent = r.shortcut || 'not set';
+      if (fillShortcutEl) fillShortcutEl.textContent = r.fillShortcut || 'not set';
+    } catch (_) {
+      if (shortcutEl) shortcutEl.textContent = 'Cmd+Shift+X';
+      if (fillShortcutEl) fillShortcutEl.textContent = 'Cmd+Shift+L';
+    }
+  }
+
   const scBtn = $('change-shortcut');
   if (scBtn) {
     scBtn.onclick = () => {
-      const isFirefox = typeof browser !== 'undefined' || navigator.userAgent.includes('Firefox');
-      if (isFirefox) $('saved').textContent = 'Firefox: about:addons → ⚙ → Manage Extension Shortcuts';
-      else chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+      if (globalThis.chrome && chrome.tabs && chrome.tabs.create) {
+        chrome.tabs.create({ url: 'chrome://extensions/shortcuts' });
+      }
     };
   }
+}
+
+function renderAbout() {
+  const vEl = $('extension-version');
+  if (!vEl) return;
+  try {
+    const v = (globalThis.chrome && chrome.runtime && chrome.runtime.getManifest && chrome.runtime.getManifest().version) || '—';
+    vEl.textContent = v;
+  } catch (_) {
+    vEl.textContent = '—';
+  }
+}
+
+async function init() {
+  if (globalThis.GitpassI18n) {
+    GitpassI18n.apply(document);
+  }
+
+  const retryBtn = $('status-retry-btn');
+  if (retryBtn) {
+    retryBtn.onclick = () => checkStatus();
+  }
+
+  renderAbout();
+  await initSettings();
+  await renderShortcut();
   await renderNeverSave();
-})();
+  await checkStatus();
+
+  // Live status updates from host/lock events without ever querying or showing item data
+  if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage && chrome.runtime.onMessage.addListener) {
+    chrome.runtime.onMessage.addListener((msg) => {
+      if (!msg || msg.type !== 'popup:event') return;
+      if (msg.event === 'unlock' || msg.event === 'lock' || msg.event === 'changed') {
+        checkStatus();
+      }
+    });
+  }
+
+  if (typeof window !== 'undefined') {
+    window.addEventListener('focus', () => checkStatus());
+  }
+}
+
+if (typeof document !== 'undefined') {
+  init();
+}
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    connectionState,
+    removeDomain,
+    restoreDomain,
+    checkStatus,
+    renderNeverSave,
+    onRemoveDomain,
+    onUndoRemove,
+  };
+}

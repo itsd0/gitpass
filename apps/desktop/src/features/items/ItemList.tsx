@@ -34,6 +34,7 @@ import {
 } from "./selection";
 import { requestDelete } from "./BulkPane";
 import { ItemListEmptyState } from "./ItemListEmptyState";
+import { SearchHighlight } from "./SearchHighlight";
 import { getCategoryLabel } from "./categoryLabel";
 import { TrashBar } from "./TrashBar";
 import { trashHint } from "./trash";
@@ -75,6 +76,7 @@ export function ItemList() {
 
   // debounce query (200ms) then call api.listItems
   const debounced = useDebounced(query, 200);
+  const searchQuery = debounced.trim();
   useEffect(() => {
     let on = true;
     setLoading(true);
@@ -231,6 +233,18 @@ export function ItemList() {
         </DropdownMenu>
       </div>
       {base.kind === "deleted" && <TrashBar />}
+      {searchQuery && !loading && items.length > 0 && (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="search-result-count"
+          className="flex h-7 shrink-0 items-center border-b border-border px-3 text-[11px] text-muted"
+        >
+          {items.length === 1
+            ? t("items.search.resultOne")
+            : t("items.search.resultCount", { count: items.length })}
+        </div>
+      )}
       <div
         ref={parentRef}
         tabIndex={items.length === 0 ? -1 : 0}
@@ -337,14 +351,14 @@ export function ItemList() {
                       <ItemIcon item={r.item} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[14px] font-medium leading-5">
-                          {r.item.title}
+                          <SearchHighlight text={r.item.title} query={searchQuery} />
                         </div>
                         {base.kind === "deleted" ? (() => {
                           const hint = trashHint(r.item.deletedAt, Date.now(), t);
                           return hint ? <div data-testid="trash-days" className={cn("truncate text-xs leading-4", hint.danger ? "text-danger" : "text-muted")}>{hint.text}</div> : null;
                         })() : r.item.subtitle ? (
                           <div className="truncate text-xs leading-4 text-muted">
-                            {r.item.subtitle}
+                            <SearchHighlight text={r.item.subtitle} query={searchQuery} />
                           </div>
                         ) : null}
                       </div>

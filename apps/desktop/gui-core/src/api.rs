@@ -16,7 +16,7 @@ use gitpass_core::store::{Item, Session, UnlockOpts};
 use gitpass_core::{import, item, totp};
 use gitpass_pasteboard::PasteboardMarkers;
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -27,7 +27,8 @@ use zeroize::Zeroizing;
 #[serde(rename_all = "camelCase")]
 pub struct Field { pub id: String, pub label: String, pub kind: FieldKind, pub value: Option<String>,
     /// Display-only mask for a concealed card number ("•••• •••• •••• 7575"); computed after decryption, never persisted.
-    #[serde(default, skip_serializing_if = "Option::is_none")] pub masked: Option<String> }
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub masked: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub diff: Option<String> }
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Section { pub id: String, pub title: Option<String>, pub fields: Vec<Field> }
@@ -59,6 +60,8 @@ pub struct HistoryRef { pub version: u64, pub updated_at: String }
 pub struct ItemDetail {
     #[serde(flatten)]
     pub summary: ItemSummary,
+    #[serde(default)]
+    pub version: u64,
     pub sections: Vec<Section>, pub notes: Option<String>, pub attachments: Vec<Attachment>,
     pub history: Vec<HistoryRef>, pub password_strength: Option<u8>, pub has_totp: bool,
     /// Active Watchtower findings (HIBP excluded: the detail view never makes network calls).
@@ -143,6 +146,8 @@ pub struct WatchtowerReport {
     pub expired: Vec<String>, pub expiring_soon: Vec<String>,
     pub insecure_urls: Vec<String>,
     pub duplicates: Vec<Vec<String>>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub weak_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ignored: Vec<IgnoredFindingItem>,
     pub checked_at: String, pub hibp_checked: bool,
@@ -156,6 +161,16 @@ pub enum Theme { Dark, Light, System }
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Language { En, My, Th }
+fn default_true() -> bool { true }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LockTrigger {
+    Sleep,
+    ScreenLock,
+    UserSwitch,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -166,6 +181,12 @@ pub struct Settings {
     #[serde(default)] pub hibp_check: bool,
     /// Ask before every SSH agent signature (default off: unlocked vault = keys usable).
     #[serde(default)] pub ssh_approve_each_use: bool,
+    /// Lock the vault immediately when the Mac goes to sleep (default on).
+    #[serde(default = "default_true")] pub lock_on_sleep: bool,
+    /// Lock the vault when the screen locks (⌃⌘Q or hot corner, default on).
+    #[serde(default = "default_true")] pub lock_on_screen_lock: bool,
+    /// Lock the vault when switching away with fast user switching (default on).
+    #[serde(default = "default_true")] pub lock_on_user_switch: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_length: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_digits: Option<bool>,
@@ -175,6 +196,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings { auto_lock_minutes: 5, clipboard_clear_secs: crate::CLIPBOARD_CLEAR_SECS, theme: Theme::Dark, language: Language::En,
             biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false, ssh_approve_each_use: false,
+            lock_on_sleep: true, lock_on_screen_lock: true, lock_on_user_switch: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None }
     }
 }
@@ -392,7 +414,7 @@ fn to_dto_sections(r: &ItemRecord) -> Vec<Section> {
     r.view_sections().into_iter().map(|s| Section { id: s.id, title: s.title, fields: s.fields.into_iter().map(|f| Field {
         masked: (r.category == Category::CreditCard && f.kind.is_secret() && is_card_number(&f))
             .then(|| f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8).map(|d| card_mask(&d))).flatten(),
-        value: if f.kind.is_secret() { None } else { f.value.clone() }, id: f.id, label: f.label, kind: f.kind }).collect() }).collect()
+        value: if f.kind.is_secret() { None } else { f.value.clone() }, id: f.id, label: f.label, kind: f.kind, diff: None }).collect() }).collect()
 }
 
 pub fn item_expiry(r: &ItemRecord) -> Option<String> {
@@ -429,10 +451,10 @@ fn summary(vid: &str, iid: &str, r: &ItemRecord) -> ItemSummary {
 
 fn has_totp(r: &ItemRecord) -> bool { r.view_sections().iter().flat_map(|s| s.fields.iter()).any(|f| f.kind == FieldKind::Totp && f.value.is_some()) }
 
-fn detail(vid: &str, iid: &str, r: &ItemRecord, findings: Vec<FindingInfo>) -> ItemDetail {
+fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>) -> ItemDetail {
     let pw = r.view_sections().into_iter().flat_map(|s| s.fields).find(|f| f.kind == FieldKind::Concealed && f.value.is_some());
     ItemDetail {
-        summary: summary(vid, iid, r), sections: to_dto_sections(r), notes: r.item.notes.clone(),
+        summary: summary(vid, iid, r), version, sections: to_dto_sections(r), notes: r.item.notes.clone(),
         attachments: r.attachments.iter().map(|a| Attachment { id: a.id.clone(), name: a.name.clone(), size: a.size, mime: a.mime.clone() }).collect(),
         history: r.history.iter().rev().map(|h| HistoryRef { version: h.version, updated_at: ts(&h.updated_at) }).collect(),
         password_strength: if r.category == Category::Login { r.item.password.as_deref().map(strength) } else { pw.and_then(|f| f.value).map(|v| strength(&v)) },
@@ -457,6 +479,48 @@ fn item_findings(s: &Session, vault_id: &str, item_id: &str) -> Result<Vec<Findi
         .filter(|f| f.vault == vault_id && f.id == item_id)
         .flat_map(|f| f.findings.into_iter().map(|x| FindingInfo { kind: x.kind().to_string(), description: x.to_string() }))
         .collect())
+}
+
+fn annotate_diff(d: &mut ItemDetail, snap: &ItemRecord, cur: &ItemRecord) {
+    let cur_sections = cur.view_sections();
+    let cur_fields: Vec<gitpass_core::item::Field> = cur_sections.into_iter().flat_map(|s| s.fields).collect();
+    let snap_sections = snap.view_sections();
+    let snap_fields: Vec<gitpass_core::item::Field> = snap_sections.into_iter().flat_map(|s| s.fields).collect();
+
+    for s in &mut d.sections {
+        for f in &mut s.fields {
+            if let Some(cf) = cur_fields.iter().find(|x| x.id == f.id) {
+                let snap_val = snap_fields.iter().find(|x| x.id == f.id).and_then(|x| x.value.as_deref());
+                let cur_val = cf.value.as_deref();
+                if snap_val != cur_val {
+                    f.diff = Some("changed".into());
+                }
+            } else {
+                f.diff = Some("removed".into());
+            }
+        }
+    }
+
+    let added_fields: Vec<Field> = cur_fields
+        .into_iter()
+        .filter(|cf| !snap_fields.iter().any(|sf| sf.id == cf.id))
+        .map(|cf| Field {
+            id: cf.id.clone(),
+            label: cf.label.clone(),
+            kind: cf.kind,
+            value: if cf.kind.is_secret() { None } else { cf.value.clone() },
+            masked: if cf.kind.is_secret() { Some("••••••••••".into()) } else { None },
+            diff: Some("added".into()),
+        })
+        .collect();
+
+    if !added_fields.is_empty() {
+        if let Some(first) = d.sections.first_mut() {
+            first.fields.extend(added_fields);
+        } else {
+            d.sections.push(Section { id: "added".into(), title: None, fields: added_fields });
+        }
+    }
 }
 
 fn mime_for(name: &str) -> &'static str {
@@ -586,6 +650,23 @@ impl App {
         if let Ok(mut k) = self.fresh_secret.lock() { *k = None; }
     }
 
+    /// Handle a system event (sleep, screen lock, fast user switch).
+    /// Returns true if the vault was unlocked and locked as a result of the event, false if ignored or already locked.
+    pub fn handle_system_lock_event(&self, trigger: LockTrigger) -> bool {
+        let s = self.get_settings();
+        let should_lock = match trigger {
+            LockTrigger::Sleep => s.lock_on_sleep,
+            LockTrigger::ScreenLock => s.lock_on_screen_lock,
+            LockTrigger::UserSwitch => s.lock_on_user_switch,
+        };
+        if should_lock && self.state.is_unlocked() {
+            self.lock();
+            true
+        } else {
+            false
+        }
+    }
+
     /// Clears the clipboard immediately if it still holds the text copied by [`App::copy_field`].
     pub fn clear_clipboard_if_ours(&self) {
         if let Ok(mut lc) = self.last_copied.lock() {
@@ -680,16 +761,28 @@ impl App {
     }
     pub fn get_item(&self, vault_id: &str, item_id: &str) -> Result<ItemDetail> {
         self.with(|u| {
-            let (_, r) = u.session.read_record(vault_id, item_id)?;
+            let (v, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, vault_id, item_id)?;
-            Ok(detail(vault_id, item_id, &r, findings))
+            Ok(detail(vault_id, item_id, v, &r, findings))
         })
     }
     /// The ONLY call that returns a stored secret value.
     pub fn reveal_field(&self, vault_id: &str, item_id: &str, field_id: &str) -> Result<Zeroizing<String>> {
+        self.reveal_field_version(vault_id, item_id, field_id, None)
+    }
+    pub fn reveal_field_version(&self, vault_id: &str, item_id: &str, field_id: &str, version: Option<u64>) -> Result<Zeroizing<String>> {
         self.with(|u| {
-            let (_, r) = u.session.read_record(vault_id, item_id)?;
-            let f = r.find_field(field_id).ok_or_else(|| anyhow!("item has no field '{field_id}'"))?;
+            let r = match version {
+                Some(v) => u.session.item_version(vault_id, item_id, v)?,
+                None => u.session.read_record(vault_id, item_id)?.1,
+            };
+            let f = r.find_field(field_id).or_else(|| {
+                if version.is_some() {
+                    u.session.read_record(vault_id, item_id).ok().and_then(|(_, cur)| cur.find_field(field_id))
+                } else {
+                    None
+                }
+            }).ok_or_else(|| anyhow!("item has no field '{field_id}'"))?;
             Ok(Zeroizing::new(f.value.clone().unwrap_or_default()))
         })
     }
@@ -899,11 +992,21 @@ impl App {
     pub fn item_version(&self, vault_id: &str, item_id: &str, version: u64) -> Result<ItemDetail> {
         self.with(|u| {
             let r = u.session.item_version(vault_id, item_id, version)?;
-            let mut d = detail(vault_id, item_id, &r, Vec::new());
+            let (_, cur) = u.session.read_record(vault_id, item_id)?;
+            let mut d = detail(vault_id, item_id, version, &r, Vec::new());
             d.history.clear();
             d.attachments.clear();
-            if let Some(h) = u.session.read_record(vault_id, item_id)?.1.history.iter().find(|h| h.version == version) { d.summary.updated_at = ts(&h.updated_at); }
+            if let Some(h) = cur.history.iter().find(|h| h.version == version) { d.summary.updated_at = ts(&h.updated_at); }
+            annotate_diff(&mut d, &r, &cur);
             Ok(d)
+        })
+    }
+    pub fn restore_item_version(&self, vault_id: &str, item_id: &str, version: u64) -> Result<ItemDetail> {
+        self.write(|u| {
+            let new_v = u.session.restore_version(vault_id, item_id, version)?;
+            let (_, r) = u.session.read_record(vault_id, item_id)?;
+            let findings = item_findings(&u.session, vault_id, item_id)?;
+            Ok(detail(vault_id, item_id, new_v, &r, findings))
         })
     }
     pub fn add_attachment(&self, vault_id: &str, item_id: &str, path: &str) -> Result<Attachment> {
@@ -1006,6 +1109,7 @@ impl App {
                 totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
                 insecure_urls: vec![],
                 duplicates: vec![],
+                weak_reasons: HashMap::new(),
                 ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
             let mut groups: BTreeMap<usize, Vec<String>> = BTreeMap::new();
@@ -1013,7 +1117,10 @@ impl App {
             for f in &rep.per_item {
                 for x in &f.findings {
                     match x {
-                        Finding::Weak { .. } => out.weak.push(f.id.clone()),
+                        Finding::Weak { reason } => {
+                            out.weak.push(f.id.clone());
+                            out.weak_reasons.insert(f.id.clone(), reason.clone());
+                        }
                         Finding::Reused { group, .. } => groups.entry(*group).or_default().push(f.id.clone()),
                         Finding::Old { .. } => out.old.push(f.id.clone()),
                         Finding::Pwned { .. } => out.breached.push(f.id.clone()),

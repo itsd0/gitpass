@@ -259,4 +259,40 @@ describe('watchtower score', () => {
     fireEvent.click((await screen.findAllByRole("button", { name: "เปลี่ยนรหัสผ่านสำหรับ Fake Forum" }))[0]);
     expect(openSpy).toHaveBeenCalledWith({ vaultId: "v-private", itemId: "i3" });
   });
+  it("displays localized weak reasons in the weak passwords card", async () => {
+    vi.spyOn(api, "watchtower").mockResolvedValue({
+      score: 70,
+      weak: ["i3", "i-site"],
+      weakReasons: {
+        i3: "contains the username",
+        "i-site": "contains the site name",
+      },
+      reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [],
+      passkeyAvailable: [], expired: [], expiringSoon: [], insecureUrls: [], duplicates: [], ignored: [], checkedAt: "", hibpChecked: false,
+    });
+    const siteItem = { ...it3, id: "i-site", title: "GitHub Site Login" };
+    vi.spyOn(api, "listItems").mockResolvedValue([it3, siteItem]);
+
+    render(<WatchtowerPage />);
+    await screen.findByTestId("score");
+
+    expect(screen.getByTestId("chip-reason-i3").textContent).toBe("(contains the username)");
+    expect(screen.getByTestId("chip-reason-i-site").textContent).toBe("(contains the site name)");
+  });
+
+  it("localizes weak reasons in Thai and Burmese", async () => {
+    vi.mocked(api.getSettings).mockResolvedValue({
+      autoLockMinutes: 10, clipboardClearSecs: 30, theme: "dark", language: "th", biometricUnlock: false, quickAccessHotkey: "CmdOrCtrl+Shift+Space", hibpCheck: false,
+    });
+    vi.spyOn(api, "watchtower").mockResolvedValue({
+      score: 70,
+      weak: ["i3"],
+      weakReasons: { i3: "contains the username" },
+      reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [],
+      passkeyAvailable: [], expired: [], expiringSoon: [], insecureUrls: [], duplicates: [], ignored: [], checkedAt: "", hibpChecked: false,
+    });
+    render(<WatchtowerPage />);
+    await screen.findByTestId("score");
+    expect(screen.getByTestId("chip-reason-i3").textContent).toBe("(มีชื่อผู้ใช้อยู่ในรหัสผ่าน)");
+  });
 });

@@ -53,6 +53,48 @@
   "symbols": {
     "message": "สัญลักษณ์"
   },
+  "genModeRandom": {
+    "message": "สุ่ม"
+  },
+  "genModeMemorable": {
+    "message": "จำง่าย"
+  },
+  "genModePin": {
+    "message": "PIN"
+  },
+  "genWords": {
+    "message": "จำนวนคำ"
+  },
+  "genIncludeDigits": {
+    "message": "ใส่ตัวเลข"
+  },
+  "genIncludeSymbols": {
+    "message": "ใส่สัญลักษณ์"
+  },
+  "genSaveAsLogin": {
+    "message": "บันทึกเป็น Login ใหม่…"
+  },
+  "genOpen": {
+    "message": "สร้างรหัสผ่าน…"
+  },
+  "genFilled": {
+    "message": "กรอกในหน้านี้แล้ว"
+  },
+  "genFillFailed": {
+    "message": "ไม่สามารถกรอกในหน้านี้ได้"
+  },
+  "genStrengthWeak": {
+    "message": "อ่อน"
+  },
+  "genStrengthFair": {
+    "message": "พอใช้"
+  },
+  "genStrengthGood": {
+    "message": "ดี"
+  },
+  "genStrengthExcellent": {
+    "message": "ยอดเยี่ยม"
+  },
   "copy": {
     "message": "คัดลอก"
   },
@@ -260,6 +302,33 @@
   },
   "generate": {
     "message": "สร้าง"
+  },
+  "edit": {
+    "message": "แก้ไข"
+  },
+  "cancel": {
+    "message": "ยกเลิก"
+  },
+  "notes": {
+    "message": "บันทึก"
+  },
+  "addWebsite": {
+    "message": "เพิ่มเว็บไซต์"
+  },
+  "removeWebsite": {
+    "message": "ลบเว็บไซต์"
+  },
+  "useGenerated": {
+    "message": "ใช้รหัสผ่าน"
+  },
+  "discardChanges": {
+    "message": "ทิ้งการเปลี่ยนแปลงที่ยังไม่ได้บันทึก?"
+  },
+  "titleRequired": {
+    "message": "ต้องระบุชื่อรายการ"
+  },
+  "websiteInvalid": {
+    "message": "เว็บไซต์ต้องเป็น URL แบบ http(s)"
   },
   "vault": {
     "message": "ห้องนิรภัย"
@@ -572,5 +641,112 @@
   },
   "loadingDetail": {
     "message": "กำลังโหลดรายละเอียด…"
+  },
+  "searchHints": {
+    "message": "↑↓ นำทาง · ↵ เติมข้อมูล · ⌘C คัดลอกรหัสผ่าน · ? ทางลัดทั้งหมด · Esc ล้าง"
+  },
+  "secretKeyPh": {
+    "message": "Secret Key (A3-XXXXXX-…)"
+  },
+  "keyboardShortcuts": {
+    "message": "ทางลัดแป้นพิมพ์"
+  },
+  "shortcutNav": {
+    "message": "เลื่อนรายการ"
+  },
+  "shortcutFill": {
+    "message": "เติมข้อมูลรายการ"
+  },
+  "shortcutCopyPw": {
+    "message": "คัดลอกรหัสผ่าน"
+  },
+  "shortcutCopyTotp": {
+    "message": "คัดลอกรหัสแบบใช้ครั้งเดียว (TOTP)"
+  },
+  "shortcutCopyUser": {
+    "message": "คัดลอกชื่อผู้ใช้"
+  },
+  "shortcutOpenUrl": {
+    "message": "เปิดเว็บไซต์"
+  },
+  "shortcutEdit": {
+    "message": "แก้ไขข้อมูลเข้าสู่ระบบ"
+  },
+  "shortcutGen": {
+    "message": "ตัวสร้างรหัสผ่าน"
+  },
+  "shortcutClose": {
+    "message": "ปิดหรือล้างการค้นหา"
+  },
+  "usernameCopied": {
+    "message": "คัดลอกชื่อผู้ใช้แล้ว"
+  },
+  "noUsername": {
+    "message": "ไม่มีชื่อผู้ใช้"
+  },
+  "settingsSubtitle": {
+    "message": "การตั้งค่าและการผสานรวมเบราว์เซอร์"
+  },
+  "statusCardTitle": {
+    "message": "การเชื่อมต่อเดสก์ท็อป"
+  },
+  "statusConnectedUnlocked": {
+    "message": "เชื่อมต่อกับ gitpass แล้ว (ปลดล็อกแล้ว)"
+  },
+  "statusAppLocked": {
+    "message": "gitpass ถูกล็อกอยู่"
+  },
+  "statusAppNotFound": {
+    "message": "ไม่พบแอปเดสก์ท็อป"
+  },
+  "troubleshootingDocs": {
+    "message": "เอกสารการแก้ไขปัญหา"
+  },
+  "secGeneral": {
+    "message": "ทั่วไป"
+  },
+  "secAutofillSaving": {
+    "message": "การกรอกอัตโนมัติและการบันทึก"
+  },
+  "secAbout": {
+    "message": "เกี่ยวกับ"
+  },
+  "aboutExt": {
+    "message": "ส่วนขยายเบราว์เซอร์สำหรับเติมข้อมูลและบันทึกข้อมูลประจำตัว"
+  },
+  "optNeverSaveEmptyBody": {
+    "message": "ไซต์ที่คุณเลือก 'ไม่ต้องบันทึก' จะปรากฏที่นี่"
+  },
+  "siteRemoved": {
+    "message": "ลบ $1 แล้ว",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "cmdFillLogin": {
+    "message": "เติมข้อมูลเข้าสู่ระบบที่ตรงที่สุดในหน้านี้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csCmdAppNotRunning": {
+    "message": "เปิดแอป gitpass แล้วลองอีกครั้ง",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csCmdNoForm": {
+    "message": "ไม่พบแบบฟอร์มเข้าสู่ระบบในหน้านี้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csCmdFailed": {
+    "message": "gitpass เติมข้อมูลในหน้านี้ไม่ได้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optFillShortcut": {
+    "message": "เติมข้อมูลเข้าสู่ระบบ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optFillShortcutBody": {
+    "message": "เติมข้อมูลเข้าสู่ระบบที่ตรงที่สุดในหน้าปัจจุบันโดยไม่ต้องเปิดป๊อปอัป",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   }
 }

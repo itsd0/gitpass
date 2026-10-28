@@ -41,6 +41,15 @@ describe('i18n', () => {
     expect(trashKeys.length).toBeGreaterThan(0);
     for (const d of [dictionaries.my, dictionaries.th]) for (const k of trashKeys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
   });
+  it("covers all watchtower.weakReason.* strings in my and th", () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith("watchtower.weakReason."));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const d of [dictionaries.my, dictionaries.th]) {
+      for (const k of keys) {
+        expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+      }
+    }
+  });
   it("covers all items.empty.* and category.* strings in my and th", () => {
     const keys = Object.keys(en).filter((k) => k.startsWith("items.empty.") || k.startsWith("category."));
     for (const d of [dictionaries.my, dictionaries.th]) {
@@ -49,13 +58,32 @@ describe('i18n', () => {
       }
     }
   });
-  it("covers all import.* strings in my and th", () => {
-    const importKeys = Object.keys(en).filter((k) => k.startsWith("import."));
-    expect(importKeys.length).toBeGreaterThan(0);
+  it("covers all unlock.* and sidebar.* strings in my and th", () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith("unlock.") || k.startsWith("sidebar."));
+    expect(keys.length).toBeGreaterThan(0);
     for (const d of [dictionaries.my, dictionaries.th]) {
-      for (const k of importKeys) {
+      for (const k of keys) {
         expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
       }
+    }
+  });
+  it("covers all items.search.* strings in my and th", () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith("items.search."));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const d of [dictionaries.my, dictionaries.th]) {
+      for (const k of keys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+    }
+  });
+  it('covers all import.* strings in my and th', () => {
+    const importKeys = Object.keys(en).filter((k) => k.startsWith('import.'));
+    expect(importKeys.length).toBeGreaterThan(0);
+    for (const d of [dictionaries.my, dictionaries.th]) for (const k of importKeys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+  });
+  it("covers all vault.* strings in my and th", () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith("vault."));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const d of [dictionaries.my, dictionaries.th]) {
+      for (const k of keys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
     }
   });
 });

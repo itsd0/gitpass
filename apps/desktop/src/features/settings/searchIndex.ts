@@ -35,6 +35,27 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['timeout', 'idle', 'inactivity', 'sleep'],
   },
   {
+    id: 'setting-lock-sleep',
+    tab: 'security',
+    labelKey: 'settings.lockOnSleep',
+    descriptionKey: 'settings.lockOnSleepHelp',
+    keywords: ['sleep', 'mac', 'lid', 'suspend', 'power'],
+  },
+  {
+    id: 'setting-lock-screen',
+    tab: 'security',
+    labelKey: 'settings.lockOnScreenLock',
+    descriptionKey: 'settings.lockOnScreenLockHelp',
+    keywords: ['screen', 'lock screen', 'ctrl+cmd+q', 'hot corner', 'screensaver'],
+  },
+  {
+    id: 'setting-lock-user-switch',
+    tab: 'security',
+    labelKey: 'settings.lockOnUserSwitch',
+    descriptionKey: 'settings.lockOnUserSwitchHelp',
+    keywords: ['fast user switching', 'switch user', 'account', 'session'],
+  },
+  {
     id: 'setting-clipboard',
     tab: 'security',
     labelKey: 'settings.clipboard',

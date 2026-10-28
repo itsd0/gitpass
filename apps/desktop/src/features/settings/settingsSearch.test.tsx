@@ -222,4 +222,19 @@ describe('Settings search and consistent layout', () => {
     expect(screen.getByRole('heading', { name: 'Authentication & Protection' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Master Credentials' })).toBeTruthy();
   });
+
+  it('searches for sleep and screen lock settings and switches to security tab', async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage initialTab="general" />);
+    const searchInput = await screen.findByTestId('settings-search-input');
+
+    await user.type(searchInput, 'sleep');
+    const sleepResult = await screen.findByRole('option', { name: /Lock when Mac sleeps/i });
+    expect(sleepResult).toBeTruthy();
+    await user.click(sleepResult);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tabpanel', { name: 'Security' })).toBeTruthy();
+    });
+  });
 });

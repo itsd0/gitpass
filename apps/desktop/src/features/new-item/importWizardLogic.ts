@@ -2,14 +2,14 @@ import type { ImportResult } from '../../api/types';
 import type { Key } from '../../i18n';
 
 export interface ImportFormatOption {
-  id: string;
-  label: string;
-  labelKey: Key;
-  ext: string;
-  hintKey?: Key;
+  readonly id: string;
+  readonly label: string;
+  readonly labelKey: Key;
+  readonly ext: string;
+  readonly hintKey?: Key;
 }
 
-export const IMPORT_FORMATS: readonly ImportFormatOption[] = [
+export const IMPORT_FORMATS = [
   {
     id: 'apple-passwords-csv',
     label: 'Apple Passwords / Safari (.csv)',
@@ -17,53 +17,18 @@ export const IMPORT_FORMATS: readonly ImportFormatOption[] = [
     ext: 'csv',
     hintKey: 'import.hintApplePasswords',
   },
-  {
-    id: 'bitwarden-json',
-    label: 'Bitwarden (.json)',
-    labelKey: 'import.formatBitwardenJson',
-    ext: 'json',
-  },
-  {
-    id: 'bitwarden-csv',
-    label: 'Bitwarden (.csv)',
-    labelKey: 'import.formatBitwardenCsv',
-    ext: 'csv',
-  },
-  {
-    id: '1password-csv',
-    label: '1Password 8 (.csv)',
-    labelKey: 'import.format1PasswordCsv',
-    ext: 'csv',
-  },
-  {
-    id: '1password-1pux',
-    label: '1Password (.1pux)',
-    labelKey: 'import.format1Password1pux',
-    ext: '1pux',
-  },
-  {
-    id: 'keepass-csv',
-    label: 'KeePass (.csv)',
-    labelKey: 'import.formatKeepassCsv',
-    ext: 'csv',
-  },
-  {
-    id: 'chrome-csv',
-    label: 'Chrome / Chromium (.csv)',
-    labelKey: 'import.formatChromeCsv',
-    ext: 'csv',
-  },
-  {
-    id: 'gitpass-json',
-    label: 'gitpass (.json)',
-    labelKey: 'import.formatGitpassJson',
-    ext: 'json',
-  },
-] as const;
+  { id: 'bitwarden-json', label: 'Bitwarden (.json)', labelKey: 'import.formatBitwardenJson', ext: 'json' },
+  { id: 'bitwarden-csv', label: 'Bitwarden (.csv)', labelKey: 'import.formatBitwardenCsv', ext: 'csv' },
+  { id: '1password-csv', label: '1Password 8 (.csv)', labelKey: 'import.format1PasswordCsv', ext: 'csv' },
+  { id: '1password-1pux', label: '1Password (.1pux)', labelKey: 'import.format1Password1pux', ext: '1pux' },
+  { id: 'keepass-csv', label: 'KeePass (.csv)', labelKey: 'import.formatKeepassCsv', ext: 'csv' },
+  { id: 'chrome-csv', label: 'Chrome / Chromium (.csv)', labelKey: 'import.formatChromeCsv', ext: 'csv' },
+  { id: 'gitpass-json', label: 'gitpass (.json)', labelKey: 'import.formatGitpassJson', ext: 'json' },
+] as const satisfies readonly ImportFormatOption[];
 
 export type ImportFormatId = (typeof IMPORT_FORMATS)[number]['id'];
 
-export type ImportStep = 'format' | 'file' | 'preview' | 'done';
+export type ImportStep = 'file' | 'preview' | 'done';
 
 export interface ImportState {
   step: ImportStep;
@@ -73,25 +38,28 @@ export interface ImportState {
   preview: ImportResult | null;
   result: ImportResult | null;
   error: string | null;
+  autoDetected?: boolean;
 }
 
 export type ImportAction =
-  | { type: 'format'; format: string }
+  | { type: 'file'; path: string; format?: string | null; autoDetected?: boolean }
+  | { type: 'format'; format: string; autoDetected?: boolean }
   | { type: 'path'; path: string }
   | { type: 'vault'; vaultId: string }
-  | { type: 'preview'; preview: ImportState['preview'] }
-  | { type: 'done'; result: ImportState['result'] }
+  | { type: 'preview'; preview: ImportResult }
+  | { type: 'done'; result: ImportResult }
   | { type: 'error'; error: string }
   | { type: 'back' };
 
 export const initialImport = (vaultId: string | null = null): ImportState => ({
-  step: 'format',
+  step: 'file',
   format: null,
   path: '',
   vaultId,
   preview: null,
   result: null,
   error: null,
+  autoDetected: false,
 });
 
 /** Pure function to detect the import format from filename and optional content/header. */
@@ -146,19 +114,19 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
         return 'keepass-csv';
       }
 
-      // Apple Passwords CSV vs 1Password 8 CSV:
-      // Apple Passwords: Title,URL,Username,Password,Notes,OTPAuth (no favorite, archived, tags)
-      // 1Password 8: Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
-      if (cols.includes('otpauth')) {
-        if (cols.some((c) => ['favorite', 'archived', 'tags'].includes(c))) {
-          return '1password-csv';
-        }
-        if (cols.includes('title') || cols.includes('url')) {
-          return 'apple-passwords-csv';
-        }
+      // Apple Passwords / Safari CSV vs 1Password 8 CSV:
+      // Apple Passwords: Title,URL,Username,Password,Notes,OTPAuth (no Favorite/Archived/Tags)
+      // 1Password 8:     Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
+      if (
+        cols.includes('otpauth') &&
+        cols.includes('title') &&
+        !cols.some((c) => ['favorite', 'archived', 'tags', 'notesplain'].includes(c))
+      ) {
+        return 'apple-passwords-csv';
       }
 
-      if (cols.some((c) => ['favorite', 'archived', 'tags', 'notesplain'].includes(c)) || (cols.includes('title') && cols.includes('favorite'))) {
+      // 1Password CSV distinctive headers
+      if (cols.some((c) => ['otpauth', 'archived', 'tags'].includes(c)) || (cols.includes('title') && cols.includes('favorite'))) {
         return '1password-csv';
       }
 
@@ -168,11 +136,13 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
       }
     }
 
-    if (lowerName.includes('apple') || lowerName.includes('safari') || lowerName.includes('passwords')) return 'apple-passwords-csv';
     if (lowerName.includes('bitwarden')) return 'bitwarden-csv';
     if (lowerName.includes('keepass')) return 'keepass-csv';
     if (lowerName.includes('chrome') || lowerName.includes('chromium')) return 'chrome-csv';
     if (lowerName.includes('1password') || lowerName.includes('onepassword')) return '1password-csv';
+    if (lowerName.includes('apple') || lowerName.includes('safari') || /(^|[\/\\])passwords\.csv$/.test(lowerName)) {
+      return 'apple-passwords-csv';
+    }
     if (lowerName.endsWith('.csv')) return '1password-csv';
   }
 
@@ -181,11 +151,25 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
 
 export function importReducer(s: ImportState, a: ImportAction): ImportState {
   switch (a.type) {
+    case 'file':
+      return {
+        ...s,
+        path: a.path,
+        format: a.format !== undefined ? a.format : s.format,
+        autoDetected: a.autoDetected ?? false,
+        error: null,
+      };
     case 'format':
-      return { ...s, format: a.format, step: 'file', error: null };
+      return { ...s, format: a.format, autoDetected: a.autoDetected ?? false, error: null };
     case 'path': {
       const detected = detectImportFormat(a.path);
-      return { ...s, path: a.path, format: s.format ?? detected, error: null };
+      return {
+        ...s,
+        path: a.path,
+        format: detected ?? s.format,
+        autoDetected: !!detected,
+        error: null,
+      };
     }
     case 'vault':
       return { ...s, vaultId: a.vaultId };
@@ -196,7 +180,11 @@ export function importReducer(s: ImportState, a: ImportAction): ImportState {
     case 'error':
       return { ...s, error: a.error };
     case 'back':
-      return { ...s, error: null, step: s.step === 'preview' ? 'file' : s.step === 'file' ? 'format' : s.step };
+      return {
+        ...s,
+        error: null,
+        step: s.step === 'preview' ? 'file' : s.step,
+      };
   }
 }
 

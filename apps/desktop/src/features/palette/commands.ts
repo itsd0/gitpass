@@ -1,8 +1,9 @@
-import { Home, KeyRound, Lock, Moon, Plus, RefreshCw, Settings, ShieldCheck, Users, Keyboard } from 'lucide-react';
+import { Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Users, Keyboard } from 'lucide-react';
 import { api } from '../../api/client';
 import { translate, useI18n, type Key } from '../../i18n';
 import type { PaletteCommand } from '../registry';
 import { useApp } from '../../lib/store';
+import { useItemsUI } from '../items/state';
 import { toast } from '../../ui';
 import { isDark } from '../settings/theme';
 import { useSettings } from '../settings/useSettings';
@@ -22,5 +23,38 @@ export function builtinCommands(): PaletteCommand[] {
     { id: 'sync', labelKey: 'cmd.sync', icon: RefreshCw, keywords: ['git', 'push', 'pull'], run: async () => { try { toast((await api.sync({ merge: false })).message); } catch (e) { toast(String((e as Error).message ?? e), 'danger'); } } },
     { id: 'shortcuts', labelKey: 'cmd.shortcuts', icon: Keyboard, keywords: ['help', 'keys'], shortcut: '?', run: openShortcutsHelp },
   ];
+  if (app.selectedItemId) {
+    cmds.push({
+      id: 'show-large-type',
+      labelKey: 'cmd.showLargeType',
+      icon: Maximize2,
+      keywords: ['large', 'type', 'password', 'secret', 'zoom'],
+      run: async () => {
+        try {
+          const selId = useApp.getState().selectedItemId;
+          if (!selId) return;
+          const items = useItemsUI.getState().items;
+          let vaultId = items.find((x) => x.id === selId)?.vaultId;
+          if (!vaultId) {
+            const all = await api.listItems({ filter: { kind: 'all' } }).catch(() => []);
+            vaultId = all.find((x) => x.id === selId)?.vaultId;
+          }
+          if (!vaultId) return;
+          const detail = await api.getItem({ vaultId, itemId: selId });
+          const allFields = detail.sections.flatMap((s) => s.fields);
+          const field = allFields.find((f) => f.kind === 'concealed' && /password/i.test(f.label))
+            ?? allFields.find((f) => f.kind === 'concealed');
+          if (!field) {
+            toast('No concealed field on this item');
+            return;
+          }
+          const val = await api.revealField({ vaultId: detail.vaultId, itemId: detail.id, fieldId: field.id });
+          useApp.getState().openModal('large-type', { title: field.label, value: val });
+        } catch (e) {
+          toast(String((e as Error)?.message ?? e), 'danger');
+        }
+      },
+    });
+  }
   return cmds.map((c) => ({ ...c, label: translate(lang, c.labelKey) }));
 }

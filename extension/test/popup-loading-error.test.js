@@ -7,7 +7,7 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 const V = require('../popup/view.js');
 const root = path.join(__dirname, '..');
-const SCRIPTS = ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/popup.js'];
+const SCRIPTS = ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/generator.js', 'popup/popup.js'];
 
 const ITEMS = [
   { id: 'v1:i1', vault_id: 'v1', vault_name: 'Personal', category: 'login', title: 'GitHub', subtitle: 'me@example.invalid', url: 'https://github.com', favorite: false },
@@ -407,7 +407,7 @@ test('popup.css includes reduced-motion disable for shimmer and light theme toke
 
   // Light theme tokens
   assert.match(css, /@media[\s]*\(prefers-color-scheme:[\s]*light\)/);
-  assert.match(css, /--orange:/);
+  assert.match(css, /--accent:/);
   assert.match(css, /--bg:/);
   assert.match(css, /--panel:/);
   assert.match(css, /--fg:/);

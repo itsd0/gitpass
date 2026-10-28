@@ -38,7 +38,9 @@ const pub = (i) => { const o = { ...i }; delete o._u; delete o._p; return o; };
 const host = (s) => { try { return new URL(s).hostname; } catch { return ''; } };
 // control.json `no_match_hosts: ["localhost"]` simulates a site with no saved login.
 const noMatchHosts = () => { const l = readJson(CTRL, {}).no_match_hosts; return Array.isArray(l) ? l : []; };
-const matches = (o) => getItems().filter((i) => i.url && host(i.url) && host(i.url) === host(o) && !noMatchHosts().includes(host(o)));
+// control.json `only_match_ids: [...]` narrows matches to those item ids (fill-login command e2e, #124).
+const onlyMatchIds = () => { const l = readJson(CTRL, {}).only_match_ids; return Array.isArray(l) ? l : null; };
+const matches = (o) => getItems().filter((i) => i.url && host(i.url) && host(i.url) === host(o) && !noMatchHosts().includes(host(o)) && (!onlyMatchIds() || onlyMatchIds().includes(i.id)));
 
 function send(obj) {
   const b = Buffer.from(JSON.stringify(obj)); const h = Buffer.alloc(4); h.writeUInt32LE(b.length);
@@ -86,8 +88,28 @@ function handle(m) {
       saveItems(items);
       return { item_id: id, title: it.title.trim() };
     }
+    case 'update_login': { needUnlock();
+      if (m.source !== 'popup') throw Object.assign(new Error('update_login is allowed only from the popup'), { code: 'denied' });
+      const items = getItems(); const i = items.find((x) => x.id === m.item_id);
+      if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
+      if (i.category !== 'login') throw Object.assign(new Error('not a login'), { code: 'bad_request' });
+      if (m.title != null) { if (!String(m.title).trim()) throw Object.assign(new Error('title is required'), { code: 'bad_request' }); i.title = String(m.title).trim(); }
+      if (m.username != null) { i._u = m.username; i.subtitle = m.username; const f = Array.isArray(i.fields) && i.fields.find((x) => x.name === 'username'); if (f) f.value = m.username; }
+      if (m.password != null) i._p = m.password;
+      if (m.urls) { i.url = m.urls[0] || ''; i.favicon_host = i.url ? host(i.url) : undefined; }
+      if (m.notes != null) i.notes = m.notes;
+      i.updated_at = new Date().toISOString();
+      saveItems(items);
+      setTimeout(() => send({ event: 'changed' }), 0);
+      return { ok: true };
+    }
     case 'update_password': needUnlock(); return { ok: true };
-    case 'generate': return { password: 'Gen-' + 'x'.repeat(Math.max(4, (m.len || 20) - 4)) };
+    case 'generate': {
+      const len = Math.max(4, m.len || 20);
+      if (m.pin) return { password: Array.from({ length: len }, (_, i) => String(i % 10)).join('') };
+      if (m.words) return { password: Array.from({ length: len }, (_, i) => ['amber', 'coral', 'lunar', 'ivory', 'ocean'][i % 5]).join('-') };
+      return { password: 'Gen-' + 'x'.repeat(Math.max(4, (m.len || 20) - 4)) };
+    }
     case 'list_vaults': needUnlock(); return { vaults: [{ ...V, item_count: getItems().length }] };
     case 'open_in_app': return {};
     case 'fill_card': case 'fill_identity': { needUnlock();

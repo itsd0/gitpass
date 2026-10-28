@@ -19,4 +19,35 @@ describe('mock api', () => {
     expect(await api.listItems({ filter: { kind: 'all' } })).toHaveLength(active);
     expect(await api.emptyTrash()).toBe(0);
   });
+  it('supports version snapshot diffs and restoring previous versions', async () => {
+    const item = (await api.listItems({ filter: { kind: 'all' } }))[0]!;
+    const original = await api.getItem({ vaultId: item.vaultId, itemId: item.id });
+    // Update the item
+    await api.updateItem({
+      itemId: item.id,
+      input: {
+        vaultId: item.vaultId,
+        category: original.category,
+        title: `${original.title} Edited`,
+        sections: [
+          ...original.sections,
+          { id: 'custom-sec', title: 'Extra', fields: [{ id: 'f-custom', label: 'note', kind: 'text', value: 'custom value' }] },
+        ],
+      },
+    });
+    const updated = await api.getItem({ vaultId: item.vaultId, itemId: item.id });
+    expect(updated.title).toBe(`${original.title} Edited`);
+    expect(updated.history.length).toBeGreaterThanOrEqual(2);
+
+    // View historical snapshot (version 1)
+    const snap = await api.itemVersion({ vaultId: item.vaultId, itemId: item.id, version: 1 });
+    expect(snap.title).toBe(original.title);
+    // Added field in current item is marked as "added"
+    expect(snap.sections.flatMap((s) => s.fields).some((f) => f.id === 'f-custom' && f.diff === 'added')).toBe(true);
+
+    // Restore version 1
+    const restored = await api.restoreItemVersion({ vaultId: item.vaultId, itemId: item.id, version: 1 });
+    expect(restored.title).toBe(original.title);
+    expect(restored.sections.flatMap((s) => s.fields).some((f) => f.id === 'f-custom')).toBe(false);
+  });
 });

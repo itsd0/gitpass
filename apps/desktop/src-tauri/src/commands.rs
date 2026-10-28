@@ -42,7 +42,7 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn list_items(s: State<App>, filter: a::Filter) -> R<Vec<a::ItemSummary>> { s.list_items(&filter).map_err(e) }
 #[tauri::command] pub fn get_item(s: State<App>, vault_id: String, item_id: String) -> R<a::ItemDetail> { s.get_item(&vault_id, &item_id).map_err(e) }
 /// The only command that sends a concealed value to the webview (explicit user "reveal").
-#[tauri::command] pub fn reveal_field(s: State<App>, vault_id: String, item_id: String, field_id: String) -> R<String> { s.reveal_field(&vault_id, &item_id, &field_id).map(|z| z.to_string()).map_err(e) }
+#[tauri::command] pub fn reveal_field(s: State<App>, vault_id: String, item_id: String, field_id: String, version: Option<u64>) -> R<String> { s.reveal_field_version(&vault_id, &item_id, &field_id, version).map(|z| z.to_string()).map_err(e) }
 /// Copies in Rust; cleared after clipboardClearSecs only if the clipboard still holds our value.
 #[tauri::command] pub fn copy_field(s: State<App>, vault_id: String, item_id: String, field_id: String) -> R<()> { s.copy_field(&vault_id, &item_id, &field_id).map_err(e) }
 #[tauri::command] pub fn totp_now(s: State<App>, vault_id: String, item_id: String) -> R<a::TotpNow> { s.totp_now(&vault_id, &item_id).map_err(e) }
@@ -60,6 +60,7 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn move_item(s: State<App>, vault_id: String, item_id: String, to_vault_id: String) -> R<a::ItemSummary> { s.move_item(&vault_id, &item_id, &to_vault_id).map_err(e) }
 #[tauri::command] pub fn duplicate_item(s: State<App>, vault_id: String, item_id: String) -> R<a::ItemSummary> { s.duplicate_item(&vault_id, &item_id).map_err(e) }
 #[tauri::command] pub fn item_version(s: State<App>, vault_id: String, item_id: String, version: u64) -> R<a::ItemDetail> { s.item_version(&vault_id, &item_id, version).map_err(e) }
+#[tauri::command] pub fn restore_item_version(s: State<App>, vault_id: String, item_id: String, version: u64) -> R<a::ItemDetail> { s.restore_item_version(&vault_id, &item_id, version).map_err(e) }
 #[tauri::command(async)] pub fn add_attachment(s: State<'_, App>, vault_id: String, item_id: String, path: String) -> R<a::Attachment> { s.add_attachment(&vault_id, &item_id, &path).map_err(e) }
 #[tauri::command(async)] pub fn save_attachment(s: State<'_, App>, vault_id: String, item_id: String, attachment_id: String, dest_path: String) -> R<()> { s.save_attachment(&vault_id, &item_id, &attachment_id, &dest_path).map_err(e) }
 #[tauri::command] pub fn list_tags(s: State<App>) -> R<Vec<String>> { s.list_tags().map_err(e) }
@@ -176,14 +177,20 @@ pub fn spawn_idle_watcher(app: AppHandle) {
             last_wall = now;
             let screen_locked = is_screen_locked();
             let mut reason = "lock";
-            if (slept || screen_locked) && st.state.is_unlocked() {
-                st.lock();
-                reason = if screen_locked { "screen" } else { "sleep" };
-            } else if st.state.check_idle() {
+            let mut locked_by_system = false;
+            if slept {
+                locked_by_system = crate::system_events::on_system_lock_event(&app, gitpass_gui_core::api::LockTrigger::Sleep);
+                if locked_by_system { reason = "sleep"; }
+            }
+            if !locked_by_system && screen_locked {
+                locked_by_system = crate::system_events::on_system_lock_event(&app, gitpass_gui_core::api::LockTrigger::ScreenLock);
+                if locked_by_system { reason = "screen"; }
+            }
+            if !locked_by_system && st.state.check_idle() {
                 reason = "idle";
             }
             let unlocked = st.state.is_unlocked();
-            if was_unlocked && !unlocked { let _ = app.emit("locked", reason); }
+            if was_unlocked && !unlocked && !locked_by_system { let _ = app.emit("locked", reason); }
             // Unlocked elsewhere (extension Touch ID / request_unlock): the UI refreshes in place.
             if !was_unlocked && unlocked { let _ = app.emit("unlocked", "watcher"); }
             // Live sync: any vault write (this window, the extension via the agent, CLI, git sync) changes the

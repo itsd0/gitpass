@@ -53,6 +53,48 @@
   "symbols": {
     "message": "Symbols"
   },
+  "genModeRandom": {
+    "message": "Random"
+  },
+  "genModeMemorable": {
+    "message": "Memorable"
+  },
+  "genModePin": {
+    "message": "PIN"
+  },
+  "genWords": {
+    "message": "Words"
+  },
+  "genIncludeDigits": {
+    "message": "Include digits"
+  },
+  "genIncludeSymbols": {
+    "message": "Include symbols"
+  },
+  "genSaveAsLogin": {
+    "message": "Save as new Login…"
+  },
+  "genOpen": {
+    "message": "Generate a password…"
+  },
+  "genFilled": {
+    "message": "Filled on this page"
+  },
+  "genFillFailed": {
+    "message": "Could not fill on this page"
+  },
+  "genStrengthWeak": {
+    "message": "Weak"
+  },
+  "genStrengthFair": {
+    "message": "Fair"
+  },
+  "genStrengthGood": {
+    "message": "Good"
+  },
+  "genStrengthExcellent": {
+    "message": "Excellent"
+  },
   "copy": {
     "message": "Copy"
   },
@@ -260,6 +302,33 @@
   },
   "generate": {
     "message": "Generate"
+  },
+  "edit": {
+    "message": "Edit"
+  },
+  "cancel": {
+    "message": "Cancel"
+  },
+  "notes": {
+    "message": "Notes"
+  },
+  "addWebsite": {
+    "message": "Add website"
+  },
+  "removeWebsite": {
+    "message": "Remove website"
+  },
+  "useGenerated": {
+    "message": "Use password"
+  },
+  "discardChanges": {
+    "message": "Discard unsaved changes?"
+  },
+  "titleRequired": {
+    "message": "Title is required"
+  },
+  "websiteInvalid": {
+    "message": "Website must be an http(s) URL"
   },
   "vault": {
     "message": "Vault"
@@ -511,5 +580,106 @@
   },
   "loadingDetail": {
     "message": "Loading item details…"
+  },
+  "searchHints": {
+    "message": "↑↓ navigate · ↵ fill · ⌘C copy password · ? all shortcuts · Esc clear"
+  },
+  "secretKeyPh": {
+    "message": "Secret Key (A3-XXXXXX-…)"
+  },
+  "keyboardShortcuts": {
+    "message": "Keyboard shortcuts"
+  },
+  "shortcutNav": {
+    "message": "Navigate list"
+  },
+  "shortcutFill": {
+    "message": "Fill item"
+  },
+  "shortcutCopyPw": {
+    "message": "Copy password"
+  },
+  "shortcutCopyTotp": {
+    "message": "Copy one-time code (TOTP)"
+  },
+  "shortcutCopyUser": {
+    "message": "Copy username"
+  },
+  "shortcutOpenUrl": {
+    "message": "Open website"
+  },
+  "shortcutEdit": {
+    "message": "Edit login"
+  },
+  "shortcutGen": {
+    "message": "Password generator"
+  },
+  "shortcutClose": {
+    "message": "Close or clear search"
+  },
+  "usernameCopied": {
+    "message": "Username copied"
+  },
+  "noUsername": {
+    "message": "No username"
+  },
+  "settingsSubtitle": {
+    "message": "Preferences and browser integration"
+  },
+  "statusCardTitle": {
+    "message": "Desktop connection"
+  },
+  "statusConnectedUnlocked": {
+    "message": "Connected to gitpass (unlocked)"
+  },
+  "statusAppLocked": {
+    "message": "gitpass is locked"
+  },
+  "statusAppNotFound": {
+    "message": "Desktop app not found"
+  },
+  "troubleshootingDocs": {
+    "message": "Troubleshooting docs"
+  },
+  "secGeneral": {
+    "message": "General"
+  },
+  "secAutofillSaving": {
+    "message": "Autofill & saving"
+  },
+  "secAbout": {
+    "message": "About"
+  },
+  "aboutExt": {
+    "message": "Browser extension for autofill and saving credentials"
+  },
+  "optNeverSaveEmptyBody": {
+    "message": "Sites where you choose 'Never save' will appear here."
+  },
+  "siteRemoved": {
+    "message": "Removed $1",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
+  },
+  "cmdFillLogin": {
+    "message": "Fill the best-matching login on this page"
+  },
+  "csCmdAppNotRunning": {
+    "message": "Open the gitpass app, then try again"
+  },
+  "csCmdNoForm": {
+    "message": "No login form found on this page"
+  },
+  "csCmdFailed": {
+    "message": "gitpass could not fill this page"
+  },
+  "optFillShortcut": {
+    "message": "Fill login"
+  },
+  "optFillShortcutBody": {
+    "message": "Fills the best-matching login on the current page without opening the popup."
   }
 }

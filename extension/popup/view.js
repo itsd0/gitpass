@@ -113,17 +113,74 @@
     return Math.min(count - 1, Math.max(0, idx + delta));
   }
 
-  /** Map a keydown to an action. ctx: {inEditable, hasSelection, panel} */
+  /** Map a keydown to an action. ctx: {inEditable, inForm, hasSelection, panel, query, hasTotp} */
   function keyAction(e, ctx = {}) {
-    const mod = e.metaKey || e.ctrlKey;
-    if (e.key === 'Escape') return ctx.panel ? 'closePanel' : 'close';
+    const mod = Boolean(e.metaKey || e.ctrlKey);
+    if (e.key === 'Escape') {
+      if (ctx.panel) return 'closePanel';
+      if (ctx.query) return 'clearSearch';
+      return 'close';
+    }
+    if (e.key === '?' && !mod && !ctx.inEditable && !ctx.hasSelection && (!ctx.panel || ctx.panel === 'shortcuts')) {
+      return 'toggleShortcuts';
+    }
     if (ctx.panel) return null;
     if (e.key === 'ArrowDown') return 'down';
     if (e.key === 'ArrowUp') return 'up';
     if (e.key === 'Enter' && !mod && !ctx.inForm) return 'fill';
+    if (mod && e.shiftKey && (e.key === 'u' || e.key === 'U') && !ctx.hasSelection) return 'copyUsername';
     if (mod && e.shiftKey && (e.key === 'c' || e.key === 'C') && !ctx.hasSelection) return ctx.hasTotp ? 'copyTotp' : 'copyPassword';
     if (mod && (e.key === 'c' || e.key === 'C') && !ctx.hasSelection) return 'copyPassword';
+    if (mod && !e.shiftKey && (e.key === 'o' || e.key === 'O') && !ctx.hasSelection) return 'openWebsite';
+    if (mod && e.shiftKey && (e.key === 'g' || e.key === 'G') && !ctx.hasSelection) return 'generator';
     return null;
+  }
+
+  /** Return an array of sorted, non-overlapping [start, end] ranges matching query terms. */
+  function highlightRanges(text, query) {
+    if (!text || !query) return [];
+    const str = String(text);
+    const q = String(query).trim();
+    if (!q) return [];
+    const lower = str.toLowerCase();
+    const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    const ranges = [];
+    for (const term of terms) {
+      let idx = 0;
+      while ((idx = lower.indexOf(term, idx)) !== -1) {
+        ranges.push([idx, idx + term.length]);
+        idx += 1;
+      }
+    }
+    if (!ranges.length) return [];
+    ranges.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+    const merged = [ranges[0]];
+    for (let i = 1; i < ranges.length; i++) {
+      const cur = ranges[i];
+      const prev = merged[merged.length - 1];
+      if (cur[0] <= prev[1]) {
+        prev[1] = Math.max(prev[1], cur[1]);
+      } else {
+        merged.push(cur);
+      }
+    }
+    return merged;
+  }
+
+  /** Split string into an array of { text, match } segments. */
+  function highlightSegments(text, query) {
+    const str = String(text == null ? '' : text);
+    const ranges = highlightRanges(str, query);
+    if (!ranges.length) return [{ text: str, match: false }];
+    const segs = [];
+    let last = 0;
+    for (const [start, end] of ranges) {
+      if (start > last) segs.push({ text: str.slice(last, start), match: false });
+      segs.push({ text: str.slice(start, end), match: true });
+      last = end;
+    }
+    if (last < str.length) segs.push({ text: str.slice(last), match: false });
+    return segs;
   }
 
   /** TOTP ring: stroke-dashoffset for an SVG circle of circumference C. */
@@ -171,7 +228,45 @@
 
   function hostOfUrl(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (_) { return ''; } }
 
-  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl };
+  /** Check if a URL has an allowed scheme (http or https with non-empty hostname). */
+  function isAllowedUrl(u) {
+    if (!u || typeof u !== 'string') return false;
+    try {
+      const parsed = new URL(u);
+      return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && Boolean(parsed.hostname);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** Extract the username from an item detail or summary. */
+  function itemUsername(detail, summary) {
+    if (detail && Array.isArray(detail.fields)) {
+      const f = detail.fields.find((x) => x && (x.name === 'username' || x.label === 'username'));
+      if (f && f.value) return String(f.value).trim();
+    }
+    if (detail && detail.username) return String(detail.username).trim();
+    if (summary && summary.username) return String(summary.username).trim();
+    const cat = (detail && detail.category) || (summary && summary.category);
+    if (cat === 'login') {
+      const sub = (detail && detail.subtitle) || (summary && summary.subtitle);
+      if (sub && sub !== '—') return String(sub).trim();
+    }
+    return '';
+  }
+
+  /** Build the secondary text for a row; when query matches the domain rather than subtitle, shows "subtitle · domain". */
+  function rowSubtitle(it, query) {
+    if (!it) return '—';
+    const host = it.url ? hostOfUrl(it.url) : '';
+    const q = String(query || '').trim();
+    if (it.subtitle && host && q && matchesQuery({ url: it.url }, q) && !matchesQuery({ subtitle: it.subtitle }, q)) {
+      return it.subtitle + ' · ' + host;
+    }
+    return it.subtitle || host || '—';
+  }
+
+  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

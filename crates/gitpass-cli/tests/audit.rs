@@ -218,3 +218,80 @@ fn audit_cli_respects_ignored_findings_and_flag() {
     assert_eq!(ignored_items.len(), 1);
     assert_eq!(ignored_items[0]["id"], id);
 }
+
+#[test]
+fn audit_cli_flags_passwords_containing_username_or_site_name() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Personal"], None).status.success());
+
+    let sk = gitpass_core::crypto::SecretKey::parse(&std::fs::read_to_string(root.join("secret.key")).unwrap()).unwrap();
+    let s = Session::unlock(&root, "fake-master-pw-123", &sk).unwrap();
+    let vid = s.resolve_vault("Personal").unwrap();
+
+    // 1. Password contains username (long, high entropy password)
+    let mut it1 = Item::default();
+    it1.title = "GitHub Account".into();
+    it1.username = Some("alice".into());
+    it1.url = Some("https://login.github.com".into());
+    it1.password = Some("github-alice-2024!".into());
+    let id1 = s.add_record(&vid, ItemRecord::new(it1)).unwrap();
+
+    // 2. Password contains site name (long, high entropy password)
+    let mut it2 = Item::default();
+    it2.title = "Bank Account".into();
+    it2.username = Some("bob".into());
+    it2.url = Some("https://sub.portal.my-bank.co.uk".into());
+    it2.password = Some("my-bank-2024-strong!".into());
+    let id2 = s.add_record(&vid, ItemRecord::new(it2)).unwrap();
+
+    // 3. Strong clean password
+    let mut it3 = Item::default();
+    it3.title = "Clean Account".into();
+    it3.username = Some("carol".into());
+    it3.url = None;
+    it3.password = Some("Xq7#vR2!mK9@pL4$wZ".into());
+    let _id3 = s.add_record(&vid, ItemRecord::new(it3)).unwrap();
+
+    // Test text output
+    let out = gp(&root, &["audit"], None);
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("weak: 2"));
+    assert!(text.contains("GitHub Account"));
+    assert!(text.contains("weak password: contains the username"));
+    assert!(text.contains("Bank Account"));
+    assert!(text.contains("weak password: contains the site name"));
+    assert!(!text.contains("Clean Account"));
+
+    // Test JSON output
+    let out_json = gp(&root, &["audit", "--json"], None);
+    assert!(out_json.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_json.stdout)).unwrap();
+    assert_eq!(v["weak"], 2);
+    let per_item = v["per_item"].as_array().unwrap();
+
+    let item1 = per_item.iter().find(|i| i["id"] == id1).expect("item1 found");
+    let weak1 = item1["findings"].as_array().unwrap().iter().find(|f| f.get("weak").is_some()).unwrap();
+    assert_eq!(weak1["weak"]["reason"], "contains the username");
+
+    let item2 = per_item.iter().find(|i| i["id"] == id2).expect("item2 found");
+    let weak2 = item2["findings"].as_array().unwrap().iter().find(|f| f.get("weak").is_some()).unwrap();
+    assert_eq!(weak2["weak"]["reason"], "contains the site name");
+}
+
+#[test]
+fn audit_help_lists_every_finding_kind() {
+    let d = tempfile::tempdir().unwrap();
+    let out = gp(&d.path().join("vault"), &["audit", "--help"], None);
+    assert!(out.status.success(), "audit --help failed: {}", String::from_utf8_lossy(&out.stderr));
+    let help = String::from_utf8_lossy(&out.stdout);
+    for kind in gitpass_core::audit::FINDING_KINDS {
+        assert!(help.contains(kind), "audit --help does not mention {kind}:\n{help}");
+    }
+    for flag in ["--hibp", "--max-age-days", "--expiring-days", "--include-ignored", "--json"] {
+        assert!(help.contains(flag), "audit --help does not mention {flag}");
+    }
+    assert!(help.contains("username or site name"), "help should mention the username/site-name rule");
+}

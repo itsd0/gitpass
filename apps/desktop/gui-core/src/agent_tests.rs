@@ -71,7 +71,7 @@ impl Client {
     }
 }
 
-fn fld(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), label: id.into(), kind, value: Some(v.into()), masked: None } }
+fn fld(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), label: id.into(), kind, value: Some(v.into()), masked: None, diff: None } }
 fn add_login(e: &Env, title: &str, url: &str, user: &str, pw: &str) -> String {
     let s = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some(url.into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, user), fld("password", FieldKind::Concealed, pw)] }],
@@ -210,6 +210,24 @@ fn save_login_and_update_password_write_real_items() {
     assert!(!e.app.get_item(vid, iid).unwrap().history.is_empty(), "old version kept in history");
     let t = c.ok("save_login", json!({"origin": "https://x.example.net", "title": "My X", "username": "", "password": "p", "vault_id": e.vault}));
     assert!(t["item_id"].as_str().unwrap().starts_with(&e.vault));
+}
+
+#[test]
+fn update_login_via_agent_edits_and_records_history() {
+    let e = env();
+    let id = add_login(&e, "GitHub", "https://github.com", "leeky", "FAKE-old-pw");
+    let (mut c, _) = Client::connect(&e);
+    assert_eq!(c.err("update_login", json!({"item_id": id, "source": "page", "title": "X"})), "denied");
+    assert_eq!(c.ok("update_login", json!({"item_id": id, "source": "popup", "title": "GitHub (work)",
+        "username": "octo", "password": "FAKE-new-pw", "urls": ["https://github.com/login", "https://github.com/enterprise"],
+        "notes": "edited" }))["ok"], json!(true));
+    let (vid, iid) = id.split_once(':').unwrap();
+    let d = e.app.get_item(vid, iid).unwrap();
+    assert_eq!((d.summary.title.as_str(), d.summary.subtitle.as_str(), d.summary.url.as_deref()),
+        ("GitHub (work)", "octo", Some("https://github.com/login")));
+    assert_eq!(d.notes.as_deref(), Some("edited"));
+    assert_eq!(e.app.reveal_field(vid, iid, "password").unwrap().as_str(), "FAKE-new-pw");
+    assert!(!d.history.is_empty(), "old version kept in history");
 }
 
 #[test]

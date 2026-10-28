@@ -133,6 +133,28 @@ enum Cmd {
     },
     /// Remove an item
     Rm { vault: String, id: String },
+    /// Version history of an item (no secrets)
+    History {
+        /// Item query (id, title, or <vault>/<item>)
+        item: String,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Restore an item to a previous version
+    Restore {
+        /// Item query (id, title, or <vault>/<item>)
+        item: String,
+        /// Prior version number to restore
+        #[arg(long)]
+        version: u64,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+    },
     /// Generate a random password, a memorable passphrase or a PIN
     Gen {
         /// Length of the random password (default 24)
@@ -227,14 +249,22 @@ enum Cmd {
     },
     /// SSH keys: generate / import / list / public key, `~/.ssh/config` line, and a standalone agent
     Ssh { #[command(subcommand)] cmd: SshCmd },
-    /// Security audit: weak / reused / old passwords, missing TOTP, offline 2FA/passkey availability, optional HIBP check
+    /// Security audit: weak / reused / old / pwned passwords, duplicates, expired or expiring items, insecure URLs, missing TOTP, offline 2FA/passkey availability
+    ///
+    /// Finding kinds: weak (incl. passwords containing the username or site name), reused, old,
+    /// pwned (only with --hibp), duplicate, expired, expiring_soon, insecure_url, missing_totp,
+    /// totp_available, passkey_available. Findings you ignored in the app are counted but only
+    /// listed with --include-ignored. See docs/WATCHTOWER.md.
     Audit {
         /// Vault (default: all vaults)
         vault: Option<String>,
         /// Check passwords against Have I Been Pwned (k-anonymity; only 5 hex chars of SHA-1 are sent)
         #[arg(long)] hibp: bool,
+        /// Flag passwords not changed for more than this many days as old
         #[arg(long, default_value_t = 365)] max_age_days: u64,
+        /// Flag cards, API credentials and other expiry fields that expire within this many days
         #[arg(long, default_value_t = 30)] expiring_days: u64,
+        /// Print the report as JSON (counts, per_item and ignored_per_item findings, change_password_url)
         #[arg(long)] json: bool,
         /// Show findings that were ignored by the user
         #[arg(long)] include_ignored: bool,
@@ -519,6 +549,39 @@ fn ts(s: &str) -> String {
     s.trim().parse::<i64>().map(gitpass_core::device::iso8601).unwrap_or_else(|_| s.to_string())
 }
 
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliHistoryEntry {
+    version: u64,
+    updated_at: String,
+    current: bool,
+}
+
+fn resolve_item_across_vaults(s: &Session, vault: Option<&str>, item: &str) -> Result<(String, String)> {
+    if let Some(v) = vault {
+        let vid = s.resolve_vault(v)?;
+        let iid = s.resolve_item(&vid, item)?;
+        return Ok((vid, iid));
+    }
+    if let Some((v, q)) = item.split_once('/') {
+        let vid = s.resolve_vault(v)?;
+        let iid = s.resolve_item(&vid, q)?;
+        return Ok((vid, iid));
+    }
+    let mut matches = Vec::new();
+    for (vid, _) in s.list_vaults()? {
+        if let Ok(m) = s.find_items(&vid, item) {
+            for (iid, it) in m {
+                matches.push((vid.clone(), iid, it.title.clone()));
+            }
+        }
+    }
+    match matches.len() {
+        0 => bail!("no item matches '{item}'"),
+        1 => Ok((matches[0].0.clone(), matches[0].1.clone())),
+        _ => bail!("multiple items match '{item}'; specify --vault or <vault>/<item>"),
+    }
+}
+
 fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
     CliItemSummary {
         id: id.to_string(),
@@ -571,11 +634,11 @@ fn pick_record(s: &Session, vid: &str, query: &str, pick: Option<usize>, include
     if !include_archived {
         recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
     }
-    let mut ranked: Vec<(i64, String, ItemRecord)> = recs
-        .into_iter()
-        .filter_map(|(id, _, rec)| gitpass_core::search::score_item(query, &id, &rec.item).map(|sc| (sc, id, rec)))
-        .collect();
-    ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+    let ranked = gitpass_core::search::rank_by(
+        query,
+        recs.into_iter().map(|(id, _, rec)| (id, rec)),
+        |r| &r.item,
+    );
 
     if ranked.is_empty() {
         bail!("no item matches '{query}'");
@@ -817,11 +880,11 @@ fn run() -> Result<()> {
             if !include_archived {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
-            let mut ranked: Vec<(i64, String, ItemRecord)> = recs
-                .into_iter()
-                .filter_map(|(id, _, rec)| gitpass_core::search::score_item(query, &id, &rec.item).map(|sc| (sc, id, rec)))
-                .collect();
-            ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+            let ranked = gitpass_core::search::rank_by(
+                query,
+                recs.into_iter().map(|(id, _, rec)| (id, rec)),
+                |r| &r.item,
+            );
             if *json {
                 let summaries: Vec<CliItemSummary> = ranked.iter().map(|(_, id, rec)| item_summary(id, rec)).collect();
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
@@ -839,14 +902,14 @@ fn run() -> Result<()> {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
             let items: Vec<(String, ItemRecord)> = match query {
-                Some(q) => {
-                    let mut ranked: Vec<(i64, String, ItemRecord)> = recs
-                        .into_iter()
-                        .filter_map(|(id, _, rec)| gitpass_core::search::score_item(q, &id, &rec.item).map(|sc| (sc, id, rec)))
-                        .collect();
-                    ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
-                    ranked.into_iter().map(|(_, id, rec)| (id, rec)).collect()
-                }
+                Some(q) => gitpass_core::search::rank_by(
+                    q,
+                    recs.into_iter().map(|(id, _, rec)| (id, rec)),
+                    |r| &r.item,
+                )
+                .into_iter()
+                .map(|(_, id, rec)| (id, rec))
+                .collect(),
                 None => {
                     recs.sort_by(|a, b| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()));
                     recs.into_iter().map(|(id, _, rec)| (id, rec)).collect()
@@ -883,6 +946,41 @@ fn run() -> Result<()> {
             let iid = s.resolve_item(&vid, id)?;
             s.remove_item(&vid, &iid)?;
             println!("removed {iid}");
+        }
+        Cmd::History { item, vault, json } => {
+            let s = unlock(&cli, &root)?;
+            let (vid, iid) = resolve_item_across_vaults(&s, vault.as_deref(), item)?;
+            let (cur_v, r) = s.read_record(&vid, &iid)?;
+            let mut entries = Vec::new();
+            entries.push(CliHistoryEntry {
+                version: cur_v,
+                updated_at: ts(&r.item.updated_at),
+                current: true,
+            });
+            for h in r.history.iter().rev() {
+                entries.push(CliHistoryEntry {
+                    version: h.version,
+                    updated_at: ts(&h.updated_at),
+                    current: false,
+                });
+            }
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&entries)?);
+            } else {
+                for e in &entries {
+                    if e.current {
+                        println!("version {} (current)  {}", e.version, e.updated_at);
+                    } else {
+                        println!("version {}            {}", e.version, e.updated_at);
+                    }
+                }
+            }
+        }
+        Cmd::Restore { item, version, vault } => {
+            let s = unlock(&cli, &root)?;
+            let (vid, iid) = resolve_item_across_vaults(&s, vault.as_deref(), item)?;
+            let new_v = s.restore_version(&vid, &iid, *version)?;
+            println!("restored {iid} to version {version} (now version {new_v})");
         }
         Cmd::Gen { len, words, pin, separator, capitalize, no_symbols, no_digits, copy, clear_secs } => {
             let args = gitpass_cli::gen::Args { len: *len, words: *words, pin: *pin, separator: *separator,
