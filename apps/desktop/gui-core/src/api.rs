@@ -14,6 +14,7 @@ use gitpass_core::item::{Category, FieldKind};
 use gitpass_core::merge::ItemRecord;
 use gitpass_core::store::{Item, Session, UnlockOpts};
 use gitpass_core::{import, item, totp};
+use gitpass_pasteboard::PasteboardMarkers;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -33,12 +34,13 @@ pub struct Section { pub id: String, pub title: Option<String>, pub fields: Vec<
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Attachment { pub id: String, pub name: String, pub size: u64, pub mime: String }
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemSummary {
     pub id: String, pub vault_id: String, pub category: Category, pub title: String, pub subtitle: String,
     pub favorite: bool, pub archived: bool, pub deleted_at: Option<String>, pub tags: Vec<String>,
     pub updated_at: String, pub created_at: String, pub url: Option<String>,
+    pub expiry: Option<String>,
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -242,14 +244,25 @@ pub struct LocalFile {
 pub trait Clipboard: Send + Sync {
     fn set_text(&self, s: &str) -> Result<()>;
     fn get_text(&self) -> Option<String>;
+    /// Copy a secret: macOS implementations declare the nspasteboard.org markers so clipboard
+    /// managers do not record or sync it. The default (and non-macOS) writes plain text.
+    fn set_marked(&self, s: &str, _markers: PasteboardMarkers) -> Result<()> { self.set_text(s) }
 }
 
 /// In-memory clipboard (tests / headless).
 #[derive(Default)]
-pub struct MemClipboard(pub Mutex<Option<String>>);
+pub struct MemClipboard { text: Mutex<Option<String>>, markers: Mutex<Option<PasteboardMarkers>> }
+impl MemClipboard {
+    pub fn markers(&self) -> Option<PasteboardMarkers> { *self.markers.lock().unwrap() }
+}
 impl Clipboard for MemClipboard {
-    fn set_text(&self, s: &str) -> Result<()> { *self.0.lock().unwrap() = Some(s.to_string()); Ok(()) }
-    fn get_text(&self) -> Option<String> { self.0.lock().unwrap().clone() }
+    fn set_text(&self, s: &str) -> Result<()> { *self.text.lock().unwrap() = Some(s.to_string()); *self.markers.lock().unwrap() = None; Ok(()) }
+    fn get_text(&self) -> Option<String> { self.text.lock().unwrap().clone() }
+    fn set_marked(&self, s: &str, markers: PasteboardMarkers) -> Result<()> {
+        self.set_text(s)?;
+        *self.markers.lock().unwrap() = Some(markers);
+        Ok(())
+    }
 }
 
 /// Real HIBP range client (k-anonymity; only 5 hex chars of SHA-1 leave the process).
@@ -299,6 +312,17 @@ pub(crate) fn is_card_number(f: &item::Field) -> bool {
     if f.id == "cvv" || f.id == "pin" || ["cvv", "cvc", "verification", "security", "pin", "holder", "name", "type", "expir", "valid"].iter().any(|k| l.contains(k)) { return false; }
     f.id == "number" || l.contains("number") || l.contains("card")
 }
+fn is_card_cvv(f: &item::Field) -> bool {
+    let l = f.label.to_lowercase();
+    f.id == "cvv" || f.id == "cvc" || ["cvv", "cvc", "verification", "security code"].iter().any(|k| l.contains(k))
+}
+
+/// Fields whose copied value clipboard managers must not record. Secret field kinds cover
+/// passwords, TOTP codes, card numbers/CVVs and API credentials; card data stored as plain text
+/// by an old import is still recognised by label/id.
+pub(crate) fn is_secret_copy(category: Category, f: &item::Field) -> bool {
+    f.kind.is_secret() || (category == Category::CreditCard && (is_card_number(f) || is_card_cvv(f)))
+}
 fn card_digits(r: &ItemRecord) -> Option<String> {
     if r.category != Category::CreditCard { return None; }
     // First card-number-like field that actually holds >= 8 digits ("cardholder" etc. are excluded above).
@@ -345,12 +369,33 @@ fn to_dto_sections(r: &ItemRecord) -> Vec<Section> {
         value: if f.kind.is_secret() { None } else { f.value.clone() }, id: f.id, label: f.label, kind: f.kind }).collect() }).collect()
 }
 
+pub fn item_expiry(r: &ItemRecord) -> Option<String> {
+    let target = match r.category {
+        Category::CreditCard => "expiry",
+        Category::ApiCredential => "expires",
+        _ => return None,
+    };
+    r.view_sections()
+        .into_iter()
+        .flat_map(|s| s.fields)
+        .find(|f| {
+            !f.removed
+                && (f.id.eq_ignore_ascii_case(target)
+                    || f.label.eq_ignore_ascii_case(target)
+                    || (r.category == Category::CreditCard && f.label.eq_ignore_ascii_case("expiry date")))
+                && f.value.as_deref().map(str::trim).filter(|v| !v.is_empty()).is_some()
+        })
+        .and_then(|f| f.value)
+        .map(|v| v.trim().to_string())
+}
+
 fn summary(vid: &str, iid: &str, r: &ItemRecord) -> ItemSummary {
     ItemSummary {
         id: iid.into(), vault_id: vid.into(), category: r.category, title: r.item.title.clone(), subtitle: subtitle(r),
         favorite: r.favorite, archived: r.archived, deleted_at: r.deleted_at.map(|d| iso8601(d as i64)), tags: r.tags.clone(),
         updated_at: ts(&r.item.updated_at), created_at: r.created_at.map(|c| iso8601(c as i64)).unwrap_or_else(|| ts(&r.item.updated_at)),
         url: r.item.url.clone(),
+        expiry: item_expiry(r),
     }
 }
 
@@ -623,14 +668,19 @@ impl App {
     }
     /// Copy a field value (TOTP fields: the current code) to the clipboard; cleared after
     /// `clipboardClearSecs` only if the clipboard still holds this value and nothing newer was copied.
+    /// Secret fields carry the macOS concealed/transient markers; plain fields do not.
     pub fn copy_field(&self, vault_id: &str, item_id: &str, field_id: &str) -> Result<()> {
-        let v = self.with(|u| {
+        let (v, markers) = self.with(|u| {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
             let f = r.find_field(field_id).ok_or_else(|| anyhow!("item has no field '{field_id}'"))?;
+            let markers = is_secret_copy(r.category, &f).then_some(PasteboardMarkers::SECRET);
             let raw = f.value.clone().filter(|v| !v.is_empty()).ok_or_else(|| anyhow!("field '{field_id}' is empty"))?;
-            Ok(Zeroizing::new(if f.kind == FieldKind::Totp { totp::code_now(&totp::parse(&raw)?).0 } else { raw }))
+            Ok((Zeroizing::new(if f.kind == FieldKind::Totp { totp::code_now(&totp::parse(&raw)?).0 } else { raw }), markers))
         })?;
-        self.clipboard.set_text(&v)?;
+        match markers {
+            Some(m) => self.clipboard.set_marked(&v, m)?,
+            None => self.clipboard.set_text(&v)?,
+        }
         if let Ok(mut lc) = self.last_copied.lock() {
             *lc = Some(Zeroizing::new(v.to_string()));
         }

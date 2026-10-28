@@ -5,6 +5,7 @@ use gitpass_core::crypto::KdfParams;
 use gitpass_core::import::{self, ImportFormat};
 use gitpass_core::item::{Category, FieldKind};
 use gitpass_core::store::{self, UnlockOpts};
+use gitpass_pasteboard::PasteboardMarkers;
 use std::sync::Arc;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 
@@ -46,6 +47,13 @@ fn card(e: &Env) -> ItemSummary {
         sections: vec![Section { id: "card".into(), title: Some("Card".into()), fields: vec![fld("number", FieldKind::Concealed, Some("4111 1111 1111 1111")),
             fld("cvv", FieldKind::Concealed, Some("123")), fld("expiry", FieldKind::MonthYear, Some("12/30"))] }],
         notes: Some("fake".into()), tags: None, favorite: Some(true) }).unwrap()
+}
+fn api_cred(e: &Env, title: &str, user: &str, cred: &str, expires: &str) -> ItemSummary {
+    e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::ApiCredential, title: title.into(), url: Some("https://api.example.invalid".into()),
+        sections: vec![Section { id: "main".into(), title: None, fields: vec![
+            fld("username", FieldKind::Text, Some(user)), fld("credential", FieldKind::Concealed, Some(cred)),
+            fld("type", FieldKind::Text, Some("token")), fld("expires", FieldKind::Date, Some(expires))] }],
+        notes: None, tags: None, favorite: None }).unwrap()
 }
 
 #[test]
@@ -146,6 +154,44 @@ fn filters_favorite_archive_delete_restore_purge_move_duplicate() {
 }
 
 #[test]
+fn copied_secrets_carry_pasteboard_markers() {
+    let e = env();
+    let l = login(&e, "Marked", "user", "pw-FAKE-marked");
+    e.app.copy_field(&e.vault, &l.id, "password").unwrap();
+    assert_eq!(e.clip.markers(), Some(PasteboardMarkers::SECRET));
+    assert_eq!(e.clip.get_text().as_deref(), Some("pw-FAKE-marked"));
+    e.app.copy_field(&e.vault, &l.id, "username").unwrap();
+    assert_eq!(e.clip.markers(), None, "username is not a secret");
+    let c = card(&e);
+    for field in ["number", "cvv"] {
+        e.app.copy_field(&e.vault, &c.id, field).unwrap();
+        assert_eq!(e.clip.markers(), Some(PasteboardMarkers::SECRET), "card {field}");
+    }
+    e.app.copy_field(&e.vault, &c.id, "expiry").unwrap();
+    assert_eq!(e.clip.markers(), None, "expiry is not a secret");
+    let api = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::ApiCredential, title: "API".into(), url: None,
+        sections: vec![Section { id: "main".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("svc")), fld("credential", FieldKind::Concealed, Some("FAKE-token"))] }],
+        notes: None, tags: None, favorite: None }).unwrap();
+    e.app.copy_field(&e.vault, &api.id, "credential").unwrap();
+    assert_eq!(e.clip.markers(), Some(PasteboardMarkers::SECRET));
+    e.app.copy_field(&e.vault, &api.id, "username").unwrap();
+    assert_eq!(e.clip.markers(), None);
+}
+
+#[test]
+fn secret_copy_decision_covers_kinds_and_legacy_card_fields() {
+    let f = |id: &str, kind: FieldKind, label: &str| gitpass_core::item::Field { id: id.into(), label: label.into(), kind, value: Some("FAKE".into()), removed: false };
+    assert!(is_secret_copy(Category::Login, &f("password", FieldKind::Concealed, "password")));
+    assert!(is_secret_copy(Category::Login, &f("otp", FieldKind::Totp, "one-time password")));
+    assert!(is_secret_copy(Category::ApiCredential, &f("credential", FieldKind::Concealed, "credential")));
+    assert!(is_secret_copy(Category::CreditCard, &f("number", FieldKind::Text, "number")), "legacy plain-text card number");
+    assert!(is_secret_copy(Category::CreditCard, &f("cvv", FieldKind::Text, "cvv")), "legacy plain-text CVV");
+    assert!(!is_secret_copy(Category::Login, &f("username", FieldKind::Text, "username")));
+    assert!(!is_secret_copy(Category::Login, &f("website", FieldKind::Url, "website")));
+    assert!(!is_secret_copy(Category::CreditCard, &f("expiry", FieldKind::MonthYear, "expiry")));
+}
+
+#[test]
 fn copy_field_clears_clipboard_only_if_unchanged() {
     let e = env();
     let mut s = e.app.get_settings();
@@ -201,6 +247,7 @@ fn totp_now_and_totp_field_copy() {
     assert_eq!((t.code.len(), t.period), (6, 30));
     e.app.copy_field(&e.vault, &it.id, "totp").unwrap();
     assert_eq!(e.clip.get_text().unwrap().len(), 6);
+    assert_eq!(e.clip.markers(), Some(PasteboardMarkers::SECRET));
     assert!(e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "bad".into(), url: None,
         sections: vec![Section { id: "x".into(), title: None, fields: vec![fld("t", FieldKind::Totp, Some("not base32!!"))] }], notes: None, tags: None, favorite: None }).is_err());
 }
@@ -553,10 +600,14 @@ fn contract_json_shapes() {
     let e = env();
     let l = login(&e, "Alpha", "a", "pw-FAKE");
     let v = serde_json::to_value(&l).unwrap();
-    for k in ["id", "vaultId", "category", "title", "subtitle", "favorite", "archived", "deletedAt", "tags", "updatedAt", "createdAt", "url"] { assert!(v.get(k).is_some(), "{k}"); }
+    for k in ["id", "vaultId", "category", "title", "subtitle", "favorite", "archived", "deletedAt", "tags", "updatedAt", "createdAt", "url", "expiry"] { assert!(v.get(k).is_some(), "{k}"); }
     assert_eq!(v["category"], "login");
+    assert!(v["expiry"].is_null());
+    let c = card(&e);
+    let vc = serde_json::to_value(&c).unwrap();
+    assert_eq!(vc["expiry"], "12/30");
     let d = serde_json::to_value(e.app.get_item(&e.vault, &l.id).unwrap()).unwrap();
-    for k in ["sections", "notes", "attachments", "history", "passwordStrength", "hasTotp", "vaultId"] { assert!(d.get(k).is_some(), "{k}"); }
+    for k in ["sections", "notes", "attachments", "history", "passwordStrength", "hasTotp", "vaultId", "expiry"] { assert!(d.get(k).is_some(), "{k}"); }
     assert!(d["sections"][0]["fields"][1]["value"].is_null());
     let vi = serde_json::to_value(&e.app.list_vaults().unwrap()[0]).unwrap();
     for k in ["id", "name", "description", "itemCount", "shared", "members", "icon", "color"] { assert!(vi.get(k).is_some(), "{k}"); }
@@ -566,6 +617,73 @@ fn contract_json_shapes() {
     assert_eq!(inp.sections[0].fields[0].kind, FieldKind::MonthYear);
     let w = serde_json::to_value(e.app.watchtower(false).unwrap()).unwrap();
     for k in ["score", "weak", "reused", "old", "breached", "missingTotp", "expired", "expiringSoon", "checkedAt", "hibpChecked"] { assert!(w.get(k).is_some(), "{k}"); }
+}
+
+#[test]
+fn item_summary_carries_expiry_for_card_and_api_credential_only() {
+    let e = env();
+    let l = login(&e, "Login Item", "user@example.invalid", "super-secret-login-password");
+    let c = card(&e);
+    let a = api_cred(&e, "Cloud API Token", "svc-deploy", "sk_live_FAKE_SECRET_KEY_12345678", "2027-12-31");
+
+    // 1. Rust struct values
+    assert_eq!(l.expiry, None);
+    assert_eq!(c.expiry.as_deref(), Some("12/30"));
+    assert_eq!(a.expiry.as_deref(), Some("2027-12-31"));
+
+    // 2. list_items carries expiry for card and api_credential only
+    let items = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap();
+    let find = |id: &str| items.iter().find(|i| i.id == id).unwrap();
+    assert_eq!(find(&l.id).expiry, None);
+    assert_eq!(find(&c.id).expiry.as_deref(), Some("12/30"));
+    assert_eq!(find(&a.id).expiry.as_deref(), Some("2027-12-31"));
+
+    // 3. Serialized JSON contains expiry, and NO secret values (password, card number, CVV, credential)
+    for (item, secret_values) in [
+        (&l, vec!["super-secret-login-password"]),
+        (&c, vec!["4111 1111 1111 1111", "123"]),
+        (&a, vec!["sk_live_FAKE_SECRET_KEY_12345678"]),
+    ] {
+        let json_str = serde_json::to_string(item).unwrap();
+        let json_val: serde_json::Value = serde_json::from_str(&json_str).unwrap();
+
+        for secret in secret_values {
+            assert!(!json_str.contains(secret), "serialized summary must not leak secret '{secret}'");
+        }
+
+        match item.category {
+            Category::CreditCard => assert_eq!(json_val["expiry"], "12/30"),
+            Category::ApiCredential => assert_eq!(json_val["expiry"], "2027-12-31"),
+            _ => assert!(json_val["expiry"].is_null()),
+        }
+    }
+
+    // 4. Removed fields or empty values give None
+    let empty_expiry_card = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::CreditCard,
+        title: "Empty Expiry Card".into(),
+        url: None,
+        sections: vec![Section { id: "card".into(), title: None, fields: vec![
+            fld("number", FieldKind::Concealed, Some("4111 2222 3333 4444")),
+            fld("expiry", FieldKind::MonthYear, Some("   ")),
+        ] }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+    assert_eq!(empty_expiry_card.expiry, None);
+
+    // 5. Non-card/non-api categories (e.g. secure_note, identity) with an expiry field still give None
+    let note = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::SecureNote,
+        title: "Note with Expiry Field".into(),
+        url: None,
+        sections: vec![Section { id: "main".into(), title: None, fields: vec![
+            fld("expiry", FieldKind::Text, Some("12/30")),
+        ] }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+    assert_eq!(note.expiry, None);
 }
 
 #[test]
