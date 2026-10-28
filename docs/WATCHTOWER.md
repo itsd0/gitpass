@@ -106,9 +106,12 @@ This is not zxcvbn: there is no dictionary attack, keyboard-pattern or l33t anal
 
 ## Old passwords
 
-An item is `Old { days }` when `updated_at` parses as Unix seconds and
-`(now − updated_at) / 86 400 > max_age_days` (default 365; CLI `--max-age-days`). The comparison is
-strict, so an item exactly 365 days old is not reported. Only items with a password are checked.
+An item is `Old { days }` when its password has not been changed for more than `max_age_days`
+(default 365; CLI `--max-age-days`). The password-change time is computed from the newest history entry
+or edit where the password value differed, or the item's creation time if it has never changed.
+Editing notes, tags, URLs, favourites or other metadata does not reset the password age; only changing the
+password itself resets it. The comparison is strict, so an item whose password is exactly 365 days old
+is not reported. Only items with a password are checked.
 
 ## Missing TOTP and offline 2FA advice
 

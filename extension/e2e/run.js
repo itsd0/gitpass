@@ -71,7 +71,44 @@ async function findInShadow(page, re) {
 }
 
 
-// Computed styles of the first element matching `selector` inside any <gitpass-ui> closed shadow root.
+// Node id of the first element matching `selector` inside any <gitpass-ui> closed shadow root.
+// (Closed roots are invisible to page JS; the DOM agent can still pierce them.)
+async function shadowNode(page, selector) {
+  const s = await cdpSession(page);
+  await s.send('DOM.enable');
+  const { root } = await s.send('DOM.getDocument', { depth: -1, pierce: true });
+  const roots = [];
+  const walk = (n) => { if (n.nodeName === 'GITPASS-UI') roots.push(...(n.shadowRoots || [])); for (const k of (n.children || [])) walk(k); };
+  walk(root);
+  for (const sr of roots) {
+    let nodeIds = [];
+    try { ({ nodeIds } = await s.send('DOM.querySelectorAll', { nodeId: sr.nodeId, selector })); } catch (_) { continue; }
+    if (nodeIds.length) return nodeIds[0];
+  }
+  return null;
+}
+
+async function shadowFocus(page, selector) {
+  const nodeId = await shadowNode(page, selector);
+  if (nodeId == null) return false;
+  await (await cdpSession(page)).send('DOM.focus', { nodeId });
+  return true;
+}
+
+async function shadowSetValue(page, selector, value) {
+  const s = await cdpSession(page);
+  const nodeId = await shadowNode(page, selector);
+  if (nodeId == null) return false;
+  const { object } = await s.send('DOM.resolveNode', { nodeId });
+  await s.send('Runtime.callFunctionOn', {
+    objectId: object.objectId,
+    functionDeclaration: 'function (v) { this.value = v; this.dispatchEvent(new Event("change", { bubbles: true })); }',
+    arguments: [{ value }],
+  });
+  return true;
+}
+
+
 // CSS.getComputedStyleForNode (with CSS.enable) sees shadow-DOM nodes found via DOM.getDocument pierce,
 // so prefers-color-scheme emulation can be asserted without opening the shadow root.
 async function shadowComputed(page, selector) {
@@ -722,6 +759,43 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     const saved = await until(() => cmdsIn(mockDir).find((m) => m.cmd === 'save_login' && m.username === 'newuser@example.com'), T(4000));
     if (REAL) rec('save-login prompt after submit (real host)', !!banner, banner ? `banner button "${banner[0].text}" clicked` : 'no Save button found', 'test'); else
     rec('save-login prompt after submit -> save_login sent', !!saved, banner ? `banner button "${banner[0].text}"; save_login ${saved ? 'received' : 'NOT received'}` : 'no Save button found in page shadow DOM');
+
+    // --- Save banner (#148): editable title + vault picker, success state, Esc dismiss.
+    if (!REAL) {
+      await page.goto(LOGIN); await sleep(1000);
+      await page.fill('#u', 'vaultuser@example.com'); await page.fill('#p', 'Vault-Pass-42'); await page.click('#go');
+      const fieldsReady = await until(async () => (await shadowNode(page, '.banner input.inp')) != null && (await shadowNode(page, '.banner select')) != null, T(6000));
+      rec('save banner: title field and vault picker appear', !!fieldsReady, fieldsReady ? 'title + select' : 'not found');
+      const focusedUi = await page.evaluate(() => document.activeElement && document.activeElement.tagName);
+      rec('save banner: focus moves into the banner', focusedUi === 'GITPASS-UI', `activeElement=${focusedUi}`);
+      const typed = await shadowFocus(page, '.banner input.inp');
+      if (typed) { await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A'); await page.keyboard.type('Work Custom Title'); }
+      const vaultSet = await shadowSetValue(page, '.banner select', 'v2');
+      const mark148 = cmdsIn(mockDir).length;
+      const saveBtn = await until(async () => { const h = await findInShadow(page, /^\s*Save\s*$/); return h.length && h; }, T(4000));
+      if (saveBtn) await page.mouse.click(saveBtn[0].x, saveBtn[0].y);
+      const custom = await until(() => cmdsIn(mockDir).slice(mark148).find((m) => m.cmd === 'save_login' && m.username === 'vaultuser@example.com'), T(5000));
+      rec('save banner: custom title and non-default vault reach save_login',
+        !!(typed && vaultSet && custom && custom.title === 'Work Custom Title' && custom.vault_id === 'v2'),
+        custom ? `title=${JSON.stringify(custom.title)} vault=${custom.vault_id}` : 'save_login NOT received');
+      const success = await until(async () => { const h = await findInShadow(page, /Open in gitpass/); return h.length && h; }, T(4000));
+      rec('save banner: success state offers Open in gitpass', !!success, success ? 'shown' : 'not shown');
+      await page.mouse.move(4, 4); // stop hovering the banner; programmatic focus must not pin it open
+      const autoClosed = await until(async () => !(await findInShadow(page, /Open in gitpass/)).length, T(8000), 300);
+      rec('save banner: success auto-closes after 4 s', !!autoClosed, autoClosed ? 'closed' : 'still open');
+
+      // Esc = Not now on a fresh banner; nothing is saved.
+      await page.goto(LOGIN); await sleep(1000);
+      await page.fill('#u', 'escuser@example.com'); await page.fill('#p', 'Esc-Pass-42'); await page.click('#go');
+      const escBanner = await until(async () => { const h = await findInShadow(page, /^\s*Save\s*$/); return h.length && h; }, T(6000));
+      const escMark = cmdsIn(mockDir).length;
+      if (escBanner) { await shadowFocus(page, '.banner input.inp'); await page.keyboard.press('Escape'); }
+      const escClosed = await until(async () => { const h = await findInShadow(page, /^\s*Save\s*$/); return !h.length; }, T(3000));
+      const after = cmdsIn(mockDir).slice(escMark);
+      const escSaved = after.some((m) => m.cmd === 'save_login' && m.username === 'escuser@example.com');
+      rec('save banner: Esc dismisses without saving', !!(escBanner && escClosed && !escSaved),
+        `banner=${!!escBanner} closed=${!!escClosed} saved=${!!escSaved}`);
+    }
 
     // --- Multi-step login (username page -> password page). The step-2 form has no username input, so
     // save_login can only carry both values if the step-1 username survives the page load in the background.

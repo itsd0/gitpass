@@ -231,7 +231,7 @@ enum Cmd {
     /// Import items from another password manager's export file
     Import {
         vault: String,
-        /// bitwarden-json | bitwarden-csv | 1password-csv | 1password-1pux | keepass-csv | chrome-csv | gitpass-json
+        /// bitwarden-json | bitwarden-csv | 1password-csv | 1password-1pux | keepass-csv | chrome-csv | apple-passwords-csv | gitpass-json
         #[arg(long = "from")] from: String,
         file: PathBuf,
         /// Parse and count only; write nothing
@@ -260,7 +260,7 @@ enum Cmd {
         vault: Option<String>,
         /// Check passwords against Have I Been Pwned (k-anonymity; only 5 hex chars of SHA-1 are sent)
         #[arg(long)] hibp: bool,
-        /// Flag passwords not changed for more than this many days as old
+        /// Flag passwords not changed for more than this many days as old (tracks password edits, not general item updates)
         #[arg(long, default_value_t = 365)] max_age_days: u64,
         /// Flag cards, API credentials and other expiry fields that expire within this many days
         #[arg(long, default_value_t = 30)] expiring_days: u64,
@@ -488,10 +488,16 @@ fn print_kit(root: &Path, enc: &str) {
     println!("===============================================================");
 }
 
-fn print_item(id: &str, it: &Item) {
+fn print_item(id: &str, r: &ItemRecord) {
+    let it = &r.item;
     println!("id:       {id}\ntitle:    {}", it.title);
     if let Some(v) = &it.username { println!("username: {v}"); }
-    if let Some(v) = &it.password { println!("password: {v}"); }
+    if let Some(v) = &it.password {
+        println!("password: {v}");
+        if let Some(t) = r.password_changed_at() {
+            println!("password changed: {}", gitpass_core::device::iso8601(t as i64));
+        }
+    }
     if let Some(v) = &it.url { println!("url:      {v}"); }
     if let Some(v) = &it.totp { println!("totp:     {v}"); }
     if let Some(v) = &it.notes { println!("notes:    {v}"); }
@@ -540,6 +546,8 @@ struct CliItemDetail {
     #[serde(skip_serializing_if = "Option::is_none")]
     created_at: Option<String>,
     updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    password_changed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     notes: Option<String>,
     fields: Vec<CliField>,
@@ -623,6 +631,7 @@ fn item_detail(id: &str, r: &ItemRecord, reveal: bool) -> CliItemDetail {
         deleted_at: r.deleted_at.map(|d| gitpass_core::device::iso8601(d as i64)),
         created_at: r.created_at.map(|c| gitpass_core::device::iso8601(c as i64)),
         updated_at: ts(&r.item.updated_at),
+        password_changed_at: r.password_changed_at().map(|t| gitpass_core::device::iso8601(t as i64)),
         notes: r.item.notes.clone().filter(|n| !n.trim().is_empty()),
         fields,
     }
@@ -855,7 +864,7 @@ fn run() -> Result<()> {
             } else if *password_only {
                 println!("{}", rec.item.password.clone().unwrap_or_default());
             } else {
-                print_item(&id, &rec.item);
+                print_item(&id, &rec);
             }
         }
         Cmd::Copy { vault, query, field, pick, clear_secs, quiet } => {

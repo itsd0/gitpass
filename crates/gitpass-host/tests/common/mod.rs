@@ -10,7 +10,7 @@ use std::time::Duration;
 pub fn fast() -> KdfParams { KdfParams { alg: "argon2id".into(), m_kib: 8192, t: 1, p: 1 } }
 pub const PW: &str = "correct horse battery";
 
-pub struct V5 { pub dir: tempfile::TempDir, pub host: Host, pub vid: String, pub login: String, pub card: String, pub ident: String, pub note: String }
+pub struct V5 { pub dir: tempfile::TempDir, pub host: Host, pub vid: String, pub vid2: String, pub login: String, pub card: String, pub ident: String, pub note: String }
 
 fn f(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), label: id.into(), kind, value: Some(v.into()), removed: false } }
 fn rec(cat: Category, title: &str, fields: Vec<Field>) -> ItemRecord {
@@ -31,6 +31,7 @@ pub fn v5_vault() -> V5 {
     std::fs::write(&skf, format!("{}\n", sk.encode())).unwrap();
     let s = Session::unlock_with(&root, PW, &sk, &UnlockOpts { accept_rollback: false, target_kdf: fast() }).unwrap();
     let vid = s.create_vault("Personal").unwrap();
+    let vid2 = s.create_vault("Work").unwrap();
     let li = Item { title: "GitHub".into(), username: Some("leeky".into()), password: Some("FAKE-gh-pw".into()),
         url: Some("https://github.com/login".into()), notes: Some("fake note".into()), totp: Some("JBSWY3DPEHPK3PXP".into()), updated_at: String::new() };
     let login = format!("{vid}:{}", s.add_record(&vid, ItemRecord::new(li)).unwrap());
@@ -42,7 +43,7 @@ pub fn v5_vault() -> V5 {
     let note = format!("{vid}:{}", s.add_record(&vid, rec(Category::SecureNote, "Wifi notes", vec![f("body", FieldKind::Multiline, "hello")])).unwrap());
     drop(s);
     let host = Host::new(HostConfig { vault_path: root, secret_key_path: skf, idle_timeout: Duration::from_secs(300), target_kdf: fast() });
-    V5 { dir: d, host, vid, login, card, ident, note }
+    V5 { dir: d, host, vid, vid2, login, card, ident, note }
 }
 
 pub fn ok(h: &mut Host, v: Value) -> Value {

@@ -521,6 +521,24 @@ fn import_file_dry_run_and_real() {
 }
 
 #[test]
+fn import_file_apple_passwords_csv() {
+    let e = env();
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("apple.csv");
+    std::fs::write(&f, "Title,URL,Username,Password,Notes,OTPAuth\nApple Service,https://apple.example.invalid,alice,FAKE1,Notes line,otpauth://totp/Apple:alice?secret=JBSWY3DPEHPK3PXP\n").unwrap();
+    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), true).unwrap();
+    assert_eq!((r.parsed, r.added, r.duplicates), (1, 1, 0));
+    assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 0);
+    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), false).unwrap();
+    assert_eq!(r.added, 1);
+    let items = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: Some(e.vault.clone()), tag: None, category: None, query: None, sort: None }).unwrap();
+    let it = items.iter().find(|i| i.title == "Apple Service").unwrap();
+    assert_eq!(it.category, Category::Login);
+    let d = e.app.get_item(&e.vault, &it.id).unwrap();
+    assert!(d.has_totp);
+}
+
+#[test]
 fn export_vault_round_trip_and_errors() {
     let e = env();
     let _l = login(&e, "Export Login", "alice@example.invalid", "FAKE-Strong-Export-1!");

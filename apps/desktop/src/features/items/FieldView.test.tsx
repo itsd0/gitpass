@@ -247,4 +247,36 @@ describe('FieldRow', () => {
     expect(screen.queryByTestId("expiry-pill")).toBeNull();
     expect(screen.queryByTestId("expiry-hint")).toBeNull();
   });
+
+  it("shows relative password changed hint under the password field", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-28T12:00:00Z"));
+    render(
+      <TooltipProvider>
+        <FieldRow
+          field={{ id: "f_pw", label: "password", kind: "concealed", value: null }}
+          ctx={ctx}
+          category="login"
+          passwordChangedAt="2026-10-27T12:00:00Z"
+        />
+      </TooltipProvider>
+    );
+    const hint = screen.getByTestId("password-changed-at");
+    expect(hint).toBeInTheDocument();
+    expect(hint.textContent).toBe("Password changed 1 day ago");
+    vi.useRealTimers();
+  });
+
+  it("does not show password changed hint when passwordChangedAt is not provided", () => {
+    render(
+      <TooltipProvider>
+        <FieldRow
+          field={{ id: "f_pw", label: "password", kind: "concealed", value: null }}
+          ctx={ctx}
+          category="login"
+        />
+      </TooltipProvider>
+    );
+    expect(screen.queryByTestId("password-changed-at")).toBeNull();
+  });
 });

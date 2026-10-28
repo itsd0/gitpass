@@ -410,6 +410,30 @@
     "message": "gitpass ကို အရင် သော့ဖွင့်ပြီး ထပ်ကြိုးစားပါ",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "csSaveAsNew": {
+    "message": "အသစ်အဖြစ် သိမ်းရန်",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csSaving": {
+    "message": "သိမ်းနေသည်…",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csUpdating": {
+    "message": "အပ်ဒိတ်လုပ်နေသည်…",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csSavedNew": {
+    "message": "လော့ဂ်အင်အသစ်အဖြစ် သိမ်းပြီးပါပြီ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csTitleRequired": {
+    "message": "ခေါင်းစဉ် ထည့်ရန် လိုအပ်ပါသည်",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csTitleTooLong": {
+    "message": "ခေါင်းစဉ် ရှည်လွန်းနေပါသည် (အများဆုံး စာလုံး 200)",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
   "allSet": {
     "message": "အားလုံး အဆင်သင့်ဖြစ်ပါပြီ",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"

@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { Field, ItemCategory } from '../../api/types';
 import { useT } from '../../i18n';
 import { checkExpiry, isExpiryField } from './expiry';
+import { formatRelativePasswordChanged } from './passwordAge';
 import { LargeTypeDialog } from './LargeType';
 import { cn } from '../../lib/utils';
 import { Badge, Button, Tooltip, toast } from '../../ui';
@@ -15,11 +16,11 @@ const DOTS = '••••••••••';
 
 interface Ctx { vaultId: string; itemId: string }
 
-export function FieldRow({ field, ctx, strength, category }: { field: Field; ctx: Ctx; strength?: number | null; category?: ItemCategory }) {
+export function FieldRow({ field, ctx, strength, category, passwordChangedAt }: { field: Field; ctx: Ctx; strength?: number | null; category?: ItemCategory; passwordChangedAt?: string | null }) {
   return (
     <div className="group relative border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-hover/50" data-testid={`field-${field.id}`}>
       <div className="text-xs text-label">{field.label}</div>
-      {field.kind === 'concealed' ? <ConcealedValue field={field} ctx={ctx} strength={strength} />
+      {field.kind === 'concealed' ? <ConcealedValue field={field} ctx={ctx} strength={strength} passwordChangedAt={passwordChangedAt} />
         : field.kind === 'totp' ? <TotpValue ctx={ctx} fieldId={field.id} />
         : <PlainValue field={field} ctx={ctx} category={category} />}
     </div>
@@ -72,7 +73,7 @@ function PlainValue({ field, ctx, category }: { field: Field; ctx: Ctx; category
 }
 
 /** Concealed values are never in the payload; only fetched via revealField, auto-hidden after 30s. */
-export function ConcealedValue({ field, ctx, strength }: { field: Field; ctx: Ctx; strength?: number | null }) {
+export function ConcealedValue({ field, ctx, strength, passwordChangedAt }: { field: Field; ctx: Ctx; strength?: number | null; passwordChangedAt?: string | null }) {
   const t = useT();
   const [revealed, setRevealed] = useState<string | null>(null);
   const [largeTypeOpen, setLargeTypeOpen] = useState(false);
@@ -154,6 +155,11 @@ export function ConcealedValue({ field, ctx, strength }: { field: Field; ctx: Ct
         </div>
       </div>
       {strength != null && /password/i.test(field.label) && <StrengthMeter score={strength} />}
+      {passwordChangedAt && /password/i.test(field.label) && (
+        <div className="mt-1 text-xs text-muted" data-testid="password-changed-at">
+          {formatRelativePasswordChanged(passwordChangedAt, undefined, t)}
+        </div>
+      )}
       {largeTypeOpen && largeTypeValue !== null && (
         <LargeTypeDialog
           open={largeTypeOpen}
