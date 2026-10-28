@@ -14,7 +14,7 @@ name = "gitpass-host"
 path = "src/main.rs"
 
 [dependencies]
-gitpass-core = { path = "../gitpass-core", version = "0.6.2" }
+gitpass-core = { path = "../gitpass-core", version = "0.6.3" }
 anyhow = "1"
 dirs = "5"
 serde = { version = "1", features = ["derive"] }
