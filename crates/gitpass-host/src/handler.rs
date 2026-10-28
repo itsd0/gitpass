@@ -158,21 +158,12 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
 
 fn visible(r: &ItemRecord) -> bool { r.deleted_at.is_none() && !r.archived }
 
-/// Password generator with options (`digits`, `symbols`), using the OS RNG.
-pub fn generate(len: usize, digits: bool, symbols: bool) -> String {
-    use rand::rngs::OsRng;
-    use rand::seq::SliceRandom;
-    const L: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-    const D: &[u8] = b"23456789";
-    const S: &[u8] = b"!@#$%^&*-_=+?";
-    let mut rng = OsRng;
-    let mut pool = L.to_vec();
-    let mut out: Vec<u8> = vec![*L.choose(&mut rng).unwrap()];
-    if digits { pool.extend_from_slice(D); out.push(*D.choose(&mut rng).unwrap()); }
-    if symbols { pool.extend_from_slice(S); out.push(*S.choose(&mut rng).unwrap()); }
-    while out.len() < len { out.push(*pool.choose(&mut rng).unwrap()); }
-    out.shuffle(&mut rng);
-    String::from_utf8(out).unwrap()
+/// Password generator: characters (`digits`, `symbols`), words (`words`) or a PIN (`pin`).
+/// Delegates to gitpass-core so the host, CLI and desktop app produce the same shapes.
+pub fn generate(len: usize, digits: bool, symbols: bool, words: bool, pin: bool) -> String {
+    gitpass_core::generate::generate(&gitpass_core::generate::Options {
+        length: len, symbols, digits, words, pin, separator: '-', capitalize: false,
+    })
 }
 
 impl Host {
@@ -443,11 +434,15 @@ impl Host {
                 Ok(json!({"favorite": fav}))
             }
             "generate" => {
-                let len = req.get("len").and_then(Value::as_u64).unwrap_or(20) as usize;
-                if !(8..=128).contains(&len) { return Err(coded(code::BAD_REQUEST, "len must be 8..=128")); }
+                use gitpass_core::generate::{MAX_LENGTH, MAX_PIN, MAX_WORDS, MIN_PIN, MIN_WORDS};
+                let words = req.get("words").and_then(Value::as_bool).unwrap_or(false);
+                let pin = req.get("pin").and_then(Value::as_bool).unwrap_or(false);
+                let (min, max, default) = if pin { (MIN_PIN, MAX_PIN, 6) } else if words { (MIN_WORDS, MAX_WORDS, 5) } else { (8, MAX_LENGTH, 20) };
+                let len = req.get("len").and_then(Value::as_u64).map_or(default, |v| v as usize);
+                if !(min..=max).contains(&len) { return Err(coded(code::BAD_REQUEST, format!("len must be {min}..={max}"))); }
                 let digits = req.get("digits").and_then(Value::as_bool).unwrap_or(true);
                 let symbols = req.get("symbols").and_then(Value::as_bool).unwrap_or(true);
-                Ok(json!({"password": generate(len, digits, symbols)}))
+                Ok(json!({"password": generate(len, digits, symbols, words, pin)}))
             }
             "list_vaults" => {
                 let s = self.sess()?;

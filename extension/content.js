@@ -64,6 +64,15 @@
   function codeOf(m) { const x = /\b(locked|denied|not_found|origin_mismatch|bad_request|app_not_running|internal)\b/.exec(m || ''); return x ? x[1] : (/disconnect|native host/i.test(m) ? 'app_not_running' : null); }
   function originOk(res) { return res && res.origin === location.origin; } // page navigated meanwhile -> drop
 
+  /** The focused, editable password field in the top document (for the popup generator's Fill action). */
+  function focusedPasswordField() {
+    const a = document.activeElement;
+    if (!a || !a.tagName || a.tagName.toLowerCase() !== 'input') return null;
+    if ((a.getAttribute('type') || 'text').toLowerCase() !== 'password') return null;
+    if (a.disabled || a.readOnly) return null;
+    return a;
+  }
+
   function shadowHost(fixed) {
     const host = document.createElement('gitpass-ui');
     const root = host.attachShadow({ mode: 'closed' });
@@ -525,6 +534,14 @@
       return true;
     }
     if (msg.origin !== location.origin) return; // page navigated meanwhile: drop
+    if (msg.type === 'gitpass-can-fill-generated') { sendResponse({ canFill: !!focusedPasswordField() }); return; }
+    if (msg.type === 'gitpass-fill-generated') {
+      const field = focusedPasswordField();
+      if (!field) { sendResponse({ filled: false }); return; }
+      GitpassForms.setValue(field, String(msg.password || ''));
+      sendResponse({ filled: true });
+      return;
+    }
     const list = GitpassForms.detectForms(document);
     if (msg.type === 'gitpass-fill') {
       const f = list.find((x) => ['login', 'login_username', 'change_password'].includes(x.kind));

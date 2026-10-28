@@ -7,6 +7,34 @@ const V = typeof GitpassView !== 'undefined' ? GitpassView : (typeof require !==
 const { UI, categoryIcon } = typeof GitpassPopupIcons !== 'undefined' ? GitpassPopupIcons : (typeof require !== 'undefined' ? require('./icons.js') : { UI: {} });
 const ROW_H = 52;
 
+// ---------- password generator (issue #68) ----------
+const G = typeof GitpassGenerator !== 'undefined' ? GitpassGenerator : (typeof require !== 'undefined' ? require('./generator.js') : null);
+const GEN_MODES = G.MODES;
+const GEN_DEFAULTS = G.DEFAULTS;
+const genMode = G.mode;
+const clampGenLength = G.clampLength;
+const safeGenSettings = G.safeSettings;
+const strengthScore = G.strengthScore;
+const strengthKey = G.strengthKey;
+
+/** Last used mode/length/toggles (extension storage); the generated value itself is never stored. */
+function generatorSettings() {
+  if (!globalThis.chrome || !chrome.storage || !chrome.storage.local) return Promise.resolve(safeGenSettings({ ...GEN_DEFAULTS, ...(window.__gitpassMockGenSettings || {}) }));
+  return new Promise((res) => {
+    try {
+      chrome.storage.local.get('generator', (r) => res(safeGenSettings({ ...GEN_DEFAULTS, ...((r && r.generator) || {}) })));
+    } catch (_) { res(safeGenSettings(GEN_DEFAULTS)); }
+  });
+}
+
+function saveGeneratorSettings(s) {
+  const clean = safeGenSettings(s);
+  if (!globalThis.chrome || !chrome.storage || !chrome.storage.local) { window.__gitpassMockGenSettings = clean; return Promise.resolve(clean); }
+  return new Promise((res) => {
+    try { chrome.storage.local.set({ generator: clean }, () => res(clean)); } catch (_) { res(clean); }
+  });
+}
+
 function send(msg, timeoutMs) {
   const ms = typeof timeoutMs === 'number'
     ? timeoutMs
@@ -798,45 +826,159 @@ async function copyPrimary() {
 function closePanel() { const p = $('panel'); p.classList.add('hidden'); p.textContent = ''; S.panel = null; $('q').focus(); if (livePending) { livePending = false; liveReload(); } }
 function panelHead(title) { const h = el('h3', null, title); h.append(iconBtn(UI.close, t('close', 'Close'), closePanel)); return h; }
 
-function localGenerate(len, digits, symbols) {
-  let set = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ';
-  if (digits) set += '23456789'; if (symbols) set += '!@#$%^&*-_=+?';
-  const out = [], buf = new Uint8Array(1), lim = 256 - (256 % set.length);
-  while (out.length < len) { crypto.getRandomValues(buf); if (buf[0] < lim) out.push(set[buf[0] % set.length]); }
-  return out.join('');
-}
-async function generate(len, digits, symbols) {
-  try { return (await send({ type: 'popup:generate', len, digits, symbols })).password; } catch (_) { return localGenerate(len, digits, symbols); }
+async function generate(len, digits, symbols, extra) {
+  const msg = { type: 'popup:generate', len, digits, symbols };
+  if (extra && extra.words) msg.words = true;
+  if (extra && extra.pin) msg.pin = true;
+  return (await send(msg)).password;
 }
 
-function openGenerator() {
+let genSeq = 0;
+const GEN_LABELS = { random: ['genModeRandom', 'Random'], memorable: ['genModeMemorable', 'Memorable'], pin: ['genModePin', 'PIN'] };
+async function openGenerator() {
   const p = $('panel'); p.textContent = ''; p.classList.remove('hidden'); S.panel = 'gen';
+  const saved = await generatorSettings();
+  if (S.panel !== 'gen') return; // closed while settings loaded
+  const st = { ...saved };
+  let pw = '';
+
   p.append(panelHead(t('generator', 'Password generator')));
-  const out = el('div', 'gen-out'); const code = el('code'); out.append(code);
-  const regen = iconBtn(UI.regen, t('regenerate', 'Regenerate'), () => run()); out.append(regen); p.append(out);
-  const r1 = el('div', 'gen-row'); const lab = el('label', null, t('length', 'Length')); const len = Object.assign(el('input'), { type: 'range', min: 8, max: 64, value: 20 }); const lv = el('span', null, '20'); r1.append(lab, len, lv); p.append(r1);
-  const r2 = el('div', 'gen-row');
-  const tog = (key, fb) => { const l = el('label', 'tog'); const c = Object.assign(el('input'), { type: 'checkbox', checked: true }); l.append(c, el('span', null, t(key, fb))); r2.append(l); return c; };
-  const dg = tog('digits', 'Digits'), sy = tog('symbols', 'Symbols'); p.append(r2);
-  const cp = el('button', 'btn btn-primary', t('copy', 'Copy'));
-  cp.onclick = async () => {
-    if (cp.disabled) return;
-    cp.disabled = true;
-    const prevHtml = cp.innerHTML;
-    cp.innerHTML = '<span class="spinner"></span> <span>' + t('copy', 'Copy') + '</span>';
+  const out = el('div', 'gen-out');
+  const code = el('code', 'gen-code');
+  out.append(code, iconBtn(UI.regen, t('regenerate', 'Regenerate'), () => run()));
+  p.append(out);
+
+  const meter = el('div', 'gen-strength');
+  meter.setAttribute('role', 'meter');
+  meter.setAttribute('aria-valuemin', '0'); meter.setAttribute('aria-valuemax', '100');
+  const meterBar = el('div', 'gen-strength-bar');
+  const meterFill = el('div', 'gen-strength-fill');
+  const meterLab = el('span', 'gen-strength-lab');
+  meterBar.append(meterFill); meter.append(meterBar, meterLab);
+  p.append(meter);
+
+  const errEl = el('p', 'err'); errEl.setAttribute('role', 'alert'); p.append(errEl);
+
+  const tabs = el('div', 'gen-modes');
+  tabs.setAttribute('role', 'tablist'); tabs.setAttribute('aria-label', t('generator', 'Password generator'));
+  const tabBtns = {};
+  for (const m of ['random', 'memorable', 'pin']) {
+    const [key, fallback] = GEN_LABELS[m];
+    const b = el('button', 'gen-mode', t(key, fallback));
+    b.type = 'button'; b.setAttribute('role', 'tab');
+    b.onclick = () => setMode(m);
+    tabs.append(b); tabBtns[m] = b;
+  }
+  p.append(tabs);
+
+  const rowLen = el('div', 'gen-row');
+  const lenLab = el('label');
+  const range = Object.assign(el('input'), { type: 'range' });
+  const num = Object.assign(el('input', 'gen-num'), { type: 'number' });
+  rowLen.append(lenLab, range, num); p.append(rowLen);
+
+  const rowTog = el('div', 'gen-row gen-toggles');
+  const mkTog = (labelKey, fallback) => {
+    const l = el('label', 'tog');
+    const c = Object.assign(el('input'), { type: 'checkbox' });
+    l.append(c, el('span', null, t(labelKey, fallback)));
+    rowTog.append(l);
+    return c;
+  };
+  const togDigits = mkTog('genIncludeDigits', 'Include digits');
+  const togSymbols = mkTog('genIncludeSymbols', 'Include symbols');
+  p.append(rowTog);
+
+  const acts = el('div', 'gen-acts');
+  const fillBtn = el('button', 'btn hidden', t('fillTitle', 'Fill on this page')); fillBtn.type = 'button';
+  const saveBtn = el('button', 'btn btn-link', t('genSaveAsLogin', 'Save as new Login…')); saveBtn.type = 'button';
+  const copyBtn = el('button', 'btn btn-primary', t('copy', 'Copy')); copyBtn.type = 'button';
+  acts.append(fillBtn, saveBtn, copyBtn); p.append(acts);
+
+  const persist = () => saveGeneratorSettings(st).catch(() => {});
+  let persistT = null;
+  const persistSoon = () => { clearTimeout(persistT); persistT = setTimeout(persist, 250); }; // slider drag: one write
+  const limits = () => GEN_MODES[st.mode];
+  const label = () => st.mode === 'memorable' ? t('genWords', 'Words') : st.mode === 'pin' ? t('genDigits', 'Digits') : t('length', 'Length');
+
+  function syncControls() {
+    for (const [m, b] of Object.entries(tabBtns)) { const on = m === st.mode; b.classList.toggle('sel', on); b.setAttribute('aria-selected', String(on)); }
+    const lim = limits();
+    for (const i of [range, num]) { i.min = lim.min; i.max = lim.max; i.value = st.length; i.setAttribute('aria-label', label()); }
+    lenLab.textContent = label();
+    rowTog.classList.toggle('hidden', st.mode === 'pin');
+    togDigits.checked = st.digits; togSymbols.checked = st.symbols;
+  }
+  function setMode(m) {
+    st.mode = genMode(m);
+    st.length = clampGenLength(st.mode, st.length);
+    syncControls(); persist(); void run();
+  }
+  function setLength(v) { st.length = clampGenLength(st.mode, v); syncControls(); persistSoon(); void run(); }
+
+  function paintCode() {
+    code.textContent = '';
+    for (const ch of pw) code.append(el('span', /[0-9]/.test(ch) ? 'num' : /[^a-zA-Z0-9]/.test(ch) ? 'sym' : null, ch));
+  }
+  function paintStrength() {
+    const score = strengthScore(pw);
+    const key = strengthKey(score);
+    meterFill.className = 'gen-strength-fill ' + key;
+    meterFill.style.width = score + '%';
+    const text = t('genStrength' + key[0].toUpperCase() + key.slice(1), key[0].toUpperCase() + key.slice(1));
+    meterLab.textContent = text;
+    meter.setAttribute('aria-valuenow', String(score));
+    meter.setAttribute('aria-valuetext', text);
+    for (const b of [fillBtn, saveBtn, copyBtn]) b.disabled = !pw;
+  }
+
+  async function run() {
+    const seq = ++genSeq;
+    errEl.textContent = '';
+    code.textContent = '…';
+    try {
+      const r = await send({ type: 'popup:generate', len: st.length, digits: st.mode === 'pin' ? false : st.digits, symbols: st.mode === 'pin' ? false : st.symbols, words: st.mode === 'memorable', pin: st.mode === 'pin' });
+      if (seq !== genSeq || S.panel !== 'gen') return;
+      pw = String((r && r.password) || '');
+      paintCode(); paintStrength();
+    } catch (e) {
+      if (seq !== genSeq || S.panel !== 'gen') return;
+      pw = ''; paintCode();
+      errEl.textContent = e && e.code === 'locked' ? t('errLocked', 'gitpass is locked. Unlock it to continue.')
+        : e && e.code === 'app_not_running' ? t('errAppDown', 'The gitpass app is not running.') : errText(e);
+      paintStrength();
+    }
+  }
+
+  range.oninput = () => setLength(range.value);
+  num.onchange = () => setLength(num.value);
+  togDigits.onchange = () => { st.digits = togDigits.checked; persist(); void run(); };
+  togSymbols.onchange = () => { st.symbols = togSymbols.checked; persist(); void run(); };
+  copyBtn.onclick = async () => {
+    if (copyBtn.disabled) return;
+    copyBtn.disabled = true;
+    const prevHtml = copyBtn.innerHTML;
+    copyBtn.innerHTML = '<span class="spinner"></span> <span>' + t('copy', 'Copy') + '</span>';
     try {
       await copy(code.textContent, t('passwordCopied', 'Password copied'));
     } catch (err) {
       toast(errText(err));
     } finally {
-      cp.innerHTML = prevHtml;
-      cp.disabled = false;
+      copyBtn.innerHTML = prevHtml;
+      copyBtn.disabled = false;
     }
   };
-  p.append(cp);
-  async function run() { lv.textContent = len.value; code.textContent = await generate(Number(len.value), dg.checked, sy.checked); }
-  for (const c of [len, dg, sy]) c.addEventListener('input', run);
-  run();
+  fillBtn.onclick = () => send({ type: 'popup:fill_generated', password: pw })
+    .then(() => { toast(t('genFilled', 'Filled on this page')); window.close(); })
+    .catch(() => toast(t('genFillFailed', 'Could not fill on this page')));
+  saveBtn.onclick = () => openNewItem('login', { title: S.origin ? V.hostOfUrl(S.origin) : '', url: S.origin || '', password: pw });
+
+  send({ type: 'popup:can_fill_generated' })
+    .then((r) => { if (S.panel === 'gen' && fillBtn.isConnected) fillBtn.classList.toggle('hidden', !(r && r.canFill)); })
+    .catch(() => {});
+  syncControls();
+  paintStrength();
+  void run();
 }
 
 /** New item: every type the desktop app supports (except passkeys, which websites create, and documents,
@@ -852,6 +994,9 @@ function openNewItem(typeId, prefill) {
   for (const x of N.TYPES) { const o = el('option', null, x.label); o.value = x.id; if (x.id === type.id) o.selected = true; ts.append(o); }
   ts.onchange = () => openNewItem(ts.value);
   f.append(el('label', null, t('itemType', 'Type')), ts);
+  const genLink = el('button', 'btn-link', t('genOpen', 'Generate a password…'));
+  genLink.type = 'button'; genLink.onclick = () => openGenerator();
+  f.append(genLink);
   const inputs = {};
   const add = (id, label, ui, val, opt) => {
     const o = opt || {};
@@ -868,7 +1013,7 @@ function openNewItem(typeId, prefill) {
       const eye = el('button', 'eye'); eye.type = 'button'; eye.innerHTML = UI.eye || UI.key; eye.title = t('show', 'Show');
       eye.onclick = () => { i.type = i.type === 'password' ? 'text' : 'password'; };
       w.append(i, eye);
-      if (ui === 'password') { i.type = 'text'; const g = el('button', 'eye gen'); g.type = 'button'; g.innerHTML = UI.key; g.title = t('generate', 'Generate'); g.onclick = async () => { i.value = await generate(20, true, true); }; w.replaceChildren(i, g); }
+      if (ui === 'password') { i.type = 'text'; const g = el('button', 'eye gen'); g.type = 'button'; g.innerHTML = UI.key; g.title = t('generate', 'Generate'); g.onclick = async () => { try { i.value = await generate(20, true, true); } catch (e) { showErr(e); } }; w.replaceChildren(i, g); }
       f.append(w);
     } else f.append(i);
     inputs[id] = i; return i;
@@ -878,7 +1023,7 @@ function openNewItem(typeId, prefill) {
   if (type.url) add('url', t('website', 'Website'), 'url', pre.url != null ? String(pre.url) : (S.origin || ''));
   for (const sec of N.sectionsOf(type)) {
     if (sec.title) f.append(el('div', 'sec-title', sec.title));
-    for (const fl of sec.fields) add(fl.id, fl.hintLabel || cap(fl.label), fl.ui, '', fl);
+    for (const fl of sec.fields) add(fl.id, fl.hintLabel || cap(fl.label), fl.ui, pre[fl.id] != null ? String(pre[fl.id]) : '', fl);
   }
   if (!type.noNotes) add('notes', t('notes', 'Notes'), 'multiline', '');
   const vs = el('select'); vs.setAttribute('aria-label', t('vault', 'Vault'));
@@ -912,7 +1057,11 @@ function openNewItem(typeId, prefill) {
   p.append(f);
   const first = type.id === 'login' ? inputs.username : (inputs.title.value ? Object.values(inputs)[1] : inputs.title);
   (first || inputs.title).focus();
-  if (type.id === 'login' && inputs.password) generate(20, true, true).then((v) => { if (!inputs.password.value) inputs.password.value = v; });
+  if (type.id === 'login' && inputs.password && !inputs.password.value) {
+    generate(20, true, true)
+      .then((v) => { if (!inputs.password.value) inputs.password.value = v; })
+      .catch((e) => showErr(e));
+  }
 }
 
 $('genBtn').innerHTML = UI.key; $('genBtn').onclick = () => (S.panel === 'gen' ? closePanel() : openGenerator());
@@ -923,6 +1072,12 @@ $('lock').innerHTML = UI.lock; $('searchIc').innerHTML = UI.search;
 document.addEventListener('keydown', (e) => {
   if ($('unlocked').classList.contains('hidden')) { if (e.key === 'Escape') window.close(); return; }
   const a = document.activeElement;
+  // ⌘⇧G / Ctrl+Shift+G opens the generator from anywhere in the popup.
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'g') {
+    e.preventDefault();
+    if (S.panel === 'gen') closePanel(); else openGenerator();
+    return;
+  }
   // Enter on a search with no results: create the item the user was looking for (before the debounce fires).
   if (e.key === 'Enter' && a && a.id === 'q') {
     const q = $('q').value.trim();
