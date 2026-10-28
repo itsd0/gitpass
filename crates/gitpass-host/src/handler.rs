@@ -6,7 +6,7 @@
 use crate::origin::{origin_matches, parse_request_origin};
 use anyhow::Result;
 use gitpass_core::crypto::{KdfParams, SecretKey};
-use gitpass_core::item::{Category, Field, FieldKind};
+use gitpass_core::item::{Category, Field, FieldKind, Section};
 use gitpass_core::merge::ItemRecord;
 use gitpass_core::store::{self, Item, Session};
 use serde_json::{json, Map, Value};
@@ -164,6 +164,74 @@ pub fn generate(len: usize, digits: bool, symbols: bool, words: bool, pin: bool)
     gitpass_core::generate::generate(&gitpass_core::generate::Options {
         length: len, symbols, digits, words, pin, separator: '-', capitalize: false,
     })
+}
+
+/// Apply an `update_login` request to a login record. Absent keys keep their stored value; an empty
+/// username/password/notes clears it. `urls` replaces the websites: the first becomes the item URL and
+/// the rest go to the importers' `urls` section (fields `url1`, `url2`, …).
+pub fn apply_login_update(r: &mut ItemRecord, req: &Value) -> Result<()> {
+    if r.category != Category::Login {
+        return Err(coded(code::BAD_REQUEST, "update_login needs a login item"));
+    }
+    if let Some(v) = req.get("title") {
+        let title = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "title must be a string"))?;
+        if title.trim().is_empty() { return Err(coded(code::BAD_REQUEST, "title is required")); }
+        r.item.title = title.trim().to_string();
+    }
+    for (key, target) in [("username", &mut r.item.username), ("password", &mut r.item.password)] {
+        if let Some(v) = req.get(key) {
+            let s = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, format!("{key} must be a string")))?;
+            *target = Some(s.to_string()).filter(|s| !s.is_empty());
+        }
+    }
+    if let Some(v) = req.get("notes") {
+        let notes = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "notes must be a string"))?;
+        r.item.notes = Some(notes.to_string()).filter(|s| !s.trim().is_empty());
+    }
+    if let Some(v) = req.get("urls") {
+        apply_websites(r, parse_websites(v)?);
+    }
+    Ok(())
+}
+
+fn parse_websites(v: &Value) -> Result<Vec<String>> {
+    let list: Vec<&Value> = match v {
+        Value::Array(a) => a.iter().collect(),
+        Value::String(_) => vec![v],
+        _ => return Err(coded(code::BAD_REQUEST, "urls must be an array of strings")),
+    };
+    let mut out: Vec<String> = vec![];
+    for item in list {
+        let s = item.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "urls must be an array of strings"))?.trim();
+        if s.is_empty() { continue; }
+        let url = if s.contains("://") { s.to_string() } else { format!("https://{s}") };
+        let valid = url::Url::parse(&url).ok()
+            .is_some_and(|u| matches!(u.scheme(), "http" | "https") && u.host_str().is_some_and(|h| !h.is_empty()));
+        if !valid { return Err(coded(code::BAD_REQUEST, format!("website must be an http(s) URL: {s}"))); }
+        if !out.contains(&url) { out.push(url); }
+    }
+    Ok(out)
+}
+
+fn apply_websites(r: &mut ItemRecord, urls: Vec<String>) {
+    r.item.url = urls.first().cloned();
+    let mut fields: Vec<Field> = urls.iter().skip(1).enumerate().map(|(n, u)| Field {
+        id: format!("url{}", n + 1), label: "website".into(), kind: FieldKind::Url, value: Some(u.clone()), removed: false,
+    }).collect();
+    let old = r.sections.iter().find(|s| s.id == "urls").cloned();
+    let Some(old) = old else {
+        if !fields.is_empty() { r.sections.push(Section { id: "urls".into(), title: Some("Websites".into()), fields }); }
+        return;
+    };
+    // Keep tombstones so a removed extra website also disappears after a git merge.
+    let gone: Vec<Field> = old.fields.iter().filter(|f| !fields.iter().any(|x| x.id == f.id))
+        .map(|f| Field { id: f.id.clone(), label: f.label.clone(), kind: f.kind, value: None, removed: true }).collect();
+    fields.extend(gone);
+    if fields.is_empty() && old.title.is_none() {
+        r.sections.retain(|s| s.id != "urls");
+    } else if let Some(s) = r.sections.iter_mut().find(|s| s.id == "urls") {
+        s.fields = fields;
+    }
 }
 
 impl Host {
@@ -412,6 +480,17 @@ impl Host {
                 let title = rec.item.title.clone();
                 let iid = s.add_record(&vid, rec)?;
                 Ok(json!({"item_id": format!("{vid}:{iid}"), "title": title}))
+            }
+            "update_login" => {
+                // Extension pages only: background.js stamps `source` for popup/options routes, and
+                // content scripts can never reach `popup:*` messages.
+                if req.get("source").and_then(Value::as_str) != Some("popup") {
+                    return Err(coded(code::DENIED, "update_login is allowed only from the popup"));
+                }
+                let (vid, iid, mut r) = self.record(arg_str(req, "item_id")?)?;
+                apply_login_update(&mut r, req)?;
+                self.sess()?.update_record(&vid, &iid, r)?;
+                Ok(json!({"ok": true}))
             }
             "update_password" => {
                 let password = arg_str(req, "password")?.to_string();

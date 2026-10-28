@@ -371,6 +371,19 @@ impl Agent {
                 self.poll_state();
                 Ok(json!({"item_id": format!("{}:{}", input.vault_id, r.id), "title": r.title}))
             }
+            "update_login" => {
+                if source != "popup" { return Err(err("denied", "update_login is allowed only from the popup")); }
+                let (vid, iid) = split_id(&req("item_id")?)?;
+                self.app.state.with(|x| {
+                    crate::GuiState::writable(x).map_err(|e| err("denied", e.to_string()))?;
+                    let (_, mut r) = x.session.read_record(&vid, &iid).map_err(|e| err("not_found", e.to_string()))?;
+                    if r.deleted_at.is_some() { return Err(err("not_found", "item not found")); }
+                    gitpass_host::handler::apply_login_update(&mut r, q).map_err(host_err)?;
+                    x.session.update_record(&vid, &iid, r)
+                })?;
+                self.poll_state();
+                Ok(json!({"ok": true}))
+            }
             "update_password" => {
                 let (vid, iid) = split_id(&req("item_id")?)?;
                 let pw = Zeroizing::new(req("password")?);

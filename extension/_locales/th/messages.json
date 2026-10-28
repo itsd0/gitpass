@@ -303,6 +303,33 @@
   "generate": {
     "message": "สร้าง"
   },
+  "edit": {
+    "message": "แก้ไข"
+  },
+  "cancel": {
+    "message": "ยกเลิก"
+  },
+  "notes": {
+    "message": "บันทึก"
+  },
+  "addWebsite": {
+    "message": "เพิ่มเว็บไซต์"
+  },
+  "removeWebsite": {
+    "message": "ลบเว็บไซต์"
+  },
+  "useGenerated": {
+    "message": "ใช้รหัสผ่าน"
+  },
+  "discardChanges": {
+    "message": "ทิ้งการเปลี่ยนแปลงที่ยังไม่ได้บันทึก?"
+  },
+  "titleRequired": {
+    "message": "ต้องระบุชื่อรายการ"
+  },
+  "websiteInvalid": {
+    "message": "เว็บไซต์ต้องเป็น URL แบบ http(s)"
+  },
   "vault": {
     "message": "ห้องนิรภัย"
   },
@@ -665,6 +692,9 @@
   },
   "shortcutOpenUrl": {
     "message": "เปิดเว็บไซต์"
+  },
+  "shortcutEdit": {
+    "message": "แก้ไขข้อมูลเข้าสู่ระบบ"
   },
   "shortcutGen": {
     "message": "ตัวสร้างรหัสผ่าน"

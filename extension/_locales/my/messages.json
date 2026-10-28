@@ -303,6 +303,33 @@
   "generate": {
     "message": "ထုတ်ရန်"
   },
+  "edit": {
+    "message": "တည်းဖြတ်ရန်"
+  },
+  "cancel": {
+    "message": "မလုပ်တော့ရန်"
+  },
+  "notes": {
+    "message": "မှတ်စု"
+  },
+  "addWebsite": {
+    "message": "ဝက်ဘ်ဆိုက် ထပ်ထည့်ရန်"
+  },
+  "removeWebsite": {
+    "message": "ဝက်ဘ်ဆိုက် ဖယ်ရှားရန်"
+  },
+  "useGenerated": {
+    "message": "စကားဝှက်ကို အသုံးပြုရန်"
+  },
+  "discardChanges": {
+    "message": "မသိမ်းရသေးသော ပြောင်းလဲမှုများကို ပယ်ဖျက်မလား။"
+  },
+  "titleRequired": {
+    "message": "ခေါင်းစဉ် လိုအပ်ပါသည်"
+  },
+  "websiteInvalid": {
+    "message": "ဝက်ဘ်ဆိုက်သည် http(s) URL ဖြစ်ရပါမည်"
+  },
   "vault": {
     "message": "သော့ခတ်သေတ္တာ"
   },
@@ -665,6 +692,9 @@
   },
   "shortcutOpenUrl": {
     "message": "ဝဘ်ဆိုဒ်ကို ဖွင့်ရန်"
+  },
+  "shortcutEdit": {
+    "message": "လော့ဂင်ကို တည်းဖြတ်ရန်"
   },
   "shortcutGen": {
     "message": "စကားဝှက် ထုတ်ပေးကိရိယာ"
