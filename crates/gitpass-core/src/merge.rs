@@ -72,6 +72,9 @@ pub struct ItemRecord {
     /// Up to [`crate::item::HISTORY_LIMIT`] prior versions (newest last).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub history: Vec<HistoryEntry>,
+    /// Findings ignored by the user in Watchtower (e.g. `["reused", "insecure_url"]`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ignored_findings: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<AttachmentMeta>,
 }
@@ -88,6 +91,25 @@ impl ItemRecord {
     pub fn clocks_or_legacy(&self) -> FieldClocks { self.clocks.unwrap_or_else(|| legacy_clocks(&self.item)) }
     pub fn new(item: Item) -> Self { let mut r = ItemRecord::default(); r.item = item; r }
     pub fn with_clocks(item: Item, clocks: Option<FieldClocks>) -> Self { let mut r = ItemRecord::new(item); r.clocks = clocks; r }
+    pub fn is_finding_ignored(&self, kind: &str) -> bool {
+        self.ignored_findings.iter().any(|k| {
+            k == kind
+                || (kind == "missing_totp" && k == "totp_available")
+                || (kind == "totp_available" && k == "missing_totp")
+                || (kind == "pwned" && k == "breached")
+                || (kind == "breached" && k == "pwned")
+        })
+    }
+    pub fn ignore_finding(&mut self, kind: &str) -> bool {
+        if !self.is_finding_ignored(kind) { self.ignored_findings.push(kind.to_string()); true } else { false }
+    }
+    pub fn unignore_finding(&mut self, kind: &str) -> bool {
+        let len_before = self.ignored_findings.len();
+        self.ignored_findings.retain(|k| {
+            k != kind && !(kind == "missing_totp" && k == "totp_available") && !(kind == "totp_available" && k == "missing_totp") && !(kind == "pwned" && k == "breached") && !(kind == "breached" && k == "pwned")
+        });
+        self.ignored_findings.len() < len_before
+    }
 
     /// Content snapshot (for history).
     pub fn snapshot(&self) -> Snapshot {
@@ -170,9 +192,10 @@ impl ItemRecord {
 fn field_map(r: &ItemRecord) -> BTreeMap<String, (String, Field)> {
     r.sections.iter().flat_map(|s| s.fields.iter().map(move |f| (f.id.clone(), (s.id.clone(), f.clone())))).collect()
 }
-fn meta_values(r: &ItemRecord) -> [(&'static str, String); 5] {
+fn meta_values(r: &ItemRecord) -> [(&'static str, String); 6] {
     [("m:category", r.category.as_str().into()), ("m:tags", r.tags.join("\u{1}")), ("m:favorite", r.favorite.to_string()),
-     ("m:archived", r.archived.to_string()), ("m:deleted", r.deleted_at.map(|d| d.to_string()).unwrap_or_default())]
+     ("m:archived", r.archived.to_string()), ("m:deleted", r.deleted_at.map(|d| d.to_string()).unwrap_or_default()),
+     ("m:ignored", r.ignored_findings.join("\u{1}"))]
 }
 fn section_titles(r: &ItemRecord) -> BTreeMap<String, Option<String>> { r.sections.iter().map(|s| (s.id.clone(), s.title.clone())).collect() }
 
@@ -245,6 +268,7 @@ fn merge_ext(local: &ItemRecord, remote: &ItemRecord, out: &mut ItemRecord) -> (
                     "m:tags" => out.tags = remote.tags.clone(),
                     "m:favorite" => out.favorite = remote.favorite,
                     "m:archived" => out.archived = remote.archived,
+                    "m:ignored" => out.ignored_findings = remote.ignored_findings.clone(),
                     _ => out.deleted_at = remote.deleted_at,
                 }
                 from_r.push(k.to_string());

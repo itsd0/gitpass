@@ -27,16 +27,33 @@ pub enum Finding {
     InsecureUrl { url_host: String },
 }
 
+impl Finding {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            Finding::Weak { .. } => "weak",
+            Finding::Reused { .. } => "reused",
+            Finding::Old { .. } => "old",
+            Finding::MissingTotp => "missing_totp",
+            Finding::TotpAvailable { .. } => "totp_available",
+            Finding::PasskeyAvailable { .. } => "passkey_available",
+            Finding::Pwned { .. } => "pwned",
+            Finding::Expired { .. } => "expired",
+            Finding::ExpiringSoon { .. } => "expiring_soon",
+            Finding::InsecureUrl { .. } => "insecure_url",
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ItemFindings { pub vault: String, pub id: String, pub title: String, pub findings: Vec<Finding> }
 
 #[derive(Clone, Debug)]
-pub struct AuditOpts { pub max_age_days: u64, pub min_length: usize, pub min_entropy_bits: f64, pub now_secs: u64, pub expiring_days: u64 }
+pub struct AuditOpts { pub max_age_days: u64, pub min_length: usize, pub min_entropy_bits: f64, pub now_secs: u64, pub expiring_days: u64, pub include_ignored: bool }
 
 impl Default for AuditOpts {
     fn default() -> Self {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        AuditOpts { max_age_days: 365, min_length: 12, min_entropy_bits: 60.0, now_secs: now, expiring_days: 30 }
+        AuditOpts { max_age_days: 365, min_length: 12, min_entropy_bits: 60.0, now_secs: now, expiring_days: 30, include_ignored: false }
     }
 }
 
@@ -47,7 +64,10 @@ pub struct AuditReport {
     pub totp_available: usize, pub passkey_available: usize,
     pub expired: usize, pub expiring_soon: usize,
     pub insecure_urls: usize,
+    pub ignored: usize,
     pub per_item: Vec<ItemFindings>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ignored_per_item: Vec<ItemFindings>,
 }
 
 const COMMON: &[&str] = &["password", "123456", "12345678", "qwerty", "letmein", "welcome", "admin", "iloveyou", "monkey", "dragon", "abc123", "111111", "passw0rd", "trustno1", "football", "baseball", "sunshine", "master"];
@@ -303,14 +323,25 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
     let mut cache = HashMap::new();
     for (i, (vault, id, rec)) in items.iter().enumerate() {
         let it = &rec.item;
-        let mut f = vec![];
+        let mut f: Vec<Finding> = vec![];
+        let mut f_ignored: Vec<Finding> = vec![];
+        let mut record_finding = |finding: Finding, r_count: &mut usize| {
+            let k = finding.kind();
+            if rec.is_finding_ignored(k) {
+                r.ignored += 1;
+                f_ignored.push(finding);
+            } else {
+                *r_count += 1;
+                f.push(finding);
+            }
+        };
         if let Some(p) = it.password.as_deref().filter(|p| !p.is_empty()) {
-            if let Some(reason) = weakness(p, o) { f.push(Finding::Weak { reason }); r.weak += 1; }
-            if let Some(&(group, others)) = reuse.get(&i) { f.push(Finding::Reused { group, others }); r.reused += 1; }
-            if let Some(c) = hibp { let n = pwned_count(c, p, &mut cache)?; if n > 0 { f.push(Finding::Pwned { count: n }); r.pwned += 1; } }
+            if let Some(reason) = weakness(p, o) { record_finding(Finding::Weak { reason }, &mut r.weak); }
+            if let Some(&(group, others)) = reuse.get(&i) { record_finding(Finding::Reused { group, others }, &mut r.reused); }
+            if let Some(c) = hibp { let n = pwned_count(c, p, &mut cache)?; if n > 0 { record_finding(Finding::Pwned { count: n }, &mut r.pwned); } }
             if let Ok(t) = it.updated_at.trim().parse::<u64>() {
                 let days = o.now_secs.saturating_sub(t) / 86400;
-                if days > o.max_age_days { f.push(Finding::Old { days }); r.old += 1; }
+                if days > o.max_age_days { record_finding(Finding::Old { days }, &mut r.old); }
             }
         }
         let url = it.url.as_deref().filter(|u| !u.trim().is_empty());
@@ -321,25 +352,22 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
             let mut advised_totp = false;
             if let Some((site, s)) = support {
                 if s.totp {
-                    f.push(Finding::TotpAvailable { site: site.to_string() });
-                    r.totp_available += 1;
+                    record_finding(Finding::TotpAvailable { site: site.to_string() }, &mut r.totp_available);
                     advised_totp = true;
                 }
             }
             if !advised_totp {
-                f.push(Finding::MissingTotp);
-                r.missing_totp += 1;
+                record_finding(Finding::MissingTotp, &mut r.missing_totp);
             }
         }
         if let (Some(host), Some((site, s))) = (host.as_deref(), support) {
             if s.passkey && !has_passkey_for(&passkey_domains, host, site) {
-                f.push(Finding::PasskeyAvailable { site: site.to_string() }); r.passkey_available += 1;
+                record_finding(Finding::PasskeyAvailable { site: site.to_string() }, &mut r.passkey_available);
             }
         }
         if let Some(u) = url {
             if let Some(url_host) = insecure_url_host(u) {
-                f.push(Finding::InsecureUrl { url_host });
-                r.insecure_urls += 1;
+                record_finding(Finding::InsecureUrl { url_host }, &mut r.insecure_urls);
             }
         }
 
@@ -355,13 +383,11 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
                 let Some(val) = fl.value.as_deref().map(str::trim).filter(|v| !v.is_empty()) else { continue; };
                 if let Some(exp_ts) = parse_expiry(val) {
                     if o.now_secs > exp_ts {
-                        f.push(Finding::Expired { on: val.to_string() });
-                        r.expired += 1;
+                        record_finding(Finding::Expired { on: val.to_string() }, &mut r.expired);
                     } else {
                         let days = exp_ts.saturating_sub(o.now_secs) / 86400;
                         if days <= o.expiring_days {
-                            f.push(Finding::ExpiringSoon { on: val.to_string(), days });
-                            r.expiring_soon += 1;
+                            record_finding(Finding::ExpiringSoon { on: val.to_string(), days }, &mut r.expiring_soon);
                         }
                     }
                 }
@@ -369,6 +395,7 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
         }
 
         if !f.is_empty() { r.per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), findings: f }); }
+        if !f_ignored.is_empty() { r.ignored_per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), findings: f_ignored }); }
     }
     Ok(r)
 }
@@ -598,5 +625,98 @@ mod tests {
                 assert!(!entry.findings.iter().any(|f| matches!(f, Finding::InsecureUrl { .. })));
             }
         }
+    }
+
+    #[test]
+    fn test_ignored_findings_audit() {
+        // Password is long enough and high entropy, but shared -> reused, not weak
+        let shared_pw = "Correct-Horse-Battery-Staple-2026!";
+        let mut item1 = Item::default();
+        item1.title = "Item 1".into();
+        item1.password = Some(shared_pw.into()); // reused
+        item1.url = Some("http://example.com".into()); // insecure url, missing totp
+
+        let mut item2 = Item::default();
+        item2.title = "Item 2".into();
+        item2.password = Some(shared_pw.into()); // reused
+
+        let mut item3 = Item::default();
+        item3.title = "Item 3 (weak)".into();
+        item3.password = Some("123456".into()); // weak password
+
+        let mut rec1 = ItemRecord::new(item1);
+        rec1.ignore_finding("reused");
+        rec1.ignore_finding("insecure_url");
+
+        let rec2 = ItemRecord::new(item2);
+
+        let mut rec3 = ItemRecord::new(item3);
+        rec3.ignore_finding("weak");
+
+        let items = vec![
+            ("v".into(), "id1".into(), rec1),
+            ("v".into(), "id2".into(), rec2),
+            ("v".into(), "id3".into(), rec3),
+        ];
+
+        let opts = AuditOpts::default();
+        let report = audit(&items, &opts, None).unwrap();
+
+        // item1 had: reused (ignored), insecure_url (ignored), missing_totp (active)
+        // item2 had: reused (active)
+        // item3 had: weak (ignored)
+        // Total ignored: 3 (reused on id1, insecure_url on id1, weak on id3)
+        assert_eq!(report.weak, 0);
+        assert_eq!(report.insecure_urls, 0);
+        assert_eq!(report.ignored, 3);
+        assert_eq!(report.reused, 1); // Only item2 has active reused finding
+
+        let active1 = report.per_item.iter().find(|i| i.id == "id1").unwrap();
+        assert!(!active1.findings.iter().any(|f| f.kind() == "reused"));
+        assert!(!active1.findings.iter().any(|f| f.kind() == "insecure_url"));
+        assert!(active1.findings.iter().any(|f| f.kind() == "missing_totp"));
+
+        let ignored1 = report.ignored_per_item.iter().find(|i| i.id == "id1").unwrap();
+        assert_eq!(ignored1.findings.len(), 2);
+        assert!(ignored1.findings.iter().any(|f| f.kind() == "reused"));
+        assert!(ignored1.findings.iter().any(|f| f.kind() == "insecure_url"));
+
+        let ignored3 = report.ignored_per_item.iter().find(|i| i.id == "id3").unwrap();
+        assert_eq!(ignored3.findings.len(), 1);
+        assert!(ignored3.findings.iter().any(|f| f.kind() == "weak"));
+    }
+
+    #[test]
+    fn test_ignored_findings_roundtrip_and_backward_compatibility() {
+        // 1. Backward compatibility: older JSON without ignored_findings
+        let legacy_json = r#"{"title":"Old Item","updated_at":"1600000000"}"#;
+        let rec: ItemRecord = serde_json::from_str(legacy_json).unwrap();
+        assert!(rec.ignored_findings.is_empty());
+        assert!(!rec.is_finding_ignored("weak"));
+
+        // Reserializing empty ignored_findings does not add "ignored_findings" key
+        let reserialized = serde_json::to_string(&rec).unwrap();
+        assert!(!reserialized.contains("ignored_findings"));
+
+        // 2. Round-trip with ignored findings
+        let mut rec_with_ignored = rec.clone();
+        rec_with_ignored.ignore_finding("reused");
+        rec_with_ignored.ignore_finding("insecure_url");
+        assert!(rec_with_ignored.is_finding_ignored("reused"));
+        assert!(rec_with_ignored.is_finding_ignored("insecure_url"));
+        assert!(!rec_with_ignored.is_finding_ignored("weak"));
+
+        let json = serde_json::to_string(&rec_with_ignored).unwrap();
+        assert!(json.contains("ignored_findings"));
+
+        let parsed: ItemRecord = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.ignored_findings, vec!["reused", "insecure_url"]);
+
+        // 3. Unignore
+        let mut rec_unignore = parsed;
+        assert!(rec_unignore.unignore_finding("reused"));
+        assert!(!rec_unignore.is_finding_ignored("reused"));
+        assert!(rec_unignore.is_finding_ignored("insecure_url"));
+        assert_eq!(rec_unignore.ignored_findings, vec!["insecure_url"]);
     }
 }

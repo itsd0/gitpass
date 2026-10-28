@@ -116,4 +116,69 @@ describe('watchtower score', () => {
     expect(screen.getByRole('link', { name: 'Open HTTPS version for Placeholder Forum' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Edit URL for Placeholder Forum' })).toBeTruthy();
   });
+
+  it("ignores warning via dropdown menu with undo toast and updates score", async () => {
+    let ignored: any[] = [];
+    const ignoreSpy = vi.spyOn(api, "ignoreFinding").mockImplementation(async (a) => {
+      ignored.push({ itemId: a.itemId, vaultId: a.vaultId, title: "Fake Forum", kind: a.kind, description: "Weak password" });
+    });
+    const unignoreSpy = vi.spyOn(api, "unignoreFinding").mockImplementation(async (a) => {
+      ignored = ignored.filter((x) => x.itemId !== a.itemId || x.kind !== a.kind);
+    });
+
+    vi.spyOn(api, "watchtower").mockImplementation(async () => ({
+      score: ignored.length > 0 ? 95 : 71,
+      weak: ignored.some((x) => x.itemId === "i3" && x.kind === "weak") ? [] : ["i3"],
+      reused: [],
+      old: [],
+      breached: [],
+      missingTotp: [],
+      totpAvailable: [],
+      passkeyAvailable: [],
+      expired: [],
+      expiringSoon: [],
+      insecureUrls: [],
+      ignored,
+      checkedAt: "",
+      hibpChecked: false,
+    }));
+
+    render(<WatchtowerPage />);
+    await screen.findByTestId("score");
+    expect(screen.getByTestId("score").textContent).toBe("71");
+
+    // Open options menu for Fake Forum in weak passwords card
+    const moreBtn = screen.getAllByRole("button", { name: "More options for Fake Forum" })[0];
+    fireEvent.pointerDown(moreBtn, { button: 0, ctrlKey: false });
+    fireEvent.click(moreBtn);
+
+    const ignoreItem = await screen.findByRole("menuitem", { name: /Ignore this warning/i });
+    expect(ignoreItem).toBeTruthy();
+    fireEvent.click(ignoreItem);
+
+    await waitFor(() => expect(ignoreSpy).toHaveBeenCalledWith({ vaultId: "v-private", itemId: "i3", kind: "weak" }));
+    await waitFor(() => expect(screen.getByTestId("score").textContent).toBe("95"));
+
+    // Check Ignored section
+    expect(screen.getByTestId("count-ignored").textContent).toBe("1");
+    fireEvent.click(screen.getByTestId("toggle-ignored-section"));
+
+    expect(screen.getByText("Weak password")).toBeTruthy();
+    const stopBtn = screen.getByRole("button", { name: "Stop ignoring for Fake Forum" });
+    expect(stopBtn).toBeTruthy();
+
+    fireEvent.click(stopBtn);
+    await waitFor(() => expect(unignoreSpy).toHaveBeenCalledWith({ vaultId: "v-private", itemId: "i3", kind: "weak" }));
+    await waitFor(() => expect(screen.getByTestId("score").textContent).toBe("71"));
+  });
+
+  it("keyboard navigation: Shift+F10 opens ignore menu on finding chip", async () => {
+    render(<WatchtowerPage />);
+    await screen.findByTestId("score");
+
+    const chip = screen.getAllByTestId("finding-chip-i3")[0];
+    fireEvent.keyDown(chip, { key: "F10", shiftKey: true });
+
+    expect(await screen.findByRole("menuitem", { name: /Ignore this warning/i })).toBeTruthy();
+  });
 });
