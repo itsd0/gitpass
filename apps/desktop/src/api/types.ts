@@ -7,7 +7,7 @@ export interface ItemSummary { id: string; vaultId: string; category: ItemCatego
 export interface IgnoredFinding { itemId: string; vaultId: string; title: string; kind: string; description: string; }
 /** Active Watchtower finding shown in the item-detail banner (description comes from the Rust audit). */
 export interface FindingInfo { kind: string; description: string; }
-export interface ItemDetail extends ItemSummary { version?: number; sections: Section[]; notes: string|null; attachments: Attachment[]; history: {version:number; updatedAt:string}[]; passwordStrength?: number|null; hasTotp: boolean; /** HIBP excluded: the detail view never makes network calls */ findings?: FindingInfo[]; }
+export interface ItemDetail extends ItemSummary { version?: number; sections: Section[]; notes: string|null; attachments: Attachment[]; history: {version:number; updatedAt:string}[]; passwordStrength?: number|null; hasTotp: boolean; /** HIBP excluded: the detail view never makes network calls */ findings?: FindingInfo[]; passwordChangedAt?: string|null; }
 export interface ItemInput { vaultId: string; category: ItemCategory; title: string; sections: Section[]; notes?: string|null; tags?: string[]; favorite?: boolean; url?: string|null; }
 export interface VaultInfo { id: string; name: string; description: string|null; itemCount: number; shared: boolean; members: Member[]; icon?: string|null; color?: string|null; }
 export interface Member { fingerprint: string; label: string|null; isSelf: boolean; }

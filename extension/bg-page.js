@@ -13,6 +13,8 @@
   const TTL_MS = 5 * 60 * 1000;
   const pendingSaves = new Map(); // tabId -> { origin, kind, username, password, item_id, prompt, ts }
   const lastUsername = new Map(); // tabId -> { origin, username, ts }  (multi-step logins: step 1 value, 5 min TTL)
+  const lastSaved = new Map(); // tabId -> { origin, item_id, ts }  ("Open in gitpass" after a banner save)
+  const inflightDecisions = new Map(); // tabId -> promise settled when the write ends (no replay, see waitInflight)
   const PAGE_LISTABLE = new Set(['credit_card', 'identity']);
   let neverSaveFallback = [];
 
@@ -85,6 +87,47 @@
     return (r && r.items) || [];
   }
 
+  /** id/name only; a failed call (locked, app restarting) leaves the banner on the default vault. */
+  async function vaultChoices(host) {
+    try {
+      const r = await host('list_vaults');
+      return ((r && r.vaults) || [])
+        .map((v) => ({ id: v && v.id, name: v && v.name }))
+        .filter((v) => typeof v.id === 'string' && v.id && typeof v.name === 'string' && v.name);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveTitle(v, origin) {
+    const fallback = new URL(origin).hostname.replace(/^www\./, '');
+    if (v == null) return fallback;
+    if (typeof v !== 'string') throw err('bad_request', 'title');
+    const title = v.trim();
+    if (!title) return fallback; // cleared field: same hostname fallback as save_login
+    if (title.length > 200) throw err('bad_request', 'title is too long');
+    return title;
+  }
+
+  async function saveVault(host, v) {
+    if (v == null || v === '') return undefined;
+    if (typeof v !== 'string') throw err('bad_request', 'vault_id');
+    // Strict call: locked/app_not_running must reach the banner so it can offer unlock, not read as a bad vault.
+    const r = await host('list_vaults');
+    if (!((r && r.vaults) || []).some((x) => x && x.id === v)) throw err('not_found', 'vault not found');
+    return v;
+  }
+
+  function rememberSaved(tabId, origin, itemId) {
+    if (itemId) lastSaved.set(tabId, { origin, item_id: itemId, ts: Date.now() });
+  }
+
+  /** A content script booting after a redirect must see the outcome of the save that is still writing. */
+  async function waitInflight(tabId) {
+    const pending = inflightDecisions.get(tabId);
+    if (pending) await pending.catch(() => {});
+  }
+
   /** Decide save vs update for a captured login. Returns the banner descriptor or null. */
   async function decide(host, origin, cap) {
     let items;
@@ -153,7 +196,11 @@
         return { origin, password: r.password };
       }
       case 'page:request_unlock': return host('request_unlock', { reason: 'Fill on ' + new URL(origin).host });
-      case 'page:open_app': return host('open_in_app', {});
+      case 'page:open_app': {
+        // Only the item id kept from this tab's own successful save is forwarded; content never sends one.
+        const saved = a.last_save ? fresh(lastSaved, tabId, origin, true) : null;
+        return host('open_in_app', saved ? { item_id: saved.item_id } : {});
+      }
 
       // ---- save-login / update-password banner ----
       case 'page:capture': {
@@ -162,6 +209,7 @@
         if (kind === 'username') { if (username) lastUsername.set(tabId, { origin, username, ts: Date.now() }); return { prompt: null }; }
         if (!['login', 'signup', 'change_password'].includes(kind)) throw err('bad_request', 'kind');
         if (typeof a.password !== 'string' || !a.password || a.password.length > 1024) throw err('bad_request', 'password');
+        await waitInflight(tabId); // process this capture after the save that is still writing
         if (await isExceptedSite(origin)) {
           pendingSaves.delete(tabId);
           return { prompt: null };
@@ -173,47 +221,69 @@
         const d = await decide(host, origin, cap);
         if (!d) { pendingSaves.delete(tabId); return { prompt: null }; }
         pendingSaves.set(tabId, { ...cap, ...d });
-        return { prompt: d.prompt, username: user, title: d.title || null };
+        return { prompt: d.prompt, username: user, title: d.title || null, vaults: await vaultChoices(host) };
       }
       case 'page:pending': {
+        await waitInflight(tabId); // a redirect during Saving… still gets the success/failure outcome
         if (await isExceptedSite(origin)) {
           pendingSaves.delete(tabId);
           return { prompt: null };
         }
         const p = fresh(pendingSaves, tabId, origin, true);
-        return p ? { prompt: p.prompt, username: p.username, title: p.title || null } : { prompt: null };
+        return p ? { prompt: p.prompt, username: p.username, title: p.title || null, vaults: await vaultChoices(host) } : { prompt: null };
       }
       case 'page:save_decision': {
         const p = fresh(pendingSaves, tabId, origin, true);
-        pendingSaves.delete(tabId);
+        if (inflightDecisions.has(tabId)) throw err('bad_request', 'already saving'); // no dismiss/never mid-write
         if (a.action === 'never') {
+          pendingSaves.delete(tabId);
           if (!a.user_click) throw err('denied', 'needs a click');
           const dom = GitpassPolicy.registrableDomain(origin);
           if (dom) await addNeverSave(dom);
           return { done: true, action: 'never' };
         }
         if (!p) throw err('not_found', 'nothing to save');
-        if (a.action === 'dismiss') return { done: false };
+        if (a.action === 'dismiss') { pendingSaves.delete(tabId); return { done: false }; }
         if (!a.user_click) throw err('denied', 'needs a click');
-        const user = p.username || '';
-        if (p.prompt === 'update' && a.action === 'update') {
-          const upArgs = { item_id: p.item_id, password: p.password }; // never an item id from the content side
-          if (user && !p.hasUser) upArgs.username = user;
-          await host('update_password', upArgs);
-          return { done: true, action: 'update' };
+        let settle;
+        inflightDecisions.set(tabId, new Promise((res) => { settle = res; }));
+        try {
+          const user = p.username || '';
+          if (a.action === 'update') {
+            if (p.prompt !== 'update') throw err('bad_request', 'action');
+            const upArgs = { item_id: p.item_id, password: p.password }; // never an item id from the content side
+            if (user && !p.hasUser) upArgs.username = user;
+            await host('update_password', upArgs);
+            if (pendingSaves.get(tabId) === p) pendingSaves.delete(tabId); // never drop a newer capture
+            rememberSaved(tabId, origin, p.item_id);
+            return { done: true, action: 'update' };
+          }
+          // save (new prompt) and save_new (second account from an update prompt). Neither carries an
+          // item id, origin or password from the page side: they come from pendingSaves.
+          if (a.action === 'save' || a.action === 'save_new') {
+            if ((a.action === 'save') !== (p.prompt === 'save')) throw err('bad_request', 'action');
+            const title = saveTitle(a.title, p.origin);
+            const vault_id = await saveVault(host, a.vault_id);
+            const args = { origin: p.origin, title, username: user, password: p.password };
+            if (vault_id) args.vault_id = vault_id;
+            const r = await host('save_login', args);
+            // Only a completed decision consumes this capture; errors keep it for retry, and a capture
+            // that replaced it while we were writing is left alone.
+            if (pendingSaves.get(tabId) === p) pendingSaves.delete(tabId);
+            rememberSaved(tabId, origin, r && r.item_id);
+            return { done: true, action: 'save', item_id: r && r.item_id };
+          }
+          throw err('bad_request', 'action');
+        } finally {
+          inflightDecisions.delete(tabId);
+          settle();
         }
-        if (a.action === 'save') {
-          const title = new URL(p.origin).hostname.replace(/^www\./, '');
-          const r = await host('save_login', { origin: p.origin, title, username: user, password: p.password });
-          return { done: true, action: 'save', item_id: r && r.item_id };
-        }
-        throw err('bad_request', 'action');
       }
     }
     throw err('bad_request', 'unknown page message');
   }
 
-  function forgetTab(tabId) { pendingSaves.delete(tabId); lastUsername.delete(tabId); }
+  function forgetTab(tabId) { pendingSaves.delete(tabId); lastUsername.delete(tabId); lastSaved.delete(tabId); inflightDecisions.delete(tabId); }
   if (root.chrome && chrome.tabs && chrome.tabs.onRemoved) chrome.tabs.onRemoved.addListener(forgetTab);
 
   /** Fill a card into the tab's payment-processor iframes (Stripe Elements & co., see GitpassPolicy.

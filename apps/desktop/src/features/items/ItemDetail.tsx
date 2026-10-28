@@ -302,7 +302,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
             <div key={s.id} className="mb-4">
               {s.title && <div className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted">{s.title}</div>}
               <div className="overflow-hidden rounded-lg border border-border bg-card">
-                {s.fields.map((f) => <FieldRow key={f.id} field={f} ctx={ctx} category={detail.category} strength={detail.passwordStrength} />)}
+                {s.fields.map((f) => <FieldRow key={f.id} field={f} ctx={ctx} category={detail.category} strength={detail.passwordStrength} passwordChangedAt={/password/i.test(f.label) ? detail.passwordChangedAt : undefined} />)}
               </div>
             </div>
           ))}

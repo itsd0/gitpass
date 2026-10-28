@@ -340,7 +340,13 @@ impl Agent {
                 let username = s("username").unwrap_or_default();
                 let host = u.host_str().unwrap_or_default().to_string();
                 let title = s("title").filter(|t| !t.trim().is_empty()).unwrap_or_else(|| host.trim_start_matches("www.").to_string());
-                let vid = match s("vault_id").filter(|v| !v.is_empty()) { Some(v) => v, None => self.app.list_vaults()?.into_iter().next().map(|v| v.id).ok_or_else(|| err("not_found", "no vault"))? };
+                let vid = match s("vault_id").filter(|v| !v.is_empty()) {
+                    Some(v) => {
+                        if !self.app.list_vaults()?.iter().any(|x| x.id == v) { return Err(err("not_found", "vault not found")); }
+                        v
+                    }
+                    None => self.app.list_vaults()?.into_iter().next().map(|v| v.id).ok_or_else(|| err("not_found", "no vault"))?,
+                };
                 let url = u.origin().ascii_serialization();
                 let iid = self.app.state.with(|x| {
                     crate::GuiState::writable(x).map_err(|e| err("denied", e.to_string()))?;

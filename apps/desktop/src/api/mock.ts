@@ -55,7 +55,7 @@ function add(vaultId: string, category: T.ItemCategory, title: string, subtitle:
     id: uid('i'), vaultId, category, title, subtitle, favorite: false, archived: false, deletedAt: null, tags: [],
     updatedAt: ts, createdAt: new Date(Date.parse(ts) - 30 * 86400000).toISOString(), url: null, changePasswordUrl: changePwUrl(extra.url),
     sections: [{ id: uid('s'), title: null, fields: fs }], notes: null, attachments: [],
-    history: [{ version: 1, updatedAt: ts }], passwordStrength: pwField ? strength(secrets[pwField.id]) : null,
+    history: [{ version: 1, updatedAt: ts }], passwordStrength: pwField ? strength(secrets[pwField.id]) : null, passwordChangedAt: pwField ? ts : null,
     hasTotp: fs.some((x) => x.kind === 'totp'), ignoredFindings: [], ...extra,
   };
   db.set(d.id, { detail: d, secrets, versions: [] });
@@ -121,7 +121,7 @@ const devices: T.DeviceInfo[] = [
 ];
 
 const summary = (d: T.ItemDetail): T.ItemSummary => {
-  const { sections: _s, notes: _n, attachments: _a, history: _h, passwordStrength: _p, hasTotp: _t, findings: _fi, ...s } = d;
+  const { sections: _s, notes: _n, attachments: _a, history: _h, passwordStrength: _p, hasTotp: _t, findings: _fi, passwordChangedAt: _pca, ...s } = d;
   const flds = d.sections?.flatMap((sec) => sec.fields) ?? [];
   let expiry: string | null = null;
   if (d.category === "credit_card") {
@@ -188,6 +188,7 @@ function applyInput(r: Rec, input: T.ItemInput) {
     hasTotp: sections.some((s) => s.fields.some((x) => x.kind === 'totp')) });
   const pw = sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed');
   r.detail.passwordStrength = pw && secrets[pw.id] ? strength(secrets[pw.id]) : null;
+  if (pw && secrets[pw.id]) { if (!r.detail.passwordChangedAt) r.detail.passwordChangedAt = r.detail.updatedAt; } else { r.detail.passwordChangedAt = null; }
 }
 /** Rough browser-mock copy of core `change_password_url` (the real derivation runs in Rust). */
 function changePwUrl(raw: string | null | undefined): string | undefined {
@@ -319,7 +320,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   totp_now: () => { const period = 30; const now = Math.floor(Date.now() / 1000); const code = String((Math.floor(now / period) * 7919) % 1000000).padStart(6, '0'); return delay({ code, remaining: period - (now % period), period }, 10); },
   create_item: ({ input }: { input: T.ItemInput }) => {
     const now = new Date().toISOString();
-    const r: Rec = { secrets: {}, versions: [], detail: { id: uid('i'), vaultId: input.vaultId, category: input.category, title: input.title, subtitle: '', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: now, createdAt: now, url: null, sections: [], notes: null, attachments: [], history: [{ version: 1, updatedAt: now }], passwordStrength: null, hasTotp: false } };
+    const r: Rec = { secrets: {}, versions: [], detail: { id: uid('i'), vaultId: input.vaultId, category: input.category, title: input.title, subtitle: '', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: now, createdAt: now, url: null, sections: [], notes: null, attachments: [], history: [{ version: 1, updatedAt: now }], passwordStrength: null, hasTotp: false, passwordChangedAt: null } };
     applyInput(r, input); db.set(r.detail.id, r); return delay(summary(r.detail));
   },
   update_item: ({ itemId, input }: { itemId: string; input: T.ItemInput }) => { const r = get(itemId); touch(r); applyInput(r, input); return delay(summary(r.detail)); },

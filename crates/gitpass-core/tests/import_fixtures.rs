@@ -170,6 +170,68 @@ fn keepass_csv_fixtures() {
 }
 
 #[test]
+fn apple_passwords_csv_fixture() {
+    let (rep, recs) = import_fixture(ImportFormat::ApplePasswordsCsv, "apple-passwords.csv");
+    assert_eq!((rep.parsed, rep.added, rep.duplicates.len(), rep.warnings.len()), (4, 3, 1, 1));
+    check_common(&recs, false);
+
+    // TOTP present on Example Mail
+    let m = by(&recs, "Example Mail");
+    assert_eq!(m.item.totp.as_deref(), Some(OTP_URI));
+    gitpass_core::totp::parse(m.item.totp.as_deref().unwrap()).unwrap();
+
+    // Notes with commas and newlines
+    assert!(m.item.notes.as_deref().unwrap().starts_with("Line one, with comma\nLine \"two\""));
+
+    // TOTP missing on Burmese item
+    let b = by(&recs, "ဘဏ် အကောင့်");
+    assert_eq!(b.item.totp, None);
+
+    // Empty username row
+    let no_user = by(&recs, "No Username Service");
+    assert_eq!(no_user.item.username, None);
+    assert_eq!(no_user.item.password.as_deref(), Some("fake-secret-pw"));
+    assert_eq!(no_user.item.url.as_deref(), Some("https://nouser.example.com/"));
+    assert_eq!(no_user.item.notes.as_deref(), Some("Notes without username"));
+    assert_eq!(no_user.item.totp, None);
+
+    // Malformed row (row 6: empty title/url) was skipped with warning
+    assert_eq!(rep.warnings.len(), 1);
+    assert!(rep.warnings[0].contains("no title or url, skipped"));
+}
+
+#[test]
+fn format_auto_detection() {
+    let b_apple = fixture("apple-passwords.csv");
+    let b_one = fixture("1password.csv");
+    let b_bw = fixture("bitwarden.csv");
+    let b_kp = fixture("keepass.csv");
+    let b_chrome = fixture("chrome.csv");
+    let b_bw_json = fixture("bitwarden.json");
+
+    assert_eq!(import::detect_format(std::str::from_utf8(&b_apple).unwrap()), Some(ImportFormat::ApplePasswordsCsv));
+    assert_eq!(import::detect_format(std::str::from_utf8(&b_one).unwrap()), Some(ImportFormat::OnePasswordCsv));
+    assert_eq!(import::detect_format(std::str::from_utf8(&b_bw).unwrap()), Some(ImportFormat::BitwardenCsv));
+    assert_eq!(import::detect_format(std::str::from_utf8(&b_kp).unwrap()), Some(ImportFormat::KeepassCsv));
+    assert_eq!(import::detect_format(std::str::from_utf8(&b_chrome).unwrap()), Some(ImportFormat::ChromeCsv));
+    assert_eq!(import::detect_format(std::str::from_utf8(&b_bw_json).unwrap()), Some(ImportFormat::BitwardenJson));
+
+    // Headers specifically: Apple header vs 1Password 8 header
+    assert_eq!(
+        import::detect_format("Title,URL,Username,Password,Notes,OTPAuth\nfoo,https://foo.test,u,p,n,\n"),
+        Some(ImportFormat::ApplePasswordsCsv)
+    );
+    assert_eq!(
+        import::detect_format("Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes\nfoo,https://foo.test,u,p,,false,false,,\n"),
+        Some(ImportFormat::OnePasswordCsv)
+    );
+
+    // Byte detection for 1pux zip and apple passwords csv
+    assert_eq!(import::detect_format_bytes(&fixture("1password.1pux")), Some(ImportFormat::OnePassword1pux));
+    assert_eq!(import::detect_format_bytes(&fixture("apple-passwords.csv")), Some(ImportFormat::ApplePasswordsCsv));
+}
+
+#[test]
 fn chrome_csv_fixture() {
     let (rep, recs) = import_fixture(ImportFormat::ChromeCsv, "chrome.csv");
     assert_eq!((rep.parsed, rep.added, rep.duplicates.len()), (4, 3, 1));
@@ -185,6 +247,7 @@ fn malformed_files_error_cleanly() {
     assert!(import::parse_bytes(ImportFormat::BitwardenJson, &fixture("malformed.json"), None).is_err());
     assert!(import::parse_bytes(ImportFormat::GitpassJson, &fixture("malformed.json"), None).is_err());
     assert!(import::parse_bytes(ImportFormat::ChromeCsv, &fixture("malformed.csv"), None).is_err());
+    assert!(import::parse_bytes(ImportFormat::ApplePasswordsCsv, &fixture("malformed.csv"), None).is_err());
     assert!(import::parse_bytes(ImportFormat::OnePassword1pux, &fixture("malformed.json"), None).is_err());
     assert!(import::parse_bytes(ImportFormat::OnePassword1pux, &fixture("1password.csv"), None).is_err());
     // wrong format picked: a CSV fed to the JSON importer
