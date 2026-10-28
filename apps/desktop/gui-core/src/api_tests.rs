@@ -223,11 +223,14 @@ fn attachments_via_paths() {
 #[test]
 fn tools_generate_strength_watchtower_hibp() {
     let e = env();
-    let p = e.app.generate_password(24, true, true, false);
+    let p = e.app.generate_password(24, true, true, false, false);
     assert_eq!(p.len(), 24);
     assert!(p.chars().any(|c| c.is_ascii_digit()) && p.chars().any(|c| "!@#$%^&*-_=+?".contains(c)));
-    assert!(e.app.generate_password(20, false, false, false).chars().all(|c| c.is_ascii_alphabetic()));
-    assert_eq!(e.app.generate_password(5, true, false, true).split('-').count(), 5);
+    assert!(e.app.generate_password(20, false, false, false, false).chars().all(|c| c.is_ascii_alphabetic()));
+    assert_eq!(e.app.generate_password(5, true, false, true, false).split('-').count(), 5);
+    let pin = e.app.generate_password(6, false, false, false, true);
+    assert_eq!(pin.len(), 6);
+    assert!(pin.chars().all(|c| c.is_ascii_digit()));
     assert!(e.app.password_strength("password") <= 10);
     assert!(e.app.password_strength(&p) >= 90);
     assert_eq!(e.app.password_strength(""), 0);
@@ -839,4 +842,16 @@ fn bulk_items_actions() {
     assert!(e.app.bulk_items(&m).is_err());
     assert!(e.app.bulk_items(&req("explode", vec![])).unwrap().count == 0);
     assert!(e.app.bulk_items(&req("explode", vec![r(&a)])).is_err());
+}
+
+#[test]
+fn copy_password_clears_clipboard_only_if_unchanged() {
+    let e = env();
+    let mut s = e.app.get_settings();
+    s.clipboard_clear_secs = 1;
+    e.app.set_settings(s).unwrap();
+    e.app.copy_password("generated-secret-123").unwrap();
+    assert_eq!(e.clip.get_text().as_deref(), Some("generated-secret-123"));
+    std::thread::sleep(std::time::Duration::from_millis(1600));
+    assert_eq!(e.clip.get_text().as_deref(), Some(""));
 }

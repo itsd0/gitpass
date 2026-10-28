@@ -112,7 +112,7 @@ cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_ca
 { const a = [...db.values()][5].detail; a.archived = true; const b = [...db.values()][22].detail; b.deletedAt = new Date('2026-10-20T08:00:00Z').toISOString(); }
 
 add('v_private', 'passkey', 'webauthn.example.invalid', 'demo@example.invalid', 6, [['site', 'text', 'webauthn.example.invalid'], ['user name', 'text', 'demo@example.invalid'], ['credential id', 'text', 'FAKE-cred-id'], ['private key', 'concealed', 'FAKE'], ['sign count', 'text', '3']]);
-let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false };
+let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true };
 let onboarding: T.Onboarding = { extensionInstalled: false, emergencyKitSaved: false, repoConnected: true, imported: false, dismissed: false };
 let unlocked = false;
 const devices: T.DeviceInfo[] = [
@@ -151,9 +151,22 @@ function applyInput(r: Rec, input: T.ItemInput) {
   const pw = sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed');
   r.detail.passwordStrength = pw && secrets[pw.id] ? strength(secrets[pw.id]) : null;
 }
-function genPw(length: number, symbols: boolean, digits: boolean, words?: boolean) {
+function genPw(length: number, symbols: boolean, digits: boolean, words?: boolean, pin?: boolean) {
   const rnd = (n: number) => crypto.getRandomValues(new Uint32Array(1))[0] % n;
-  if (words) { const w = ['apple', 'river', 'stone', 'cloud', 'tiger', 'maple', 'ocean', 'pixel', 'lunar', 'cedar']; return Array.from({ length: Math.max(3, Math.round(length / 6)) }, () => w[rnd(w.length)]).join('-'); }
+  if (pin) {
+    const d = '0123456789';
+    return Array.from({ length: Math.max(4, Math.min(16, length)) }, () => d[rnd(d.length)]).join('');
+  }
+  if (words) {
+    const w = ['apple', 'river', 'stone', 'cloud', 'tiger', 'maple', 'ocean', 'pixel', 'lunar', 'cedar'];
+    const count = Math.max(3, Math.min(20, length));
+    const chosen = Array.from({ length: count }, () => w[rnd(w.length)]);
+    if (digits && chosen.length > 0) {
+      const idx = rnd(chosen.length);
+      chosen[idx] = chosen[idx] + rnd(10);
+    }
+    return chosen.join(symbols ? '-' : '.');
+  }
   const cs = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ' + (digits ? '23456789' : '') + (symbols ? '!@#$%^&*-_+=' : '');
   return Array.from({ length }, () => cs[rnd(cs.length)]).join('');
 }
@@ -258,7 +271,11 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   add_attachment: (a: { itemId: string; path: string }) => { const att: T.Attachment = { id: uid('a'), name: a.path.split(/[\\/]/).pop() || 'file', size: 4096, mime: 'application/octet-stream' }; get(a.itemId).detail.attachments.push(att); return delay(att); },
   save_attachment: () => delay(undefined),
   list_tags: () => delay([...new Set([...db.values()].flatMap((r) => r.detail.tags))].sort()),
-  generate_password: (a: { length: number; symbols: boolean; digits: boolean; words?: boolean }) => delay(genPw(a.length, a.symbols, a.digits, a.words), 5),
+  generate_password: (a: { length: number; symbols: boolean; digits: boolean; words?: boolean; pin?: boolean }) => delay(genPw(a.length, a.symbols, a.digits, a.words, a.pin), 5),
+  copy_password: (a: { password: string }) => {
+    navigator.clipboard?.writeText(a.password).catch(() => {});
+    return delay(undefined);
+  },
   password_strength: (a: { password: string }) => delay(strength(a.password), 5),
   watchtower: (a: { hibp: boolean }) => {
     const pw = [...db.values()].map((r) => { const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed' && /password/.test(x.label)); return fld ? [r.detail.id, r.secrets[fld.id]] as const : null; }).filter(Boolean) as (readonly [string, string])[];

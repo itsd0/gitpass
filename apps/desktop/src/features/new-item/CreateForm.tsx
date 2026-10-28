@@ -17,16 +17,21 @@ export function normaliseTotp(input: string): string | null {
   if (s.startsWith('otpauth://')) { try { const u = new URL(s); return u.searchParams.get('secret') ? s : null; } catch { return null; } }
   const b = s.replace(/\s+/g, '').toUpperCase(); return /^[A-Z2-7]+=*$/.test(b) && b.length >= 16 ? b : null;
 }
-type FormProps = { category: ItemCategory; initial?: { title?: string; url?: string }; vaultId?: string; onBack: () => void; onDone: () => void };
+type FormProps = { category: ItemCategory; initial?: { title?: string; url?: string; password?: string }; vaultId?: string; onBack: () => void; onDone: () => void };
 export function CreateForm(p: FormProps) { return p.category === 'ssh_key' ? <SshKeyCreate {...p} /> : <TemplateForm {...p} />; }
 function TemplateForm({ category, initial, vaultId: initialVault, onBack, onDone }: FormProps) {
   const cat = categoryById(category);
   const [vaults, setVaults] = useState<VaultInfo[]>([]);
   const [vaultId, setVaultId] = useState(initialVault ?? '');
   const [title, setTitle] = useState(initial?.title ?? '');
-  const [values, setValues] = useState<Record<string, string>>(() => (initial?.url ? { 'main.website': initial.url } : {}) as Record<string, string>);
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    if (initial?.url) init['main.website'] = initial.url;
+    if (initial?.password) init['main.password'] = initial.password;
+    return init;
+  });
   const [notes, setNotes] = useState(''); const [docPath, setDocPath] = useState('');
-  const [shown, setShown] = useState<Record<string, boolean>>({});
+  const [shown, setShown] = useState<Record<string, boolean>>(() => (initial?.password ? { 'main.password': true } : {} as Record<string, boolean>));
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const { setRoute, selectItem } = useApp();
   useEffect(() => { api.listVaults().then(v => { setVaults(v); setVaultId(id => id || v[0]?.id || ''); }).catch(e => setErr(String(e))); }, []);
