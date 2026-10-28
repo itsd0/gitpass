@@ -1,20 +1,23 @@
-# gitpass 0.4.0: zero-knowledge password manager synced through a private git repo (format v4)
+# gitpass: zero-knowledge password manager synced through a private git repo (format v4)
 
-A clean-room Rust password manager that follows the publicly documented two-secret model (master password + Secret Key). It is end-to-end encrypted and syncs through git. 0.4.0 adds real device revoke with key rotation, vault sharing (X25519),
-import/export, a security audit with optional HIBP, a Tauri desktop app and a browser extension with a native messaging host.
+A clean-room Rust password manager that follows the publicly documented two-secret model (master password + Secret Key). It is end-to-end encrypted and syncs through git. It includes real device revoke with key rotation, vault sharing (X25519),
+import/export, a security audit with optional HIBP, a Tauri desktop app, an iOS app, and a browser extension with a native messaging host.
 
 > **NOT audited.** Don't trust it with real secrets until it has been reviewed independently.
 
 ## Workspace layout
 ```
-Cargo.toml                 # workspace root (version 0.4.0); members: core, cli, host, gui-core; excludes src-tauri
+Cargo.toml                 # workspace root; excludes src-tauri
 crates/gitpass-core/       # library: crypto, store (v4), keys (X25519), device, merge, sync, migrate, import, audit, totp, search
-crates/gitpass-cli/        # binary `gitpass` (ureq HIBP client lives here)
+crates/gitpass-cli/        # binary `gitpass` (CLI, secret injection, import/export, audit, SSH agent)
 crates/gitpass-host/       # binary `gitpass-host`: native messaging host for the extension
+crates/gitpass-pasteboard/ # concealed/transient pasteboard copies (macOS NSPasteboard / Linux fallback)
 apps/desktop/gui-core/     # Tauri-free GUI command layer (root workspace member)
 apps/desktop/src-tauri/    # Tauri 2 app (own Cargo.lock + .cargo/config.toml; NOT in root workspace)
 apps/desktop/src/          # React + TypeScript frontend (Vite)
 extension/                 # MV3 browser extension (plain JS, `npm test`)
+ios/rust/gitpass-ios-ffi/  # UniFFI bridge between gitpass-core and the Swift iOS app
+ios/                       # iOS SwiftUI app and AutoFill credential provider extension
 ```
 
 ## Install
