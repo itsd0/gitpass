@@ -14,6 +14,8 @@ const isUnlocked = () => !!readJson(STATE, {}).unlocked;
 const setUnlocked = (v) => fs.writeFileSync(STATE, JSON.stringify({ unlocked: v }));
 
 const V = { id: 'v1', name: 'Personal' };
+const V2 = { id: 'v2', name: 'Work' }; // second vault so the save banner's picker has something to choose
+const VAULTS = { [V.id]: V, [V2.id]: V2 };
 const now = '2026-10-26T00:00:00Z';
 const DEFAULT_ITEMS = [
   { id: 'v1:i1', category: 'login', title: 'Localhost Test Login', subtitle: 'alice@example.com', url: 'http://localhost', favicon_host: 'localhost', has_totp: true, favorite: true, _u: 'alice@example.com', _p: 'Corr3ct-H0rse-Battery' },
@@ -51,8 +53,8 @@ function needUnlock() { if (!isUnlocked()) { const e = new Error('vault is locke
 function handle(m) {
   const origin = m.origin || m.url;
   switch (m.cmd) {
-    case 'hello': return { app_version: '0.6.0-mock', unlocked: isUnlocked(), account: { name: 'Mock User', email: 'alice@example.com', vault_count: 1 } };
-    case 'status': return { unlocked: isUnlocked(), app_running: true, account: { name: 'Mock User', email: 'alice@example.com', vault_count: 1 }, idle_timeout_secs: 600 };
+    case 'hello': return { app_version: '0.6.0-mock', unlocked: isUnlocked(), account: { name: 'Mock User', email: 'alice@example.com', vault_count: 2 } };
+    case 'status': return { unlocked: isUnlocked(), app_running: true, account: { name: 'Mock User', email: 'alice@example.com', vault_count: 2 }, idle_timeout_secs: 600 };
     case 'request_unlock': case 'unlock': setTimeout(() => { setUnlocked(true); send({ event: 'unlock' }); }, 0); return { unlocked: true };
     case 'lock': setUnlocked(false); setTimeout(() => send({ event: 'lock' }), 0); return { unlocked: false };
     case 'list_items': case 'search': { needUnlock(); const q = (m.query || '').toLowerCase(); let r = getItems().filter((i) => !q || i.title.toLowerCase().includes(q)); if (m.category) r = r.filter((i) => i.category === m.category); return { items: r.slice(0, m.limit || 100).map(pub) }; }
@@ -66,9 +68,11 @@ function handle(m) {
       return { username: i._u, password: i._p, totp: i.has_totp ? '123456' : undefined }; }
     case 'totp': needUnlock(); return { code: '123456', remaining: 20, period: 30 };
     case 'save_login': { needUnlock();
-      const id = 'v1:new' + Date.now();
+      const vault = m.vault_id ? VAULTS[m.vault_id] : V;
+      if (!vault) throw Object.assign(new Error('vault not found'), { code: 'not_found' });
+      const id = vault.id + ':new' + Date.now();
       const items = getItems();
-      items.push({ vault_id: V.id, vault_name: V.name, id, category: 'login', title: m.title || host(m.origin) || 'New Login', subtitle: m.username || '', url: m.origin || '', favorite: false, updated_at: new Date().toISOString(), _u: m.username, _p: m.password });
+      items.push({ vault_id: vault.id, vault_name: vault.name, id, category: 'login', title: m.title || host(m.origin) || 'New Login', subtitle: m.username || '', url: m.origin || '', favorite: false, updated_at: new Date().toISOString(), _u: m.username, _p: m.password });
       saveItems(items);
       return { item_id: id };
     }
@@ -77,13 +81,14 @@ function handle(m) {
       const cats = ['login', 'api_credential', 'secure_note', 'credit_card', 'identity', 'wifi', 'ssh_key'];
       if (!it || typeof it !== 'object' || !cats.includes(it.category)) throw Object.assign(new Error('bad item'), { code: 'bad_request' });
       if (typeof it.title !== 'string' || !it.title.trim()) throw Object.assign(new Error('title is required'), { code: 'bad_request' });
-      if (it.vaultId && it.vaultId !== V.id) throw Object.assign(new Error('vault not found'), { code: 'not_found' });
+      const vault = it.vaultId ? VAULTS[it.vaultId] : V;
+      if (!vault) throw Object.assign(new Error('vault not found'), { code: 'not_found' });
       // Detail fields as the host returns them: concealed values never leave the vault.
       const fields = (Array.isArray(it.sections) ? it.sections : []).flatMap((s) => (Array.isArray(s.fields) ? s.fields : [])
         .map((f) => ({ name: f.id, label: f.label, kind: f.kind, concealed: f.kind === 'concealed', value: f.kind === 'concealed' ? null : f.value })));
-      const id = 'v1:new' + Date.now() + '-' + (++createdCount);
+      const id = vault.id + ':new' + Date.now() + '-' + (++createdCount);
       const items = getItems();
-      items.push({ vault_id: V.id, vault_name: V.name, id, category: it.category, title: it.title.trim(), subtitle: '',
+      items.push({ vault_id: vault.id, vault_name: vault.name, id, category: it.category, title: it.title.trim(), subtitle: '',
         url: it.url || '', favorite: false, updated_at: new Date().toISOString(), fields, tags: Array.isArray(it.tags) ? it.tags : [] });
       saveItems(items);
       return { item_id: id, title: it.title.trim() };
@@ -110,7 +115,7 @@ function handle(m) {
       if (m.words) return { password: Array.from({ length: len }, (_, i) => ['amber', 'coral', 'lunar', 'ivory', 'ocean'][i % 5]).join('-') };
       return { password: 'Gen-' + 'x'.repeat(Math.max(4, (m.len || 20) - 4)) };
     }
-    case 'list_vaults': needUnlock(); return { vaults: [{ ...V, item_count: getItems().length }] };
+    case 'list_vaults': needUnlock(); return { vaults: [V, V2].map((v) => ({ ...v, item_count: getItems().filter((i) => i.vault_id === v.id).length })) };
     case 'open_in_app': return {};
     case 'fill_card': case 'fill_identity': { needUnlock();
       // Same rule as the real host: popup-initiated or after an in-page click only.
