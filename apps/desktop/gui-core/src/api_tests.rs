@@ -395,6 +395,39 @@ fn watchtower_score_weighting_weak_and_missing_totp() {
 }
 
 #[test]
+fn item_change_password_url_and_detail_findings() {
+    let e = env();
+    let makelogin = |title: &str, url: &str| e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some(url.into()),
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![
+            fld("username", FieldKind::Text, Some("fake@example.invalid")),
+            fld("password", FieldKind::Concealed, Some("password")),
+        ] }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+
+    // http is upgraded, path/query dropped, and the URL travels on the summary + detail.
+    let l = makelogin("Forum (fake)", "http://forum.example.com/login?token=fake");
+    let want = "https://forum.example.com/.well-known/change-password";
+    assert_eq!(l.change_password_url.as_deref(), Some(want));
+    assert_eq!(e.app.item_change_password_url(&e.vault, &l.id).unwrap().as_deref(), Some(want));
+    let d = e.app.get_item(&e.vault, &l.id).unwrap();
+    assert_eq!(d.summary.change_password_url.as_deref(), Some(want));
+    assert!(d.findings.iter().any(|f| f.kind == "weak"));
+    assert!(d.findings.iter().any(|f| f.kind == "insecure_url"));
+    assert!(d.findings.iter().any(|f| f.description.contains("weak password")));
+
+    // Loopback: no change-password URL (and no insecure_url finding), but other findings remain.
+    let n = makelogin("Local (fake)", "http://127.0.0.1/login");
+    assert_eq!(n.change_password_url, None);
+    assert_eq!(e.app.item_change_password_url(&e.vault, &n.id).unwrap(), None);
+    let d = e.app.get_item(&e.vault, &n.id).unwrap();
+    assert!(d.findings.iter().all(|f| f.kind != "insecure_url"));
+    assert!(d.findings.iter().any(|f| f.kind == "weak"));
+    assert!(d.findings.iter().any(|f| f.kind == "missing_totp"));
+}
+
+#[test]
 fn watchtower_score_weighting_reuse_counts_every_item() {
     // Both items of a reuse group are in `bad`: 80·(2/2) + 10·(2/2) = 90 → score 10.
     let e = env();

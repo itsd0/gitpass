@@ -3,13 +3,13 @@ import { cleanup } from '@testing-library/react';
 import { api } from '../../api/client';
 import { mock } from '../../api/mock';
 import { useSettings } from '../settings/useSettings';
-const it3 = { id: 'i3', vaultId: 'v-private', category: 'login' as const, title: 'Fake Forum', subtitle: 'demo', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: '', createdAt: '', url: 'https://forum.example.org' };
-const it3x = { ...it3, id: 'i3x', title: 'Fake 2FA Site', url: 'https://2fa.example.org' };
-const itExp = { ...it3, id: 'i-exp', category: 'credit_card' as const, title: 'Expired Card', url: null };
-const itSoon = { ...it3, id: 'i-soon', category: 'api_credential' as const, title: 'Expiring API Key', url: 'https://api.example.org' };
-const itInsecure = { ...it3, id: 'i-insecure', title: 'Insecure Website', url: 'http://insecure.example.com/login?token=abc' };
-const itDupOlder = { ...it3, id: 'dup-older', title: 'Site Duplicate 1', subtitle: 'alex', url: 'https://dup.example.com', updatedAt: '2026-10-10T00:00:00Z' };
-const itDupNewer = { ...it3, id: 'dup-newer', title: 'Site Duplicate 2', subtitle: 'alex', url: 'https://dup.example.com', updatedAt: '2026-10-20T00:00:00Z' };
+const it3 = { id: 'i3', vaultId: 'v-private', category: 'login' as const, title: 'Fake Forum', subtitle: 'demo', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: '', createdAt: '', url: 'https://forum.example.org', changePasswordUrl: 'https://forum.example.org/.well-known/change-password' };
+const it3x = { ...it3, id: 'i3x', title: 'Fake 2FA Site', url: 'https://2fa.example.org', changePasswordUrl: 'https://2fa.example.org/.well-known/change-password' };
+const itExp = { ...it3, id: 'i-exp', category: 'credit_card' as const, title: 'Expired Card', url: null, changePasswordUrl: undefined };
+const itSoon = { ...it3, id: 'i-soon', category: 'api_credential' as const, title: 'Expiring API Key', url: 'https://api.example.org', changePasswordUrl: 'https://api.example.org/.well-known/change-password' };
+const itInsecure = { ...it3, id: 'i-insecure', title: 'Insecure Website', url: 'http://insecure.example.com/login?token=abc', changePasswordUrl: 'https://insecure.example.com/.well-known/change-password' };
+const itDupOlder = { ...it3, id: 'dup-older', title: 'Site Duplicate 1', subtitle: 'alex', url: 'https://dup.example.com', updatedAt: '2026-10-10T00:00:00Z', changePasswordUrl: 'https://dup.example.com/.well-known/change-password' };
+const itDupNewer = { ...it3, id: 'dup-newer', title: 'Site Duplicate 2', subtitle: 'alex', url: 'https://dup.example.com', updatedAt: '2026-10-20T00:00:00Z', changePasswordUrl: 'https://dup.example.com/.well-known/change-password' };
 let hibpOn = false;
 beforeEach(() => {
   hibpOn = false; useSettings.setState({ settings: null });
@@ -214,5 +214,37 @@ describe('watchtower score', () => {
     fireEvent.click(openBtns[0]);
     // The items in the duplicate group are sorted newest first, so openBtns[0] corresponds to dup-newer
     expect(useApp.getState().selectedItemId).toBe('dup-newer');
+  });
+
+  it("offers Change password for password findings and unsecured rows", async () => {
+    const openSpy = vi.spyOn(api, "openChangePassword").mockResolvedValue(undefined);
+    render(<WatchtowerPage />);
+    await screen.findByTestId("score");
+
+    // Weak password chip: icon button labelled with the item title.
+    fireEvent.click(screen.getAllByRole("button", { name: "Change password for Fake Forum" })[0]);
+    expect(openSpy).toHaveBeenCalledWith({ vaultId: "v-private", itemId: "i3" });
+
+    // Unsecured website row: same action next to Open HTTPS / Edit URL.
+    fireEvent.click(screen.getByRole("button", { name: "Change password for Insecure Website" }));
+    expect(openSpy).toHaveBeenCalledWith({ vaultId: "v-private", itemId: "i-insecure" });
+
+    // Duplicate login rows offer it as well.
+    fireEvent.click(screen.getByRole("button", { name: "Change password for Site Duplicate 2" }));
+    expect(openSpy).toHaveBeenCalledWith({ vaultId: "v-private", itemId: "dup-newer" });
+  });
+
+  it("hides Change password when the login has no usable URL", async () => {
+    const noUrl = { ...it3, id: "i-nourl", title: "No URL Login", url: null, changePasswordUrl: undefined };
+    vi.spyOn(api, "listItems").mockResolvedValue([noUrl]);
+    vi.spyOn(api, "watchtower").mockResolvedValue({
+      score: 50, weak: ["i-nourl"], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [],
+      passkeyAvailable: [], expired: [], expiringSoon: [], insecureUrls: [], duplicates: [], ignored: [], checkedAt: "", hibpChecked: false,
+    });
+    render(<WatchtowerPage />);
+    await screen.findByTestId("score");
+
+    expect(screen.getByText("No URL Login")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Change password for No URL Login" })).toBeNull();
   });
 });

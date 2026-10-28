@@ -103,3 +103,80 @@ describe("ItemDetail Watchtower Ignored Note", () => {
     expect(screen.queryByTestId("watchtower-ignored-note")).toBeNull();
   });
 });
+
+const mockItemWithFindings: Detail = {
+  ...mockItemWithIgnored,
+  id: "item-3",
+  title: "Weak Forum",
+  ignoredFindings: [],
+  changePasswordUrl: "https://example.com/.well-known/change-password",
+  findings: [
+    { kind: "weak", description: "weak password: too short (6 < 12)" },
+    { kind: "insecure_url", description: "saved with unencrypted HTTP URL (example.com)" },
+  ],
+};
+
+describe("ItemDetail Watchtower findings banner", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    vi.spyOn(api, "listVaults").mockResolvedValue([mockVault]);
+    vi.spyOn(api, "listTags").mockResolvedValue([]);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it("shows findings with a Change password action", async () => {
+    const openSpy = vi.spyOn(api, "openChangePassword").mockResolvedValue();
+    vi.spyOn(api, "getItem").mockResolvedValue(mockItemWithFindings);
+    vi.spyOn(api, "listItems").mockResolvedValue([mockItemWithFindings as ItemSummary]);
+
+    useItemsUI.setState({ items: [mockItemWithFindings as any], loading: false });
+    useApp.setState({ selectedItemId: "item-3", editing: false });
+
+    render(<TooltipProvider><ItemDetailPane /></TooltipProvider>);
+
+    const banner = await screen.findByTestId("watchtower-findings");
+    expect(banner.textContent).toContain("Watchtower found issues with this item");
+    expect(banner.textContent).toContain("weak password: too short (6 < 12)");
+    expect(banner.textContent).toContain("saved with unencrypted HTTP URL (example.com)");
+
+    fireEvent.click(screen.getByRole("button", { name: "Change password for Weak Forum" }));
+    expect(openSpy).toHaveBeenCalledWith({ vaultId: "v-1", itemId: "item-3" });
+  });
+
+  it("shows the banner without the action when no password finding applies", async () => {
+    const noAction: Detail = {
+      ...mockItemWithFindings,
+      id: "item-4",
+      title: "No TOTP Login",
+      changePasswordUrl: undefined,
+      findings: [{ kind: "missing_totp", description: "has a URL but no TOTP configured" }],
+    };
+    vi.spyOn(api, "getItem").mockResolvedValue(noAction);
+    vi.spyOn(api, "listItems").mockResolvedValue([noAction as ItemSummary]);
+
+    useItemsUI.setState({ items: [noAction as any], loading: false });
+    useApp.setState({ selectedItemId: "item-4", editing: false });
+
+    render(<TooltipProvider><ItemDetailPane /></TooltipProvider>);
+
+    expect(await screen.findByTestId("watchtower-findings")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Change password/i })).toBeNull();
+  });
+
+  it("does not show the banner without findings", async () => {
+    const clean: Detail = { ...mockItemClean, id: "item-5", title: "Clean Two" };
+    vi.spyOn(api, "getItem").mockResolvedValue(clean);
+    vi.spyOn(api, "listItems").mockResolvedValue([clean as ItemSummary]);
+
+    useItemsUI.setState({ items: [clean as any], loading: false });
+    useApp.setState({ selectedItemId: "item-5", editing: false });
+
+    render(<TooltipProvider><ItemDetailPane /></TooltipProvider>);
+
+    await screen.findAllByText("Clean Two");
+    expect(screen.queryByTestId("watchtower-findings")).toBeNull();
+  });
+});

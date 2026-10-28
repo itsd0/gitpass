@@ -53,7 +53,7 @@ function add(vaultId: string, category: T.ItemCategory, title: string, subtitle:
   const ts = new Date(Date.UTC(2026, 9, 25, 12) - daysAgo * 86400000).toISOString();
   const d: T.ItemDetail = {
     id: uid('i'), vaultId, category, title, subtitle, favorite: false, archived: false, deletedAt: null, tags: [],
-    updatedAt: ts, createdAt: new Date(Date.parse(ts) - 30 * 86400000).toISOString(), url: null,
+    updatedAt: ts, createdAt: new Date(Date.parse(ts) - 30 * 86400000).toISOString(), url: null, changePasswordUrl: changePwUrl(extra.url),
     sections: [{ id: uid('s'), title: null, fields: fs }], notes: null, attachments: [],
     history: [{ version: 1, updatedAt: ts }], passwordStrength: pwField ? strength(secrets[pwField.id]) : null,
     hasTotp: fs.some((x) => x.kind === 'totp'), ignoredFindings: [], ...extra,
@@ -121,7 +121,7 @@ const devices: T.DeviceInfo[] = [
 ];
 
 const summary = (d: T.ItemDetail): T.ItemSummary => {
-  const { sections: _s, notes: _n, attachments: _a, history: _h, passwordStrength: _p, hasTotp: _t, ...s } = d;
+  const { sections: _s, notes: _n, attachments: _a, history: _h, passwordStrength: _p, hasTotp: _t, findings: _fi, ...s } = d;
   const flds = d.sections?.flatMap((sec) => sec.fields) ?? [];
   let expiry: string | null = null;
   if (d.category === "credit_card") {
@@ -156,13 +156,65 @@ function applyInput(r: Rec, input: T.ItemInput) {
   }) }));
   r.secrets = secrets;
   Object.assign(r.detail, { vaultId: input.vaultId, category: input.category, title: input.title, sections, notes: input.notes ?? null,
-    tags: input.tags ?? [], favorite: input.favorite ?? r.detail.favorite, url: input.url ?? null, subtitle: subtitleFor(input) || r.detail.subtitle,
+    tags: input.tags ?? [], favorite: input.favorite ?? r.detail.favorite, url: input.url ?? null, changePasswordUrl: changePwUrl(input.url),
+    subtitle: subtitleFor(input) || r.detail.subtitle,
     hasTotp: sections.some((s) => s.fields.some((x) => x.kind === 'totp')) });
   const pw = sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed');
   r.detail.passwordStrength = pw && secrets[pw.id] ? strength(secrets[pw.id]) : null;
 }
-function genPw(length: number, symbols: boolean, digits: boolean, words?: boolean, pin?: boolean) {
-  const rnd = (n: number) => crypto.getRandomValues(new Uint32Array(1))[0] % n;
+/** Rough browser-mock copy of core `change_password_url` (the real derivation runs in Rust). */
+function changePwUrl(raw: string | null | undefined): string | undefined {
+  const s = (raw ?? '').trim();
+  const m = /^https?:\/\//i.exec(s);
+  if (!m) return undefined;
+  const authority = s.slice(m[0].length).split(/[/?#]/)[0];
+  const hostPort = authority.split('@').pop() ?? '';
+  if (hostPort.startsWith('[')) return undefined;
+  const colon = hostPort.indexOf(':');
+  const host = (colon >= 0 ? hostPort.slice(0, colon) : hostPort).replace(/\.+$/, '').toLowerCase();
+  const port = colon >= 0 ? hostPort.slice(colon + 1) : '';
+  if (!host || host.split('.').every((l) => /^\d+$/.test(l))) return undefined;
+  if (host === 'localhost' || host.endsWith('.localhost') || host === 'local' || host.endsWith('.local')) return undefined;
+  if (!host.split('.').every((l) => /^[a-z0-9_](?:[a-z0-9_-]*[a-z0-9_])?$/.test(l))) return undefined;
+  if (port && !/^\d+$/.test(port)) return undefined;
+  const n = port ? Number(port) : 0;
+  if (port && (n < 1 || n > 65535)) return undefined;
+  return `https://${host}${port ? `:${n}` : ''}/.well-known/change-password`;
+}
+/** Rough browser-mock findings for the item-detail banner (the real audit runs in Rust). */
+function mockFindings(id: string): T.FindingInfo[] {
+  const r = db.get(id); if (!r) return [];
+  const d = r.detail;
+  if (d.category === 'passkey') return [];
+  const flds = d.sections.flatMap((s) => s.fields);
+  const pwFld = flds.find((f) => f.kind === 'concealed' && /password/i.test(f.label));
+  const pw = pwFld ? r.secrets[pwFld.id] : undefined;
+  const out: T.FindingInfo[] = [];
+  const push = (kind: string, description: string) => {
+    if (!(d.ignoredFindings ?? []).some((k) => k === kind || (kind === 'missing_totp' && k === 'totp_available'))) out.push({ kind, description });
+  };
+  if (d.category === 'login' && pw && strength4(pw) < 2) push('weak', 'weak password');
+  if (d.category === 'login' && pw) {
+    const others = [...db.values()].filter((x) => {
+      if (x.detail.id === d.id || x.detail.category !== 'login') return false;
+      const f = x.detail.sections.flatMap((s) => s.fields).find((y) => y.kind === 'concealed' && /password/i.test(y.label));
+      return f ? x.secrets[f.id] === pw : false;
+    });
+    if (others.length > 0) push('reused', `reused password (shared with ${others.length} other item(s))`);
+  }
+  if (d.category === 'login' && d.url && !d.hasTotp) push('missing_totp', 'has a URL but no TOTP configured');
+  const u = d.url?.trim().toLowerCase();
+  if (u?.startsWith('http://')) {
+    try {
+      const h = new URL(u).hostname;
+      const local = h === 'localhost' || h.endsWith('.localhost') || h === 'local' || h.endsWith('.local') || h === '::1'
+        || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h);
+      if (!local) push('insecure_url', `saved with unencrypted HTTP URL (${h})`);
+    } catch { /* malformed URL: no finding */ }
+  }
+  return out;
+}
+function genPw(length: number, symbols: boolean, digits: boolean, words?: boolean, pin?: boolean) {  const rnd = (n: number) => crypto.getRandomValues(new Uint32Array(1))[0] % n;
   if (pin) {
     const d = '0123456789';
     return Array.from({ length: Math.max(4, Math.min(16, length)) }, () => d[rnd(d.length)]).join('');
@@ -224,7 +276,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : b.updatedAt.localeCompare(a.updatedAt));
     return delay(xs.map(summary));
   },
-  get_item: (a: { itemId: string }) => delay(get(a.itemId).detail),
+  get_item: (a: { itemId: string }) => delay({ ...get(a.itemId).detail, findings: mockFindings(a.itemId) }),
   reveal_field: (a: { itemId: string; fieldId: string }) => { const v = get(a.itemId).secrets[a.fieldId]; return v == null ? Promise.reject(new Error('not a concealed field')) : delay(v); },
   copy_field: (a: { itemId: string; fieldId: string }) => {
     const r = get(a.itemId); const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId);
@@ -549,6 +601,12 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     : (syncState = { remote: a.url, lastSync: new Date().toISOString(), ahead: 0, behind: 0, dirty: false }, onboarding = { ...onboarding, repoConnected: true }, delay<T.SyncStatus>({ ...syncState }, 400))),
   remote_disconnect: () => { syncState = { remote: null, lastSync: syncState.lastSync, ahead: 0, behind: 0, dirty: false }; onboarding = { ...onboarding, repoConnected: false }; return delay<T.SyncStatus>({ ...syncState }); },
   open_new_repo_page: () => { if (typeof window !== 'undefined') window.open('https://github.com/new', '_blank', 'noopener'); return delay(undefined); },
+  open_change_password: (a: { itemId: string }) => {
+    const url = summary(get(a.itemId).detail).changePasswordUrl;
+    if (!url) return Promise.reject(new Error('this item has no change-password URL'));
+    if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
+    return delay(undefined);
+  },
   sync: () => delay({ message: 'Pulled 1 commit (mock)' }, 400),
   onboarding: () => delay(onboarding),
   set_onboarding: (a: { patch: Partial<T.Onboarding> }) => { onboarding = { ...onboarding, ...a.patch }; return delay(onboarding); },

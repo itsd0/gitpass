@@ -235,7 +235,9 @@ export const my: Partial<Record<Key, string>> = {
   "watchtower.noIgnored": "လျစ်လျူရှုထားသော သတိပေးချက်များ မရှိပါ။",
   "watchtower.stopIgnoring": "လျစ်လျူမရှုတော့ပါ",
   "watchtower.moreOptions": "နောက်ထပ် ရွေးချယ်စရာများ",
+  "watchtower.changePassword": "စကားဝှက် ပြောင်းရန်",
   "detail.watchtowerIgnored": "Watchtower သတိပေးချက်ကို လျစ်လျူရှုထားသည်",
+  "detail.watchtowerFindings": "Watchtower သည် ဤအရာတွင် ပြဿနာများ တွေ့ရှိထားသည်",
   "detail.warningRestored": "Watchtower သတိပေးချက်ကို ပြန်လည်ထားရှိပြီးပါပြီ",
   // TODO(i18n-review): native Burmese review of the new export.* wording
   "export.titleVault": "သော့ခတ်သေတ္တာကို export လုပ်ရန်",

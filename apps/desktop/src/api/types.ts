@@ -3,9 +3,11 @@ export type FieldKind = 'text'|'concealed'|'url'|'email'|'phone'|'date'|'month_y
 export interface Field { id: string; label: string; kind: FieldKind; value: string | null; /** card numbers only: '•••• •••• •••• 7575' (computed after decryption, display only) */ masked?: string | null; } // concealed values are null in summaries/details until reveal
 export interface Section { id: string; title: string | null; fields: Field[]; }
 export interface Attachment { id: string; name: string; size: number; mime: string; }
-export interface ItemSummary { id: string; vaultId: string; category: ItemCategory; title: string; subtitle: string; favorite: boolean; archived: boolean; deletedAt: string|null; tags: string[]; updatedAt: string; createdAt: string; url?: string|null; expiry?: string|null; ignoredFindings?: string[]; }
+export interface ItemSummary { id: string; vaultId: string; category: ItemCategory; title: string; subtitle: string; favorite: boolean; archived: boolean; deletedAt: string|null; tags: string[]; updatedAt: string; createdAt: string; url?: string|null; expiry?: string|null; /** derived `https://<host>/.well-known/change-password` when the URL is usable */ changePasswordUrl?: string|null; ignoredFindings?: string[]; }
 export interface IgnoredFinding { itemId: string; vaultId: string; title: string; kind: string; description: string; }
-export interface ItemDetail extends ItemSummary { sections: Section[]; notes: string|null; attachments: Attachment[]; history: {version:number; updatedAt:string}[]; passwordStrength?: number|null; hasTotp: boolean; }
+/** Active Watchtower finding shown in the item-detail banner (description comes from the Rust audit). */
+export interface FindingInfo { kind: string; description: string; }
+export interface ItemDetail extends ItemSummary { sections: Section[]; notes: string|null; attachments: Attachment[]; history: {version:number; updatedAt:string}[]; passwordStrength?: number|null; hasTotp: boolean; /** HIBP excluded: the detail view never makes network calls */ findings?: FindingInfo[]; }
 export interface ItemInput { vaultId: string; category: ItemCategory; title: string; sections: Section[]; notes?: string|null; tags?: string[]; favorite?: boolean; url?: string|null; }
 export interface VaultInfo { id: string; name: string; description: string|null; itemCount: number; shared: boolean; members: Member[]; icon?: string|null; color?: string|null; }
 export interface Member { fingerprint: string; label: string|null; isSelf: boolean; }
