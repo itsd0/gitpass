@@ -397,3 +397,72 @@ fn bulk_move_and_purge_keep_attachments_right() {
     assert_eq!(s.remove_items(&t).unwrap(), 2);
     assert!(s.read_attachment(&v2, &mv[0].2, &r.attachments[0].id).is_err());
 }
+
+#[test]
+fn remove_attachment_deletes_file_and_manifest_and_records_history() {
+    let (d, sk, s, v) = vault();
+    let id = s.add_record(&v, rec(Category::Login, "item-with-files", sample(Category::Login))).unwrap();
+
+    let data_a = b"fake-file-a-contents";
+    let data_b = b"fake-file-b-contents";
+    let att_a = s.add_attachment(&v, &id, "a.txt", "text/plain", data_a).unwrap();
+    let att_b = s.add_attachment(&v, &id, "b.pdf", "application/pdf", data_b).unwrap();
+
+    let fp_a = d.path().join("vaults").join(&v).join("files").join(format!("{}.enc", att_a.id));
+    let fp_b = d.path().join("vaults").join(&v).join("files").join(format!("{}.enc", att_b.id));
+    assert!(fp_a.exists());
+    assert!(fp_b.exists());
+    assert_eq!(s.read_attachment(&v, &id, &att_a.id).unwrap(), data_a);
+    assert_eq!(s.read_attachment(&v, &id, &att_b.id).unwrap(), data_b);
+
+    let m1 = s.load_manifest().unwrap();
+    assert!(m1.vaults[&v].files.contains_key(&att_a.id));
+    assert!(m1.vaults[&v].files.contains_key(&att_b.id));
+
+    let (v_before, r_before) = s.read_record(&v, &id).unwrap();
+    assert_eq!(r_before.attachments.len(), 2);
+
+    // Remove attachment A
+    s.remove_attachment(&v, &id, &att_a.id).unwrap();
+
+    // 1. Blob removed from disk
+    assert!(!fp_a.exists(), "attachment file must be removed from disk");
+    assert!(fp_b.exists(), "other attachment must remain");
+
+    // 2. Manifest entry removed
+    let m2 = s.load_manifest().unwrap();
+    assert!(!m2.vaults[&v].files.contains_key(&att_a.id), "manifest must drop removed file");
+    assert!(m2.vaults[&v].files.contains_key(&att_b.id));
+
+    // 3. Decrypting removed attachment fails
+    assert!(s.read_attachment(&v, &id, &att_a.id).is_err());
+    assert_eq!(s.read_attachment(&v, &id, &att_b.id).unwrap(), data_b);
+
+    // 4. Record updated and prior version recorded in history
+    let (v_after, r_after) = s.read_record(&v, &id).unwrap();
+    assert_eq!(v_after, v_before + 1);
+    assert_eq!(r_after.attachments.len(), 1);
+    assert_eq!(r_after.attachments[0].id, att_b.id);
+    assert!(!r_after.history.is_empty(), "history must record prior edit");
+    let last_hist = r_after.history.last().unwrap();
+    assert_eq!(last_hist.version, v_before);
+
+    // 5. Removing already-removed or non-existent attachment fails cleanly
+    let err = s.remove_attachment(&v, &id, &att_a.id).unwrap_err();
+    assert!(err.to_string().contains("item has no attachment"));
+
+    // 6. Remove attachment B (now 0 attachments)
+    s.remove_attachment(&v, &id, &att_b.id).unwrap();
+    assert!(!fp_b.exists());
+    let (_, r_empty) = s.read_record(&v, &id).unwrap();
+    assert!(r_empty.attachments.is_empty());
+
+    // 7. Adding file exceeding limit produces clear error
+    let huge = vec![0u8; gitpass_core::item::MAX_ATTACHMENT_BYTES + 1];
+    let err_size = s.add_attachment(&v, &id, "huge.dat", "application/octet-stream", &huge).unwrap_err();
+    assert!(err_size.to_string().contains("exceeds 25 MiB limit"), "{err_size}");
+
+    // 8. Re-unlocking session verifies clean integrity
+    let s_unlocked = Session::unlock_with(d.path(), "fake-pw", &sk, &opts()).unwrap();
+    assert_eq!(s_unlocked.list_records(&v).unwrap().len(), 1);
+}

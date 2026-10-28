@@ -319,6 +319,9 @@ fn attachments_via_paths() {
     let dst = dir.path().join("out.pdf");
     e.app.save_attachment(&e.vault, &n.id, &a.id, &dst.display().to_string()).unwrap();
     assert_eq!(std::fs::read(&dst).unwrap(), b"%PDF-fake");
+    e.app.remove_attachment(&e.vault, &n.id, &a.id).unwrap();
+    assert!(e.app.get_item(&e.vault, &n.id).unwrap().attachments.is_empty());
+    assert!(e.app.remove_attachment(&e.vault, &n.id, &a.id).is_err());
 }
 
 #[test]

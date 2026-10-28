@@ -91,6 +91,20 @@ pub const PURGE_AFTER_SECS: u64 = 30 * 86400;
 /// Attachment size cap.
 pub const MAX_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
 
+/// Resolve a MIME type for a file name based on its extension.
+pub fn mime_for(name: &str) -> &'static str {
+    match std::path::Path::new(name).extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
+        Some("pdf") => "application/pdf",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("txt") => "text/plain",
+        Some("json") => "application/json",
+        Some("zip") => "application/zip",
+        _ => "application/octet-stream",
+    }
+}
+
 /// Field ids that map onto the legacy login fields of [`crate::store::Item`].
 pub const LOGIN_USERNAME: &str = "username";
 pub const LOGIN_PASSWORD: &str = "password";

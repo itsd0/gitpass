@@ -1289,7 +1289,7 @@ impl Session {
         let mut cmp_new = new.snapshot(); cmp_new.item.updated_at.clear();
         let mut cmp_old = old.snapshot(); cmp_old.item.updated_at.clear();
         new.history = old.history.clone();
-        if cmp_new != cmp_old {
+        if cmp_new != cmp_old || old.attachments != new.attachments {
             new.history.push(crate::item::HistoryEntry { version: v, updated_at: old.item.updated_at.clone(), snapshot: old.snapshot() });
             let n = new.history.len();
             if n > crate::item::HISTORY_LIMIT { new.history.drain(..n - crate::item::HISTORY_LIMIT); }
@@ -1522,7 +1522,9 @@ impl Session {
     /// is recorded in the manifest.
     pub fn add_attachment(&self, vid: &str, iid: &str, name: &str, mime: &str, data: &[u8]) -> Result<crate::item::AttachmentMeta> {
         self.ensure_not_revoked()?;
-        if data.len() > crate::item::MAX_ATTACHMENT_BYTES { bail!("attachment too large ({} bytes > {} byte limit)", data.len(), crate::item::MAX_ATTACHMENT_BYTES); }
+        if data.len() > crate::item::MAX_ATTACHMENT_BYTES {
+            bail!("attachment too large ({} bytes exceeds {} MiB limit)", data.len(), crate::item::MAX_ATTACHMENT_BYTES / (1024 * 1024));
+        }
         let (_, mut rec) = self.read_record(vid, iid)?;
         let vk = self.vault_key(vid)?;
         let fid = uuid::Uuid::new_v4().to_string();
@@ -1558,6 +1560,38 @@ impl Session {
         let vk = self.vault_key(vid)?;
         let padded = zeroize::Zeroizing::new(open(&vk, &b.envelope, &file_aad(vid, iid, fid)).context("attachment failed authentication")?);
         unpad(&padded)
+    }
+
+    /// Remove an attachment from item `iid`: deletes the encrypted blob from `files/<fid>.enc`,
+    /// removes the file from the manifest, removes the attachment metadata, and records the prior state
+    /// in the item's history.
+    pub fn remove_attachment(&self, vid: &str, iid: &str, fid: &str) -> Result<()> {
+        self.ensure_not_revoked()?;
+        let (v, old) = self.read_record(vid, iid)?;
+        let idx = old.attachments.iter().position(|a| a.id == fid).ok_or_else(|| anyhow!("item has no attachment {fid}"))?;
+        let d = self.vdir(vid);
+        let fp = d.join(FILES_DIR).join(format!("{fid}.enc"));
+        self.commit(|m| {
+            if fp.exists() { fs::remove_file(&fp)?; }
+            if let Some(ve) = m.vaults.get_mut(vid) {
+                ve.files.remove(fid);
+            }
+            Ok(())
+        })?;
+        let now = merge::now_ms();
+        let mut rec = old.clone();
+        rec.attachments.remove(idx);
+        rec.history.push(crate::item::HistoryEntry {
+            version: v,
+            updated_at: old.item.updated_at.clone(),
+            snapshot: old.snapshot(),
+        });
+        let n = rec.history.len();
+        if n > crate::item::HISTORY_LIMIT { rec.history.drain(..n - crate::item::HISTORY_LIMIT); }
+        rec.item.updated_at = (now / 1000).to_string();
+        rec.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &rec.item, now));
+        merge::stamp_ext(Some(&old), &mut rec, now);
+        self.put_item(vid, iid, v + 1, &rec)
     }
 }
 

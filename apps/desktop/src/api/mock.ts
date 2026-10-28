@@ -389,6 +389,13 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   },
   add_attachment: (a: { itemId: string; path: string }) => { const att: T.Attachment = { id: uid('a'), name: a.path.split(/[\\/]/).pop() || 'file', size: 4096, mime: 'application/octet-stream' }; get(a.itemId).detail.attachments.push(att); return delay(att); },
   save_attachment: () => delay(undefined),
+  remove_attachment: (a: { itemId: string; attachmentId: string }) => {
+    const item = get(a.itemId);
+    const idx = item.detail.attachments.findIndex((x) => x.id === a.attachmentId);
+    if (idx < 0) return Promise.reject(new Error(`item has no attachment ${a.attachmentId}`));
+    item.detail.attachments.splice(idx, 1);
+    return delay(undefined);
+  },
   list_tags: () => delay([...new Set([...db.values()].flatMap((r) => r.detail.tags))].sort()),
   rename_tag: (a: { old: string; new: string }) => {
     const old = a.old.trim();
