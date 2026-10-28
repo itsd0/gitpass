@@ -694,5 +694,29 @@
         "content": "$1"
       }
     }
+  },
+  "cmdFillLogin": {
+    "message": "เติมข้อมูลเข้าสู่ระบบที่ตรงที่สุดในหน้านี้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csCmdAppNotRunning": {
+    "message": "เปิดแอป gitpass แล้วลองอีกครั้ง",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csCmdNoForm": {
+    "message": "ไม่พบแบบฟอร์มเข้าสู่ระบบในหน้านี้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csCmdFailed": {
+    "message": "gitpass เติมข้อมูลในหน้านี้ไม่ได้",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optFillShortcut": {
+    "message": "เติมข้อมูลเข้าสู่ระบบ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optFillShortcutBody": {
+    "message": "เติมข้อมูลเข้าสู่ระบบที่ตรงที่สุดในหน้าปัจจุบันโดยไม่ต้องเปิดป๊อปอัป",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   }
 }
