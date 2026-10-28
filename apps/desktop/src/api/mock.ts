@@ -281,6 +281,37 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   add_attachment: (a: { itemId: string; path: string }) => { const att: T.Attachment = { id: uid('a'), name: a.path.split(/[\\/]/).pop() || 'file', size: 4096, mime: 'application/octet-stream' }; get(a.itemId).detail.attachments.push(att); return delay(att); },
   save_attachment: () => delay(undefined),
   list_tags: () => delay([...new Set([...db.values()].flatMap((r) => r.detail.tags))].sort()),
+  rename_tag: (a: { old: string; new: string }) => {
+    const old = a.old.trim();
+    const next = a.new.trim();
+    if (!old) return Promise.reject(new Error('tag name cannot be empty'));
+    if (!next) return Promise.reject(new Error('new tag name cannot be empty'));
+    if (old === next) return delay({ count: 0, items: [] });
+    const items: T.ItemRef[] = [];
+    for (const r of db.values()) {
+      if (r.detail.tags.includes(old)) {
+        const set = new Set<string>();
+        for (const t of r.detail.tags) {
+          set.add(t === old ? next : t);
+        }
+        r.detail.tags = [...set];
+        items.push({ vaultId: r.detail.vaultId, itemId: r.detail.id });
+      }
+    }
+    return delay({ count: items.length, items });
+  },
+  delete_tag: (a: { name: string }) => {
+    const name = a.name.trim();
+    if (!name) return Promise.reject(new Error('tag name cannot be empty'));
+    const items: T.ItemRef[] = [];
+    for (const r of db.values()) {
+      if (r.detail.tags.includes(name)) {
+        r.detail.tags = r.detail.tags.filter((t) => t !== name);
+        items.push({ vaultId: r.detail.vaultId, itemId: r.detail.id });
+      }
+    }
+    return delay({ count: items.length, items });
+  },
   generate_password: (a: { length: number; symbols: boolean; digits: boolean; words?: boolean; pin?: boolean }) => delay(genPw(a.length, a.symbols, a.digits, a.words, a.pin), 5),
   copy_password: (a: { password: string }) => {
     navigator.clipboard?.writeText(a.password).catch(() => {});

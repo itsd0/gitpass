@@ -1,31 +1,220 @@
-import type * as React from "react";
-import { useState } from 'react';
+import * as React from "react";
+import { useEffect, useRef, useState } from 'react';
 import { Archive, Check, ChevronDown, KeyRound, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
 import { VaultIcon } from '../features/home/vaultIcons';
 import { DeleteVaultDialog, EditVaultDialog } from '../features/home/VaultDialogs';
-import type { VaultInfo } from '../api/types';
+import { DeleteTagDialog, MergeTagDialog } from './TagDialogs';
+import type { BulkResult, VaultInfo } from '../api/types';
 import { api } from '../api/client';
 import type { Filter } from '../api/types';
 import { features } from '../features/registry';
 import { useVaultsAndTags } from '../lib/data';
 import { useApp, type Route } from '../lib/store';
 import { cn } from '../lib/utils';
-import { useT, type Key } from '../i18n';
+import { useT, useI18n, translate, type Key } from '../i18n';
 import { OnboardingBadge } from '../features/onboarding';
 import { useSettings } from '../features/settings/useSettings';
 import { Button, Logo, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Input, Tooltip, toast } from '../ui';
 
 const same = (r: Route, f: Filter) => r.name === 'items' && r.filter.kind === f.kind && r.filter.vaultId === f.vaultId && r.filter.tag === f.tag;
 
-function NavItem({ active, icon, label, onClick, right }: { active?: boolean; icon: React.ReactNode; label: string; onClick: () => void; right?: React.ReactNode }) {
+const NavItem = React.forwardRef<
+  HTMLButtonElement,
+  {
+    active?: boolean;
+    icon: React.ReactNode;
+    label: string;
+    onClick: () => void;
+    right?: React.ReactNode;
+    onContextMenu?: (e: React.MouseEvent) => void;
+    onKeyDown?: (e: React.KeyboardEvent) => void;
+  }
+>(({ active, icon, label, onClick, right, onContextMenu, onKeyDown }, ref) => {
   return (
-    <button onClick={onClick} className={cn('group flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[14px]', active ? 'bg-active font-medium' : 'hover:bg-hover')}>
-      <span className="flex w-4 justify-center">{icon}</span><span className="flex-1 truncate">{label}</span>{right}
+    <button
+      ref={ref}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+      onKeyDown={onKeyDown}
+      className={cn(
+        'group flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[14px]',
+        active ? 'bg-active font-medium' : 'hover:bg-hover'
+      )}
+    >
+      <span className="flex w-4 justify-center">{icon}</span>
+      <span className="flex-1 truncate">{label}</span>
+      {right}
     </button>
   );
-}
+});
+NavItem.displayName = 'NavItem';
+
 function SectionHeader({ label, action }: { label: string; action?: React.ReactNode }) {
   return <div className="mt-5 flex items-center justify-between px-2.5 pb-1 text-[11px] font-semibold tracking-wider text-muted"><span className="flex items-center gap-1"><ChevronDown size={12} />{label}</span>{action}</div>;
+}
+
+function SidebarTagItem({
+  tag,
+  active,
+  isEditing,
+  menuOpen,
+  onOpenMenu,
+  onCloseMenu,
+  onStartRename,
+  onCancelRename,
+  onRename,
+  onSelect,
+  onPromptDelete,
+}: {
+  tag: string;
+  active: boolean;
+  isEditing: boolean;
+  menuOpen: boolean;
+  onOpenMenu: () => void;
+  onCloseMenu: () => void;
+  onStartRename: () => void;
+  onCancelRename: () => void;
+  onRename: (newTag: string) => Promise<void>;
+  onSelect: () => void;
+  onPromptDelete: () => void;
+}) {
+  const t = useT();
+  const [val, setVal] = useState(tag);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const committingRef = useRef(false);
+
+  useEffect(() => {
+    if (isEditing) {
+      setVal(tag);
+      committingRef.current = false;
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 0);
+    }
+  }, [isEditing, tag]);
+
+  const commit = async () => {
+    committingRef.current = true;
+    const trimmed = val.trim();
+    if (!trimmed || trimmed === tag) {
+      onCancelRename();
+      committingRef.current = false;
+      buttonRef.current?.focus();
+      return;
+    }
+    await onRename(trimmed);
+    committingRef.current = false;
+    buttonRef.current?.focus();
+  };
+
+  if (isEditing) {
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          void commit();
+        }}
+        className="flex w-full items-center gap-2 rounded-md bg-active px-2 py-1 text-[14px]"
+        data-testid="sidebar-tag-rename"
+      >
+        <Tag size={14} className="shrink-0 text-ok" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              void commit();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              e.stopPropagation();
+              onCancelRename();
+              buttonRef.current?.focus();
+            }
+          }}
+          onBlur={() => {
+            if (!committingRef.current) {
+              onCancelRename();
+            }
+          }}
+          className="min-w-0 flex-1 rounded border border-accent bg-panel px-1.5 py-0.5 text-[14px] text-fg outline-none ring-1 ring-accent"
+          autoFocus
+          aria-label={`Rename tag ${tag}`}
+        />
+      </form>
+    );
+  }
+
+  return (
+    <div
+      className="group/tag relative"
+      data-testid="sidebar-tag"
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onOpenMenu();
+      }}
+    >
+      <NavItem
+        ref={buttonRef}
+        active={active}
+        icon={<Tag size={14} className="text-ok" />}
+        label={tag}
+        onClick={onSelect}
+        onKeyDown={(e) => {
+          if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
+            e.preventDefault();
+            onOpenMenu();
+          }
+        }}
+      />
+      <DropdownMenu
+        open={menuOpen}
+        onOpenChange={(o) => {
+          if (o) onOpenMenu();
+          else {
+            onCloseMenu();
+            buttonRef.current?.focus();
+          }
+        }}
+      >
+        <DropdownMenuTrigger asChild>
+          <button
+            aria-label={`${t('tag.more')}: ${tag}`}
+            className={cn(
+              'absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:bg-active hover:text-fg',
+              menuOpen ? 'visible' : 'invisible group-hover/tag:visible focus:visible'
+            )}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem
+            onSelect={() => {
+              setTimeout(() => {
+                onStartRename();
+              }, 0);
+            }}
+          >
+            <Pencil size={14} />
+            {t('tag.rename')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-danger"
+            onSelect={onPromptDelete}
+          >
+            <Trash2 size={14} />
+            {t('tag.delete')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
 }
 
 export function Sidebar() {
@@ -41,6 +230,13 @@ export function Sidebar() {
   const [vName, setVName] = useState('');
   const [editV, setEditV] = useState<VaultInfo | null>(null); const [delV, setDelV] = useState<VaultInfo | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
+
+  // Tag management state
+  const [menuForTag, setMenuForTag] = useState<string | null>(null);
+  const [editingTag, setEditingTag] = useState<string | null>(null);
+  const [mergePrompt, setMergePrompt] = useState<{ oldTag: string; newTag: string } | null>(null);
+  const [delTag, setDelTag] = useState<string | null>(null);
+
   const extraTop = features.filter((f) => f.sidebar?.section === 'top' && f.id !== 'items' && f.route);
   const extraBottom = features.filter((f) => f.sidebar?.section === 'bottom' && f.route);
 
@@ -95,7 +291,38 @@ export function Sidebar() {
         ))}
 
         {tags.length > 0 && <SectionHeader label={t('nav.tags').toUpperCase()} />}
-        {tags.map((t) => <NavItem key={t} active={same(route, { kind: 'tag', tag: t })} icon={<Tag size={14} className="text-ok" />} label={t} onClick={() => go({ kind: 'tag', tag: t })} />)}
+        {tags.map((tName) => (
+          <SidebarTagItem
+            key={tName}
+            tag={tName}
+            active={same(route, { kind: 'tag', tag: tName })}
+            isEditing={editingTag === tName}
+            menuOpen={menuForTag === tName}
+            onOpenMenu={() => setMenuForTag(tName)}
+            onCloseMenu={() => setMenuForTag(null)}
+            onStartRename={() => setEditingTag(tName)}
+            onCancelRename={() => setEditingTag(null)}
+            onRename={async (newTag) => {
+              setEditingTag(null);
+              if (tags.includes(newTag)) {
+                setMergePrompt({ oldTag: tName, newTag });
+                return;
+              }
+              try {
+                await api.renameTag({ old: tName, new: newTag });
+                toast(t('tag.renamed', { old: tName, new: newTag }));
+                refreshItems();
+                if (same(route, { kind: 'tag', tag: tName })) {
+                  go({ kind: 'tag', tag: newTag });
+                }
+              } catch (err) {
+                toast(String(err), 'danger');
+              }
+            }}
+            onSelect={() => go({ kind: 'tag', tag: tName })}
+            onPromptDelete={() => setDelTag(tName)}
+          />
+        ))}
       </nav>
 
       <div className="border-t border-border p-2">
@@ -115,6 +342,45 @@ export function Sidebar() {
       <EditVaultDialog vault={editV} onOpenChange={(o) => !o && setEditV(null)} onSaved={() => { toast(t('vault.saved')); refreshItems(); }} />
       <DeleteVaultDialog vault={delV} isLast={vaults.length <= 1} onOpenChange={(o) => !o && setDelV(null)}
         onDeleted={(id) => { toast(t('vault.deleted', { vault: delV?.name ?? '' })); if (same(route, { kind: 'vault', vaultId: id })) go({ kind: 'all' }); useApp.getState().selectItem(null); refreshItems(); }} />
+
+      <MergeTagDialog
+        prompt={mergePrompt}
+        onOpenChange={(o) => !o && setMergePrompt(null)}
+        onMerged={(oldTag, newTag) => {
+          toast(t('tag.merged', { old: oldTag, new: newTag }));
+          refreshItems();
+          if (same(route, { kind: 'tag', tag: oldTag })) {
+            go({ kind: 'tag', tag: newTag });
+          }
+        }}
+      />
+      <DeleteTagDialog
+        tag={delTag}
+        onOpenChange={(o) => !o && setDelTag(null)}
+        onDeleted={(deletedTag, res: BulkResult) => {
+          if (same(route, { kind: 'tag', tag: deletedTag })) {
+            go({ kind: 'all' });
+          }
+          refreshItems();
+          const lang = useI18n.getState().lang;
+          toast(translate(lang, 'tag.deleted', { tag: deletedTag }), {
+            duration: 5000,
+            action: {
+              label: translate(lang, 'bulk.undo'),
+              altText: translate(lang, 'bulk.undo'),
+              onClick: async () => {
+                try {
+                  await api.bulkItems({ req: { action: 'add_tag', tag: deletedTag, items: res.items } });
+                  toast(translate(lang, 'bulk.undone'));
+                  refreshItems();
+                } catch (e) {
+                  toast(String(e), 'danger');
+                }
+              },
+            },
+          });
+        }}
+      />
     </aside>
   );
 }
