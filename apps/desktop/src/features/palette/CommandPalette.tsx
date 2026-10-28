@@ -75,6 +75,7 @@ export function PaletteHost() {
     registerShortcut({ id: 'palette', combo: 'mod+k', labelKey: 'shortcuts.palette', run: () => setOpen((o) => !o), allowInInput: true }),
     registerShortcut({ id: 'help', combo: '?', labelKey: 'shortcuts.help', run: () => app().openModal('shortcuts-help') }),
     registerShortcut({ id: 'new-item', combo: 'mod+n', labelKey: 'shortcuts.newItem', run: () => app().openModal('new-item') }),
+    registerShortcut({ id: 'generate-password', combo: 'mod+shift+g', labelKey: 'shortcuts.generatePassword', run: () => app().openModal('password-generator') }),
     registerShortcut({ id: 'lock', combo: 'mod+shift+l', labelKey: 'shortcuts.lock', run: () => { void api.lock().catch(() => {}); app().lock(); }, allowInInput: true }),
   ]; return () => offs.forEach((f) => f()); }, []);
   useEffect(() => { if (modal?.id === 'palette') { setOpen(true); closeModal(); } }, [modal, closeModal]);

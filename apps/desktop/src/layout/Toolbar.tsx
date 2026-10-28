@@ -1,8 +1,8 @@
 import { forwardRef } from 'react';
-import { ArrowLeft, ArrowRight, PanelLeftOpen, Plus, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, KeyRound, PanelLeftOpen, Plus, Search } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { useItemsUI } from '../features/items';
-import { Button, Kbd } from '../ui';
+import { Button, Kbd, Tooltip } from '../ui';
 import { useT } from '../i18n';
 
 export const Toolbar = forwardRef<HTMLInputElement>(function Toolbar(_, ref) {
@@ -23,6 +23,11 @@ export const Toolbar = forwardRef<HTMLInputElement>(function Toolbar(_, ref) {
           className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted" />
         <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd><Kbd>F</Kbd>
       </label>
+      <Tooltip content={t('generator.title')}>
+        <Button variant="ghost" size="iconSm" aria-label={t('generator.title')} onClick={() => openModal('password-generator')}>
+          <KeyRound size={15} />
+        </Button>
+      </Tooltip>
       <Button variant="link" size="sm" className="px-2" onClick={() => setRoute({ name: 'settings', tab: 'help' })}>Help</Button>
       <Button onClick={() => openModal('new-item')}><Plus size={15} />{t('nav.newItem')}</Button>
     </div>

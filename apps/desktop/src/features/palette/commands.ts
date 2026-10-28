@@ -1,4 +1,4 @@
-import { Home, Lock, Moon, Plus, RefreshCw, Settings, ShieldCheck, Users, Keyboard } from 'lucide-react';
+import { Home, KeyRound, Lock, Moon, Plus, RefreshCw, Settings, ShieldCheck, Users, Keyboard } from 'lucide-react';
 import { api } from '../../api/client';
 import { translate, useI18n, type Key } from '../../i18n';
 import type { PaletteCommand } from '../registry';
@@ -12,6 +12,7 @@ export function builtinCommands(): PaletteCommand[] {
   const app = useApp.getState(); const lang = useI18n.getState().lang;
   const cmds: (Omit<PaletteCommand, 'label'> & { labelKey: Key })[] = [
     { id: 'new-item', labelKey: 'cmd.newItem', icon: Plus, keywords: ['create', 'add'], shortcut: 'mod+n', run: () => app.openModal('new-item') },
+    { id: 'generate-password', labelKey: 'cmd.generatePassword', icon: KeyRound, keywords: ['generator', 'pin', 'words', 'random'], shortcut: 'mod+shift+g', run: () => app.openModal('password-generator') },
     { id: 'lock', labelKey: 'cmd.lock', icon: Lock, shortcut: 'mod+shift+l', run: async () => { await api.lock().catch(() => {}); app.lock(); } },
     { id: 'go-home', labelKey: 'cmd.home', icon: Home, run: () => app.setRoute({ name: 'home' }) },
     { id: 'go-watchtower', labelKey: 'cmd.watchtower', icon: ShieldCheck, keywords: ['security', 'audit'], run: () => app.setRoute({ name: 'watchtower' }) },

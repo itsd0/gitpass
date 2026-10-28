@@ -77,6 +77,12 @@
   "totpCopied": {
     "message": "คัดลอก TOTP แล้ว"
   },
+  "copyTotpCode": {
+    "message": "คัดลอกโค้ดใช้ครั้งเดียว"
+  },
+  "totpUnavailable": {
+    "message": "ไม่สามารถแสดงโค้ดได้"
+  },
   "notHttps": {
     "message": "ไม่ใช่หน้า https"
   },

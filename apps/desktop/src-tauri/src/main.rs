@@ -33,7 +33,7 @@ fn main() {
             c::status, c::show_quick_access, c::unlock, c::lock, c::list_vaults, c::create_vault, c::update_vault, c::delete_vault, c::list_items, c::get_item, c::reveal_field,
             c::copy_field, c::totp_now, c::create_item, c::update_item, c::set_favorite, c::archive_item, c::delete_item,
             c::restore_item, c::purge_item, c::bulk_items, c::move_item, c::duplicate_item, c::item_version, c::add_attachment,
-            c::save_attachment, c::list_tags, c::generate_password, c::password_strength, c::watchtower, c::import_file, c::export_items,
+            c::save_attachment, c::list_tags, c::generate_password, c::copy_password, c::password_strength, c::watchtower, c::import_file, c::export_items,
             c::identity, c::fingerprint_of, c::list_members, c::share_vault, c::unshare_vault, c::accept_share, c::list_devices,
             c::revoke_device, c::get_settings, c::set_settings, c::change_password, c::rotate_secret_key, c::sync_status,
             c::sync, c::remote_connect, c::remote_disconnect, c::open_new_repo_page, c::onboarding, c::set_onboarding, c::emergency_kit, c::emergency_kit_data, c::favicon_url, c::touch, c::create_account, c::unlock_biometric, c::ssh_generate, c::ssh_import, c::ssh_agent_info,

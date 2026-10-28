@@ -7,11 +7,11 @@ import { domainSuggestion, filterCategories } from './categories';
 import { CategoryIcon } from './CategoryIcon';
 import { CreateForm } from './CreateForm';
 import { ImportWizard } from './ImportWizard';
-type View = { kind: 'pick' } | { kind: 'form'; category: ItemCategory; initial?: { title?: string; url?: string } } | { kind: 'import' };
-export interface NewItemModalProps { category?: ItemCategory; vaultId?: string; view?: 'import'; }
+type View = { kind: 'pick' } | { kind: 'form'; category: ItemCategory; initial?: { title?: string; url?: string; password?: string } } | { kind: 'import' };
+export interface NewItemModalProps { category?: ItemCategory; vaultId?: string; view?: 'import'; initial?: { title?: string; url?: string; password?: string }; }
 export function NewItemModal(props: NewItemModalProps) {
   const { closeModal } = useApp();
-  const [view, setView] = useState<View>(props.view === 'import' ? { kind: 'import' } : props.category ? { kind: 'form', category: props.category } : { kind: 'pick' });
+  const [view, setView] = useState<View>(props.view === 'import' ? { kind: 'import' } : props.category ? { kind: 'form', category: props.category, initial: props.initial } : { kind: 'pick' });
   const [q, setQ] = useState(''); const [more, setMore] = useState(false);
   const cats = filterCategories(q); const suggestion = domainSuggestion(q);
   const visible = q || more ? cats : cats.filter(c => c.primary);
