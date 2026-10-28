@@ -53,6 +53,48 @@
   "symbols": {
     "message": "Symbols"
   },
+  "genModeRandom": {
+    "message": "Random"
+  },
+  "genModeMemorable": {
+    "message": "Memorable"
+  },
+  "genModePin": {
+    "message": "PIN"
+  },
+  "genWords": {
+    "message": "Words"
+  },
+  "genIncludeDigits": {
+    "message": "Include digits"
+  },
+  "genIncludeSymbols": {
+    "message": "Include symbols"
+  },
+  "genSaveAsLogin": {
+    "message": "Save as new Login…"
+  },
+  "genOpen": {
+    "message": "Generate a password…"
+  },
+  "genFilled": {
+    "message": "Filled on this page"
+  },
+  "genFillFailed": {
+    "message": "Could not fill on this page"
+  },
+  "genStrengthWeak": {
+    "message": "Weak"
+  },
+  "genStrengthFair": {
+    "message": "Fair"
+  },
+  "genStrengthGood": {
+    "message": "Good"
+  },
+  "genStrengthExcellent": {
+    "message": "Excellent"
+  },
   "copy": {
     "message": "Copy"
   },

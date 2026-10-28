@@ -123,6 +123,15 @@ fn fill_totp_save_update_vaults_generate() {
     let g = ok(&mut f.host, json!({"cmd":"generate","len":12,"digits":true,"symbols":true}))["password"].as_str().unwrap().to_string();
     assert!(g.chars().any(|c| c.is_ascii_digit()) && g.chars().any(|c| !c.is_ascii_alphanumeric()));
 
+    // Passphrase and PIN modes share gitpass-core's generator with the CLI and desktop app.
+    let g = ok(&mut f.host, json!({"cmd":"generate","len":5,"words":true}))["password"].as_str().unwrap().to_string();
+    assert_eq!(g.split('-').count(), 5, "{g}");
+    let g = ok(&mut f.host, json!({"cmd":"generate","len":6,"pin":true,"digits":false,"symbols":false}))["password"].as_str().unwrap().to_string();
+    assert_eq!(g.len(), 6, "{g}");
+    assert!(g.chars().all(|c| c.is_ascii_digit()), "{g}");
+    assert_eq!(err(&mut f.host, json!({"cmd":"generate","len":2,"pin":true})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"generate","len":25,"words":true})).0, "bad_request");
+
     let st = ok(&mut f.host, json!({"cmd":"status"}));
     assert_eq!(st["app_running"], false);
     assert_eq!(err(&mut f.host, json!({"cmd":"request_unlock","reason":"x"})).0, "app_not_running");

@@ -427,6 +427,58 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
           nf.note && nf.note.kind === 'multiline' && nf.note.value === 'FAKE-code-1\nFAKE-code-2',
           `${desc(note.msg)}; create_item=${note.count}; panelClosed=${!!note.closed}`);
       }
+
+      // --- Password generator (#68): open from the header, copy, and save as a new Login.
+      let genStep = 'open';
+      try {
+        const panelClick = (label) => pop.eval(`(() => {
+          const p = document.getElementById('panel'); if (!p) return null;
+          const b = [...p.querySelectorAll('button')].find((x) => (x.innerText || '').trim() === ${JSON.stringify(label)});
+          if (!b) return null; b.click(); return ${JSON.stringify(label)};
+        })()`);
+        const opened = await pop.eval('(() => { const b = document.getElementById("genBtn"); if (!b) return false; b.click(); return true; })()');
+        const gen = await until(() => pop.eval(`(() => {
+          const c = document.querySelector('#panel .gen-code'); if (!c) return null;
+          if (!c.textContent || c.textContent === '…') return null; // still loading
+          const sel = document.querySelector('#panel .gen-mode.sel');
+          const meter = document.querySelector('#panel .gen-strength');
+          return { text: c.textContent, mode: sel ? sel.textContent : '', strength: Number(meter ? meter.getAttribute('aria-valuenow') : 0) };
+        })()`), T(4000));
+        rec('popup generator: opens from the header with a host-generated password',
+          !!opened && !!gen && gen.text === 'Gen-' + 'x'.repeat(16) && gen.mode === 'Random' && gen.strength > 0,
+          `${opened ? 'clicked generator' : 'no generator button'}; ${JSON.stringify(gen)}`);
+
+        await pop.eval(`(() => {
+          window.__copied = [];
+          try { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (x) => { window.__copied.push(x); return Promise.resolve(); } } }); } catch (_) {}
+          return true;
+        })()`);
+        genStep = 'copy';
+        await panelClick('Copy');
+        const copiedGen = await until(async () => { const c = await pop.eval('window.__copied || []'); return Array.isArray(c) && c.includes('Gen-' + 'x'.repeat(16)) && c; }, T(3000));
+        rec('popup generator: Copy copies the password', !!copiedGen, `copied=${JSON.stringify(copiedGen || [])}`);
+
+        const m0 = cmdsIn(mockDir).length;
+        genStep = 'memorable';
+        await panelClick('Memorable');
+        const words = await until(() => pop.eval(`(() => { const c = document.querySelector('#panel .gen-code'); const t = c ? c.textContent : ''; return t && t !== '…' ? t : ''; })()`), T(4000));
+        const wordCmd = cmdsIn(mockDir).slice(m0).find((m) => m.cmd === 'generate' && m.words === true);
+        rec('popup generator: Memorable asks the host for words', !!wordCmd && /^amber-coral-lunar-ivory-ocean/.test(words), `cmd=${JSON.stringify(wordCmd || null)} text=${JSON.stringify(words)}`);
+
+        const before = cmdsIn(mockDir).filter((m) => m.cmd === 'create_item').length;
+        genStep = 'save-as-login';
+        await panelClick('Save as new Login…');
+        const prefill = await until(() => pop.eval(`(() => {
+          const f = document.querySelector('#panel form.newitem'); if (!f) return null;
+          const v = (k) => { const i = f.querySelector('[data-field="' + k + '"]'); return i ? i.value : null; };
+          return { type: f.querySelector('select').value, title: v('title'), url: v('url'), password: v('password') };
+        })()`), T(4000));
+        const after = cmdsIn(mockDir).filter((m) => m.cmd === 'create_item').length;
+        rec('popup generator: Save as new Login prefills title, site URL and password',
+          !!prefill && prefill.type === 'login' && prefill.title === 'localhost' && prefill.url === new URL(LOGIN).origin &&
+          prefill.password === words && after === before,
+          `${JSON.stringify(prefill)}; create_item delta=${after - before}`);
+      } catch (e) { rec('popup generator', false, `${genStep}: ${e.message}`); }
     }
     if (pop) await pop.close();
 

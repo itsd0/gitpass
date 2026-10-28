@@ -87,7 +87,12 @@ function handle(m) {
       return { item_id: id, title: it.title.trim() };
     }
     case 'update_password': needUnlock(); return { ok: true };
-    case 'generate': return { password: 'Gen-' + 'x'.repeat(Math.max(4, (m.len || 20) - 4)) };
+    case 'generate': {
+      const len = Math.max(4, m.len || 20);
+      if (m.pin) return { password: Array.from({ length: len }, (_, i) => String(i % 10)).join('') };
+      if (m.words) return { password: Array.from({ length: len }, (_, i) => ['amber', 'coral', 'lunar', 'ivory', 'ocean'][i % 5]).join('-') };
+      return { password: 'Gen-' + 'x'.repeat(Math.max(4, (m.len || 20) - 4)) };
+    }
     case 'list_vaults': needUnlock(); return { vaults: [{ ...V, item_count: getItems().length }] };
     case 'open_in_app': return {};
     case 'fill_card': case 'fill_identity': { needUnlock();
