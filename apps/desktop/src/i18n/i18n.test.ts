@@ -26,8 +26,13 @@ describe('i18n', () => {
     const kitKeys = Object.keys(en).filter((k) => k.startsWith('kit.'));
     for (const d of [dictionaries.my, dictionaries.th]) for (const k of kitKeys) expect(d[k as keyof typeof en]).toBeTruthy();
   });
-  it("covers all trash.* strings in my and th", () => {
-    const trashKeys = Object.keys(en).filter((k) => k.startsWith("trash."));
+  it('covers all settings search and section strings in my and th', () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith('settings.section') || k.startsWith('settings.search') || k.endsWith('Help'));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const d of [dictionaries.my, dictionaries.th]) for (const k of keys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+  });
+  it('covers all trash.* strings in my and th', () => {
+    const trashKeys = Object.keys(en).filter((k) => k.startsWith('trash.'));
     expect(trashKeys.length).toBeGreaterThan(0);
     for (const d of [dictionaries.my, dictionaries.th]) for (const k of trashKeys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
   });
