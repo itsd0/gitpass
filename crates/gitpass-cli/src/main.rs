@@ -634,11 +634,11 @@ fn pick_record(s: &Session, vid: &str, query: &str, pick: Option<usize>, include
     if !include_archived {
         recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
     }
-    let mut ranked: Vec<(i64, String, ItemRecord)> = recs
-        .into_iter()
-        .filter_map(|(id, _, rec)| gitpass_core::search::score_item(query, &id, &rec.item).map(|sc| (sc, id, rec)))
-        .collect();
-    ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+    let ranked = gitpass_core::search::rank_by(
+        query,
+        recs.into_iter().map(|(id, _, rec)| (id, rec)),
+        |r| &r.item,
+    );
 
     if ranked.is_empty() {
         bail!("no item matches '{query}'");
@@ -880,11 +880,11 @@ fn run() -> Result<()> {
             if !include_archived {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
-            let mut ranked: Vec<(i64, String, ItemRecord)> = recs
-                .into_iter()
-                .filter_map(|(id, _, rec)| gitpass_core::search::score_item(query, &id, &rec.item).map(|sc| (sc, id, rec)))
-                .collect();
-            ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+            let ranked = gitpass_core::search::rank_by(
+                query,
+                recs.into_iter().map(|(id, _, rec)| (id, rec)),
+                |r| &r.item,
+            );
             if *json {
                 let summaries: Vec<CliItemSummary> = ranked.iter().map(|(_, id, rec)| item_summary(id, rec)).collect();
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
@@ -902,14 +902,14 @@ fn run() -> Result<()> {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
             let items: Vec<(String, ItemRecord)> = match query {
-                Some(q) => {
-                    let mut ranked: Vec<(i64, String, ItemRecord)> = recs
-                        .into_iter()
-                        .filter_map(|(id, _, rec)| gitpass_core::search::score_item(q, &id, &rec.item).map(|sc| (sc, id, rec)))
-                        .collect();
-                    ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
-                    ranked.into_iter().map(|(_, id, rec)| (id, rec)).collect()
-                }
+                Some(q) => gitpass_core::search::rank_by(
+                    q,
+                    recs.into_iter().map(|(id, _, rec)| (id, rec)),
+                    |r| &r.item,
+                )
+                .into_iter()
+                .map(|(_, id, rec)| (id, rec))
+                .collect(),
                 None => {
                     recs.sort_by(|a, b| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()));
                     recs.into_iter().map(|(id, _, rec)| (id, rec)).collect()
