@@ -303,6 +303,33 @@
   "generate": {
     "message": "Generate"
   },
+  "edit": {
+    "message": "Edit"
+  },
+  "cancel": {
+    "message": "Cancel"
+  },
+  "notes": {
+    "message": "Notes"
+  },
+  "addWebsite": {
+    "message": "Add website"
+  },
+  "removeWebsite": {
+    "message": "Remove website"
+  },
+  "useGenerated": {
+    "message": "Use password"
+  },
+  "discardChanges": {
+    "message": "Discard unsaved changes?"
+  },
+  "titleRequired": {
+    "message": "Title is required"
+  },
+  "websiteInvalid": {
+    "message": "Website must be an http(s) URL"
+  },
   "vault": {
     "message": "Vault"
   },
@@ -581,6 +608,9 @@
   "shortcutOpenUrl": {
     "message": "Open website"
   },
+  "shortcutEdit": {
+    "message": "Edit login"
+  },
   "shortcutGen": {
     "message": "Password generator"
   },
@@ -633,5 +663,23 @@
         "content": "$1"
       }
     }
+  },
+  "cmdFillLogin": {
+    "message": "Fill the best-matching login on this page"
+  },
+  "csCmdAppNotRunning": {
+    "message": "Open the gitpass app, then try again"
+  },
+  "csCmdNoForm": {
+    "message": "No login form found on this page"
+  },
+  "csCmdFailed": {
+    "message": "gitpass could not fill this page"
+  },
+  "optFillShortcut": {
+    "message": "Fill login"
+  },
+  "optFillShortcutBody": {
+    "message": "Fills the best-matching login on the current page without opening the popup."
   }
 }

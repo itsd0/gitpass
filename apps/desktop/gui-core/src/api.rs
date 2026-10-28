@@ -67,6 +67,8 @@ pub struct ItemDetail {
     /// Active Watchtower findings (HIBP excluded: the detail view never makes network calls).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub findings: Vec<FindingInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password_changed_at: Option<String>,
 }
 /// One item reference for bulk commands.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -161,6 +163,16 @@ pub enum Theme { Dark, Light, System }
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Language { En, My, Th }
+fn default_true() -> bool { true }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LockTrigger {
+    Sleep,
+    ScreenLock,
+    UserSwitch,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
@@ -171,6 +183,12 @@ pub struct Settings {
     #[serde(default)] pub hibp_check: bool,
     /// Ask before every SSH agent signature (default off: unlocked vault = keys usable).
     #[serde(default)] pub ssh_approve_each_use: bool,
+    /// Lock the vault immediately when the Mac goes to sleep (default on).
+    #[serde(default = "default_true")] pub lock_on_sleep: bool,
+    /// Lock the vault when the screen locks (⌃⌘Q or hot corner, default on).
+    #[serde(default = "default_true")] pub lock_on_screen_lock: bool,
+    /// Lock the vault when switching away with fast user switching (default on).
+    #[serde(default = "default_true")] pub lock_on_user_switch: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_length: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_digits: Option<bool>,
@@ -180,6 +198,7 @@ impl Default for Settings {
     fn default() -> Self {
         Settings { auto_lock_minutes: 5, clipboard_clear_secs: crate::CLIPBOARD_CLEAR_SECS, theme: Theme::Dark, language: Language::En,
             biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false, ssh_approve_each_use: false,
+            lock_on_sleep: true, lock_on_screen_lock: true, lock_on_user_switch: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None }
     }
 }
@@ -443,6 +462,7 @@ fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<Find
         password_strength: if r.category == Category::Login { r.item.password.as_deref().map(strength) } else { pw.and_then(|f| f.value).map(|v| strength(&v)) },
         has_totp: has_totp(r),
         findings,
+        password_changed_at: r.password_changed_at().map(|t| iso8601(t as i64)),
     }
 }
 
@@ -631,6 +651,23 @@ impl App {
         self.state.lock();
         if let Ok(mut k) = self.fresh_kit.lock() { *k = None; }
         if let Ok(mut k) = self.fresh_secret.lock() { *k = None; }
+    }
+
+    /// Handle a system event (sleep, screen lock, fast user switch).
+    /// Returns true if the vault was unlocked and locked as a result of the event, false if ignored or already locked.
+    pub fn handle_system_lock_event(&self, trigger: LockTrigger) -> bool {
+        let s = self.get_settings();
+        let should_lock = match trigger {
+            LockTrigger::Sleep => s.lock_on_sleep,
+            LockTrigger::ScreenLock => s.lock_on_screen_lock,
+            LockTrigger::UserSwitch => s.lock_on_user_switch,
+        };
+        if should_lock && self.state.is_unlocked() {
+            self.lock();
+            true
+        } else {
+            false
+        }
     }
 
     /// Clears the clipboard immediately if it still holds the text copied by [`App::copy_field`].

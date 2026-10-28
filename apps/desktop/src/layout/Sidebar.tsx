@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Archive, Check, ChevronDown, KeyRound, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
 import { VaultIcon } from '../features/home/vaultIcons';
 import { DeleteVaultDialog, EditVaultDialog } from '../features/home/VaultDialogs';
+import { NewVaultDialog } from '../features/home/NewVaultDialog';
 import { DeleteTagDialog, MergeTagDialog } from './TagDialogs';
 import type { BulkResult, VaultInfo } from '../api/types';
 import { api } from '../api/client';
@@ -16,7 +17,7 @@ import { OnboardingBadge } from '../features/onboarding';
 import { useSettings } from '../features/settings/useSettings';
 import { useDragStore, canDropOnVault } from '../features/items/dragState';
 import { runBulk } from '../features/items/BulkPane';
-import { Button, Logo, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Input, Tooltip, toast } from '../ui';
+import { Button, Logo, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Tooltip, toast } from '../ui';
 
 const same = (r: Route, f: Filter) => r.name === 'items' && r.filter.kind === f.kind && r.filter.vaultId === f.vaultId && r.filter.tag === f.tag;
 
@@ -368,7 +369,6 @@ export function Sidebar() {
   // `account` is the account UUID: show a friendly name instead (first vault, else Personal).
   const accountName = vaults.find((v) => v.name === 'Personal')?.name ?? vaults[0]?.name ?? 'Personal';
   void account;
-  const [vName, setVName] = useState('');
   const [editV, setEditV] = useState<VaultInfo | null>(null); const [delV, setDelV] = useState<VaultInfo | null>(null);
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
@@ -468,14 +468,14 @@ export function Sidebar() {
         <NavItem active={same(route, { kind: 'deleted' })} icon={<Trash2 size={15} />} label={t('nav.deleted')} onClick={() => go({ kind: 'deleted' })} />
       </div>
 
-      <Dialog open={newVault} onOpenChange={setNewVault}>
-        <DialogContent title={t("vault.newTitle")} description={t("vault.newDesc")}>
-          <form onSubmit={(e) => { e.preventDefault(); if (!vName.trim()) return; api.createVault({ name: vName.trim() }).then((v) => { toast(t("vault.created", { name: v.name })); setNewVault(false); setVName(''); refreshItems(); go({ kind: 'vault', vaultId: v.id }); }, (er) => toast(String(er), 'danger')); }}>
-            <Input autoFocus placeholder={t("vault.namePlaceholder")} value={vName} onChange={(e) => setVName(e.target.value)} />
-            <div className="mt-4 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setNewVault(false)}>{t("common.cancel")}</Button><Button type="submit">{t("vault.create")}</Button></div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <NewVaultDialog
+        open={newVault}
+        onOpenChange={setNewVault}
+        onCreated={(v) => {
+          refreshItems();
+          go({ kind: 'vault', vaultId: v.id });
+        }}
+      />
       <EditVaultDialog vault={editV} onOpenChange={(o) => !o && setEditV(null)} onSaved={() => { toast(t('vault.saved')); refreshItems(); }} />
       <DeleteVaultDialog vault={delV} isLast={vaults.length <= 1} onOpenChange={(o) => !o && setDelV(null)}
         onDeleted={(id) => { toast(t('vault.deleted', { vault: delV?.name ?? '' })); if (same(route, { kind: 'vault', vaultId: id })) go({ kind: 'all' }); useApp.getState().selectItem(null); refreshItems(); }} />
