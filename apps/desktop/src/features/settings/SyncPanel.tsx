@@ -6,6 +6,7 @@ import { cn } from '../../lib/utils';
 import { Badge, Button, Input, Modal, Skeleton } from '../../ui';
 import { useT, type Key } from '../../i18n';
 import { useOnboarding } from '../onboarding/useOnboarding';
+import { SettingsSection, SettingsRow } from './SettingsSection';
 
 const errMsg = (e: unknown) => String((e as Error)?.message ?? e);
 export const NEW_REPO_URL = 'https://github.com/new';
@@ -74,7 +75,7 @@ export function ConnectForm({ onConnected }: { onConnected: (s: SyncStatus) => v
   </form>;
 }
 
-export function SyncPanel() {
+export function SyncPanel({ highlightedId }: { highlightedId?: string | null } = {}) {
   const t = useT(); const { patch } = useOnboarding();
   const [st, setSt] = useState<SyncStatus | null>(null); const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = useState(false); const [confirm, setConfirm] = useState(false);
@@ -87,16 +88,36 @@ export function SyncPanel() {
   };
   if (!st) return result ? <ErrorBox text={result.text} /> : <Skeleton className="h-24" />;
   if (!st.remote) return <ConnectForm onConnected={(s) => { setSt(s); setResult({ ok: true, text: t('sync.connected') }); }} />;
-  return <>
-    <div className="flex items-start justify-between gap-6 border-b border-border py-4"><div className="text-sm font-medium">{t('sync.remote')}</div><span className="break-all font-mono text-sm">{st.remote}</span></div>
-    <div className="flex items-start justify-between gap-6 border-b border-border py-4"><div className="text-sm font-medium">{t('sync.lastSync')}</div><span className="text-sm">{st.lastSync ? new Date(st.lastSync).toLocaleString() : t('sync.never')}</span></div>
-    <div className="flex items-start justify-between gap-6 py-4"><div className="text-sm font-medium">{t('sync.status')}</div><div className="flex gap-1"><Badge>{t('sync.ahead', { n: st.ahead })}</Badge><Badge>{t('sync.behind', { n: st.behind })}</Badge>{st.dirty && <Badge tone="warn">{t('sync.dirty')}</Badge>}</div></div>
-    <div className="mt-2 flex flex-wrap gap-2"><Button variant="default" disabled={busy} onClick={() => run(false)}><RefreshCw className={cn('h-4 w-4', busy && 'motion-safe:animate-spin')} aria-hidden />{t('sync.now')}</Button>
-      <Button variant="outline" disabled={busy} onClick={() => run(true)}><GitMerge className="h-4 w-4" aria-hidden />{t('sync.merge')}</Button>
-      <Button variant="outline" disabled={busy} onClick={() => setConfirm(true)}><Link2Off className="h-4 w-4" aria-hidden />{t('sync.disconnect')}</Button></div>
+  return <div id="setting-sync" data-setting-id="setting-sync">
+    <SettingsSection title={t('settings.sectionSync')}>
+      <SettingsRow label={t('sync.remote')} highlighted={highlightedId === 'setting-sync'}>
+        <span className="break-all font-mono text-sm">{st.remote}</span>
+      </SettingsRow>
+      <SettingsRow label={t('sync.lastSync')}>
+        <span className="text-sm">{st.lastSync ? new Date(st.lastSync).toLocaleString() : t('sync.never')}</span>
+      </SettingsRow>
+      <SettingsRow label={t('sync.status')}>
+        <div className="flex gap-1">
+          <Badge>{t('sync.ahead', { n: st.ahead })}</Badge>
+          <Badge>{t('sync.behind', { n: st.behind })}</Badge>
+          {st.dirty && <Badge tone="warn">{t('sync.dirty')}</Badge>}
+        </div>
+      </SettingsRow>
+    </SettingsSection>
+    <div className="mt-4 flex flex-wrap gap-2">
+      <Button variant="default" disabled={busy} onClick={() => run(false)}>
+        <RefreshCw className={cn('h-4 w-4', busy && 'motion-safe:animate-spin')} aria-hidden />{t('sync.now')}
+      </Button>
+      <Button variant="outline" disabled={busy} onClick={() => run(true)}>
+        <GitMerge className="h-4 w-4" aria-hidden />{t('sync.merge')}
+      </Button>
+      <Button variant="outline" disabled={busy} onClick={() => setConfirm(true)}>
+        <Link2Off className="h-4 w-4" aria-hidden />{t('sync.disconnect')}
+      </Button>
+    </div>
     {result && (result.ok ? <div role="status" className="mt-4 rounded-md border border-border p-3 text-sm"><div className="text-xs text-muted">{t('sync.result')}</div><pre className="whitespace-pre-wrap font-mono text-xs">{result.text}</pre></div> : <ErrorBox text={result.text} />)}
     {confirm && <Modal open onOpenChange={(o) => !o && setConfirm(false)} title={t('sync.disconnectTitle')}
       footer={<><Button variant="outline" onClick={() => setConfirm(false)}>{t('common.cancel')}</Button><Button variant="danger" disabled={busy} onClick={disconnect}>{t('sync.disconnect')}</Button></>}>
       <p className="text-sm">{t('sync.disconnectBody')}</p></Modal>}
-  </>;
+  </div>;
 }
