@@ -557,5 +557,20 @@
   },
   "itemType": {
     "message": "ประเภท"
+  },
+  "errTimeout": {
+    "message": "คำขอหมดเวลา"
+  },
+  "errListLoad": {
+    "message": "ไม่สามารถโหลดรายการได้"
+  },
+  "errDetailLoad": {
+    "message": "ไม่สามารถโหลดรายละเอียดได้"
+  },
+  "loadingItems": {
+    "message": "กำลังโหลดรายการ…"
+  },
+  "loadingDetail": {
+    "message": "กำลังโหลดรายละเอียด…"
   }
 }
