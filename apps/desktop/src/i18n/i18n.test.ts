@@ -58,6 +58,15 @@ describe('i18n', () => {
       }
     }
   });
+  it("covers all unlock.* and sidebar.* strings in my and th", () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith("unlock.") || k.startsWith("sidebar."));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const d of [dictionaries.my, dictionaries.th]) {
+      for (const k of keys) {
+        expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+      }
+    }
+  });
   it("covers all items.search.* strings in my and th", () => {
     const keys = Object.keys(en).filter((k) => k.startsWith("items.search."));
     expect(keys.length).toBeGreaterThan(0);
