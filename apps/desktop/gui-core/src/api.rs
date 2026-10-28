@@ -132,6 +132,7 @@ pub struct WatchtowerReport {
     pub missing_totp: Vec<String>, pub totp_available: Vec<String>, pub passkey_available: Vec<String>,
     pub expired: Vec<String>, pub expiring_soon: Vec<String>,
     pub insecure_urls: Vec<String>,
+    pub duplicates: Vec<Vec<String>>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ignored: Vec<IgnoredFindingItem>,
     pub checked_at: String, pub hibp_checked: bool,
@@ -961,9 +962,11 @@ impl App {
             let mut out = WatchtowerReport { score: 100, weak: vec![], reused: vec![], old: vec![], breached: vec![], missing_totp: vec![],
                 totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
                 insecure_urls: vec![],
+                duplicates: vec![],
                 ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
             let mut groups: BTreeMap<usize, Vec<String>> = BTreeMap::new();
+            let mut dup_groups: BTreeMap<String, Vec<String>> = BTreeMap::new();
             for f in &rep.per_item {
                 for x in &f.findings {
                     match x {
@@ -977,10 +980,12 @@ impl App {
                         Finding::Expired { .. } => out.expired.push(f.id.clone()),
                         Finding::ExpiringSoon { .. } => out.expiring_soon.push(f.id.clone()),
                         Finding::InsecureUrl { .. } => out.insecure_urls.push(f.id.clone()),
+                        Finding::Duplicate { group } => dup_groups.entry(group.clone()).or_default().push(f.id.clone()),
                     }
                 }
             }
             out.reused = groups.into_values().collect();
+            out.duplicates = dup_groups.into_values().collect();
             for f in &rep.ignored_per_item {
                 for x in &f.findings {
                     out.ignored.push(IgnoredFindingItem {

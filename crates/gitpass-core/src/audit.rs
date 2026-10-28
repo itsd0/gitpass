@@ -25,6 +25,7 @@ pub enum Finding {
     ExpiringSoon { on: String, days: u64 },
     /// Saved with an unencrypted HTTP URL (public host only; no secrets/paths/queries).
     InsecureUrl { url_host: String },
+    Duplicate { group: String },
 }
 
 impl Finding {
@@ -40,6 +41,7 @@ impl Finding {
             Finding::Expired { .. } => "expired",
             Finding::ExpiringSoon { .. } => "expiring_soon",
             Finding::InsecureUrl { .. } => "insecure_url",
+            Finding::Duplicate { .. } => "duplicate",
         }
     }
 }
@@ -60,7 +62,7 @@ impl Default for AuditOpts {
 #[derive(Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuditReport {
     pub items_checked: usize,
-    pub weak: usize, pub reused: usize, pub reused_groups: usize, pub old: usize, pub missing_totp: usize, pub pwned: usize,
+    pub weak: usize, pub reused: usize, pub reused_groups: usize, pub duplicates: usize, pub old: usize, pub missing_totp: usize, pub pwned: usize,
     pub totp_available: usize, pub passkey_available: usize,
     pub expired: usize, pub expiring_soon: usize,
     pub insecure_urls: usize,
@@ -320,6 +322,28 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
         r.reused_groups += 1;
         for &i in idxs { reuse.insert(i, (g + 1, idxs.len() - 1)); }
     }
+    // duplicate groups: login items in the same vault scope that share the same normalized site and username.
+    // Archived and recently deleted items are ignored. Items with an empty username are not grouped.
+    let mut dup_map: BTreeMap<(String, String, String), Vec<usize>> = BTreeMap::new();
+    for (i, (vault, _, rec)) in items.iter().enumerate() {
+        if rec.archived || rec.deleted_at.is_some() || rec.category != crate::item::Category::Login {
+            continue;
+        }
+        let Some(user) = rec.item.username.as_deref().map(str::trim).filter(|u| !u.is_empty()) else {
+            continue;
+        };
+        let Some(site) = rec.item.url.as_deref().and_then(host_of) else {
+            continue;
+        };
+        dup_map.entry((vault.clone(), site, user.to_lowercase())).or_default().push(i);
+    }
+    let mut dup_findings: HashMap<usize, String> = HashMap::new();
+    for ((_, site, norm_user), idxs) in dup_map.into_iter().filter(|(_, v)| v.len() > 1) {
+        let group = format!("{site}/{norm_user}");
+        for i in idxs {
+            dup_findings.insert(i, group.clone());
+        }
+    }
     let mut cache = HashMap::new();
     for (i, (vault, id, rec)) in items.iter().enumerate() {
         let it = &rec.item;
@@ -335,6 +359,9 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
                 f.push(finding);
             }
         };
+        if let Some(group) = dup_findings.get(&i) {
+            record_finding(Finding::Duplicate { group: group.clone() }, &mut r.duplicates);
+        }
         if let Some(p) = it.password.as_deref().filter(|p| !p.is_empty()) {
             if let Some(reason) = weakness(p, o) { record_finding(Finding::Weak { reason }, &mut r.weak); }
             if let Some(&(group, others)) = reuse.get(&i) { record_finding(Finding::Reused { group, others }, &mut r.reused); }
@@ -431,6 +458,7 @@ impl std::fmt::Display for Finding {
             Finding::Expired { on } => write!(f, "expired on {on}"),
             Finding::ExpiringSoon { on, days } => write!(f, "expires in {days} days (on {on})"),
             Finding::InsecureUrl { url_host } => write!(f, "saved with unencrypted HTTP URL ({url_host})"),
+            Finding::Duplicate { group } => write!(f, "duplicate login for {group}"),
         }
     }
 }
@@ -718,5 +746,74 @@ mod tests {
         assert!(!rec_unignore.is_finding_ignored("reused"));
         assert!(rec_unignore.is_finding_ignored("insecure_url"));
         assert_eq!(rec_unignore.ignored_findings, vec!["insecure_url"]);
+    }
+
+    fn login_rec(title: &str, username: Option<&str>, url: Option<&str>, pw: Option<&str>) -> ItemRecord {
+        let mut it = Item::default();
+        it.title = title.into();
+        it.username = username.map(|u| u.into());
+        it.url = url.map(|u| u.into());
+        it.password = pw.map(|p| p.into());
+        let mut rec = ItemRecord::new(it);
+        rec.category = Category::Login;
+        rec
+    }
+
+    #[test]
+    fn test_duplicate_logins_detection() {
+        let strong_pw = "Kj9#mQ2$vL5!wP8*zR";
+        let mut rec_archived = login_rec("Archived Site", Some("archived_user"), Some("https://archive-test.com/"), Some(strong_pw));
+        rec_archived.archived = true;
+
+        let mut rec_deleted = login_rec("Deleted Site", Some("deleted_user"), Some("https://delete-test.com/"), Some(strong_pw));
+        rec_deleted.deleted_at = Some(1778846400);
+
+        let items = vec![
+            // 1. Same host+username in different case / scheme / www. / port / path are grouped:
+            ("v".into(), "dup1".into(), login_rec("Alpha 1", Some("Alice"), Some("https://www.EXAMPLE.com:8443/login?redirect=1"), Some(strong_pw))),
+            ("v".into(), "dup2".into(), login_rec("Alpha 2", Some(" alice "), Some("http://example.com/dashboard"), Some(strong_pw))),
+            // 2. Different username -> not grouped
+            ("v".into(), "diff_user".into(), login_rec("Alpha Bob", Some("bob"), Some("https://example.com/"), Some(strong_pw))),
+            // 3. Different host -> not grouped
+            ("v".into(), "diff_host".into(), login_rec("Other Site", Some("alice"), Some("https://other.com/"), Some(strong_pw))),
+            // 4. Empty username -> not grouped
+            ("v".into(), "empty_user1".into(), login_rec("Empty 1", Some("   "), Some("https://empty-test.com/"), Some(strong_pw))),
+            ("v".into(), "empty_user2".into(), login_rec("Empty 2", Some(""), Some("https://empty-test.com/"), Some(strong_pw))),
+            ("v".into(), "none_user".into(), login_rec("None User", None, Some("https://empty-test.com/"), Some(strong_pw))),
+            // 5. Archived items are excluded (and do not cause single active item to be flagged)
+            ("v".into(), "archive_active".into(), login_rec("Archive Active", Some("archived_user"), Some("https://archive-test.com/"), Some(strong_pw))),
+            ("v".into(), "archive_inactive".into(), rec_archived),
+            // 6. Deleted items are excluded
+            ("v".into(), "delete_active".into(), login_rec("Delete Active", Some("deleted_user"), Some("https://delete-test.com/"), Some(strong_pw))),
+            ("v".into(), "delete_inactive".into(), rec_deleted),
+            // 7. Same host+user in different vault scopes are not grouped
+            ("vault_other".into(), "other_vault_dup".into(), login_rec("Alpha in other vault", Some("alice"), Some("https://example.com/"), Some(strong_pw))),
+        ];
+
+        let opts = AuditOpts::default();
+        let report = audit(&items, &opts, None).unwrap();
+        assert_eq!(report.duplicates, 2);
+
+        let find = |id: &str| report.per_item.iter().find(|i| i.id == id).map(|i| i.findings.clone()).unwrap_or_default();
+
+        let dup1_f = find("dup1");
+        let expected_finding = Finding::Duplicate { group: "example.com/alice".into() };
+        assert!(dup1_f.contains(&expected_finding));
+
+        let dup2_f = find("dup2");
+        assert!(dup2_f.contains(&expected_finding));
+
+        // Finding text contains no password, path, or query
+        let text = expected_finding.to_string();
+        assert_eq!(text, "duplicate login for example.com/alice");
+        assert!(!text.contains(strong_pw));
+        assert!(!text.contains("/login"));
+        assert!(!text.contains("redirect=1"));
+        assert!(!text.contains("8443"));
+
+        // Others are NOT flagged as duplicate
+        for id in ["diff_user", "diff_host", "empty_user1", "empty_user2", "none_user", "archive_active", "archive_inactive", "delete_active", "delete_inactive", "other_vault_dup"] {
+            assert!(find(id).iter().all(|f| !matches!(f, Finding::Duplicate { .. })), "{id} should not have Duplicate finding");
+        }
     }
 }

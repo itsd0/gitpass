@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   AlertTriangle,
+  Archive,
   CalendarClock,
   CalendarX,
   ChevronRight,
@@ -10,6 +11,7 @@ import {
   EyeOff,
   Globe,
   KeyRound,
+  Layers,
   MoreVertical,
   Pencil,
   RefreshCw,
@@ -91,6 +93,7 @@ const ISSUE_TO_KIND: Record<IssueKey, string> = {
   old: "old",
   breached: "pwned",
   missingTotp: "missing_totp",
+  duplicates: "duplicate",
   totpAvailable: "totp_available",
   passkeyAvailable: "passkey_available",
   expired: "expired",
@@ -102,6 +105,7 @@ export function WatchtowerPage() {
   const t = useT();
   const cards = [
     ...CARDS,
+    { key: "duplicates" as const, title: t("watchtower.duplicates"), desc: t("watchtower.duplicatesDesc"), Icon: Layers },
     { key: "totpAvailable" as const, title: t("watchtower.totpAvailable"), desc: t("watchtower.totpAvailableDesc"), Icon: Smartphone },
     { key: "passkeyAvailable" as const, title: t("watchtower.passkeyAvailable"), desc: t("watchtower.passkeyAvailableDesc"), Icon: KeyRound },
     { key: "expired" as const, title: t("watchtower.expired"), desc: t("watchtower.expiredDesc"), Icon: CalendarX },
@@ -162,6 +166,31 @@ export function WatchtowerPage() {
     setRoute({ name: "items", filter: it ? { kind: "vault", vaultId: it.vaultId } : { kind: "all" } });
     selectItem(id);
     setEditing(true);
+  };
+
+  const handleArchiveOlder = async (older: ItemSummary[]) => {
+    try {
+      await Promise.all(older.map((it) => api.archiveItem({ vaultId: it.vaultId, itemId: it.id, archived: true })));
+      toast(t("bulk.toast.archive"), {
+        duration: 5000,
+        action: {
+          label: t("bulk.undo"),
+          altText: t("bulk.undo"),
+          onClick: async () => {
+            try {
+              await Promise.all(older.map((it) => api.archiveItem({ vaultId: it.vaultId, itemId: it.id, archived: false })));
+              toast(t("bulk.toast.unarchive"));
+              load(hibp);
+            } catch (e) {
+              toast(String(e), "danger");
+            }
+          },
+        },
+      });
+      load(hibp);
+    } catch (e) {
+      toast(String(e), "danger");
+    }
   };
 
   const ignoreFinding = async (id: string, kind: string) => {
@@ -315,6 +344,78 @@ export function WatchtowerPage() {
                       </div>
                     </li>
                   ))}
+                </ul>
+              ) : key === "duplicates" ? (
+                <ul className="mt-3 space-y-3">
+                  {report!.duplicates.map((g, i) => {
+                    const groupItems = g.map(
+                      (id) =>
+                        titles[id] ?? {
+                          id,
+                          vaultId: "",
+                          category: "login" as const,
+                          title: id,
+                          subtitle: "",
+                          favorite: false,
+                          archived: false,
+                          deletedAt: null,
+                          tags: [],
+                          updatedAt: "",
+                          createdAt: "",
+                        }
+                    );
+                    const sorted = [...groupItems].sort(
+                      (a, b) => (Date.parse(b.updatedAt) || 0) - (Date.parse(a.updatedAt) || 0)
+                    );
+                    const older = sorted.slice(1);
+                    const groupTitle = t("watchtower.duplicateGroup", { n: i + 1, count: g.length });
+                    return (
+                      <li key={i} className="rounded-lg border border-border bg-bg p-3">
+                        <div className="mb-2 flex items-center justify-between gap-2">
+                          <span className="text-[11px] font-medium text-muted">{groupTitle}</span>
+                          {older.length > 0 && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 px-2 text-xs border-accent text-accent hover:bg-accent/10 focus-visible:ring-accent"
+                              onClick={() => void handleArchiveOlder(older)}
+                              aria-label={`${t("watchtower.archiveOlder")}: ${groupTitle}`}
+                            >
+                              <Archive size={12} className="mr-1" />
+                              {t("watchtower.archiveOlder")}
+                            </Button>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          {sorted.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between gap-3 rounded bg-panel px-2.5 py-1.5 text-xs"
+                            >
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate font-medium text-fg">{item.title}</div>
+                                <div className="truncate text-[11px] text-muted">
+                                  {item.subtitle ? `${item.subtitle} · ` : ""}
+                                  {item.url
+                                    ? `${item.url.replace(/^[a-zA-Z]+:\/\//, "").replace(/\/.*$/, "")} · `
+                                    : ""}
+                                  {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : ""}
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => open(item.id)}
+                              >
+                                {t("watchtower.open")}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : key === "insecureUrls" ? (
                 <ul className="mt-3 space-y-2" data-testid="insecure-urls-list">

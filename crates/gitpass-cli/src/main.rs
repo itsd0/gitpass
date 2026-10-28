@@ -1100,8 +1100,8 @@ fn run() -> Result<()> {
                 return Ok(());
             }
             println!("audited {} item(s) in {} vault(s){}", r.items_checked, vids.len(), if *hibp { " (with HIBP)" } else { "" });
-            println!("  weak: {}  reused: {} ({} group(s))  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}  ignored: {}",
-                r.weak, r.reused, r.reused_groups, r.old, r.expired, r.expiring_soon, r.insecure_urls, r.missing_totp, r.totp_available, r.passkey_available,
+            println!("  weak: {}  reused: {} ({} group(s))  duplicates: {}  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}  ignored: {}",
+                r.weak, r.reused, r.reused_groups, r.duplicates, r.old, r.expired, r.expiring_soon, r.insecure_urls, r.missing_totp, r.totp_available, r.passkey_available,
                 if *hibp { format!("  pwned: {}", r.pwned) } else { String::new() },
                 r.ignored);
             for f in &r.per_item {

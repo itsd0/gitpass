@@ -648,7 +648,7 @@ fn contract_json_shapes() {
     let inp: ItemInput = serde_json::from_str(r#"{"vaultId":"x","category":"wifi","title":"t","sections":[{"id":"s","title":null,"fields":[{"id":"a","label":"A","kind":"month_year","value":"01/30"}]}]}"#).unwrap();
     assert_eq!(inp.sections[0].fields[0].kind, FieldKind::MonthYear);
     let w = serde_json::to_value(e.app.watchtower(false).unwrap()).unwrap();
-    for k in ["score", "weak", "reused", "old", "breached", "missingTotp", "expired", "expiringSoon", "insecureUrls", "checkedAt", "hibpChecked"] { assert!(w.get(k).is_some(), "{k}"); }
+    for k in ["score", "weak", "reused", "old", "breached", "missingTotp", "expired", "expiringSoon", "insecureUrls", "duplicates", "checkedAt", "hibpChecked"] { assert!(w.get(k).is_some(), "{k}"); }
 }
 
 #[test]
@@ -1179,4 +1179,21 @@ fn watchtower_ignore_stop_ignoring_and_score_change() {
     assert_eq!(rep4.ignored.len(), 1);
     assert_eq!(rep4.ignored[0].kind, "insecure_url");
     assert_eq!(rep4.score, score_before); // score back to initial penalized score
+}
+
+#[test]
+fn watchtower_groups_duplicate_logins() {
+    let e = env();
+    let l1 = login(&e, "Service A", "alice", "pw1-super-strong-fake");
+    let l2 = login(&e, "Service B", "Alice", "pw2-super-strong-fake");
+    let l3 = login(&e, "Service C", "bob", "pw3-super-strong-fake");
+
+    let rep = e.app.watchtower(false).unwrap();
+    assert_eq!(rep.duplicates.len(), 1);
+    let mut group = rep.duplicates[0].clone();
+    group.sort();
+    let mut expected = vec![l1.id.clone(), l2.id.clone()];
+    expected.sort();
+    assert_eq!(group, expected);
+    assert!(!group.contains(&l3.id));
 }

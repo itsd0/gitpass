@@ -403,6 +403,19 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
         return false;
       }
     }).map((r) => r.detail.id);
+    const dupMap = new Map<string, string[]>();
+    for (const r of logins) {
+      if (r.detail.archived || r.detail.deletedAt) continue;
+      const user = r.detail.subtitle?.trim().toLowerCase();
+      const rawUrl = r.detail.url?.trim() || '';
+      const host = rawUrl.replace(/^[a-zA-Z]+:\/\//, '').split(/[/?:#]/)[0].split('@').pop()?.split(':')[0].toLowerCase().replace(/^www\./, '');
+      if (user && host) {
+        const k = `${r.detail.vaultId}|${host}|${user}`;
+        dupMap.set(k, [...(dupMap.get(k) ?? []), r.detail.id]);
+      }
+    }
+    const duplicates = [...dupMap.values()].filter((g) => g.length > 1);
+
     const isIgnored = (id: string, kind: string) => {
       const it = db.get(id);
       return (it?.detail.ignoredFindings ?? []).some(
@@ -493,6 +506,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       expired: activeExpired,
       expiringSoon: activeExpiringSoon,
       insecureUrls: activeInsecureUrls,
+      duplicates,
       ignored: ignoredList,
       checkedAt: new Date().toISOString(),
       hibpChecked: hibp,
