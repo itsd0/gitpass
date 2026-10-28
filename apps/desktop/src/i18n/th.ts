@@ -199,6 +199,10 @@ export const th: Partial<Record<Key, string>> = {
   "watchtower.expiredDesc": "บัตรเครดิตหรือข้อมูลประจำตัวที่หมดอายุแล้ว",
   "watchtower.expiringSoon": "ใกล้หมดอายุ",
   "watchtower.expiringSoonDesc": "รายการที่จะหมดอายุภายใน 30 วัน",
+  "watchtower.insecureUrls": "เว็บไซต์ที่ไม่ปลอดภัย",
+  "watchtower.insecureUrlsDesc": "ข้อมูลเข้าสู่ระบบที่บันทึกด้วยที่อยู่ http:// ที่ไม่ได้เข้ารหัส อัปเดตเป็น HTTPS",
+  "watchtower.openHttps": "เปิดเวอร์ชัน HTTPS",
+  "watchtower.editUrl": "แก้ไข URL",
   // TODO(i18n-review): native Thai review of the new export.* wording
   "export.titleVault": "ส่งออกห้องนิรภัย",
   "export.titleSelected": "ส่งออกรายการที่เลือก",
