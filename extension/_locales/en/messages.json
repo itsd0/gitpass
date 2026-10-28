@@ -303,6 +303,33 @@
   "generate": {
     "message": "Generate"
   },
+  "edit": {
+    "message": "Edit"
+  },
+  "cancel": {
+    "message": "Cancel"
+  },
+  "notes": {
+    "message": "Notes"
+  },
+  "addWebsite": {
+    "message": "Add website"
+  },
+  "removeWebsite": {
+    "message": "Remove website"
+  },
+  "useGenerated": {
+    "message": "Use password"
+  },
+  "discardChanges": {
+    "message": "Discard unsaved changes?"
+  },
+  "titleRequired": {
+    "message": "Title is required"
+  },
+  "websiteInvalid": {
+    "message": "Website must be an http(s) URL"
+  },
   "vault": {
     "message": "Vault"
   },
@@ -580,6 +607,9 @@
   },
   "shortcutOpenUrl": {
     "message": "Open website"
+  },
+  "shortcutEdit": {
+    "message": "Edit login"
   },
   "shortcutGen": {
     "message": "Password generator"

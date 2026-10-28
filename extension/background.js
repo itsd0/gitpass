@@ -115,6 +115,12 @@ async function popupRoute(msg) {
       if (!it || typeof it.category !== 'string' || it.category === 'passkey') throw Object.assign(new Error('bad item'), { code: 'bad_request' });
       return host('create_item', { item: it });
     }
+    case 'update_login': {
+      const args = { item_id: msg.item_id, source: 'popup' }; // extension pages only; content scripts can't reach popup:*
+      for (const k of ['title', 'username', 'password', 'notes']) if (msg[k] != null) args[k] = String(msg[k]);
+      if (Array.isArray(msg.urls)) args.urls = msg.urls.map(String);
+      return host('update_login', args);
+    }
     case 'save_login': return host('save_login', { origin: msg.origin, title: msg.title, username: msg.username, password: msg.password, vault_id: msg.vault_id });
     case 'set_favorite': return host('set_favorite', { item_id: msg.item_id, favorite: !!msg.favorite });
     case 'open_in_app': return host('open_in_app', msg.item_id ? { item_id: msg.item_id } : {});

@@ -542,6 +542,48 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
           `${JSON.stringify(prefill)}; create_item delta=${after - before}`);
       } catch (e) { rec('popup generator', false, `${genStep}: ${e.message}`); }
     }
+
+    if (!REAL) {
+      // --- Inline edit (#144): change a login's username in the popup, then reopen it.
+      try {
+        if (!(await pop.eval(`document.getElementById('panel').classList.contains('hidden')`))) {
+          await pop.eval(`(() => { document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })); return true; })()`);
+          await sleep(300);
+        }
+        await pop.search('GitHub'); await sleep(300);
+        const mark = cmdsIn(mockDir).length;
+        const picked = await pop.click('/GitHub/');
+        await sleep(300);
+        const openedEdit = await pop.click('/^Edit$/');
+        const editForm = await until(() => pop.eval(`(() => {
+          const f = document.querySelector('#detail form.inline-edit');
+          if (!f) return null;
+          return { title: document.getElementById('edit-title').value, username: document.getElementById('edit-username').value };
+        })()`), T(4000));
+        await pop.eval(`(() => {
+          const u = document.getElementById('edit-username');
+          if (!u) return false;
+          u.value = 'octo-edited@example.com';
+          u.dispatchEvent(new Event('input', { bubbles: true }));
+          return true;
+        })()`);
+        await pop.click('/^Save$/');
+        const editMsg = await until(() => cmdsIn(mockDir).slice(mark).find((m) => m.cmd === 'update_login'), T(4000));
+        const editSaved = await until(async () => /Saved/.test(await pop.text()) && true, T(3000));
+        rec('popup inline edit: Save sends update_login with the edited username',
+          !!editForm && !!openedEdit && !!editMsg && editMsg.source === 'popup' && editMsg.item_id === 'v1:i2' && editMsg.username === 'octo-edited@example.com' && !!editSaved,
+          `form=${JSON.stringify(editForm)}; edit=${JSON.stringify(editMsg && { item_id: editMsg.item_id, username: editMsg.username, source: editMsg.source })}; toast=${!!editSaved}; picked=${picked}`);
+
+        await pop.close();
+        const popEdited = await openRealPopup(ctx, sw, page, EXT);
+        await until(async () => titles.test(await popEdited.text()), T(5000));
+        await popEdited.search('GitHub'); await sleep(300);
+        await popEdited.click('/GitHub/');
+        const persisted = await until(async () => { const text = await popEdited.text(); return text.includes('octo-edited@example.com') && text; }, T(4000));
+        rec('popup inline edit: edited username is visible after reopening the popup', !!persisted, persisted ? 'new username shown' : 'username not shown');
+        await popEdited.close();
+      } catch (e) { rec('popup inline edit (#144)', false, e.message); }
+    }
     if (pop) await pop.close();
 
     // In-page dropdown (closed shadow DOM, pierced via CDP) first; popup "Fill" as fallback.
