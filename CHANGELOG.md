@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.6.3 — 2026-10-28
+
+### Desktop
+- Standalone password generator (⌘⇧G, command palette, save as new Login) (#64).
+- Rename, merge and delete tags from the sidebar (#75).
+- Flag duplicate logins with an "Archive older" action (#83).
+- Purge countdown and "Empty Recently Deleted" (#90).
+- "Ignore this warning" per item with an Ignored section (desktop + CLI) (#87).
+- Flag logins saved with insecure `http://` URLs in Watchtower (#70).
+- Flag expired and soon-to-expire cards and API credentials (core, CLI, desktop) (#58); expiry pills on item list
+  rows and detail (#57); card/API credential expiry included in `ItemSummary` (#63).
+- Render 2FA/passkey availability in Watchtower (#22); MFA dataset and matching follow-ups (#24); Watchtower
+  scoring documented and tested (#35).
+- Export the vault or selected items (#26).
+- Multi-select with batched bulk actions, Shift+Arrow selection fixes (#3, #15), keyboard tests and undo toast for
+  bulk actions (#38).
+- Localized item detail actions, dialogs and toasts (en/my/th) (#81); Burmese/Thai Emergency Kit and settings
+  wording (#18); harmonized Burmese "vault" term (#23).
+
+### CLI
+- `--json` and `--reveal` flags for `list`, `find` and `get` (#95).
+- `completions` subcommand for zsh, bash and fish (#86).
+- `gitpass gen` parity with the desktop generator (words, PIN, charset, `--copy`) (#82).
+- Integration tests and docs for `gitpass run` and `gitpass inject` (#37); SSH agent socket tests (#36).
+
+### Extension
+- "Never for this site" banner and exceptions in options (#76).
+- Live TOTP codes in the popup list with a countdown ring (#65).
+- Injected UI follows the system light/dark theme (#77).
+- Actionable popup empty states (#53).
+- In-page passkey prompt, multi-step login usernames, one inline icon per form group, all item types in popup
+  New item (#3); more e2e/unit coverage (#25, #39, #40/#47, #48, #71).
+
+### Security
+- Clipboard auto-clear and auto-lock on idle, sleep and screen lock (#44).
+- Copied secrets marked concealed/transient on the macOS pasteboard (#59).
+- Dependency security bumps: vite 6.4.5, vitest 4.1.12, time 0.3.47, serde_with 3.21.0 (#14).
+
+### Tests / repo
+- Desktop live refresh and lock events via host socket (#49); GitHub release check and signature verification
+  against a mock server (#43).
+- Public-repo readiness (LICENSE, SECURITY.md, hosted CI) (#10); multi-agent setup and agent docs (#4, #16, #34).
+
 ## 0.6.2 — 2026-10-27
 
 ### iOS (new, PR #1)
