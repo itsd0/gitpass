@@ -28,6 +28,9 @@ pub enum Finding {
     Duplicate { group: String },
 }
 
+/// Every [`Finding::kind`] string, in declaration order (docs and `gitpass audit --help` list these).
+pub const FINDING_KINDS: &[&str] = &["weak", "reused", "old", "missing_totp", "totp_available", "passkey_available", "pwned", "expired", "expiring_soon", "insecure_url", "duplicate"];
+
 impl Finding {
     pub fn kind(&self) -> &'static str {
         match self {
@@ -855,6 +858,18 @@ mod tests {
         assert_eq!(insecure_url_host(""), None);
         assert_eq!(insecure_url_host("ftp://ftp.example.com"), None);
         assert_eq!(insecure_url_host("not-a-url"), None);
+    }
+
+    #[test]
+    fn finding_kinds_lists_every_variant() {
+        let all = [
+            Finding::Weak { reason: String::new() }, Finding::Reused { group: 1, others: 1 }, Finding::Old { days: 1 },
+            Finding::MissingTotp, Finding::TotpAvailable { site: String::new() }, Finding::PasskeyAvailable { site: String::new() },
+            Finding::Pwned { count: 1 }, Finding::Expired { on: String::new() }, Finding::ExpiringSoon { on: String::new(), days: 1 },
+            Finding::InsecureUrl { url_host: String::new() }, Finding::Duplicate { group: String::new() },
+        ];
+        let kinds: Vec<&str> = all.iter().map(Finding::kind).collect();
+        assert_eq!(kinds, FINDING_KINDS);
     }
 
     #[test]
