@@ -6,5 +6,11 @@
 <label class="t"><span><b data-i18n="optAutofill">Autofill suggestions on pages</b><br><span class="mut" data-i18n="optAutofillBody">Show the gitpass menu under login fields.</span></span><input type="checkbox" id="autofill"></label>
 <label class="t"><span><b data-i18n="optSave">Offer to save logins</b><br><span class="mut" data-i18n="optSaveBody">Ask to save or update a password after you sign in.</span></span><input type="checkbox" id="savePrompts"></label>
 <div class="t" style="border:0"><span><b data-i18n="optShortcut">Keyboard shortcut</b><br><span class="mut" data-i18n="optShortcutBody">Opens the gitpass popup.</span></span><span><kbd id="shortcut">—</kbd> <button class="sec" id="change-shortcut" data-i18n="change">Change</button></span></div>
+</div>
+<div class="step" id="never-save-section">
+<h2 data-i18n="optNeverSave">Never save on these sites</h2>
+<div class="mut" style="margin-bottom:12px" data-i18n="optNeverSaveBody">gitpass will not offer to save or update passwords on these sites.</div>
+<div id="never-save-list"></div>
+<div id="never-save-empty" class="mut" data-i18n="optNeverSaveEmpty" style="display:none;padding:6px 0">No sites excluded</div>
 </div><div class="status" id="saved"></div></div>
 <script src="../lib/i18n.js"></script><script src="../lib/onboard-common.js"></script><script src="options.js"></script></body></html>

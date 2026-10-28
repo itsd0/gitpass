@@ -306,6 +306,9 @@
   "csNotNow": {
     "message": "Not now"
   },
+  "csNever": {
+    "message": "Never for this site"
+  },
   "csUpdate": {
     "message": "Update"
   },
@@ -374,6 +377,24 @@
   },
   "optSaveBody": {
     "message": "Ask to save or update a password after you sign in."
+  },
+  "optNeverSave": {
+    "message": "Never save on these sites"
+  },
+  "optNeverSaveBody": {
+    "message": "gitpass will not offer to save or update passwords on these sites."
+  },
+  "optNeverSaveEmpty": {
+    "message": "No sites excluded"
+  },
+  "remove": {
+    "message": "Remove"
+  },
+  "savingOff": {
+    "message": "Saving is off for this site"
+  },
+  "undo": {
+    "message": "Undo"
   },
   "optShortcut": {
     "message": "Keyboard shortcut"

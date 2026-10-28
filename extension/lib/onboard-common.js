@@ -20,5 +20,25 @@
   const DEFAULTS = { autolockFollowsApp: true, autofill: true, savePrompts: true };
   function getSettings() { return new Promise((res) => chrome.storage.local.get('settings', (r) => res(Object.assign({}, DEFAULTS, (r && r.settings) || {})))); }
   function setSettings(patch) { return getSettings().then((s) => new Promise((res) => { const n = Object.assign(s, patch); chrome.storage.local.set({ settings: n }, () => res(n)); })); }
-  root.GitpassOnboard = { send, getSettings, setSettings, DEFAULTS };
+  function getNeverSave() {
+    return new Promise((res) => {
+      chrome.storage.local.get(['neverSave', 'neverSaveSites'], (r) => {
+        const list = (r && (r.neverSave || r.neverSaveSites)) || [];
+        res(Array.isArray(list) ? list : []);
+      });
+    });
+  }
+  function setNeverSave(list) {
+    return new Promise((res) => {
+      chrome.storage.local.set({ neverSave: list }, () => res(list));
+    });
+  }
+  function removeNeverSave(domain) {
+    const dom = (domain || '').trim().toLowerCase();
+    return getNeverSave().then((list) => {
+      const filtered = list.filter((d) => (d || '').toLowerCase() !== dom);
+      return setNeverSave(filtered);
+    });
+  }
+  root.GitpassOnboard = { send, getSettings, setSettings, getNeverSave, setNeverSave, removeNeverSave, DEFAULTS };
 })(globalThis);

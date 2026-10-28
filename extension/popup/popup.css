@@ -53,6 +53,10 @@ input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 
 .panes { flex: 1; display: flex; min-height: 0; }
 .left { width: 280px; display: flex; flex-direction: column; border-right: 1px solid rgb(var(--border)); background: rgb(var(--panel)); }
 .filter-wrap { padding: 8px; border-bottom: 1px solid rgb(var(--border)); }
+.excepted-note { margin-top: 6px; font-size: 12px; color: rgb(var(--muted)); display: flex; align-items: center; justify-content: center; gap: 4px; }
+.excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--orange)); cursor: pointer; text-decoration: underline; }
+.empty-excepted-note { margin: 8px 0 0; font-size: 12px; color: rgb(var(--muted)); }
+.empty-excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--orange)); cursor: pointer; text-decoration: underline; }
 .list { flex: 1; overflow-y: auto; outline: none; }
 .row { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 10px; cursor: pointer; border-left: 3px solid transparent; }
 .row:hover { background: rgb(var(--hover)); }

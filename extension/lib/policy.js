@@ -41,14 +41,67 @@
     return out;
   }
 
-  /** Rough "same site" check (last two host labels, scheme must match). Used only to carry a pending
+  const MULTI_PART_TLDS = new Set([
+    'co.uk', 'org.uk', 'gov.uk', 'ac.uk', 'net.uk', 'me.uk',
+    'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
+    'co.jp', 'ne.jp', 'or.jp', 'go.jp', 'ac.jp',
+    'co.nz', 'net.nz', 'org.nz', 'govt.nz',
+    'com.br', 'net.br', 'org.br',
+    'com.sg', 'edu.sg', 'gov.sg',
+    'co.za', 'org.za',
+    'com.tw', 'org.tw', 'gov.tw',
+    'co.in', 'net.in', 'org.in', 'gen.in', 'firm.in', 'ind.in',
+    'com.cn', 'net.cn', 'org.cn', 'gov.cn',
+    'co.kr', 'ne.kr', 'or.kr', 're.kr',
+  ]);
+
+  /** Registrable domain (eTLD+1) of a URL, origin or hostname string.
+   *  Normalises subdomains: login.example.com -> example.com.
+   *  Loopback hosts (localhost, 127.0.0.1, [::1]) are returned as-is. */
+  function registrableDomain(urlOrHost) {
+    if (!urlOrHost) return '';
+    let host = '';
+    try {
+      const u = new URL(urlOrHost.includes('://') ? urlOrHost : 'https://' + urlOrHost);
+      host = (u.hostname || '').toLowerCase();
+    } catch (_) {
+      host = String(urlOrHost).toLowerCase().trim().split('/')[0].split(':')[0];
+    }
+    if (!host) return '';
+    if (LOOPBACK.has(host) || host.endsWith('.localhost')) return host;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.includes(':')) return host;
+    const parts = host.split('.');
+    if (parts.length <= 2) return host;
+    const lastTwo = parts.slice(-2).join('.');
+    if (MULTI_PART_TLDS.has(lastTwo) && parts.length >= 3) {
+      return parts.slice(-3).join('.');
+    }
+    const tld = parts[parts.length - 1];
+    const sld = parts[parts.length - 2];
+    if (tld.length === 2 && ['co', 'com', 'org', 'net', 'edu', 'gov'].includes(sld) && parts.length >= 3) {
+      return parts.slice(-3).join('.');
+    }
+    return parts.slice(-2).join('.');
+  }
+
+  /** Check if a URL or origin's registrable domain is in the neverSave list. */
+  function isNeverSave(urlOrOrigin, list) {
+    if (!list || !Array.isArray(list) || !list.length) return false;
+    const dom = registrableDomain(urlOrOrigin);
+    if (!dom) return false;
+    const lower = dom.toLowerCase();
+    return list.some((item) => (item || '').trim().toLowerCase() === lower);
+  }
+
+  /** Rough "same site" check (registrable domain, scheme must match). Used only to carry a pending
    *  save-login prompt across a post-login redirect (e.g. login.example.com -> www.example.com); never for fills. */
   function sameSite(a, b) {
     try {
       const x = new URL(a), y = new URL(b);
       if (x.protocol !== y.protocol) return false;
-      const tail = (h) => h.split('.').slice(-2).join('.');
-      return x.hostname === y.hostname || tail(x.hostname) === tail(y.hostname);
+      const domA = registrableDomain(x.hostname);
+      const domB = registrableDomain(y.hostname);
+      return domA === domB || x.hostname === y.hostname;
     } catch { return false; }
   }
 
@@ -59,7 +112,7 @@
   function isPaymentFrameOrigin(origin) {
     try { const u = new URL(origin); return u.protocol === 'https:' && !u.port && PAYMENT_FRAME_HOSTS.includes(u.hostname); } catch (_) { return false; }
   }
-  const api = { isFillableOrigin, originOf, findLoginFields, isVisible, sameSite, isPaymentFrameOrigin, PAYMENT_FRAME_HOSTS };
+  const api = { isFillableOrigin, originOf, findLoginFields, isVisible, sameSite, registrableDomain, isNeverSave, isPaymentFrameOrigin, PAYMENT_FRAME_HOSTS };
   root.GitpassPolicy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
