@@ -152,6 +152,10 @@ fn match_fill_reveal_origin_rules_and_categories() {
     assert_eq!((f["username"].clone(), f["password"].clone()), (json!("octo"), json!("pw-gh")));
     assert_eq!(c.err("fill", json!({"item_id": gh, "origin": "https://github.com.evil.io"})), "origin_mismatch");
     assert_eq!(c.err("fill", json!({"item_id": gh, "origin": "https://example.org"})), "origin_mismatch");
+    assert_eq!(c.err("fill", json!({"item_id": gh, "origin": "https://example.org", "confirm": true})), "origin_mismatch");
+    assert_eq!(c.err("fill", json!({"item_id": gh, "origin": "https://example.org", "user_confirm": "true"})), "origin_mismatch");
+    let f_confirmed = c.ok("fill", json!({"item_id": gh, "origin": "https://example.org", "user_confirm": true}));
+    assert_eq!((f_confirmed["username"].clone(), f_confirmed["password"].clone()), (json!("octo"), json!("pw-gh")));
     assert_eq!(c.err("fill", json!({"item_id": format!("{}:nope", e.vault), "origin": "https://github.com"})), "not_found");
 
     // reveal: popup only

@@ -411,6 +411,40 @@
   "csTitleTooLong": {
     "message": "Title is too long (max 200 characters)"
   },
+  "csSearchGitpass": {
+    "message": "Search gitpass…"
+  },
+  "csSearchLoginsPh": {
+    "message": "Search gitpass…"
+  },
+  "csNoMatchingLogins": {
+    "message": "No matching logins"
+  },
+  "csConfirmCrossSite": {
+    "message": "Fill on $PAGE$? This login is for $ITEM$",
+    "placeholders": {
+      "page": {
+        "content": "$1",
+        "example": "example.com"
+      },
+      "item": {
+        "content": "$2",
+        "example": "other.com"
+      }
+    }
+  },
+  "csConfirmFill": {
+    "message": "Fill"
+  },
+  "csCancel": {
+    "message": "Cancel"
+  },
+  "csAlsoAddSite": {
+    "message": "Also add this site to the item"
+  },
+  "csSiteAdded": {
+    "message": "Site added"
+  },
   "allSet": {
     "message": "All set"
   },

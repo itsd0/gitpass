@@ -94,6 +94,38 @@ fn fill_totp_save_update_vaults_generate() {
     assert_eq!(r["password"], "FAKE-gh-pw");
     assert_eq!(r["totp"].as_str().unwrap().len(), 6);
     assert_eq!(err(&mut f.host, json!({"cmd":"fill","item_id":f.login,"origin":"https://github.com.evil.io"})).0, "origin_mismatch");
+    assert_eq!(err(&mut f.host, json!({"cmd":"fill","item_id":f.login,"origin":"https://another-domain.example"})).0, "origin_mismatch");
+    assert_eq!(err(&mut f.host, json!({"cmd":"fill","item_id":f.login,"origin":"https://another-domain.example","confirm":true})).0, "origin_mismatch");
+    assert_eq!(err(&mut f.host, json!({"cmd":"fill","item_id":f.login,"origin":"https://another-domain.example","user_confirm":"true"})).0, "origin_mismatch");
+    let confirmed_fill = ok(&mut f.host, json!({"cmd":"fill","item_id":f.login,"origin":"https://another-domain.example","user_confirm":true}));
+    assert_eq!(confirmed_fill["username"], "leeky");
+    assert_eq!(confirmed_fill["password"], "FAKE-gh-pw");
+
+    // add_url adds origin to item, allowing subsequent match and fill without user_confirm
+    ok(&mut f.host, json!({"cmd":"add_url","item_id":f.login,"origin":"https://another-domain.example","url":"https://another-domain.example"}));
+    let m_added = ok(&mut f.host, json!({"cmd":"match","origin":"https://another-domain.example"}));
+    assert_eq!(m_added["items"].as_array().unwrap().len(), 1);
+    assert_eq!(m_added["items"][0]["title"], "GitHub");
+    let fill_added = ok(&mut f.host, json!({"cmd":"fill","item_id":f.login,"origin":"https://another-domain.example"}));
+    assert_eq!(fill_added["username"], "leeky");
+    assert_eq!(fill_added["password"], "FAKE-gh-pw");
+
+    // add_url creates standard url1 field in urls section, which survives update_login
+    let item_detail = ok(&mut f.host, json!({"cmd":"get_item","item_id":f.login}))["item"].clone();
+    let fields = item_detail["fields"].as_array().unwrap();
+    let added_url_field = fields.iter().find(|x| x["name"] == "url1").expect("url1 field");
+    assert_eq!(added_url_field["value"], "https://another-domain.example");
+
+    ok(&mut f.host, json!({
+        "cmd": "update_login", "item_id": f.login, "source": "popup",
+        "title": "GitHub", "username": "leeky",
+        "urls": ["https://github.com", "https://another-domain.example"]
+    }));
+    let item_after = ok(&mut f.host, json!({"cmd":"get_item","item_id":f.login}))["item"].clone();
+    let fields_after = item_after["fields"].as_array().unwrap();
+    let preserved = fields_after.iter().find(|x| x["name"] == "url1").expect("url1 preserved");
+    assert_eq!(preserved["value"], "https://another-domain.example");
+
     let t = ok(&mut f.host, json!({"cmd":"totp","item_id":f.login}));
     assert_eq!(t["period"], 30);
     assert!(t["remaining"].as_u64().unwrap() <= 30);

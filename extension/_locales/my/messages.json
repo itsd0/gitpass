@@ -434,6 +434,40 @@
     "message": "ခေါင်းစဉ် ရှည်လွန်းနေပါသည် (အများဆုံး စာလုံး 200)",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "csSearchGitpass": {
+    "message": "gitpass တွင် ရှာဖွေပါ…"
+  },
+  "csSearchLoginsPh": {
+    "message": "gitpass တွင် ရှာဖွေပါ…"
+  },
+  "csNoMatchingLogins": {
+    "message": "ကိုက်ညီသော လော့ဂ်အင် မရှိပါ"
+  },
+  "csConfirmCrossSite": {
+    "message": "$PAGE$ တွင် ဖြည့်မလား? ဤလော့ဂ်အင်သည် $ITEM$ အတွက်ဖြစ်ပါသည်",
+    "placeholders": {
+      "page": {
+        "content": "$1",
+        "example": "example.com"
+      },
+      "item": {
+        "content": "$2",
+        "example": "other.com"
+      }
+    }
+  },
+  "csConfirmFill": {
+    "message": "ဖြည့်ပါ"
+  },
+  "csCancel": {
+    "message": "မလုပ်တော့ပါ"
+  },
+  "csAlsoAddSite": {
+    "message": "ဤဝဘ်ဆိုက်ကိုလည်း ပစ္စည်းတွင် ထည့်သွင်းပါ"
+  },
+  "csSiteAdded": {
+    "message": "ဝဘ်ဆိုက်ကို ထည့်သွင်းပြီးပါပြီ"
+  },
   "allSet": {
     "message": "အားလုံး အဆင်သင့်ဖြစ်ပါပြီ",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"

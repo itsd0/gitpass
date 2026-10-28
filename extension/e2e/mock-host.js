@@ -42,7 +42,12 @@ const host = (s) => { try { return new URL(s).hostname; } catch { return ''; } }
 const noMatchHosts = () => { const l = readJson(CTRL, {}).no_match_hosts; return Array.isArray(l) ? l : []; };
 // control.json `only_match_ids: [...]` narrows matches to those item ids (fill-login command e2e, #124).
 const onlyMatchIds = () => { const l = readJson(CTRL, {}).only_match_ids; return Array.isArray(l) ? l : null; };
-const matches = (o) => getItems().filter((i) => i.url && host(i.url) && host(i.url) === host(o) && !noMatchHosts().includes(host(o)) && (!onlyMatchIds() || onlyMatchIds().includes(i.id)));
+const matches = (o) => getItems().filter((i) => {
+  if (noMatchHosts().includes(host(o))) return false;
+  if (onlyMatchIds() && !onlyMatchIds().includes(i.id)) return false;
+  const urls = [i.url, ...(i.extra_urls || [])];
+  return urls.some((u) => u && host(u) && host(u) === host(o));
+});
 
 function send(obj) {
   const b = Buffer.from(JSON.stringify(obj)); const h = Buffer.alloc(4); h.writeUInt32LE(b.length);
@@ -64,8 +69,22 @@ function handle(m) {
       return { item: { ...pub(i), fields, tags: i.tags || [], created_at: i.created_at || now } }; }
     case 'reveal': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); return { value: i && m.field === 'password' ? i._p : (i && i._u) || '' }; }
     case 'fill': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
-      if (!matches(origin).some((x) => x.id === i.id)) throw Object.assign(new Error('origin mismatch'), { code: 'origin_mismatch' });
+      const matchOk = matches(origin).some((x) => x.id === i.id) || !!m.user_confirm;
+      if (!matchOk) throw Object.assign(new Error('origin mismatch'), { code: 'origin_mismatch' });
       return { username: i._u, password: i._p, totp: i.has_totp ? '123456' : undefined }; }
+    case 'add_url': {
+      needUnlock();
+      const i = getItems().find((x) => x.id === m.item_id);
+      if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
+      const items = getItems();
+      const idx = items.findIndex((x) => x.id === m.item_id);
+      if (idx >= 0 && m.url) {
+        items[idx].extra_urls = items[idx].extra_urls || [];
+        if (!items[idx].extra_urls.includes(m.url)) items[idx].extra_urls.push(m.url);
+        saveItems(items);
+      }
+      return { ok: true };
+    }
     case 'totp': needUnlock(); return { code: '123456', remaining: 20, period: 30 };
     case 'save_login': { needUnlock();
       const vault = m.vault_id ? VAULTS[m.vault_id] : V;

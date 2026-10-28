@@ -434,6 +434,40 @@
     "message": "ชื่อรายการยาวเกินไป (สูงสุด 200 อักขระ)",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "csSearchGitpass": {
+    "message": "ค้นหาใน gitpass…"
+  },
+  "csSearchLoginsPh": {
+    "message": "ค้นหาใน gitpass…"
+  },
+  "csNoMatchingLogins": {
+    "message": "ไม่พบบัญชีที่ตรงกัน"
+  },
+  "csConfirmCrossSite": {
+    "message": "กรอกใน $PAGE$ หรือไม่? ข้อมูลนี้สำหรับ $ITEM$",
+    "placeholders": {
+      "page": {
+        "content": "$1",
+        "example": "example.com"
+      },
+      "item": {
+        "content": "$2",
+        "example": "other.com"
+      }
+    }
+  },
+  "csConfirmFill": {
+    "message": "กรอก"
+  },
+  "csCancel": {
+    "message": "ยกเลิก"
+  },
+  "csAlsoAddSite": {
+    "message": "เพิ่มเว็บไซต์นี้ลงในรายการด้วย"
+  },
+  "csSiteAdded": {
+    "message": "เพิ่มเว็บไซต์แล้ว"
+  },
   "allSet": {
     "message": "พร้อมใช้งานแล้ว",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"

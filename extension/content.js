@@ -10,7 +10,7 @@
   if (!GitpassPolicy.isFillableOrigin(location.origin)) return; // https or http://localhost only
   if (window.__gitpassInpage) return; window.__gitpassInpage = true;
   const LOGO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAABGdBTUEAALGPC/xhBQAAACBjSFJNAAB6JgAAgIQAAPoAAACA6AAAdTAAAOpgAAA6mAAAF3CculE8AAAARGVYSWZNTQAqAAAACAABh2kABAAAAAEAAAAaAAAAAAADoAEAAwAAAAEAAQAAoAIABAAAAAEAAAAgoAMABAAAAAEAAAAgAAAAAKyGYvMAAAHLaVRYdFhNTDpjb20uYWRvYmUueG1wAAAAAAA8eDp4bXBtZXRhIHhtbG5zOng9ImFkb2JlOm5zOm1ldGEvIiB4OnhtcHRrPSJYTVAgQ29yZSA2LjAuMCI+CiAgIDxyZGY6UkRGIHhtbG5zOnJkZj0iaHR0cDovL3d3dy53My5vcmcvMTk5OS8wMi8yMi1yZGYtc3ludGF4LW5zIyI+CiAgICAgIDxyZGY6RGVzY3JpcHRpb24gcmRmOmFib3V0PSIiCiAgICAgICAgICAgIHhtbG5zOmV4aWY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vZXhpZi8xLjAvIj4KICAgICAgICAgPGV4aWY6Q29sb3JTcGFjZT4xPC9leGlmOkNvbG9yU3BhY2U+CiAgICAgICAgIDxleGlmOlBpeGVsWERpbWVuc2lvbj4yNTY8L2V4aWY6UGl4ZWxYRGltZW5zaW9uPgogICAgICAgICA8ZXhpZjpQaXhlbFlEaW1lbnNpb24+MjU2PC9leGlmOlBpeGVsWURpbWVuc2lvbj4KICAgICAgPC9yZGY6RGVzY3JpcHRpb24+CiAgIDwvcmRmOlJERj4KPC94OnhtcG1ldGE+CuYattQAAAYoSURBVFgJzVdbbFRFGP7OOXvOdrfdllY02JBoDEaSgkLkKg9QUSEx9AXqgwnBgJZ4efDRhBejCfKoJr6Q4IM1Phg1oRoJEI01KKmkCAUjmoaWBhqK1ALb6+65+H8zZ3bP7lIkJiROcs7M/PNfvvn+f+bsWrhD6+rqcltbW607qPzr0ujoaHTw4MHifIo1zpcvX/5IPp/fGYbhRsuyHhBDu9aYZlGtuEoi9oiiKBTxNcdxeuvr67vPnTt3MalWAWDJkiV7CoXCATFaKA+Nk7r/eUwgfKRdT6fTbw0ODh4yzkoAJPhuCX5Idm7W7klv2zY8z9sjID5mAAVg6dKlD8/MzJ4Ow6D5nkStcGpBQEw0NTU+OTAwMKTy6/v+LmGo2bJsRZWhrNwn5TYdzKOnqdZ+qFOtZ+Zonp6e3kVcKb4k15vYm4C3z30pW1RFIbAQhrpGbNuCJ560BkEoFfHLnpNI+eZM+1bFuZHzVGdnp9Pf39+ii0Q71GMua1DsTT3qmBGeWeZh3aMul9A3WMSPvxfVuXDiM0N9ISpuDKiHepMKSAtjKwa4RFqJTitSu7wTrtOQO65zLex/IYPtazxAx8frfhpf9BWw7/MZYSaCEFJigbZsZlOMYRiiXGHUixzOl0O9laLQ/kq7h+3rHIRBgEtXihgZLarxjnUpdLWnUQxM7qt77VvXj66FEgDi0NQkjWhg5syjhcasjY4nHEB2+evFAja/O4an3xnDaRkjCLFtpYMFolPrL+lL+4z3rhlgESUfDYZGpC42kEkuY6MpI+mRu2L4Lx9jeUs9w9d8JVtQFyodITm2Y1/7kAXGY1M1YHbPamXTOdJ1QBnrgkaTs8B4PsTCLLBlmYMNj9Upk60yDgo+/hZAk3OA40hQ5Sn5KksMKK6q5Oq8VCPlzrWM6448UwULPWciOJYPz5Eb03IQycOxYwVqbXJO2KzZddmX9snQFQzoIqO4spEFrmlm6lwb3X3A4uYQnSsD7N4ga7LEgvysP4VP+mykeR+Ibz76RFV65IwgxEotxMeQO1XzqpcR6p46Un94+xsXA5dt7N8mfItw39cevjqTEpbkCMZ7SfpjwOTlpgFoRQWAOZsPbRUioVpLTg45GJ+UcpOgHPMCcuLCMjYEYYLroHqFYzMvMcCqvNsvIROSTsluowC2XE6knZXP+DpZBkI5YFKig2tNxYOhyyBjf/vC5PZ1kb20eho5r4gGN8CuVTPqWEXxzpJ+5h/LfSJNMWBJJRMEGaABm74y9VjN5VXwhSUB/sb6PF5cMYlDp3KiZ+HlNXmMT1v46Oec8uM55GP+ZmJQQwHQhaN3bcySSqEUiCdcrVpcwOOL5tC19iYO/5bFhz81irqF+7M+9q6+qero7GgaA2MefLm2TUKML1OInBtZzICuSBPc9MYgjGzsXTOBnStuqDz/cjmLA733lZy819sil1MRr4oOP1ifnl2AD062wJUCNY2+mFbTG3ClGjCoqnty6km6Vj04hcCXsxsGOC87vDHnICVHgs8tGQ9cTSMKfPh+gNWtU6pIyY5ppqZMbxiIAWhKTHAG5ZjKvAGLkYPDfzTi1qyF4QkXJy41SICyTVo+0SdGGjA07iIvOj0XmuSr6KjCpI9k0FKMGFyqra0tGh4eUVwlj2EZO48c0PNnC05dyWFWPrcTs47aIQuQzRMwF65n8NqRh5BxI1yddEVGl+VcqwDxZaNB2GBs5WHt+qeORkH4HItNVZJyW/sKRJ0GsqkaPTrlLUkXjqXCKQeU63xLL4uMaOvfisf6+k5uUSlwHfeookpUDUXJ3tCYEm3eeHRpCYqkDscpuYlcqYlqeenHKdMhwelP/qgcI0IFIJfLdovRiO0wb1rB9HRmmnGs1kRudNibRh3OS0FlbuxUr9askYaGbDdtSt43bdq8tVCY+1LIy0aJPyc8NjS8q0bm76CqQWHadb0dvb3fH6HPCvX29mc3B0HxfTnLy7io7gHllLuggFI9MLGUiGI2I6ydKIls5Hwm4755/Pjx75RAXhUAKOzo6MhNTc0+HxT9jUEULqp0KgqlIGXaof5/SoGJOwOUxaZqkb1lX3Xd1A/19XXf9vT05Bnnf9P+AdZ+ELBsh66WAAAAAElFTkSuQmCC';
-  const t = (k, f) => GitpassI18n.t(k, f);
+  const t = (k, f, subs) => GitpassI18n.t(k, f, subs);
   const LOGIN_ROLES = new Set(['username', 'password', 'current_password', 'totp']);
   const NEWPW_ROLES = new Set(['new_password', 'confirm_password']);
 
@@ -64,7 +64,15 @@
   .pk-acts{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
   .pk-status{font-size:12px;margin-top:4px;color:var(--gp-muted);white-space:pre-wrap;word-break:break-word}
   .pk-status.err{color:var(--gp-danger)}
-  .pk-status.ok{color:var(--gp-ok)}`;
+  .pk-status.ok{color:var(--gp-ok)}
+  .search-wrap{display:flex;align-items:center;gap:6px;width:100%}
+  .search-input{all:unset;box-sizing:border-box;width:100%;padding:4px 8px;background:var(--gp-field);color:var(--gp-fg);border:1px solid var(--gp-border);border-radius:6px;font:inherit;text-transform:none;letter-spacing:normal}
+  .search-input:focus{border-color:var(--gp-accent);box-shadow:0 0 0 1px var(--gp-accent)}
+  .confirm-box{padding:12px 10px;display:flex;flex-direction:column;gap:10px}
+  .confirm-msg{font-size:12px;line-height:1.4;color:var(--gp-fg);word-break:break-word}
+  .confirm-acts{display:flex;justify-content:flex-end;gap:8px}
+  .spinner{width:16px;height:16px;border:2px solid var(--gp-border);border-top-color:var(--gp-accent);border-radius:50%;animation:spin .8s linear infinite;display:inline-block}
+  @keyframes spin{to{transform:rotate(360deg)}}`;
 
   // ---------- messaging ----------
   async function send(type, args) {
@@ -195,14 +203,22 @@
 
   function bindField(field) {
     field.addEventListener('focus', (e) => { if (e.isTrusted) openDropdown(field); });
-    field.addEventListener('blur', () => setTimeout(() => { if (dd && dd.field === field && !dd.hovered) closeDropdown(); }, 150));
+    field.addEventListener('blur', () => setTimeout(() => {
+      if (dd && dd.field === field && !dd.hovered && !dd.root.activeElement && dd.mode === 'suggested') closeDropdown();
+    }, 150));
     field.addEventListener('keydown', onFieldKey, true);
   }
 
   // ---------- dropdown ----------
-  let dd = null; // { field, host, root, box, rows:[{btn, run}], active, hovered, seq }
+  let dd = null; // { field, host, root, box, hd, rows:[{btn, run}], active, hovered, seq, mode, searchInput, allLogins, confirmRun, cancelRun }
   let ddSeq = 0;
-  function closeDropdown() { if (dd) { dd.host.remove(); dd = null; } }
+  function closeDropdown() {
+    if (dd) {
+      if (dd.mode === 'search') send('page:search_disable').catch(() => {});
+      dd.host.remove();
+      dd = null;
+    }
+  }
   function placeDropdown() {
     const r = dd.field.getBoundingClientRect();
     dd.host.style.left = Math.max(4, Math.min(r.left + scrollX, scrollX + innerWidth - 328)) + 'px';
@@ -212,12 +228,24 @@
     if (!dd || !dd.rows.length) return;
     dd.active = (i + dd.rows.length) % dd.rows.length;
     dd.rows.forEach((r, j) => r.btn.classList.toggle('active', j === dd.active));
-    dd.rows[dd.active].btn.scrollIntoView({ block: 'nearest' });
+    if (dd.rows[dd.active].btn.scrollIntoView) dd.rows[dd.active].btn.scrollIntoView({ block: 'nearest' });
   }
   function onFieldKey(e) {
     if (!dd || dd.field !== e.target) {
       if (e.key === 'ArrowDown' && e.isTrusted && (e.altKey || !e.target.value)) { e.preventDefault(); openDropdown(e.target); }
       return;
+    }
+    if (dd.mode === 'confirm') {
+      if (e.key === 'Escape') { e.preventDefault(); if (dd.cancelRun) dd.cancelRun(); }
+      else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); if (dd.confirmRun) dd.confirmRun(); }
+      return;
+    }
+    if (dd.mode === 'postfill') {
+      if (e.key === 'Escape') { e.preventDefault(); closeDropdown(); }
+      return;
+    }
+    if (dd.mode === 'search') {
+      if (e.key === 'Escape') { e.preventDefault(); exitSearchMode(ctxFor(dd.field)); return; }
     }
     if (e.key === 'ArrowDown') { e.preventDefault(); setActive(dd.active + 1); }
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(dd.active - 1); }
@@ -232,7 +260,7 @@
     const m = el('span', 'm'); m.append(el('div', 'ti', title)); if (sub) m.append(el('div', 'u' + (opts && opts.mono ? ' mono' : ''), sub));
     b.append(ic, m);
     b.addEventListener('mousedown', (e) => e.preventDefault());
-    const row = { btn: b, run: () => run().catch(showErr) };
+    const row = { btn: b, run: () => Promise.resolve().then(run).catch(showErr) };
     b.addEventListener('click', (e) => { if (!e.isTrusted) return; e.preventDefault(); e.stopPropagation(); row.run(); });
     b.addEventListener('mouseenter', () => setActive(dd.rows.indexOf(row)));
     dd.box.append(b); dd.rows.push(row);
@@ -241,6 +269,12 @@
   function showErr(e) { if (!dd) return; const d = el('div', 'msg err', 'gitpass: ' + (e && e.message || e)); dd.box.append(d); }
   function catIcon(cat) { try { return { svg: GitpassIcons.categoryIcon(cat || 'login', 28) }; } catch (_) { return { text: '🔑' }; } }
   function clearRows() { if (!dd) return; dd.rows = []; dd.active = -1; while (dd.box.childNodes.length > 1) dd.box.lastChild.remove(); }
+
+  function isCrossSite(it) {
+    if (dd && dd.matchedIds && dd.matchedIds.has(it && it.id)) return false;
+    if (!it || !it.url) return true;
+    return GitpassPolicy.isCrossSite(it.url, location.origin);
+  }
 
   async function openDropdown(field) {
     const ctx = ctxFor(field);
@@ -254,7 +288,7 @@
     box.append(hd); root.append(box);
     host.addEventListener('mouseenter', () => { if (dd) dd.hovered = true; });
     host.addEventListener('mouseleave', () => { if (dd) dd.hovered = false; });
-    dd = { field, host, root, box, rows: [], active: -1, hovered: false, seq: ++ddSeq };
+    dd = { field, host, root, box, hd, rows: [], active: -1, hovered: false, seq: ++ddSeq, mode: 'suggested', searchInput: null, allLogins: null, matchedIds: new Set() };
     placeDropdown();
     await populate(ctx);
   }
@@ -266,6 +300,7 @@
     const loading = el('div', 'msg', '…'); dd.box.append(loading);
     const { form, role } = ctx;
     const isNew = NEWPW_ROLES.has(role) || (role === 'username' && (form.kind === 'signup'));
+    const isLogin = !GitpassForms.CARD_ROLES.has(role) && form.kind !== 'identity';
     try {
       let items = [];
       if (GitpassForms.CARD_ROLES.has(role)) items = (await send('page:list', { category: 'credit_card' })).items;
@@ -273,6 +308,7 @@
       else items = (await send('page:match')).items.filter((i) => !i.category || i.category === 'login');
       if (!live()) return;
       loading.remove();
+      dd.matchedIds = new Set((items || []).map((i) => i.id));
       if (form.fields.newPassword && (isNew || form.kind === 'change_password')) {
         addRow({ text: '✨' }, t('csSuggest', 'Suggest strong password'), t('csSuggestSub', 'gitpass will save it when you submit'), async () => {
           const r = await send('page:generate');
@@ -282,8 +318,16 @@
         }, { primary: true });
       }
       if (role === 'totp') items = items.filter((i) => i.has_totp);
-      for (const it of items) addRow(catIcon(it.category), it.title || '(untitled)', it.subtitle || '', () => fillItem(ctx, it));
-      if (!dd.rows.length) dd.box.append(el('div', 'msg', GitpassForms.CARD_ROLES.has(role) ? t('csNoCards', 'No cards in gitpass') : form.kind === 'identity' ? t('csNoIdentities', 'No identities in gitpass') : t('csNoLogins', 'No gitpass logins for this site')));
+      for (const it of items) addRow(catIcon(it.category), it.title || '(untitled)', it.subtitle || '', () => selectItem(ctx, it));
+      if (!items.length) {
+        dd.box.append(el('div', 'msg', GitpassForms.CARD_ROLES.has(role) ? t('csNoCards', 'No cards in gitpass') : form.kind === 'identity' ? t('csNoIdentities', 'No identities in gitpass') : t('csNoLogins', 'No gitpass logins for this site')));
+      }
+      if (isLogin) {
+        addRow({ text: '🔍' }, t('csSearchGitpass', 'Search gitpass…'), '', (e) => {
+          if (e && !e.isTrusted) return;
+          openSearchMode(ctx);
+        });
+      }
       setActive(0);
     } catch (e) {
       if (!live()) return;
@@ -302,7 +346,167 @@
     }
   }
 
-  async function fillItem(ctx, it) {
+  async function openSearchMode(ctx) {
+    if (!dd) return;
+    try {
+      await send('page:search_enable', { user_click: true });
+    } catch (_) {}
+    dd.mode = 'search';
+    clearRows();
+    dd.hd.textContent = '';
+    const searchWrap = el('div', 'search-wrap');
+    const lg = el('img'); lg.src = LOGO; lg.alt = '';
+    const input = el('input', 'search-input');
+    input.type = 'text';
+    input.placeholder = t('csSearchGitpass', 'Search gitpass…');
+    input.autocomplete = 'off';
+    input.spellcheck = false;
+    searchWrap.append(lg, input);
+    dd.hd.append(searchWrap);
+    dd.searchInput = input;
+    input.focus();
+
+    const loading = el('div', 'msg', '…');
+    dd.box.append(loading);
+
+    let searchSeq = 0;
+    let debounceTimer = null;
+    let lastItems = [];
+
+    async function doSearch(query) {
+      const seq = ++searchSeq;
+      try {
+        const res = await send('page:search', { query: (query || '').trim() });
+        if (seq !== searchSeq || !dd || dd.mode !== 'search') return;
+        loading.remove();
+        lastItems = res.items || [];
+        renderSearchResults(ctx, lastItems, query);
+      } catch (e) {
+        if (seq !== searchSeq || !dd || dd.mode !== 'search') return;
+        loading.remove();
+        const code = e.code || codeOf(e.message);
+        clearRows();
+        if (code === 'locked') {
+          addRow({ text: '🔒' }, t('csUnlock', 'Unlock gitpass'), t('csUnlockSub', 'Use Touch ID or your password in the gitpass app'), async () => {
+            const r = await send('page:request_unlock');
+            if (r && r.unlocked && dd && dd.mode === 'search') {
+              openSearchMode(ctx);
+            }
+          }, { primary: true });
+          setActive(0);
+        } else if (code === 'app_not_running') {
+          addRow({ text: '↗' }, t('csOpenApp', 'Open gitpass app to unlock'), '', async () => { await send('page:open_app'); closeDropdown(); }, { primary: true });
+          setActive(0);
+        } else {
+          dd.box.append(el('div', 'msg err', 'gitpass: ' + e.message));
+        }
+      }
+    }
+
+    input.addEventListener('input', () => {
+      const q = input.value;
+      renderSearchResults(ctx, lastItems, q);
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        doSearch(q);
+      }, 50);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setActive(dd.active + 1); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(dd.active - 1); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (dd.active >= 0 && dd.rows[dd.active]) dd.rows[dd.active].run();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        exitSearchMode(ctx);
+      }
+    });
+
+    doSearch('');
+    setTimeout(() => input.focus(), 10);
+  }
+
+  function exitSearchMode(ctx) {
+    if (!dd) return;
+    send('page:search_disable').catch(() => {});
+    dd.mode = 'suggested';
+    dd.searchInput = null;
+    dd.hd.textContent = '';
+    const lg = el('img'); lg.src = LOGO; lg.alt = '';
+    dd.hd.append(lg, document.createTextNode('gitpass'));
+    populate(ctx);
+    if (dd.field) dd.field.focus();
+  }
+
+  function renderSearchResults(ctx, items, query) {
+    if (!dd || dd.mode !== 'search') return;
+    clearRows();
+    const q = (query !== undefined ? query : (dd.searchInput ? dd.searchInput.value : '')).trim().toLowerCase();
+    const isTotp = ctx && ctx.role === 'totp';
+    const list = (items || []).filter((i) => {
+      if (isTotp && !i.has_totp) return false;
+      if (!q) return true;
+      return [i.title, i.subtitle, i.url].some((x) => x && String(x).toLowerCase().includes(q));
+    });
+    list.sort((a, b) => (Number(b.favorite || 0) - Number(a.favorite || 0)) || String(a.title || '').localeCompare(String(b.title || '')));
+    for (const it of list) {
+      addRow(catIcon(it.category), it.title || '(untitled)', it.subtitle || it.url || '', () => selectItem(ctx, it));
+    }
+    if (!list.length) {
+      dd.box.append(el('div', 'msg', t('csNoMatchingLogins', 'No matching logins')));
+    }
+    setActive(0);
+  }
+
+  async function selectItem(ctx, it) {
+    if (ctx && ctx.role === 'totp' && !it.has_totp) return;
+    if (isCrossSite(it)) {
+      try {
+        const res = await send('page:request_cross_site_confirm', { item_id: it.id });
+        if (res && res.approved) {
+          await fillItem(ctx, it, { keepOpenForAddSite: true });
+          showAddSitePrompt(ctx, it);
+        }
+      } catch (e) {
+        if (e && e.code !== 'cancelled' && !/cancelled/i.test(e.message)) {
+          showErr(e);
+        }
+      }
+    } else {
+      fillItem(ctx, it);
+    }
+  }
+
+  function showAddSitePrompt(ctx, it) {
+    if (!dd) return;
+    dd.mode = 'postfill';
+    clearRows();
+    const box = el('div', 'confirm-box');
+    const addBtn = el('button', 'btn pri', t('csAlsoAddSite', 'Also add this site to the item'));
+    addBtn.type = 'button';
+    addBtn.style.width = '100%';
+    addBtn.addEventListener('click', async (e) => {
+      if (!e.isTrusted) return;
+      addBtn.disabled = true;
+      try {
+        await send('page:add_url', { item_id: it.id, user_click: true });
+        addBtn.textContent = t('csSiteAdded', 'Site added');
+        setTimeout(closeDropdown, 1200);
+      } catch (err) {
+        addBtn.textContent = 'gitpass: ' + (err && err.message || err);
+        setTimeout(closeDropdown, 2000);
+      }
+    });
+    box.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeDropdown(); }
+    });
+    box.append(addBtn);
+    dd.box.append(box);
+    setTimeout(() => addBtn.focus(), 10);
+  }
+
+  async function fillItem(ctx, it, opts = {}) {
     const { form, role } = ctx;
     if (it.category === 'credit_card') {
       const r = await send('page:fill_card', { item_id: it.id, user_click: true });
@@ -322,7 +526,9 @@
       }
       r = null; // drop secrets
     }
-    closeDropdown();
+    if (!opts.keepOpenForAddSite) {
+      closeDropdown();
+    }
   }
   // Re-detect right before writing, in case the page swapped fields since the dropdown opened.
   function freshForm(form) {
