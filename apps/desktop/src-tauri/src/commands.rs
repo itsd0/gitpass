@@ -89,13 +89,24 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command(async)] pub fn rotate_secret_key(s: State<'_, App>) -> R<a::RotateResult> { s.rotate_secret_key().map_err(e) }
 #[tauri::command(async)] pub fn sync_status(s: State<'_, App>) -> R<a::SyncStatus> { s.sync_status().map_err(e) }
 #[tauri::command(async)] pub fn remote_connect(s: State<'_, App>, url: String) -> R<a::SyncStatus> { s.remote_connect(&url).map_err(e) }
-/// Open https://github.com/new (fixed URL; no user input reaches the shell) in the default browser.
-#[tauri::command] pub fn open_new_repo_page() -> R<()> {
-    const URL: &str = "https://github.com/new";
-    #[cfg(target_os = "macos")] let r = std::process::Command::new("/usr/bin/open").arg(URL).status();
-    #[cfg(target_os = "windows")] let r = std::process::Command::new("explorer").arg(URL).status();
-    #[cfg(all(unix, not(target_os = "macos")))] let r = std::process::Command::new("xdg-open").arg(URL).status();
+/// Open an https URL in the default browser. Only HTTPS is allowed; callers pass URLs derived in
+/// Rust (never raw webview input) and the argument is never routed through a shell.
+fn open_external(url: &str) -> R<()> {
+    if !url.starts_with("https://") { return Err("only https URLs can be opened".into()); }
+    #[cfg(target_os = "macos")] let r = std::process::Command::new("/usr/bin/open").arg(url).status();
+    #[cfg(target_os = "windows")] let r = std::process::Command::new("explorer").arg(url).status();
+    #[cfg(all(unix, not(target_os = "macos")))] let r = std::process::Command::new("xdg-open").arg(url).status();
     r.map(|_| ()).map_err(|x| x.to_string())
+}
+/// Open https://github.com/new (fixed URL; no user input reaches the shell) in the default browser.
+#[tauri::command] pub fn open_new_repo_page() -> R<()> { open_external("https://github.com/new") }
+/// Open the site's standard change-password page for an item. The URL is derived in Rust from the
+/// item's saved URL, so the webview never supplies a URL to the OS.
+#[tauri::command] pub fn open_change_password(s: State<App>, vault_id: String, item_id: String) -> R<()> {
+    match s.item_change_password_url(&vault_id, &item_id).map_err(e)? {
+        Some(url) => open_external(&url),
+        None => Err("this item has no change-password URL".into()),
+    }
 }
 #[tauri::command(async)] pub fn remote_disconnect(s: State<'_, App>) -> R<a::SyncStatus> { s.remote_disconnect().map_err(e) }
 #[tauri::command(async)] pub fn sync(s: State<'_, App>, merge: bool) -> R<a::SyncResult> { s.sync(merge).map_err(e) }

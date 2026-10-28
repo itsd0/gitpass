@@ -47,7 +47,14 @@ impl Finding {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct ItemFindings { pub vault: String, pub id: String, pub title: String, pub findings: Vec<Finding> }
+pub struct ItemFindings {
+    pub vault: String, pub id: String, pub title: String,
+    /// `https://<host>/.well-known/change-password` for the item's URL (the same URL applies to
+    /// every finding in the item). Absent when the item has no usable URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change_password_url: Option<String>,
+    pub findings: Vec<Finding>,
+}
 
 #[derive(Clone, Debug)]
 pub struct AuditOpts { pub max_age_days: u64, pub min_length: usize, pub min_entropy_bits: f64, pub now_secs: u64, pub expiring_days: u64, pub include_ignored: bool }
@@ -186,6 +193,54 @@ pub fn insecure_url_host(url: &str) -> Option<String> {
     }
 
     Some(host)
+}
+
+/// The site's standard change-password page (W3C "well-known change password URL" / RFC 8615):
+/// `https://<host>/.well-known/change-password`.
+///
+/// Only http(s) URLs with a plain DNS host are accepted. The subdomain and an explicit port are
+/// kept; path, query, fragment and any userinfo are dropped; `http://` is upgraded to https; a
+/// trailing dot on the host is removed. Returns `None` for empty or non-http(s) input, IP literals
+/// (v4/v6), `localhost`/`*.localhost`/`local`/`*.local`, and malformed hosts.
+pub fn change_password_url(item_url: &str) -> Option<String> {
+    let s = item_url.trim();
+    let rest = if s.get(..8).is_some_and(|p| p.eq_ignore_ascii_case("https://")) {
+        &s[8..]
+    } else if s.get(..7).is_some_and(|p| p.eq_ignore_ascii_case("http://")) {
+        &s[7..]
+    } else {
+        return None;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host_port = authority.rsplit('@').next().unwrap_or("");
+    if host_port.starts_with('[') { return None; } // IPv6 literal: no standard change-password page
+    let (host, port) = host_port.split_once(':').map_or((host_port, None), |(h, p)| (h, Some(p)));
+    let host = host.trim_end_matches('.').to_ascii_lowercase();
+    if host.is_empty() || host.parse::<std::net::IpAddr>().is_ok() { return None; }
+    // Browsers also accept shorthand IPv4 (`127.1`, `2130706433`): an all-numeric host is an IP.
+    if host.split('.').all(|label| label.bytes().all(|b| b.is_ascii_digit())) { return None; }
+    if host == "localhost" || host.ends_with(".localhost") || host == "local" || host.ends_with(".local") { return None; }
+    if !valid_dns_name(&host) { return None; }
+    let port = match port {
+        Some(p) => {
+            if p.is_empty() || !p.bytes().all(|b| b.is_ascii_digit()) { return None; }
+            let n: u32 = p.parse().ok()?;
+            if !(1..=65535).contains(&n) { return None; }
+            format!(":{n}")
+        }
+        None => String::new(),
+    };
+    Some(format!("https://{host}{port}/.well-known/change-password"))
+}
+
+/// Dot-separated non-empty DNS labels (ASCII letters/digits, `-`, `_`; no leading/trailing `-`).
+fn valid_dns_name(host: &str) -> bool {
+    host.split('.').all(|label| {
+        !label.is_empty()
+            && !label.starts_with('-')
+            && !label.ends_with('-')
+            && label.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+    })
 }
 
 fn bundled_mfa_sites() -> &'static [(String, SiteSupport)] {
@@ -421,8 +476,9 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
             }
         }
 
-        if !f.is_empty() { r.per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), findings: f }); }
-        if !f_ignored.is_empty() { r.ignored_per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), findings: f_ignored }); }
+        let change_pw_url = url.and_then(change_password_url);
+        if !f.is_empty() { r.per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), change_password_url: change_pw_url.clone(), findings: f }); }
+        if !f_ignored.is_empty() { r.ignored_per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), change_password_url: change_pw_url, findings: f_ignored }); }
     }
     Ok(r)
 }
@@ -590,6 +646,71 @@ mod tests {
         assert_eq!(insecure_url_host(""), None);
         assert_eq!(insecure_url_host("ftp://ftp.example.com"), None);
         assert_eq!(insecure_url_host("not-a-url"), None);
+    }
+
+    #[test]
+    fn test_change_password_url() {
+        let well_known = "/.well-known/change-password";
+        // Plain https host, subdomain kept, path/query/fragment dropped.
+        assert_eq!(change_password_url("https://example.com"), Some(format!("https://example.com{well_known}")));
+        assert_eq!(
+            change_password_url("https://app.example.com/login?next=%2F#top"),
+            Some(format!("https://app.example.com{well_known}"))
+        );
+        // Explicit port kept (and normalized).
+        assert_eq!(
+            change_password_url("https://example.com:8443/login"),
+            Some(format!("https://example.com:8443{well_known}"))
+        );
+        assert_eq!(change_password_url("http://example.com:080"), Some(format!("https://example.com:80{well_known}")));
+        // http is upgraded, scheme/host case and a trailing dot are normalized.
+        assert_eq!(change_password_url("http://Example.COM"), Some(format!("https://example.com{well_known}")));
+        assert_eq!(change_password_url("HTTPS://example.com."), Some(format!("https://example.com{well_known}")));
+        // Userinfo never reaches the output.
+        assert_eq!(
+            change_password_url("https://user:secret@example.com/account"),
+            Some(format!("https://example.com{well_known}"))
+        );
+
+        // IP literals (v4 and v6), local names, non-http schemes, bare hosts and empties.
+        for bad in [
+            "", "   ", "example.com", "not-a-url", "file:///etc/passwd", "ftp://example.com",
+            "http://127.0.0.1", "http://127.0.0.5:8080", "http://8.8.8.8", "http://127.1", "http://2130706433", "https://[::1]", "https://[2001:db8::1]:8443",
+            "http://localhost", "http://localhost:3000", "https://app.localhost", "http://local", "http://nas.local",
+            "https://exa mple.com", "https://example.com:0", "https://example.com:", "https://example.com:notaport",
+            "https://example.com:70000", "https://-bad.example.com", "https://a..example.com", "https://example.com\\evil",
+        ] {
+            assert_eq!(change_password_url(bad), None, "expected None for {bad:?}");
+        }
+    }
+
+    #[test]
+    fn test_audit_includes_change_password_url_per_item() {
+        let mut it = Item::default();
+        it.title = "Forum".into();
+        it.url = Some("http://forum.example.com/login?token=secret#frag".into());
+        it.password = Some("SuperSecurePassword123!".into());
+        let mut rec = ItemRecord::new(it);
+        rec.ignore_finding("missing_totp");
+        let items = vec![("v".into(), "forum".into(), rec)];
+
+        let report = audit(&items, &AuditOpts::default(), None).unwrap();
+        // insecure_url is active; missing_totp is ignored. Both carry the same derived URL.
+        let active = report.per_item.iter().find(|i| i.id == "forum").unwrap();
+        assert_eq!(
+            active.change_password_url.as_deref(),
+            Some("https://forum.example.com/.well-known/change-password")
+        );
+        assert!(!active.change_password_url.as_deref().unwrap().contains("secret"));
+        let ignored = report.ignored_per_item.iter().find(|i| i.id == "forum").unwrap();
+        assert_eq!(ignored.change_password_url, active.change_password_url);
+
+        // No URL -> no change-password URL in JSON.
+        let mut no_url = Item::default();
+        no_url.title = "No URL".into();
+        no_url.password = Some("123456".into());
+        let report = audit(&[("v".into(), "none".into(), ItemRecord::new(no_url))], &AuditOpts::default(), None).unwrap();
+        assert_eq!(report.per_item.iter().find(|i| i.id == "none").unwrap().change_password_url, None);
     }
 
     #[test]

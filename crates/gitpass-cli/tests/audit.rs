@@ -135,6 +135,42 @@ fn audit_json_includes_new_findings_and_titles_only() {
 }
 
 #[test]
+fn audit_json_includes_change_password_url_per_item() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Personal"], None).status.success());
+
+    let sk = gitpass_core::crypto::SecretKey::parse(&std::fs::read_to_string(root.join("secret.key")).unwrap()).unwrap();
+    let s = Session::unlock(&root, "fake-master-pw-123", &sk).unwrap();
+    let vid = s.resolve_vault("Personal").unwrap();
+
+    let mut with_url = Item::default();
+    with_url.title = "Fake Forum".into();
+    with_url.url = Some("http://forum.example.com/login?token=fake-secret#frag".into());
+    with_url.password = Some("123456".into());
+    let id_url = s.add_record(&vid, ItemRecord::new(with_url)).unwrap();
+
+    let mut no_url = Item::default();
+    no_url.title = "Fake Local Login".into();
+    no_url.password = Some("123456".into());
+    let id_no = s.add_record(&vid, ItemRecord::new(no_url)).unwrap();
+
+    let out = gp(&root, &["audit", "--json"], None);
+    assert!(out.status.success(), "audit failed: {}", String::from_utf8_lossy(&out.stderr));
+    let json_text = String::from_utf8_lossy(&out.stdout).to_string();
+    // Only the derived URL is emitted: the path/query/fragment (and its secret) never leak.
+    assert!(!json_text.contains("token=fake-secret"));
+    let v: serde_json::Value = serde_json::from_str(&json_text).expect("valid JSON from audit --json");
+    let per_item = v["per_item"].as_array().expect("per_item array");
+    let with_url = per_item.iter().find(|i| i["id"] == id_url).expect("item with URL present");
+    assert_eq!(with_url["change_password_url"], "https://forum.example.com/.well-known/change-password");
+    assert_eq!(with_url["title"], "Fake Forum");
+    let no_url = per_item.iter().find(|i| i["id"] == id_no).expect("item without URL present");
+    assert!(no_url.get("change_password_url").is_none(), "no derived URL for a login without a URL");
+}
+
+#[test]
 fn audit_cli_respects_ignored_findings_and_flag() {
     let d = tempfile::tempdir().unwrap();
     let root = d.path().join("vault");
