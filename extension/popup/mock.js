@@ -46,7 +46,7 @@
       case 'ssh_key': fields = [F('public', 'public key', 'text', 'ssh-ed25519 AAAAC3Nza…demo naing@mac'), F('private', 'private key', 'password', null, true), F('fp', 'fingerprint', 'text', 'SHA256:x2Tq…9fA')]; secrets.private = '-----BEGIN OPENSSH PRIVATE KEY-----demo'; break;
       case 'wifi': fields = [F('ssid', 'network name', 'text', 'NaingHome-5G'), F('password', 'wireless password', 'password', null, true), F('security', 'security', 'text', 'WPA3')]; secrets.password = 'wifi-demo-pass'; break;
     }
-    return { ...it, fields, notes: it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : '', tags: ['demo'], created_at: now - 864e5 * 30 };
+    return { ...it, fields, notes: it.notes != null ? it.notes : (it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : ''), tags: ['demo'], created_at: now - 864e5 * 30 };
   }
   let unlocked = !['locked', 'appdown', 'nohost'].includes(P.get('view'));
   const appRunning = P.get('view') !== 'appdown';
@@ -70,6 +70,17 @@
       case 'totp': { const s = Math.floor(Date.now() / 1000); return ok({ code: String(100000 + (Math.floor(s / 30) * 7919) % 900000), remaining: 30 - (s % 30), period: 30 }); }
       case 'generate': return ok({ password: 'Xk7#pQ2m-Vr9!tLz4wNb' });
       case 'save_login': return ok({ item_id: 'v1:new' });
+      case 'update_login': {
+        const it = items.find((i) => i.id === msg.item_id);
+        if (!it) return err('not_found');
+        if (msg.title != null) it.title = msg.title;
+        if (msg.username != null) it.subtitle = msg.username;
+        if (msg.password != null) secrets.password = msg.password;
+        if (msg.urls) it.url = msg.urls[0] || null;
+        if (msg.notes != null) it.notes = msg.notes;
+        it.updated_at = Date.now();
+        return ok({ ok: true });
+      }
       case 'create_item': { const id = 'v1:new' + items.length; items.unshift({ id, vault_id: 'v1', title: msg.item.title, subtitle: '', category: msg.item.category, favorite: false }); return ok({ item_id: id, title: msg.item.title }); }
       case 'set_favorite': { const it = items.find((i) => i.id === msg.item_id); it.favorite = !!msg.favorite; return ok({ ok: true }); }
       case 'open_fill': case 'fill_active': return ok(true);

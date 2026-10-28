@@ -88,6 +88,21 @@ function handle(m) {
       saveItems(items);
       return { item_id: id, title: it.title.trim() };
     }
+    case 'update_login': { needUnlock();
+      if (m.source !== 'popup') throw Object.assign(new Error('update_login is allowed only from the popup'), { code: 'denied' });
+      const items = getItems(); const i = items.find((x) => x.id === m.item_id);
+      if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
+      if (i.category !== 'login') throw Object.assign(new Error('not a login'), { code: 'bad_request' });
+      if (m.title != null) { if (!String(m.title).trim()) throw Object.assign(new Error('title is required'), { code: 'bad_request' }); i.title = String(m.title).trim(); }
+      if (m.username != null) { i._u = m.username; i.subtitle = m.username; const f = Array.isArray(i.fields) && i.fields.find((x) => x.name === 'username'); if (f) f.value = m.username; }
+      if (m.password != null) i._p = m.password;
+      if (m.urls) { i.url = m.urls[0] || ''; i.favicon_host = i.url ? host(i.url) : undefined; }
+      if (m.notes != null) i.notes = m.notes;
+      i.updated_at = new Date().toISOString();
+      saveItems(items);
+      setTimeout(() => send({ event: 'changed' }), 0);
+      return { ok: true };
+    }
     case 'update_password': needUnlock(); return { ok: true };
     case 'generate': {
       const len = Math.max(4, m.len || 20);
