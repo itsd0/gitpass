@@ -38,6 +38,8 @@ export const api = {
   deleteItem: (a:{vaultId:string; itemId:string}) => call<void>('delete_item', a),       // soft delete
   restoreItem: (a:{vaultId:string; itemId:string}) => call<void>('restore_item', a),
   purgeItem: (a:{vaultId:string; itemId:string}) => call<void>('purge_item', a),
+  /** permanently delete every item in Recently Deleted in one commit; returns the count */
+  emptyTrash: () => call<number>('empty_trash'),
   /** multi-select bulk action; one vault commit (move = two) */
   bulkItems: (a:{req:T.BulkRequest}) => call<T.BulkResult>('bulk_items', a),
   moveItem: (a:{vaultId:string; itemId:string; toVaultId:string}) => call<T.ItemSummary>('move_item', a),

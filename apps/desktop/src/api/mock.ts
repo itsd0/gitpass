@@ -109,7 +109,7 @@ cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_ca
 ['Home Wi-Fi (Example-Net)', 'Office Guest Wi-Fi', 'Cabin Wi-Fi'].forEach((t, i) =>
   add(i === 1 ? 'v_work' : 'v_family', 'wifi', t, `Example-Net-${i}`, 2 + i * 33, [['network name', 'text', `Example-Net-${i}`], ['wireless password', 'concealed', `wifi-pass-${i}-fake`], ['security', 'text', 'WPA3']]));
 // a couple archived / deleted for those views
-{ const a = [...db.values()][5].detail; a.archived = true; const b = [...db.values()][22].detail; b.deletedAt = new Date('2026-10-20T08:00:00Z').toISOString(); }
+{ const a = [...db.values()][5].detail; a.archived = true; const b = [...db.values()][22].detail; b.deletedAt = new Date(Date.now() - 29 * 86400000).toISOString(); }
 
 add('v_private', 'passkey', 'webauthn.example.invalid', 'demo@example.invalid', 6, [['site', 'text', 'webauthn.example.invalid'], ['user name', 'text', 'demo@example.invalid'], ['credential id', 'text', 'FAKE-cred-id'], ['private key', 'concealed', 'FAKE'], ['sign count', 'text', '3']]);
 let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true };
@@ -245,6 +245,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   delete_item: (a: { itemId: string }) => { get(a.itemId).detail.deletedAt = new Date().toISOString(); return delay(undefined); },
   restore_item: (a: { itemId: string }) => { const d = get(a.itemId).detail; d.deletedAt = null; d.archived = false; return delay(undefined); },
   purge_item: (a: { itemId: string }) => { db.delete(a.itemId); return delay(undefined); },
+  empty_trash: () => { let n = 0; for (const [id, r] of db) if (r.detail.deletedAt) { db.delete(id); n++; } return delay(n); },
   bulk_items: ({ req }: { req: T.BulkRequest }) => {
     const now = new Date().toISOString(); const out: T.ItemRef[] = []; let count = 0;
     const tag = (req.tag ?? '').trim();
