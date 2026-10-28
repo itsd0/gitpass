@@ -568,7 +568,12 @@ impl Host {
             "passkey_create" | "passkey_get" => {
                 if !crate::passkey::popup_approved(req) { return Err(coded(code::DENIED, format!("{cmd} needs approval in the gitpass popup"))); }
                 let s = self.sess()?;
-                if cmd == "passkey_create" { crate::passkey::create(s, req) } else { crate::passkey::get(s, req) }
+                if cmd == "passkey_create" {
+                    let res = crate::passkey::create(s, req);
+                    // A new passkey changes Watchtower's passkey-available sites.
+                    if res.is_ok() { self.audit_cache = None; }
+                    res
+                } else { crate::passkey::get(s, req) }
             }
             "item_findings" => {
                 let item_id_str = arg_str(req, "item_id")?;

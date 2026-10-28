@@ -468,18 +468,22 @@ function applyFilter(selectFirst) {
 }
 
 let findingsFetchSeq = 0;
+const FINDINGS_MAX_ROWS = 60;
 async function fetchFindingsForVisibleRows() {
   const seq = ++findingsFetchSeq;
   const need = S.rows.filter((r) => r.category === 'login' && !S.findingsCache[r.id]);
   if (!need.length) return;
-  await Promise.all(need.map(async (r) => {
+  // Bounded fan-out: first lookup warms the host's audit cache, then at most 3 in flight.
+  // Only the first FINDINGS_MAX_ROWS rows are fetched; the rest load when the user selects them.
+  await V.mapLimit(need.slice(0, FINDINGS_MAX_ROWS), 3, async (r) => {
+    if (seq !== findingsFetchSeq) return;
     try {
       const res = await send({ type: 'popup:item_findings', item_id: r.id });
-      S.findingsCache[r.id] = res;
+      if (V.cacheableFindings(res)) S.findingsCache[r.id] = res;
     } catch (_) {
-      S.findingsCache[r.id] = { kinds: [] };
+      // Leave uncached so dots and the strip appear once the audit is ready.
     }
-  }));
+  });
   if (seq === findingsFetchSeq) {
     renderList();
   }
@@ -746,7 +750,7 @@ async function select(idx) {
     const findingsPromise = it.category === 'login'
       ? (S.findingsCache[it.id]
           ? Promise.resolve(S.findingsCache[it.id])
-          : send({ type: 'popup:item_findings', item_id: it.id }).catch(() => ({ kinds: [] })))
+          : send({ type: 'popup:item_findings', item_id: it.id }).catch(() => null))
       : Promise.resolve({ kinds: [] });
 
     const [res, findingsRes] = await Promise.all([
@@ -754,9 +758,9 @@ async function select(idx) {
       findingsPromise,
     ]);
     d = res.item;
-    findings = findingsRes;
-    if (it.category === 'login') {
-      S.findingsCache[it.id] = findings;
+    findings = findingsRes || { kinds: [] };
+    if (it.category === 'login' && V.cacheableFindings(findingsRes)) {
+      S.findingsCache[it.id] = findingsRes;
     }
   } catch (e) {
     if (seq !== detailSeq) return;
@@ -1331,7 +1335,8 @@ async function openGenerator(opts) {
         await send({ type: 'popup:update_login', item_id: updateItem.id, password: pw });
         toast(t('passwordUpdated', 'Password updated'));
         closePanel();
-        delete S.findingsCache[updateItem.id];
+        // Reuse findings change for every login that shared the old password.
+        S.findingsCache = {};
         await select(S.sel);
         renderList();
       } catch (err) {

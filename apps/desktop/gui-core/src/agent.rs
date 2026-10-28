@@ -447,40 +447,23 @@ impl Agent {
                 let id = req("item_id")?;
                 let (vid, iid) = split_id(&id)?;
                 let (_, r) = self.record(&vid, &iid)?;
-                let rep = {
-                    let current_stamp = self.app.state.change_stamp();
-                    let cache = self.audit_cache.lock().unwrap();
-                    if let Some((stamp, rep)) = &*cache {
-                        if *stamp == current_stamp {
-                            Some(Arc::clone(rep))
-                        } else {
-                            None
-                        }
-                    } else {
-                        None
-                    }
-                };
-                let rep = match rep {
-                    Some(rep) => rep,
-                    None => {
-                        let fresh = self.app.state.with(|x| {
-                            let s = &x.session;
-                            let records = App::all_records(s)?;
-                            let passkey_sites: BTreeSet<String> = records.iter()
-                                .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
-                                .filter_map(|(_, _, r)| r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value))
-                                .collect();
-                            let items: Vec<(String, String, ItemRecord)> = records.into_iter()
-                                .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
-                                .collect();
-                            gitpass_core::audit::audit_with_passkeys(&items, &passkey_sites, &gitpass_core::audit::AuditOpts::default(), None)
-                        })?;
-                        let fresh = Arc::new(fresh);
-                        let current_stamp = self.app.state.change_stamp();
-                        *self.audit_cache.lock().unwrap() = Some((current_stamp, Arc::clone(&fresh)));
-                        fresh
-                    }
-                };
+                // Read the vault stamp *before* computing, so a write during the audit
+                // leaves the cached report under the old stamp and invalidates it.
+                let stamp = self.app.state.change_stamp();
+                let rep = cached_audit(&self.audit_cache, stamp, || {
+                    self.app.state.with(|x| {
+                        let s = &x.session;
+                        let records = App::all_records(s)?;
+                        let passkey_sites: BTreeSet<String> = records.iter()
+                            .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
+                            .filter_map(|(_, _, r)| r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value))
+                            .collect();
+                        let items: Vec<(String, String, ItemRecord)> = records.into_iter()
+                            .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
+                            .collect();
+                        gitpass_core::audit::audit_with_passkeys(&items, &passkey_sites, &gitpass_core::audit::AuditOpts::default(), None)
+                    })
+                })?;
                 let item_finding = rep.per_item.iter().find(|f| f.vault == vid && f.id == iid);
                 let change_pw_url = r.item.url.as_deref().and_then(gitpass_core::audit::change_password_url);
                 let mut kinds = vec![];
@@ -609,4 +592,58 @@ fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
 fn host_err(e: anyhow::Error) -> anyhow::Error {
     if let Some(c) = e.downcast_ref::<gitpass_host::handler::CodedError>() { return err(c.code, c.message.clone()); }
     e
+}
+
+/// Return the cached audit report for `stamp`, or compute it and cache it under `stamp`.
+/// `stamp` must be read before `compute` runs; a `None` stamp (locked/unreadable) is never cached.
+pub(crate) fn cached_audit<T, E>(
+    cache: &Mutex<Option<(Option<u64>, Arc<T>)>>,
+    stamp: Option<u64>,
+    compute: impl FnOnce() -> Result<T, E>,
+) -> Result<Arc<T>, E> {
+    if stamp.is_some() {
+        if let Some((s, rep)) = &*cache.lock().unwrap() {
+            if *s == stamp {
+                return Ok(Arc::clone(rep));
+            }
+        }
+    }
+    let fresh = Arc::new(compute()?);
+    if stamp.is_some() {
+        *cache.lock().unwrap() = Some((stamp, Arc::clone(&fresh)));
+    }
+    Ok(fresh)
+}
+
+#[cfg(test)]
+mod cached_audit_tests {
+    use super::cached_audit;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn write_during_compute_invalidates_cached_report() {
+        let cache: Mutex<Option<(Option<u64>, Arc<u32>)>> = Mutex::new(None);
+        let mut vault_stamp = 1u64;
+        // Stamp read before compute; a write lands while computing.
+        let before = Some(vault_stamp);
+        let r = cached_audit(&cache, before, || { vault_stamp = 2; Ok::<_, ()>(10) }).unwrap();
+        assert_eq!(*r, 10);
+        // Next lookup sees the new stamp and must recompute, not reuse the stale report.
+        let mut recomputed = false;
+        let r2 = cached_audit(&cache, Some(vault_stamp), || { recomputed = true; Ok::<_, ()>(20) }).unwrap();
+        assert!(recomputed);
+        assert_eq!(*r2, 20);
+        // Same stamp again hits the cache.
+        let r3 = cached_audit(&cache, Some(vault_stamp), || -> Result<u32, ()> { panic!("should be cached") }).unwrap();
+        assert_eq!(*r3, 20);
+    }
+
+    #[test]
+    fn unknown_stamp_and_errors_are_not_cached() {
+        let cache: Mutex<Option<(Option<u64>, Arc<u32>)>> = Mutex::new(None);
+        cached_audit(&cache, None, || Ok::<_, ()>(1)).unwrap();
+        assert!(cache.lock().unwrap().is_none());
+        assert!(cached_audit(&cache, Some(5), || Err::<u32, _>("boom")).is_err());
+        assert!(cache.lock().unwrap().is_none());
+    }
 }

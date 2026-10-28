@@ -234,3 +234,45 @@ test('popup list: displays warning dot only on items with findings', async () =>
   const dot2 = rows[2].querySelector('.warn-dot');
   assert.strictEqual(dot2, null, 'credit card row must not have warning dot');
 });
+
+test('view.js: mapLimit runs the first call alone, then bounds concurrency', async () => {
+  let inFlight = 0; let peak = 0; const firstAlone = [];
+  const out = await V.mapLimit([1, 2, 3, 4, 5, 6, 7], 3, async (x, i) => {
+    inFlight++; peak = Math.max(peak, inFlight);
+    if (i === 0) firstAlone.push(inFlight);
+    await new Promise((r) => setTimeout(r, 5));
+    inFlight--;
+    return x * 2;
+  });
+  assert.deepStrictEqual(out, [2, 4, 6, 8, 10, 12, 14]);
+  assert.deepStrictEqual(firstAlone, [1]);
+  assert.ok(peak <= 3, `peak concurrency ${peak} must be <= 3`);
+  assert.deepStrictEqual(await V.mapLimit([], 3, async () => 1), []);
+});
+
+test('view.js: cacheableFindings rejects failed lookups', () => {
+  assert.strictEqual(V.cacheableFindings({ kinds: [] }), true);
+  assert.strictEqual(V.cacheableFindings({ kinds: ['weak'] }), true);
+  assert.strictEqual(V.cacheableFindings(null), false);
+  assert.strictEqual(V.cacheableFindings(undefined), false);
+});
+
+test('popup list: a failed findings lookup is not cached as "no findings" and is retried', async () => {
+  let failing = true;
+  const { dom, w } = setupPopup({
+    itemFindings: (msg) => {
+      if (failing) return Promise.reject(new Error('timeout'));
+      return Promise.resolve(msg.item_id === 'v1:i1' ? { kinds: ['weak'] } : { kinds: [] });
+    },
+  });
+  await new Promise((r) => setTimeout(r, 100));
+  let rows = dom.window.document.querySelectorAll('#listInner .row');
+  assert.strictEqual(rows[0].querySelector('.warn-dot'), null, 'no dot while the audit is failing');
+
+  failing = false;
+  // Re-filtering the list re-runs the findings fetch for uncached rows.
+  w.document.getElementById('q').dispatchEvent(new w.Event('input', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 200));
+  rows = dom.window.document.querySelectorAll('#listInner .row');
+  assert.ok(rows[0].querySelector('.warn-dot'), 'dot appears once the audit succeeds');
+});

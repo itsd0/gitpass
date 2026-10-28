@@ -319,7 +319,33 @@
     return Boolean(findings && Array.isArray(findings.kinds) && findings.kinds.length > 0);
   }
 
-  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings };
+  /**
+   * Run `fn` over `items` with at most `limit` calls in flight. The first call runs alone so a
+   * host-side cache (e.g. the Watchtower audit) is warm before the rest fan out.
+   */
+  async function mapLimit(items, limit, fn) {
+    const list = Array.from(items || []);
+    if (!list.length) return [];
+    const out = new Array(list.length);
+    out[0] = await fn(list[0], 0);
+    let next = 1;
+    const n = Math.max(1, Math.min(limit | 0 || 1, list.length - 1));
+    const worker = async () => {
+      while (next < list.length) {
+        const i = next++;
+        out[i] = await fn(list[i], i);
+      }
+    };
+    await Promise.all(Array.from({ length: n }, worker));
+    return out;
+  }
+
+  /** Watchtower findings worth caching: a failed lookup (null/undefined) stays uncached so it is retried. */
+  function cacheableFindings(res) {
+    return Boolean(res && Array.isArray(res.kinds));
+  }
+
+  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
