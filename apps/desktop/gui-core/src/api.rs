@@ -67,6 +67,8 @@ pub struct ItemDetail {
     /// Active Watchtower findings (HIBP excluded: the detail view never makes network calls).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub findings: Vec<FindingInfo>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub password_changed_at: Option<String>,
 }
 /// One item reference for bulk commands.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -460,6 +462,7 @@ fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<Find
         password_strength: if r.category == Category::Login { r.item.password.as_deref().map(strength) } else { pw.and_then(|f| f.value).map(|v| strength(&v)) },
         has_totp: has_totp(r),
         findings,
+        password_changed_at: r.password_changed_at().map(|t| iso8601(t as i64)),
     }
 }
 
