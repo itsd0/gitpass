@@ -74,4 +74,31 @@ describe('settings', () => {
     view.rerender(<SettingsPage initialTab="ssh" />);
     expect(screen.getByRole('switch', { name: 'Approve each use' })).toBe(sw);
   });
+  it('toggles lock on Mac sleep, screen lock, and user switch', async () => {
+    const spy = vi.spyOn(api, 'setSettings').mockResolvedValue(undefined as any);
+    const u = userEvent.setup();
+    render(<SettingsPage initialTab="security" />);
+
+    const sleepSwitch = await screen.findByTestId('lock-sleep-switch');
+    expect(sleepSwitch).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('Lock when Mac sleeps')).toBeTruthy();
+    expect(screen.getByText('Lock the vault immediately when your Mac goes to sleep')).toBeTruthy();
+    await u.click(sleepSwitch);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[spy.mock.calls.length - 1]![0].settings.lockOnSleep).toBe(false);
+
+    const screenSwitch = await screen.findByTestId('lock-screen-switch');
+    expect(screenSwitch).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('Lock when screen locks')).toBeTruthy();
+    await u.click(screenSwitch);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[spy.mock.calls.length - 1]![0].settings.lockOnScreenLock).toBe(false);
+
+    const switchUserSwitch = await screen.findByTestId('lock-user-switch-switch');
+    expect(switchUserSwitch).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('Lock when switching users')).toBeTruthy();
+    await u.click(switchUserSwitch);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[spy.mock.calls.length - 1]![0].settings.lockOnUserSwitch).toBe(false);
+  });
 });
