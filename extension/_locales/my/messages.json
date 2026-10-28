@@ -683,5 +683,46 @@
   },
   "noUsername": {
     "message": "အသုံးပြုသူအမည် မရှိပါ"
+  },
+  "settingsSubtitle": {
+    "message": "စိတ်ကြိုက်ရွေးချယ်မှုများနှင့် ဘရောက်ဆာ ချိတ်ဆက်မှု"
+  },
+  "statusCardTitle": {
+    "message": "ဒက်စ်တော့ ချိတ်ဆက်မှု"
+  },
+  "statusConnectedUnlocked": {
+    "message": "gitpass နှင့် ချိတ်ဆက်ထားသည် (သော့ဖွင့်ထားသည်)"
+  },
+  "statusAppLocked": {
+    "message": "gitpass သော့ခတ်ထားသည်"
+  },
+  "statusAppNotFound": {
+    "message": "ဒက်စ်တော့ အက်ပ်ကို ရှာမတွေ့ပါ"
+  },
+  "troubleshootingDocs": {
+    "message": "ပြဿနာဖြေရှင်းခြင်း လမ်းညွှန်"
+  },
+  "secGeneral": {
+    "message": "ယေဘုယျ"
+  },
+  "secAutofillSaving": {
+    "message": "Autofill နှင့် သိမ်းဆည်းခြင်း"
+  },
+  "secAbout": {
+    "message": "အကြောင်း"
+  },
+  "aboutExt": {
+    "message": "အထောက်အထားများကို အလိုအလျောက်ဖြည့်ရန်နှင့် သိမ်းဆည်းရန် ဘရောက်ဆာ တိုးချဲ့မှု"
+  },
+  "optNeverSaveEmptyBody": {
+    "message": "စကားဝှက်မသိမ်းရန် သင်ရွေးချယ်ထားသော ဆိုက်များသည် ဤနေရာတွင် ပေါ်လာပါမည်။"
+  },
+  "siteRemoved": {
+    "message": "$1 ကို ဖယ်ရှားပြီးပါပြီ",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
   }
 }

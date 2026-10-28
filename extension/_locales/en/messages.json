@@ -622,5 +622,46 @@
   },
   "noUsername": {
     "message": "No username"
+  },
+  "settingsSubtitle": {
+    "message": "Preferences and browser integration"
+  },
+  "statusCardTitle": {
+    "message": "Desktop connection"
+  },
+  "statusConnectedUnlocked": {
+    "message": "Connected to gitpass (unlocked)"
+  },
+  "statusAppLocked": {
+    "message": "gitpass is locked"
+  },
+  "statusAppNotFound": {
+    "message": "Desktop app not found"
+  },
+  "troubleshootingDocs": {
+    "message": "Troubleshooting docs"
+  },
+  "secGeneral": {
+    "message": "General"
+  },
+  "secAutofillSaving": {
+    "message": "Autofill & saving"
+  },
+  "secAbout": {
+    "message": "About"
+  },
+  "aboutExt": {
+    "message": "Browser extension for autofill and saving credentials"
+  },
+  "optNeverSaveEmptyBody": {
+    "message": "Sites where you choose 'Never save' will appear here."
+  },
+  "siteRemoved": {
+    "message": "Removed $1",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
   }
 }
