@@ -23,6 +23,7 @@ const DEFAULT_ITEMS = [
   { id: 'v1:i4', category: 'secure_note', title: 'Wi-Fi notes', subtitle: '', has_totp: false, favorite: false },
 ].map((i) => ({ vault_id: V.id, vault_name: V.name, updated_at: now, ...i }));
 
+let createdCount = 0;
 const saveItems = (items) => fs.writeFileSync(ITEMS_FILE, JSON.stringify(items));
 const getItems = () => {
   const stored = readJson(ITEMS_FILE, null);
@@ -68,6 +69,22 @@ function handle(m) {
       items.push({ vault_id: V.id, vault_name: V.name, id, category: 'login', title: m.title || host(m.origin) || 'New Login', subtitle: m.username || '', url: m.origin || '', favorite: false, updated_at: new Date().toISOString(), _u: m.username, _p: m.password });
       saveItems(items);
       return { item_id: id };
+    }
+    case 'create_item': { needUnlock();
+      const it = m.item;
+      const cats = ['login', 'api_credential', 'secure_note', 'credit_card', 'identity', 'wifi', 'ssh_key'];
+      if (!it || typeof it !== 'object' || !cats.includes(it.category)) throw Object.assign(new Error('bad item'), { code: 'bad_request' });
+      if (typeof it.title !== 'string' || !it.title.trim()) throw Object.assign(new Error('title is required'), { code: 'bad_request' });
+      if (it.vaultId && it.vaultId !== V.id) throw Object.assign(new Error('vault not found'), { code: 'not_found' });
+      // Detail fields as the host returns them: concealed values never leave the vault.
+      const fields = (Array.isArray(it.sections) ? it.sections : []).flatMap((s) => (Array.isArray(s.fields) ? s.fields : [])
+        .map((f) => ({ name: f.id, label: f.label, kind: f.kind, concealed: f.kind === 'concealed', value: f.kind === 'concealed' ? null : f.value })));
+      const id = 'v1:new' + Date.now() + '-' + (++createdCount);
+      const items = getItems();
+      items.push({ vault_id: V.id, vault_name: V.name, id, category: it.category, title: it.title.trim(), subtitle: '',
+        url: it.url || '', favorite: false, updated_at: new Date().toISOString(), fields, tags: Array.isArray(it.tags) ? it.tags : [] });
+      saveItems(items);
+      return { item_id: id, title: it.title.trim() };
     }
     case 'update_password': needUnlock(); return { ok: true };
     case 'generate': return { password: 'Gen-' + 'x'.repeat(Math.max(4, (m.len || 20) - 4)) };

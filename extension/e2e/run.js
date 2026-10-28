@@ -289,6 +289,116 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
           return titles.test(t);
         }, T(4000));
         rec('open popup restores item list on host unlock event', !!restoredList, restoredList ? 'item list restored' : 'popup did not restore');
+
+        // --- TOTP code in the popup list (#62): the mock host returns 123456 / 20 s / 30 s.
+        const totpShown = await until(async () => /123 456/.test(await pop.text()), T(5000));
+        rec('popup list shows a formatted TOTP code for a login with a secret', !!totpShown,
+          totpShown ? 'code 123 456 visible' : 'code not visible: ' + (await pop.text()).slice(0, 160).replace(/\s+/g, ' '));
+        if (totpShown) {
+          await pop.eval(`(() => {
+            window.__copied = [];
+            try { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (x) => { window.__copied.push(x); return Promise.resolve(); } } }); } catch (_) {}
+            return true;
+          })()`);
+          const chip = await pop.click('/^123 456$/');
+          const copied = await until(async () => { const c = await pop.eval('window.__copied || []'); return Array.isArray(c) && c.includes('123456') && c; }, T(3000));
+          rec('popup TOTP code click copies the code', !!copied,
+            `${chip ? `clicked "${chip}"` : 'code chip not found'}; copied=${JSON.stringify(copied || [])}${await pop.text().then((t) => /Copied/.test(t) ? '; toast shown' : '; no toast').catch(() => '')}`);
+        }
+
+        // --- New item (#41): the popup's New item form sends exactly one create_item per item, with the
+        // desktop New Item template's category/section/field ids and kinds.
+        const panel = () => pop.eval(`(() => {
+          const p = document.getElementById('panel');
+          const f = p && p.querySelector('form.newitem');
+          if (!f) return { open: false };
+          const err = f.querySelector('.err');
+          return { open: true, type: f.querySelector('select').value, err: err ? err.textContent : '',
+            bad: [...f.querySelectorAll('.bad')].map((x) => x.dataset.field) };
+        })()`);
+        const openType = async (type) => {
+          if (!(await panel()).open) await pop.click('/^New item$/');
+          const ok = await until(() => pop.eval(`(() => {
+            const f = document.querySelector('#panel form.newitem'); if (!f) return false;
+            const sel = f.querySelector('select'); if (!sel) return false;
+            if (sel.value !== ${JSON.stringify(type)}) { sel.value = ${JSON.stringify(type)}; sel.dispatchEvent(new Event('change', { bubbles: true })); return false; }
+            return !!f.querySelector('[data-field=title]');
+          })()`), T(5000));
+          return !!ok;
+        };
+        const fillNew = (vals) => pop.eval(`(() => {
+          const f = document.querySelector('#panel form.newitem'); if (!f) return 'no form';
+          for (const [k, v] of Object.entries(${JSON.stringify(vals)})) {
+            const i = f.querySelector('[data-field="' + k + '"]'); if (!i) return 'missing ' + k;
+            i.value = v;
+          }
+          return true;
+        })()`);
+        const submitNew = () => pop.eval(`(() => { const f = document.querySelector('#panel form.newitem'); if (!f) return false; f.requestSubmit(); return true; })()`);
+        const createdIn = (mark) => cmdsIn(mockDir).slice(mark).filter((m) => m.cmd === 'create_item');
+        const fieldMap = (msg) => Object.fromEntries(((msg && msg.item.sections) || []).flatMap((s) => (s.fields || []).map((f) => [f.id, f])));
+        const desc = (msg) => {
+          const it = msg && msg.item;
+          if (!it) return 'no create_item received';
+          return `category=${it.category} sections=${(it.sections || []).map((s) => s.id).join(',')} fields=${(it.sections || []).flatMap((s) => s.fields.map((f) => `${f.id}:${f.kind}`)).join(',')}`;
+        };
+
+        // Required-field validation: an empty API credential, then a card number that fails Luhn.
+        let mark = cmdsIn(mockDir).length;
+        await openType('api_credential');
+        await fillNew({ title: 'FAKE Incomplete Key' });
+        await submitNew();
+        const apiErr = await until(async () => { const s = await panel(); return s.err && s; }, T(3000));
+        rec('popup new item: empty API credential shows an error and sends nothing',
+          !!apiErr && apiErr.err === 'Key / secret is required' && apiErr.bad.includes('credential') && createdIn(mark).length === 0,
+          apiErr ? `error="${apiErr.err}" bad=${apiErr.bad.join(',')} create_item=${createdIn(mark).length}` : 'no validation error shown');
+
+        await openType('credit_card');
+        await fillNew({ title: 'FAKE Test Card', number: '4242 4242 4242 4241' });
+        await submitNew();
+        const cardErr = await until(async () => { const s = await panel(); return s.err && s; }, T(3000));
+        rec('popup new item: invalid card number shows an error and sends nothing',
+          !!cardErr && cardErr.err === 'Card number is not valid' && cardErr.bad.includes('number') && createdIn(mark).length === 0,
+          cardErr ? `error="${cardErr.err}" bad=${cardErr.bad.join(',')} create_item=${createdIn(mark).length}` : 'no validation error shown');
+
+        // Create one item of each type through the form; each must send exactly one create_item.
+        const addItem = async (type, values) => {
+          const m0 = cmdsIn(mockDir).length;
+          const opened = await openType(type);
+          const filled = await fillNew(values);
+          await submitNew();
+          const msg = await until(() => createdIn(m0)[0], T(8000));
+          const closed = await until(async () => !(await panel()).open, T(4000));
+          return { opened, filled, msg, count: createdIn(m0).length, closed };
+        };
+
+        const api = await addItem('api_credential', { title: 'FAKE Stripe Key', credential: 'FAKE-sk_test_notreal', hostname: 'api.example.invalid' });
+        const af = fieldMap(api.msg);
+        rec('popup new item: API Key / Credential -> one create_item, concealed credential + url hostname',
+          api.opened && api.filled === true && !!api.msg && api.count === 1 && api.closed &&
+          api.msg.item.category === 'api_credential' && api.msg.item.title === 'FAKE Stripe Key' && api.msg.item.vaultId === 'v1' &&
+          (api.msg.item.sections || []).length === 1 && api.msg.item.sections[0].id === 'main' &&
+          af.credential && af.credential.kind === 'concealed' && af.credential.value === 'FAKE-sk_test_notreal' &&
+          af.hostname && af.hostname.kind === 'url' && af.hostname.value === 'https://api.example.invalid' && !af.username,
+          `${desc(api.msg)}; create_item=${api.count}; panelClosed=${!!api.closed}`);
+
+        const card = await addItem('credit_card', { title: 'FAKE Test Card', number: '4242 4242 4242 4242', expiry: '8/2029', cvv: '123' });
+        const cf = fieldMap(card.msg);
+        rec('popup new item: Credit Card -> one create_item, concealed number, MM/YY expiry',
+          card.opened && card.filled === true && !!card.msg && card.count === 1 && card.closed &&
+          card.msg.item.category === 'credit_card' && card.msg.item.title === 'FAKE Test Card' &&
+          cf.number && cf.number.kind === 'concealed' && cf.number.value === '4242424242424242' &&
+          cf.cvv && cf.cvv.kind === 'concealed' && cf.expiry && cf.expiry.kind === 'month_year' && cf.expiry.value === '08/29',
+          `${desc(card.msg)}; create_item=${card.count}; panelClosed=${!!card.closed}`);
+
+        const note = await addItem('secure_note', { title: 'FAKE Recovery Codes', note: 'FAKE-code-1\nFAKE-code-2' });
+        const nf = fieldMap(note.msg);
+        rec('popup new item: Secure Note -> one create_item with a multiline note',
+          note.opened && note.filled === true && !!note.msg && note.count === 1 && note.closed &&
+          note.msg.item.category === 'secure_note' && note.msg.item.title === 'FAKE Recovery Codes' && !('notes' in note.msg.item) &&
+          (note.msg.item.sections || []).length === 1 && note.msg.item.sections[0].id === 'main' &&
+          nf.note && nf.note.kind === 'multiline' && nf.note.value === 'FAKE-code-1\nFAKE-code-2',
+          `${desc(note.msg)}; create_item=${note.count}; panelClosed=${!!note.closed}`);
       }
     }
     if (pop) await pop.close();

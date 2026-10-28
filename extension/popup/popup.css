@@ -62,6 +62,13 @@ input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 
 .row .u { color: rgb(var(--muted)); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row .fav { color: rgb(var(--orange)); }
 .row .fav svg.ui { width: 12px; height: 12px; fill: currentColor; }
+.row .totp-mini { display: flex; align-items: center; gap: 4px; flex: none; padding: 3px 4px; border: 0; border-radius: 6px; background: none; color: rgb(var(--muted)); font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; }
+.row .totp-mini:hover { background: rgb(var(--hover)); color: rgb(var(--fg)); }
+.row .totp-code { letter-spacing: .04em; white-space: nowrap; }
+.row.sel .totp-code, .row .totp-mini:hover .totp-code { color: rgb(var(--fg)); }
+.row .totp-code.bad { color: rgb(var(--danger)); }
+.row .totp-mini .ring { width: 12px; height: 12px; }
+.row .totp-mini .ring circle { stroke-width: 2; }
 .empty { padding: 24px 16px; color: rgb(var(--muted)); text-align: center; }
 .empty .empty-ic { display: flex; justify-content: center; margin-bottom: 8px; }
 .empty .empty-ic svg.ui { width: 22px; height: 22px; }
