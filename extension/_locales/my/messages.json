@@ -616,9 +616,42 @@
     "message": "အရာအသေးစိတ်ကို ဖွင့်နေသည်…"
   },
   "searchHints": {
-    "message": "↑↓ ရွေးချယ်ရန် · ↵ ဖြည့်သွင်းရန် · ⌘C စကားဝှက် ကူးရန် · Esc ရှင်းရန်"
+    "message": "↑↓ ရွေးချယ်ရန် · ↵ ဖြည့်သွင်းရန် · ⌘C စကားဝှက် ကူးရန် · ? ဖြတ်လမ်းများ အားလုံး · Esc ရှင်းရန်"
   },
   "secretKeyPh": {
     "message": "Secret Key (A3-XXXXXX-…)"
+  },
+  "keyboardShortcuts": {
+    "message": "ကီးဘုတ် ဖြတ်လမ်းများ"
+  },
+  "shortcutNav": {
+    "message": "စာရင်းကို ရွေးချယ်ရန်"
+  },
+  "shortcutFill": {
+    "message": "အရာကို ဖြည့်သွင်းရန်"
+  },
+  "shortcutCopyPw": {
+    "message": "စကားဝှက် ကူးရန်"
+  },
+  "shortcutCopyTotp": {
+    "message": "တစ်ခါသုံးကုဒ် (TOTP) ကူးရန်"
+  },
+  "shortcutCopyUser": {
+    "message": "အသုံးပြုသူအမည် ကူးရန်"
+  },
+  "shortcutOpenUrl": {
+    "message": "ဝဘ်ဆိုဒ်ကို ဖွင့်ရန်"
+  },
+  "shortcutGen": {
+    "message": "စကားဝှက် ထုတ်ပေးကိရိယာ"
+  },
+  "shortcutClose": {
+    "message": "ပိတ်ရန် သို့မဟုတ် ရှာဖွေမှု ရှင်းရန်"
+  },
+  "usernameCopied": {
+    "message": "အသုံးပြုသူအမည်ကို ကူးယူပြီးပါပြီ"
+  },
+  "noUsername": {
+    "message": "အသုံးပြုသူအမည် မရှိပါ"
   }
 }

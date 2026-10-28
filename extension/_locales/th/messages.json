@@ -616,9 +616,42 @@
     "message": "กำลังโหลดรายละเอียด…"
   },
   "searchHints": {
-    "message": "↑↓ นำทาง · ↵ เติมข้อมูล · ⌘C คัดลอกรหัสผ่าน · Esc ล้าง"
+    "message": "↑↓ นำทาง · ↵ เติมข้อมูล · ⌘C คัดลอกรหัสผ่าน · ? ทางลัดทั้งหมด · Esc ล้าง"
   },
   "secretKeyPh": {
     "message": "Secret Key (A3-XXXXXX-…)"
+  },
+  "keyboardShortcuts": {
+    "message": "ทางลัดแป้นพิมพ์"
+  },
+  "shortcutNav": {
+    "message": "เลื่อนรายการ"
+  },
+  "shortcutFill": {
+    "message": "เติมข้อมูลรายการ"
+  },
+  "shortcutCopyPw": {
+    "message": "คัดลอกรหัสผ่าน"
+  },
+  "shortcutCopyTotp": {
+    "message": "คัดลอกรหัสแบบใช้ครั้งเดียว (TOTP)"
+  },
+  "shortcutCopyUser": {
+    "message": "คัดลอกชื่อผู้ใช้"
+  },
+  "shortcutOpenUrl": {
+    "message": "เปิดเว็บไซต์"
+  },
+  "shortcutGen": {
+    "message": "ตัวสร้างรหัสผ่าน"
+  },
+  "shortcutClose": {
+    "message": "ปิดหรือล้างการค้นหา"
+  },
+  "usernameCopied": {
+    "message": "คัดลอกชื่อผู้ใช้แล้ว"
+  },
+  "noUsername": {
+    "message": "ไม่มีชื่อผู้ใช้"
   }
 }

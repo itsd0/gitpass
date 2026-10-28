@@ -488,7 +488,7 @@ function updateSearchHints() {
   const show = Boolean(S.rows.length);
   hints.classList.toggle('hidden', !show);
   if (show) {
-    hints.textContent = t('searchHints', '↑↓ navigate · ↵ fill · ⌘C copy password · Esc clear');
+    hints.textContent = t('searchHints', '↑↓ navigate · ↵ fill · ⌘C copy password · ? all shortcuts · Esc clear');
   }
 }
 
@@ -870,9 +870,103 @@ async function copyPrimary() {
   await copy(await secretValue(d, f), f.kind === 'password' ? t('passwordCopied', 'Password copied') : t('copied', 'Copied'));
 }
 
-// ---------- panels: generator / new login ----------
-function closePanel() { const p = $('panel'); p.classList.add('hidden'); p.textContent = ''; S.panel = null; $('q').focus(); if (livePending) { livePending = false; liveReload(); } }
+async function copyUsername() {
+  const selected = S.rows[S.sel];
+  if (!selected) return;
+  const user = V.itemUsername(S.detail, selected);
+  if (user) {
+    await copy(user, t('usernameCopied', 'Username copied'));
+  } else {
+    toast(t('noUsername', 'No username'));
+  }
+}
+
+function openWebsite() {
+  const selected = S.rows[S.sel];
+  if (!selected) return;
+  const url = (S.detail && S.detail.url) || selected.url || '';
+  if (url && V.isAllowedUrl(url)) {
+    if (typeof chrome !== 'undefined' && chrome.tabs && typeof chrome.tabs.create === 'function') {
+      chrome.tabs.create({ url, active: true });
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }
+}
+
+// ---------- panels: generator / new login / shortcuts ----------
+let prevFocus = null;
+
+function closePanel() {
+  const p = $('panel');
+  p.classList.add('hidden');
+  p.classList.remove('shortcuts-panel');
+  p.textContent = '';
+  p.removeAttribute('aria-modal');
+  p.removeAttribute('aria-label');
+  const wasShortcuts = S.panel === 'shortcuts';
+  S.panel = null;
+  if (wasShortcuts && prevFocus && typeof prevFocus.focus === 'function' && prevFocus.isConnected) {
+    prevFocus.focus();
+  } else {
+    $('q').focus();
+  }
+  prevFocus = null;
+  if (livePending) { livePending = false; liveReload(); }
+}
+
 function panelHead(title) { const h = el('h3', null, title); h.append(iconBtn(UI.close, t('close', 'Close'), closePanel)); return h; }
+
+function openShortcuts() {
+  prevFocus = document.activeElement;
+  const p = $('panel');
+  p.textContent = '';
+  p.classList.remove('hidden');
+  p.classList.add('shortcuts-panel');
+  p.setAttribute('role', 'dialog');
+  p.setAttribute('aria-modal', 'true');
+  p.setAttribute('aria-label', t('keyboardShortcuts', 'Keyboard shortcuts'));
+  S.panel = 'shortcuts';
+
+  p.append(panelHead(t('keyboardShortcuts', 'Keyboard shortcuts')));
+
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+  const cmd = isMac ? '⌘' : 'Ctrl+';
+  const shift = isMac ? '⇧' : 'Shift+';
+
+  const list = el('div', 'shortcuts-list');
+  list.setAttribute('role', 'list');
+
+  const shortcuts = [
+    { keys: ['↑', '↓'], label: t('shortcutNav', 'Navigate list') },
+    { keys: [isMac ? '↵' : 'Enter'], label: t('shortcutFill', 'Fill item') },
+    { keys: [`${cmd}C`], label: t('shortcutCopyPw', 'Copy password') },
+    { keys: [`${cmd}${shift}C`], label: t('shortcutCopyTotp', 'Copy one-time code (TOTP)') },
+    { keys: [`${cmd}${shift}U`], label: t('shortcutCopyUser', 'Copy username') },
+    { keys: [`${cmd}O`], label: t('shortcutOpenUrl', 'Open website') },
+    { keys: [`${cmd}${shift}G`], label: t('shortcutGen', 'Password generator') },
+    { keys: ['Esc'], label: t('shortcutClose', 'Close or clear search') },
+  ];
+
+  for (const s of shortcuts) {
+    const row = el('div', 'shortcut-row');
+    row.setAttribute('role', 'listitem');
+    const lbl = el('span', 'shortcut-label', s.label);
+    const keysWrap = el('span', 'shortcut-keys');
+    for (const k of s.keys) {
+      const kbd = document.createElement('kbd');
+      kbd.textContent = k;
+      keysWrap.append(kbd);
+    }
+    row.append(lbl, keysWrap);
+    list.append(row);
+  }
+
+  p.append(list);
+
+  const closeBtn = p.querySelector('button');
+  if (closeBtn) closeBtn.focus();
+}
 
 async function generate(len, digits, symbols, extra) {
   const msg = { type: 'popup:generate', len, digits, symbols };
@@ -1115,11 +1209,34 @@ function openNewItem(typeId, prefill) {
 $('genBtn').innerHTML = UI.key; $('genBtn').onclick = () => (S.panel === 'gen' ? closePanel() : openGenerator());
 $('newBtn').innerHTML = UI.plus; $('newBtn').onclick = () => (S.panel === 'new' ? closePanel() : openNewItem());
 $('lock').innerHTML = UI.lock; $('searchIc').innerHTML = UI.search;
+if ($('searchHints')) $('searchHints').onclick = () => (S.panel === 'shortcuts' ? closePanel() : openShortcuts());
 
 // ---------- keyboard ----------
 document.addEventListener('keydown', (e) => {
   if ($('unlocked').classList.contains('hidden')) { if (e.key === 'Escape') window.close(); return; }
   const a = document.activeElement;
+  // Focus trap for shortcuts modal
+  if (e.key === 'Tab' && S.panel === 'shortcuts') {
+    const p = $('panel');
+    const focusable = Array.from(p.querySelectorAll('button:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+    if (focusable.length) {
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first || !p.contains(document.activeElement)) {
+          e.preventDefault();
+          last.focus();
+          return;
+        }
+      } else {
+        if (document.activeElement === last || !p.contains(document.activeElement)) {
+          e.preventDefault();
+          first.focus();
+          return;
+        }
+      }
+    }
+  }
   // ⌘⇧G / Ctrl+Shift+G opens the generator from anywhere in the popup.
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'g') {
     e.preventDefault();
@@ -1133,14 +1250,18 @@ document.addEventListener('keydown', (e) => {
     if (S.query && !S.rows.length) { e.preventDefault(); openNewItem('login', { title: S.query }); return; }
   }
   const inForm = !!(a && a.closest && a.closest('#panel, select, .menu, button'));
+  const inEditable = !!(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable));
   const sel = window.getSelection && String(window.getSelection());
   const inputSel = a && a.tagName === 'INPUT' && a.selectionStart !== a.selectionEnd;
   const selected = S.rows[S.sel];
-  const act = V.keyAction(e, { panel: S.panel, inForm, hasSelection: !!sel || inputSel, hasTotp: !!(selected && selected.has_totp), query: S.query });
+  const act = V.keyAction(e, { panel: S.panel, inForm, inEditable, hasSelection: !!sel || inputSel, hasTotp: !!(selected && selected.has_totp), query: S.query });
   if (!act) return;
   e.preventDefault();
   if (act === 'close') window.close();
   else if (act === 'closePanel') closePanel();
+  else if (act === 'toggleShortcuts' || act === 'shortcuts') {
+    if (S.panel === 'shortcuts') closePanel(); else openShortcuts();
+  }
   else if (act === 'clearSearch') {
     S.query = '';
     const qIn = $('q');
@@ -1151,6 +1272,9 @@ document.addEventListener('keydown', (e) => {
   else if (act === 'fill') openAndFill();
   else if (act === 'copyTotp') { if (selected) copyTotp(selected.id).catch(showErr); }
   else if (act === 'copyPassword') copyPrimary().catch(showErr);
+  else if (act === 'copyUsername') copyUsername().catch(showErr);
+  else if (act === 'openWebsite') openWebsite();
+  else if (act === 'generator') { if (S.panel === 'gen') closePanel(); else openGenerator(); }
 });
 
 // ---------- user settings (options page) ----------

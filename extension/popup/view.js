@@ -113,20 +113,26 @@
     return Math.min(count - 1, Math.max(0, idx + delta));
   }
 
-  /** Map a keydown to an action. ctx: {inEditable, hasSelection, panel, query} */
+  /** Map a keydown to an action. ctx: {inEditable, inForm, hasSelection, panel, query, hasTotp} */
   function keyAction(e, ctx = {}) {
-    const mod = e.metaKey || e.ctrlKey;
+    const mod = Boolean(e.metaKey || e.ctrlKey);
     if (e.key === 'Escape') {
       if (ctx.panel) return 'closePanel';
       if (ctx.query) return 'clearSearch';
       return 'close';
     }
+    if (e.key === '?' && !mod && !ctx.inEditable && !ctx.hasSelection && (!ctx.panel || ctx.panel === 'shortcuts')) {
+      return 'toggleShortcuts';
+    }
     if (ctx.panel) return null;
     if (e.key === 'ArrowDown') return 'down';
     if (e.key === 'ArrowUp') return 'up';
     if (e.key === 'Enter' && !mod && !ctx.inForm) return 'fill';
+    if (mod && e.shiftKey && (e.key === 'u' || e.key === 'U') && !ctx.hasSelection) return 'copyUsername';
     if (mod && e.shiftKey && (e.key === 'c' || e.key === 'C') && !ctx.hasSelection) return ctx.hasTotp ? 'copyTotp' : 'copyPassword';
     if (mod && (e.key === 'c' || e.key === 'C') && !ctx.hasSelection) return 'copyPassword';
+    if (mod && !e.shiftKey && (e.key === 'o' || e.key === 'O') && !ctx.hasSelection) return 'openWebsite';
+    if (mod && e.shiftKey && (e.key === 'g' || e.key === 'G') && !ctx.hasSelection) return 'generator';
     return null;
   }
 
@@ -222,6 +228,33 @@
 
   function hostOfUrl(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (_) { return ''; } }
 
+  /** Check if a URL has an allowed scheme (http or https with non-empty hostname). */
+  function isAllowedUrl(u) {
+    if (!u || typeof u !== 'string') return false;
+    try {
+      const parsed = new URL(u);
+      return (parsed.protocol === 'http:' || parsed.protocol === 'https:') && Boolean(parsed.hostname);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** Extract the username from an item detail or summary. */
+  function itemUsername(detail, summary) {
+    if (detail && Array.isArray(detail.fields)) {
+      const f = detail.fields.find((x) => x && (x.name === 'username' || x.label === 'username'));
+      if (f && f.value) return String(f.value).trim();
+    }
+    if (detail && detail.username) return String(detail.username).trim();
+    if (summary && summary.username) return String(summary.username).trim();
+    const cat = (detail && detail.category) || (summary && summary.category);
+    if (cat === 'login') {
+      const sub = (detail && detail.subtitle) || (summary && summary.subtitle);
+      if (sub && sub !== '—') return String(sub).trim();
+    }
+    return '';
+  }
+
   /** Build the secondary text for a row; when query matches the domain rather than subtitle, shows "subtitle · domain". */
   function rowSubtitle(it, query) {
     if (!it) return '—';
@@ -233,7 +266,7 @@
     return it.subtitle || host || '—';
   }
 
-  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, highlightRanges, highlightSegments, rowSubtitle };
+  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
