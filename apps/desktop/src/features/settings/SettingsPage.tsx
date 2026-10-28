@@ -363,6 +363,81 @@ function Security({ highlightedId }: { highlightedId?: string | null }) {
           max={1440}
           onSave={(autoLockMinutes) => s({ autoLockMinutes })}
         />
+        <SettingsRow
+          id="setting-lock-sleep"
+          highlighted={highlightedId === 'setting-lock-sleep'}
+          label={t('settings.lockOnSleep')}
+          description={t('settings.lockOnSleepHelp')}
+        >
+          <button
+            role="switch"
+            aria-checked={settings.lockOnSleep ?? true}
+            aria-label={t('settings.lockOnSleep')}
+            data-testid="lock-sleep-switch"
+            onClick={() => s({ lockOnSleep: !(settings.lockOnSleep ?? true) })}
+            className={cn(
+              'relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              (settings.lockOnSleep ?? true) ? 'bg-accent' : 'bg-border'
+            )}
+          >
+            <span
+              className={cn(
+                'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+                (settings.lockOnSleep ?? true) ? 'translate-x-5' : 'translate-x-0.5'
+              )}
+            />
+          </button>
+        </SettingsRow>
+        <SettingsRow
+          id="setting-lock-screen"
+          highlighted={highlightedId === 'setting-lock-screen'}
+          label={t('settings.lockOnScreenLock')}
+          description={t('settings.lockOnScreenLockHelp')}
+        >
+          <button
+            role="switch"
+            aria-checked={settings.lockOnScreenLock ?? true}
+            aria-label={t('settings.lockOnScreenLock')}
+            data-testid="lock-screen-switch"
+            onClick={() => s({ lockOnScreenLock: !(settings.lockOnScreenLock ?? true) })}
+            className={cn(
+              'relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              (settings.lockOnScreenLock ?? true) ? 'bg-accent' : 'bg-border'
+            )}
+          >
+            <span
+              className={cn(
+                'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+                (settings.lockOnScreenLock ?? true) ? 'translate-x-5' : 'translate-x-0.5'
+              )}
+            />
+          </button>
+        </SettingsRow>
+        <SettingsRow
+          id="setting-lock-user-switch"
+          highlighted={highlightedId === 'setting-lock-user-switch'}
+          label={t('settings.lockOnUserSwitch')}
+          description={t('settings.lockOnUserSwitchHelp')}
+        >
+          <button
+            role="switch"
+            aria-checked={settings.lockOnUserSwitch ?? true}
+            aria-label={t('settings.lockOnUserSwitch')}
+            data-testid="lock-user-switch-switch"
+            onClick={() => s({ lockOnUserSwitch: !(settings.lockOnUserSwitch ?? true) })}
+            className={cn(
+              'relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              (settings.lockOnUserSwitch ?? true) ? 'bg-accent' : 'bg-border'
+            )}
+          >
+            <span
+              className={cn(
+                'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+                (settings.lockOnUserSwitch ?? true) ? 'translate-x-5' : 'translate-x-0.5'
+              )}
+            />
+          </button>
+        </SettingsRow>
         <NumberSetting
           id="setting-clipboard"
           highlighted={highlightedId === 'setting-clipboard'}
