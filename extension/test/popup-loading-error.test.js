@@ -419,3 +419,62 @@ test('popup.css includes reduced-motion disable for shimmer and light theme toke
   assert.match(css, /.inline-err/);
   assert.match(css, /.btn-retry/);
 });
+
+test("timeoutForMessage assigns >= 130 s for user-interactive unlock and app calls, 8 s default for regular calls", () => {
+  assert.strictEqual(V.timeoutForMessage({ type: "popup:request_unlock" }), 130000);
+  assert.strictEqual(V.timeoutForMessage({ type: "popup:open_fill" }), 130000);
+  assert.strictEqual(V.timeoutForMessage({ type: "popup:open_in_app" }), 130000);
+  assert.strictEqual(V.timeoutForMessage({ type: "popup:list_items" }), 8000);
+  assert.strictEqual(V.timeoutForMessage({ type: "popup:status" }), 8000);
+  assert.strictEqual(V.timeoutForMessage({ type: "popup:request_unlock", __timeoutMs: 5000 }), 5000);
+  assert.strictEqual(V.timeoutForMessage({ type: "popup:request_unlock" }, 4000), 4000);
+});
+
+test("request_unlock does not time out at 8 s", async () => {
+  const { mock } = require("node:test");
+  mock.timers.enable();
+  try {
+    let unlockResolved = false;
+    let unlockPromiseResolver;
+    const unlockPromise = new Promise((res) => {
+      unlockPromiseResolver = res;
+    });
+
+    const { w } = popup({
+      hostHandler: (msg) => {
+        if (msg.type === "popup:request_unlock") {
+          return unlockPromise;
+        }
+        return undefined;
+      },
+    });
+
+    const p = w.__gitpassPopup.send({ type: "popup:request_unlock" });
+    p.then(() => { unlockResolved = true; });
+
+    // Advance mock timers past 8 seconds (e.g. 10 seconds / 10,000 ms)
+    mock.timers.tick(10000);
+    await Promise.resolve();
+
+    // Verify request_unlock has NOT timed out at 8 s
+    assert.strictEqual(unlockResolved, false, "request_unlock should not be resolved or timed out yet");
+
+    // Resolve unlock prompt (e.g. Touch ID confirmed after 10 s)
+    unlockPromiseResolver({ unlocked: true });
+    await Promise.resolve();
+    const res = await p;
+    assert.strictEqual(res.unlocked, true);
+    assert.strictEqual(unlockResolved, true);
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test("window.__gitpassPopup is only set when window.__gitpassMock is present", () => {
+  const html = fs.readFileSync(path.join(root, "popup", "popup.html"), "utf8");
+  const dom = new JSDOM(html, { url: "chrome-extension://mock-id/popup/popup.html", runScripts: "outside-only" });
+  const w = dom.window;
+  // do NOT set w.__gitpassMock
+  for (const f of SCRIPTS) w.eval(fs.readFileSync(path.join(root, f), "utf8"));
+  assert.strictEqual(w.__gitpassPopup, undefined);
+});

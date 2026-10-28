@@ -3,6 +3,18 @@
   'use strict';
   const REQUEST_TIMEOUT_MS = 8000;
   const SKELETON_DELAY_MS = 150;
+  const UNLOCK_TIMEOUT_MS = 130000; // >= 130 s, exceeds bridge.rs UNLOCK_TIMEOUT (125 s)
+
+  /** Determine the timeout for a message: user-interactive calls (Touch ID / prompt, app launch) get at least 130 s. */
+  function timeoutForMessage(msg, explicitMs) {
+    if (typeof explicitMs === "number") return explicitMs;
+    if (msg && typeof msg.__timeoutMs === "number") return msg.__timeoutMs;
+    const type = msg && msg.type;
+    if (type === "popup:request_unlock" || type === "popup:open_in_app" || type === "popup:open_fill") {
+      return UNLOCK_TIMEOUT_MS;
+    }
+    return REQUEST_TIMEOUT_MS;
+  }
 
   /** Wrap a promise in a timeout; rejects with code: 'timeout' if ms expires. */
   function withTimeout(promise, timeoutMs = REQUEST_TIMEOUT_MS, timeoutMsg) {
@@ -159,7 +171,7 @@
 
   function hostOfUrl(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (_) { return ''; } }
 
-  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl };
+  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

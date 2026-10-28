@@ -10,7 +10,13 @@ const ROW_H = 52;
 function send(msg, timeoutMs) {
   const ms = typeof timeoutMs === 'number'
     ? timeoutMs
-    : (msg && typeof msg.__timeoutMs === 'number' ? msg.__timeoutMs : (V ? V.REQUEST_TIMEOUT_MS : 8000));
+    : (msg && typeof msg.__timeoutMs === 'number'
+        ? msg.__timeoutMs
+        : (V && V.timeoutForMessage ? V.timeoutForMessage(msg) : (
+            (msg && (msg.type === 'popup:request_unlock' || msg.type === 'popup:open_in_app' || msg.type === 'popup:open_fill'))
+              ? 130000
+              : (V ? V.REQUEST_TIMEOUT_MS : 8000)
+          )));
   const p = window.__gitpassMock ? window.__gitpassMock(msg) : new Promise((res, rej) => chrome.runtime.sendMessage(msg, (r) => {
     if (chrome.runtime.lastError) return rej(new Error(chrome.runtime.lastError.message));
     if (r && r.ok) return res(r.result);
@@ -986,7 +992,8 @@ if (typeof document !== 'undefined') {
   refresh();
 }
 
-globalThis.__gitpassPopup = {
+if (typeof window !== 'undefined' && window.__gitpassMock) {
+  window.__gitpassPopup = {
   copy,
   clearClipboardIfOurs,
   renderListSkeletons,
@@ -999,7 +1006,8 @@ globalThis.__gitpassPopup = {
   loadData,
   select,
   S,
-};
+  };
+}
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
