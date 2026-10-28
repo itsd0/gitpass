@@ -6,13 +6,13 @@
   --bg: 248 248 250; --panel: 255 255 255; --sidebar: 241 242 245; --card: 255 255 255;
   --hover: 232 234 239; --active: 220 224 232; --border: 222 224 230;
   --fg: 24 26 32; --muted: 104 110 124; --label: 88 86 214;
-  --accent: 26 115 232; --danger: 214 48 49; --ok: 22 163 74; --warn: 217 119 6;
+  --accent: 194 65 12; --danger: 214 48 49; --ok: 22 163 74; --warn: 217 119 6;
 }
 .dark {
   --bg: 30 30 32; --panel: 36 36 38; --sidebar: 41 45 52; --card: 44 44 47;
   --hover: 52 54 60; --active: 70 74 82; --border: 60 62 68;
   --fg: 236 237 240; --muted: 150 154 164; --label: 176 160 255;
-  --accent: 46 125 246; --danger: 239 83 80; --ok: 52 199 89; --warn: 245 166 35;
+  --accent: 242 140 40; --danger: 239 83 80; --ok: 52 199 89; --warn: 245 166 35;
 }
 html, body, #root { height: 100%; }
 body { @apply bg-bg text-fg font-sans antialiased text-sm; margin: 0; }
