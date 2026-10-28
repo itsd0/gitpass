@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { api } from '../api/client';
 import { defaultRoute, useApp } from './store';
 
-const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+export const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 export interface OpenItemPayload { vaultId?: string | null; itemId?: string | null }
 
@@ -37,10 +37,14 @@ export function useAgentEvents() {
     if (!locked && pending) { const p = pending; pending = null; openItemFromAgent(p); }
   }, [locked]);
   useEffect(() => {
-    const onDom = (e: Event) => openItemFromAgent((e as CustomEvent<OpenItemPayload>).detail);
-    window.addEventListener('gitpass:open-item', onDom);
+    const onDomOpen = (e: Event) => openItemFromAgent((e as CustomEvent<OpenItemPayload>).detail);
+    const onDomVaultChanged = () => onVaultChanged();
+    const onDomLocked = () => { const s = useApp.getState(); if (!s.locked) s.lock(); };
+    window.addEventListener('gitpass:open-item', onDomOpen);
+    window.addEventListener('gitpass:vault-changed', onDomVaultChanged);
+    window.addEventListener('gitpass:locked', onDomLocked);
     const unlisten: Array<() => void> = [];
-    if (isTauri) {
+    if (isTauri()) {
       import('@tauri-apps/api/event').then(({ listen }) => {
         // agent_ui.rs emits `open-item` and also dispatches the DOM event; selecting twice is idempotent.
         listen<OpenItemPayload>('open-item', (ev) => openItemFromAgent(ev.payload)).then((u) => unlisten.push(u));
@@ -58,6 +62,11 @@ export function useAgentEvents() {
         }).then((u) => unlisten.push(u));
       }).catch(() => {});
     }
-    return () => { window.removeEventListener('gitpass:open-item', onDom); unlisten.forEach((u) => u()); };
+    return () => {
+      window.removeEventListener('gitpass:open-item', onDomOpen);
+      window.removeEventListener('gitpass:vault-changed', onDomVaultChanged);
+      window.removeEventListener('gitpass:locked', onDomLocked);
+      unlisten.forEach((u) => u());
+    };
   }, []);
 }
