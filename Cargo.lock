@@ -1078,6 +1078,7 @@ dependencies = [
  "gitpass-core",
  "gitpass-pasteboard",
  "rpassword",
+ "serde",
  "serde_json",
  "tempfile",
  "ureq",

@@ -318,6 +318,26 @@ value = conflict, local kept and reported; `None` with a clock is a tombstone. v
   unless one is a clear winner or `--pick <n>` is given.
 - Build without clipboard support: `cargo build --no-default-features`.
 
+## Scripting with --json
+
+`gitpass list`, `gitpass find` and `gitpass get` support `--json` output for automation and shell scripting:
+
+- `gitpass list <vault> [--query <q>] --json` and `gitpass find <vault> <q> --json` print a JSON array of item summaries (`id`, `title`, `category`, `username`, `url`, `tags`, `favorite`, `updated_at`). No secrets (password, TOTP seed, concealed fields, notes) appear in list/find output.
+- `gitpass get <vault> <query> --json` prints an item object with metadata and its fields (`label`, `kind`, `value`). Concealed values (passwords, TOTP seeds, secret custom fields) are `null` unless `--reveal` is also passed. `--json --password-only` is rejected with an error.
+- Ambiguous queries keep `--pick <n>` behavior. In `--json` mode, ambiguity errors go to stderr with non-zero exit so stdout stays clean.
+- Archived and deleted items are excluded by default unless `--include-archived` is passed.
+
+Example with `jq`:
+
+```bash
+# Find an item ID by title and extract its revealed password
+ITEM_ID=$(gitpass list Personal --query "github" --json | jq -r '.[0].id')
+PASSWORD=$(gitpass get Personal "$ITEM_ID" --json --reveal | jq -r '.fields[] | select(.label == "password") | .value')
+
+# List usernames for all login items
+gitpass list Personal --json | jq -r '.[] | select(.category == "login") | "\(.title): \(.username)"'
+```
+
 ## Security audit (Watchtower)
 
 `gitpass audit [VAULT] [--max-age-days N] [--hibp]` checks live login items for weak, reused and old
