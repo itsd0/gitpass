@@ -342,6 +342,14 @@ export const th: Partial<Record<Key, string>> = {
   "expiry.expiresInMonths": "จะหมดอายุในอีก {n} เดือน",
   "expiry.expiresInYearOne": "จะหมดอายุในอีก 1 ปี",
   "expiry.expiresInYears": "จะหมดอายุในอีก {n} ปี",
+  // password changed relative hints
+  "passwordChanged.today": "เปลี่ยนรหัสผ่านวันนี้",
+  "passwordChanged.dayOne": "เปลี่ยนรหัสผ่านเมื่อ 1 วันที่แล้ว",
+  "passwordChanged.days": "เปลี่ยนรหัสผ่านเมื่อ {n} วันที่แล้ว",
+  "passwordChanged.monthOne": "เปลี่ยนรหัสผ่านเมื่อ 1 เดือนที่แล้ว",
+  "passwordChanged.months": "เปลี่ยนรหัสผ่านเมื่อ {n} เดือนที่แล้ว",
+  "passwordChanged.yearOne": "เปลี่ยนรหัสผ่านเมื่อ 1 ปีที่แล้ว",
+  "passwordChanged.years": "เปลี่ยนรหัสผ่านเมื่อ {n} ปีที่แล้ว",
   // item list shell & dropdowns
   "items.allCategories": "ทุกหมวดหมู่",
   "items.sortBy": "จัดเรียงตาม",
