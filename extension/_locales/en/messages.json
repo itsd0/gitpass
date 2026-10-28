@@ -496,5 +496,20 @@
   },
   "itemType": {
     "message": "Type"
+  },
+  "errTimeout": {
+    "message": "Request timed out."
+  },
+  "errListLoad": {
+    "message": "Couldn't load items"
+  },
+  "errDetailLoad": {
+    "message": "Couldn't load item details"
+  },
+  "loadingItems": {
+    "message": "Loading items…"
+  },
+  "loadingDetail": {
+    "message": "Loading item details…"
   }
 }
