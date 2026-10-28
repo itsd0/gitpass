@@ -557,5 +557,20 @@
   },
   "itemType": {
     "message": "အမျိုးအစား"
+  },
+  "errTimeout": {
+    "message": "တောင်းဆိုမှု အချိန်ကုန်သွားပါပြီ။"
+  },
+  "errListLoad": {
+    "message": "အရာများကို ဖွင့်မရပါ"
+  },
+  "errDetailLoad": {
+    "message": "အရာအသေးစိတ်ကို ဖွင့်မရပါ"
+  },
+  "loadingItems": {
+    "message": "အရာများကို ဖွင့်နေသည်…"
+  },
+  "loadingDetail": {
+    "message": "အရာအသေးစိတ်ကို ဖွင့်နေသည်…"
   }
 }

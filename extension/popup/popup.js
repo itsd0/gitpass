@@ -7,13 +7,16 @@ const V = typeof GitpassView !== 'undefined' ? GitpassView : (typeof require !==
 const { UI, categoryIcon } = typeof GitpassPopupIcons !== 'undefined' ? GitpassPopupIcons : (typeof require !== 'undefined' ? require('./icons.js') : { UI: {} });
 const ROW_H = 52;
 
-function send(msg) {
-  if (window.__gitpassMock) return window.__gitpassMock(msg);
-  return new Promise((res, rej) => chrome.runtime.sendMessage(msg, (r) => {
+function send(msg, timeoutMs) {
+  const ms = typeof timeoutMs === 'number'
+    ? timeoutMs
+    : (msg && typeof msg.__timeoutMs === 'number' ? msg.__timeoutMs : (V ? V.REQUEST_TIMEOUT_MS : 8000));
+  const p = window.__gitpassMock ? window.__gitpassMock(msg) : new Promise((res, rej) => chrome.runtime.sendMessage(msg, (r) => {
     if (chrome.runtime.lastError) return rej(new Error(chrome.runtime.lastError.message));
     if (r && r.ok) return res(r.result);
     const e = new Error((r && r.error) || 'error'); e.code = r && r.code; rej(e);
   }));
+  return V && V.withTimeout ? V.withTimeout(p, ms, t('errTimeout', 'Request timed out.')) : p;
 }
 function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
 function iconBtn(svg, title, onclick) {
@@ -31,6 +34,7 @@ function errText(e) {
     not_found: t('errNotFound', 'Item not found.'),
     origin_mismatch: t('errOrigin', 'This item does not match the current site.'),
     app_not_running: t('errAppDown', 'The gitpass app is not running.'),
+    timeout: t('errTimeout', 'Request timed out.'),
   };
   return (c && M[c]) || String((e && e.message) || e);
 }
@@ -160,7 +164,7 @@ async function refresh() {
     $('acct').title = st.account.email || '';
   }
   await loadData();
-  $('q').focus();
+  if (!document.querySelector('.inline-err')) $('q').focus();
 }
 
 function showNoHost(e) {
@@ -218,21 +222,177 @@ document.querySelectorAll('.eye').forEach((b) => {
 $('retry').onclick = refresh;
 $('lock').onclick = async () => { clearClipboardIfOurs(); await send({ type: 'popup:lock' }).catch(showErr); refresh(); };
 
+// ---------- Skeletons & error cards ----------
+let listSkeletonTimer = null;
+let listLoading = false;
+
+function renderListSkeletons() {
+  stopListTotp();
+  const list = $('list'), inner = $('listInner');
+  if (!list || !inner) return;
+  list.setAttribute('aria-busy', 'true');
+  list.setAttribute('aria-label', t('loadingItems', 'Loading items…'));
+  inner.textContent = '';
+  inner.style.paddingTop = '0px';
+  inner.style.paddingBottom = '0px';
+  for (let i = 0; i < 6; i++) {
+    const row = el('div', 'row skeleton-row skeleton-shimmer');
+    row.setAttribute('aria-hidden', 'true');
+    const ic = el('span', 'skeleton-icon');
+    const meta = el('div', 'skeleton-meta');
+    meta.append(el('span', 'skeleton-bar t'), el('span', 'skeleton-bar u'));
+    row.append(ic, meta);
+    inner.append(row);
+  }
+}
+
+function startListLoading(delayMs = (V ? V.SKELETON_DELAY_MS : 150)) {
+  listLoading = true;
+  const list = $('list');
+  if (list) list.setAttribute('aria-busy', 'true');
+  clearTimeout(listSkeletonTimer);
+  listSkeletonTimer = setTimeout(() => {
+    if (listLoading) renderListSkeletons();
+  }, delayMs);
+}
+
+function stopListLoading() {
+  listLoading = false;
+  clearTimeout(listSkeletonTimer);
+  listSkeletonTimer = null;
+  const list = $('list');
+  if (list) {
+    list.removeAttribute('aria-busy');
+    list.removeAttribute('aria-label');
+  }
+}
+
+function renderListError(err, onRetry) {
+  stopListTotp();
+  const list = $('list'), inner = $('listInner');
+  if (!list || !inner) return;
+  list.removeAttribute('aria-busy');
+  list.removeAttribute('aria-label');
+  inner.textContent = '';
+  inner.style.paddingTop = '0px';
+  inner.style.paddingBottom = '0px';
+  const card = el('div', 'inline-err');
+  card.setAttribute('role', 'alert');
+  const ic = el('div', 'inline-err-ic');
+  ic.innerHTML = UI.alert || UI.warn;
+  const msg = el('h3', 'inline-err-msg', t('errListLoad', "Couldn't load items"));
+  const sub = el('p', 'inline-err-sub muted', errText(err));
+  const btn = el('button', 'btn btn-primary btn-retry', t('retry', 'Retry'));
+  btn.type = 'button';
+  btn.onclick = () => { onRetry(); };
+  card.append(ic, msg, sub, btn);
+  inner.append(card);
+  btn.focus();
+}
+
+function renderDetailSkeleton(it) {
+  const pane = $('detail');
+  if (!pane) return;
+  pane.textContent = '';
+  pane.setAttribute('aria-busy', 'true');
+  pane.setAttribute('aria-label', t('loadingDetail', 'Loading item details…'));
+
+  const head = el('div', 'd-head skeleton-head skeleton-shimmer');
+  head.setAttribute('aria-hidden', 'true');
+  const ic = el('span', 'skeleton-icon lg');
+  const g = el('div', 'skeleton-meta grow');
+  g.append(el('span', 'skeleton-bar h'), el('span', 'skeleton-bar sub'));
+  head.append(ic, g);
+  pane.append(head);
+
+  const box = el('div', 'fields skeleton-fields');
+  box.setAttribute('aria-hidden', 'true');
+  for (let i = 0; i < 3; i++) {
+    const f = el('div', 'f skeleton-field skeleton-shimmer');
+    const fg = el('div', 'grow');
+    fg.append(el('span', 'skeleton-bar lbl'), el('span', 'skeleton-bar val'));
+    f.append(fg);
+    box.append(f);
+  }
+  pane.append(box);
+}
+
+function renderDetailError(err, onRetry) {
+  const pane = $('detail');
+  if (!pane) return;
+  pane.removeAttribute('aria-busy');
+  pane.removeAttribute('aria-label');
+  pane.textContent = '';
+  const card = el('div', 'inline-err');
+  card.setAttribute('role', 'alert');
+  const ic = el('div', 'inline-err-ic');
+  ic.innerHTML = UI.alert || UI.warn;
+  const msg = el('h3', 'inline-err-msg', t('errDetailLoad', "Couldn't load item details"));
+  const sub = el('p', 'inline-err-sub muted', errText(err));
+  const btn = el('button', 'btn btn-primary btn-retry', t('retry', 'Retry'));
+  btn.type = 'button';
+  btn.onclick = () => { onRetry(); };
+  card.append(ic, msg, sub, btn);
+  pane.append(card);
+  btn.focus();
+}
+
 // ---------- data + list ----------
 async function loadData() {
-  const [vaults, all, match] = await Promise.all([
-    send({ type: 'popup:list_vaults' }).catch(() => ({ vaults: [] })),
-    send({ type: 'popup:list_items' }).catch((e) => { showErr(e); return { items: [] }; }),
-    send({ type: 'popup:match_active' }).catch(() => ({ items: [], origin: null })),
-  ]);
-  S.vaults = vaults.vaults || []; S.all = all.items || []; S.suggested = match.items || []; S.origin = match.origin || null;
+  startListLoading();
+  let listError = null;
+  let vaults = { vaults: [] };
+  let all = null;
+  let match = { items: [], origin: null };
+
+  try {
+    const results = await Promise.all([
+      send({ type: 'popup:list_vaults' }).catch(() => ({ vaults: [] })),
+      send({ type: 'popup:list_items' }),
+      send({ type: 'popup:match_active' }).catch(() => ({ items: [], origin: null })),
+    ]);
+    vaults = results[0];
+    all = results[1];
+    match = results[2];
+  } catch (err) {
+    listError = err;
+  } finally {
+    stopListLoading();
+  }
+
+  if (listError) {
+    if (listError.code === 'nohost' || /disconnected|cannot connect/i.test(listError.message)) {
+      return showNoHost(listError);
+    }
+    renderListError(listError, () => loadData());
+    const pane = $('detail');
+    if (pane) {
+      pane.textContent = '';
+      pane.removeAttribute('aria-busy');
+      pane.removeAttribute('aria-label');
+      pane.append(el('div', 'empty', t('selectItem', 'Select an item')));
+    }
+    S.detail = null;
+    return;
+  }
+
+  S.vaults = vaults.vaults || [];
+  S.all = (all && all.items) || [];
+  S.suggested = (match && match.items) || [];
+  S.origin = (match && match.origin) || null;
   await refreshNeverSave();
+
   const want = window.__gitpassMockParams && window.__gitpassMockParams.get('filter');
-  if (want) S.filter = want; else if (S.view !== 'unlocked-loaded' && !S.suggested.length && S.filter === 'suggested') S.filter = 'all';
+  if (want) S.filter = want;
+  else if (S.view !== 'unlocked-loaded' && !S.suggested.length && S.filter === 'suggested') S.filter = 'all';
   S.view = 'unlocked-loaded';
-  renderFilter(); applyFilter(true);
+  renderFilter();
+  applyFilter(true);
   const pre = window.__gitpassMockParams && window.__gitpassMockParams.get('item');
-  if (pre) { const i = S.rows.findIndex((r) => r.id === pre); if (i >= 0) select(i); }
+  if (pre) {
+    const i = S.rows.findIndex((r) => r.id === pre);
+    if (i >= 0) select(i);
+  }
 }
 
 function renderFilter() {
@@ -382,7 +542,18 @@ function totpChip(it) {
   const b = el('button', 'totp-mini'); b.type = 'button'; b.dataset.totpId = it.id;
   b.setAttribute('aria-label', t('copyTotpCode', 'Copy one-time code'));
   b.append(el('span', 'totp-code'), totpRing());
-  b.onclick = (e) => { e.stopPropagation(); copyTotp(it.id).catch(showErr); };
+  b.onclick = async (e) => {
+    e.stopPropagation();
+    if (b.disabled) return;
+    b.disabled = true;
+    try {
+      await copyTotp(it.id);
+    } catch (err) {
+      toast(errText(err));
+    } finally {
+      b.disabled = false;
+    }
+  };
   paintTotpChip(b, S.totpCache[it.id]);
   return b;
 }
@@ -437,14 +608,38 @@ async function select(idx) {
   const list = $('list');
   if (idx >= 0) list.scrollTop = V.scrollToRow(idx, list.scrollTop, list.clientHeight || 380, ROW_H);
   renderList();
-  const pane = $('detail'); pane.textContent = '';
+  const pane = $('detail');
   const it = S.rows[idx];
-  if (!it) { pane.append(el('div', 'empty', t('selectItem', 'Select an item'))); S.detail = null; return; }
+  if (!it) {
+    pane.textContent = '';
+    pane.removeAttribute('aria-busy');
+    pane.removeAttribute('aria-label');
+    pane.append(el('div', 'empty', t('selectItem', 'Select an item')));
+    S.detail = null;
+    return;
+  }
   const seq = ++detailSeq;
+  renderDetailSkeleton(it);
+
   let d;
-  try { d = (await send({ type: 'popup:get_item', item_id: it.id })).item; } catch (e) { d = { ...it, fields: [], tags: [] }; showErr(e); }
+  try {
+    const res = await send({ type: 'popup:get_item', item_id: it.id });
+    d = res.item;
+  } catch (e) {
+    if (seq !== detailSeq) return;
+    pane.removeAttribute('aria-busy');
+    pane.removeAttribute('aria-label');
+    if (e.code === 'nohost' || /disconnected|cannot connect/i.test(e.message)) {
+      return showNoHost(e);
+    }
+    renderDetailError(e, () => select(idx));
+    return;
+  }
   if (seq !== detailSeq) return;
-  S.detail = d; renderDetail(d);
+  pane.removeAttribute('aria-busy');
+  pane.removeAttribute('aria-label');
+  S.detail = d;
+  renderDetail(d);
 }
 
 function renderDetail(d) {
@@ -456,7 +651,22 @@ function renderDetail(d) {
   pane.append(head);
   const acts = el('div', 'd-actions');
   if (V.fillKind(d.category)) {
-    const b = el('button', 'btn btn-primary', d.category === 'login' && d.url ? t('openFill', 'Open & Fill') : t('fill', 'Fill')); b.onclick = () => openAndFill();
+    const fillLabel = d.category === 'login' && d.url ? t('openFill', 'Open & Fill') : t('fill', 'Fill');
+    const b = el('button', 'btn btn-primary', fillLabel);
+    b.onclick = async () => {
+      if (b.disabled) return;
+      b.disabled = true;
+      const prevHtml = b.innerHTML;
+      b.innerHTML = '<span class="spinner"></span> <span>' + fillLabel + '</span>';
+      try {
+        await openAndFill();
+      } catch (err) {
+        toast(errText(err));
+      } finally {
+        b.innerHTML = prevHtml;
+        b.disabled = false;
+      }
+    };
     acts.append(b);
   }
   if (acts.children.length) pane.append(acts);
@@ -484,13 +694,41 @@ function fieldRow(d, f) {
   else if (f.concealed) {
     val.textContent = V.mask(f.kind, f.masked);
     acts.append(iconBtn(UI.eye, t('reveal', 'Reveal'), async (b) => {
+      if (b.disabled) return;
       if (S.revealed[f.name] != null) { delete S.revealed[f.name]; val.textContent = V.mask(f.kind, f.masked); b.innerHTML = UI.eye; return; }
-      const v = await secretValue(d, f); S.revealed[f.name] = v; val.textContent = V.formatValue(f.kind, v); b.innerHTML = UI.eyeOff;
+      b.disabled = true;
+      const prevHtml = b.innerHTML;
+      b.innerHTML = '<span class="spinner"></span>';
+      try {
+        const v = await secretValue(d, f);
+        S.revealed[f.name] = v;
+        val.textContent = V.formatValue(f.kind, v);
+        b.innerHTML = UI.eyeOff;
+      } catch (err) {
+        b.innerHTML = prevHtml;
+        toast(errText(err));
+      } finally {
+        b.disabled = false;
+      }
     }));
   } else if (f.kind === 'url' && f.value) {
     const a = el('a', null, f.value); a.href = f.value; a.target = '_blank'; a.rel = 'noopener'; val.append(a); val.classList.add('plain');
   } else { val.textContent = V.formatValue(f.kind, f.value); if (!/password|card_number/.test(f.kind)) val.classList.add('plain'); }
-  acts.append(iconBtn(UI.copy, t('copy', 'Copy'), async () => copy(await secretValue(d, f), t('copied', 'Copied'))));
+  acts.append(iconBtn(UI.copy, t('copy', 'Copy'), async (b) => {
+    if (b.disabled) return;
+    b.disabled = true;
+    const prevHtml = b.innerHTML;
+    b.innerHTML = '<span class="spinner"></span>';
+    try {
+      const v = await secretValue(d, f);
+      await copy(v, t('copied', 'Copied'));
+    } catch (err) {
+      toast(errText(err));
+    } finally {
+      b.innerHTML = prevHtml;
+      b.disabled = false;
+    }
+  }));
   return row;
 }
 
@@ -574,7 +812,22 @@ function openGenerator() {
   const r2 = el('div', 'gen-row');
   const tog = (key, fb) => { const l = el('label', 'tog'); const c = Object.assign(el('input'), { type: 'checkbox', checked: true }); l.append(c, el('span', null, t(key, fb))); r2.append(l); return c; };
   const dg = tog('digits', 'Digits'), sy = tog('symbols', 'Symbols'); p.append(r2);
-  const cp = el('button', 'btn btn-primary', t('copy', 'Copy')); cp.onclick = () => copy(code.textContent, t('passwordCopied', 'Password copied')).catch(showErr); p.append(cp);
+  const cp = el('button', 'btn btn-primary', t('copy', 'Copy'));
+  cp.onclick = async () => {
+    if (cp.disabled) return;
+    cp.disabled = true;
+    const prevHtml = cp.innerHTML;
+    cp.innerHTML = '<span class="spinner"></span> <span>' + t('copy', 'Copy') + '</span>';
+    try {
+      await copy(code.textContent, t('passwordCopied', 'Password copied'));
+    } catch (err) {
+      toast(errText(err));
+    } finally {
+      cp.innerHTML = prevHtml;
+      cp.disabled = false;
+    }
+  };
+  p.append(cp);
   async function run() { lv.textContent = len.value; code.textContent = await generate(Number(len.value), dg.checked, sy.checked); }
   for (const c of [len, dg, sy]) c.addEventListener('input', run);
   run();
@@ -633,11 +886,22 @@ function openNewItem(typeId, prefill) {
     const values = {}; for (const [k, i] of Object.entries(inputs)) values[k] = i.value;
     const bad = N.validate(type.id, values);
     if (bad) { errEl.textContent = bad.error; if (inputs[bad.field]) { inputs[bad.field].classList.add('bad'); inputs[bad.field].focus(); } return; }
+    if (save.disabled) return;
     save.disabled = true;
+    const prevHtml = save.innerHTML;
+    save.innerHTML = '<span class="spinner"></span> <span>' + t('save', 'Save') + '</span>';
     try {
       const r = await send({ type: 'popup:create_item', item: N.buildItem(type.id, values, vs.value || undefined) });
-      toast(t('saved', 'Saved') + ' — ' + (r && r.title ? r.title : values.title)); closePanel(); await loadData();
-    } catch (err) { errEl.textContent = errText(err); } finally { save.disabled = false; }
+      toast(t('saved', 'Saved') + ' — ' + (r && r.title ? r.title : values.title));
+      closePanel();
+      await loadData();
+    } catch (err) {
+      errEl.textContent = errText(err);
+      toast(errText(err));
+    } finally {
+      save.innerHTML = prevHtml;
+      save.disabled = false;
+    }
   };
   p.append(f);
   const first = type.id === 'login' ? inputs.username : (inputs.title.value ? Object.values(inputs)[1] : inputs.title);
@@ -722,6 +986,34 @@ if (typeof document !== 'undefined') {
   refresh();
 }
 
+globalThis.__gitpassPopup = {
+  copy,
+  clearClipboardIfOurs,
+  renderListSkeletons,
+  renderDetailSkeleton,
+  startListLoading,
+  stopListLoading,
+  renderListError,
+  renderDetailError,
+  send,
+  loadData,
+  select,
+  S,
+};
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { copy, clearClipboardIfOurs };
+  module.exports = {
+    copy,
+    clearClipboardIfOurs,
+    renderListSkeletons,
+    renderDetailSkeleton,
+    startListLoading,
+    stopListLoading,
+    renderListError,
+    renderDetailError,
+    send,
+    loadData,
+    select,
+    S,
+  };
 }

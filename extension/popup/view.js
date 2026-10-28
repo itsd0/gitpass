@@ -1,6 +1,28 @@
 // Pure view logic for the popup (no DOM, no chrome.*) so it can be unit-tested in node.
 (function (root) {
   'use strict';
+  const REQUEST_TIMEOUT_MS = 8000;
+  const SKELETON_DELAY_MS = 150;
+
+  /** Wrap a promise in a timeout; rejects with code: 'timeout' if ms expires. */
+  function withTimeout(promise, timeoutMs = REQUEST_TIMEOUT_MS, timeoutMsg) {
+    if (!timeoutMs || timeoutMs <= 0) return Promise.resolve(promise);
+    return new Promise((res, rej) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        const err = new Error(timeoutMsg || 'Request timed out.');
+        err.code = 'timeout';
+        rej(err);
+      }, timeoutMs);
+      Promise.resolve(promise).then(
+        (val) => { if (!settled) { settled = true; clearTimeout(timer); res(val); } },
+        (err) => { if (!settled) { settled = true; clearTimeout(timer); rej(err); } }
+      );
+    });
+  }
+
   const CATEGORIES = ['login', 'secure_note', 'credit_card', 'identity', 'api_credential', 'document', 'ssh_key', 'wifi', 'passkey'];
   const CAT_LABEL = {
     login: 'Logins', secure_note: 'Secure Notes', credit_card: 'Credit Cards', identity: 'Identities',
@@ -137,7 +159,7 @@
 
   function hostOfUrl(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (_) { return ''; } }
 
-  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl };
+  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
