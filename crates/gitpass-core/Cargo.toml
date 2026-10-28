@@ -26,7 +26,7 @@ hmac = "0.12"
 sha1 = "0.10"
 x25519-dalek = { version = "2.0.1", features = ["static_secrets", "zeroize"] }
 csv = "1.3"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 ssh-key = { version = "0.6", features = ["ed25519", "ecdsa", "p256", "encryption", "std", "rand_core"] }
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
 ed25519-dalek = { version = "2", features = ["rand_core", "zeroize"] }
