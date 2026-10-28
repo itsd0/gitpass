@@ -384,7 +384,7 @@
     banner = shadowHost(true);
     const me = banner;
     banner.host.style.zIndex = '2147483647'; banner.host.style.top = '0'; banner.host.style.right = '0';
-    const b = el('div', 'banner'); b.setAttribute('role', 'dialog');
+    const b = el('div', 'banner'); b.setAttribute('role', 'dialog'); b.tabIndex = -1;
     const isUpdate = p.prompt === 'update';
     const headTitle = isUpdate ? t('csUpdateQ', 'Update password in gitpass?') : t('csSaveQ', 'Save login to gitpass?');
     b.setAttribute('aria-label', headTitle);
@@ -501,20 +501,24 @@
     primary.addEventListener('click', (e) => { if (!e.isTrusted) return; decide(isUpdate ? 'update' : 'save'); });
     if (saveNew) saveNew.addEventListener('click', (e) => { if (!e.isTrusted) return; decide('save_new'); });
 
-    // Esc = Not now, even when focus left the banner; Tab stays inside it while open.
+    // Esc = Not now, even when focus left the banner; Tab stays inside it while open (including while
+    // Saving…, when every control is disabled and focus has fallen back to the page).
     const onDocKey = (e) => {
-      if (!e.isTrusted || !GitpassBanner.isEscape(e.key) || me.busy) return;
-      e.preventDefault(); e.stopPropagation(); dismiss();
+      if (!e.isTrusted) return;
+      if (GitpassBanner.isEscape(e.key)) {
+        if (me.busy) return;
+        e.preventDefault(); e.stopPropagation(); dismiss(); return;
+      }
+      if (e.key !== 'Tab') return;
+      const list = Array.from(banner.root.querySelectorAll('input,select,button')).filter((x) => !x.disabled);
+      if (!list.length) { e.preventDefault(); e.stopPropagation(); b.focus(); return; }
+      if (!banner.root.activeElement) return; // focus is on the page, not in the dialog
+      const at = list.indexOf(banner.root.activeElement);
+      const next = GitpassBanner.trapTab(e.key, e.shiftKey, at, list.length);
+      if (next != null) { e.preventDefault(); e.stopPropagation(); list[next].focus(); }
     };
     document.addEventListener('keydown', onDocKey, true);
     banner.docKey = onDocKey;
-    banner.root.addEventListener('keydown', (e) => {
-      if (!e.isTrusted || e.key !== 'Tab') return;
-      const list = Array.from(banner.root.querySelectorAll('input,select,button')).filter((x) => !x.disabled);
-      const at = list.indexOf(banner.root.activeElement);
-      const next = GitpassBanner.trapTab(e.key, e.shiftKey, at, list.length);
-      if (next != null) { e.preventDefault(); list[next].focus(); }
-    });
     banner.host.addEventListener('mouseenter', clearBannerTimer);
     banner.host.addEventListener('focusin', clearBannerTimer);
     banner.host.addEventListener('mouseleave', () => { if (banner && banner.done) armClose(4000); });

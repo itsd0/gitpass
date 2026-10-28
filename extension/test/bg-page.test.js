@@ -89,13 +89,16 @@ test('save decision: trimmed custom title, chosen vault, page-side item id ignor
   });
 });
 
-test('save decision: unknown vault and over-long titles are rejected', async () => {
+test('save decision: rejected vault/title keep the pending capture for retry', async () => {
   const s = tab('https://site.example/login', 0, 22);
   const capture = (host) => B.handle({ type: 'page:capture', kind: 'login', username: 'new@x', password: 'pw1' }, s, host);
   let h = fakeHost([]);
   await capture(h);
   await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save', vault_id: 'nope', user_click: true }, s, h), /vault not found/);
   assert.ok(!h.calls.some(([cmd]) => cmd === 'save_login'));
+  // Retry with the still-pending capture: the banner can just pick another vault.
+  await B.handle({ type: 'page:save_decision', action: 'save', vault_id: 'v2', user_click: true }, s, h);
+  assert.strictEqual(h.calls.find(([cmd]) => cmd === 'save_login')[1].vault_id, 'v2');
   h = fakeHost([]);
   await capture(h);
   await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save', title: 'x'.repeat(201), user_click: true }, s, h), /too long/);
@@ -105,6 +108,51 @@ test('save decision: unknown vault and over-long titles are rejected', async () 
   await capture(h);
   await B.handle({ type: 'page:save_decision', action: 'save', title: '   ', user_click: true }, s, h);
   assert.strictEqual(h.calls.find(([cmd]) => cmd === 'save_login')[1].title, 'site.example');
+});
+
+test('locked vault lookup surfaces locked and keeps the capture for retry', async () => {
+  const s = tab('https://site.example/login', 0, 26);
+  let failLocked = 0;
+  const calls = [];
+  const h = async (cmd, args) => {
+    calls.push([cmd, args]);
+    if (cmd === 'match') return { items: [] };
+    if (cmd === 'list_vaults') {
+      if (failLocked > 0) { failLocked--; const e = new Error('vault is locked'); e.code = 'locked'; throw e; }
+      return { vaults: VAULTS };
+    }
+    if (cmd === 'save_login') return { item_id: 'v:new' };
+    return {};
+  };
+  await B.handle({ type: 'page:capture', kind: 'login', username: 'new@x', password: 'pw1' }, s, h);
+  failLocked = 1;
+  const e = await B.handle({ type: 'page:save_decision', action: 'save', vault_id: 'v2', user_click: true }, s, h).catch((x) => x);
+  assert.strictEqual(e.code, 'locked', 'the banner must see locked, not a missing vault');
+  assert.ok(!calls.some(([cmd]) => cmd === 'save_login'));
+  const r = await B.handle({ type: 'page:save_decision', action: 'save', vault_id: 'v2', user_click: true }, s, h);
+  assert.deepStrictEqual(r, { done: true, action: 'save', item_id: 'v:new' });
+  assert.strictEqual(calls.filter(([cmd]) => cmd === 'save_login').length, 1);
+});
+
+test('a second decision while saving is rejected and only one item is written', async () => {
+  const s = tab('https://site.example/login', 0, 27);
+  let release;
+  const gate = new Promise((res) => { release = res; });
+  const calls = [];
+  const h = async (cmd, args) => {
+    calls.push([cmd, args]);
+    if (cmd === 'match') return { items: [] };
+    if (cmd === 'list_vaults') return { vaults: VAULTS };
+    if (cmd === 'save_login') { await gate; return { item_id: 'v:new' }; }
+    return {};
+  };
+  await B.handle({ type: 'page:capture', kind: 'login', username: 'new@x', password: 'pw1' }, s, h);
+  const first = B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h);
+  await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h), /already saving/);
+  release();
+  assert.deepStrictEqual(await first, { done: true, action: 'save', item_id: 'v:new' });
+  assert.strictEqual(calls.filter(([cmd]) => cmd === 'save_login').length, 1);
+  await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h), /nothing to save/);
 });
 
 test('update prompt: save_new makes a second login; save/update actions are not interchangeable', async () => {

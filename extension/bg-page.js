@@ -14,6 +14,7 @@
   const pendingSaves = new Map(); // tabId -> { origin, kind, username, password, item_id, prompt, ts }
   const lastUsername = new Map(); // tabId -> { origin, username, ts }  (multi-step logins: step 1 value, 5 min TTL)
   const lastSaved = new Map(); // tabId -> { origin, item_id, ts }  ("Open in gitpass" after a banner save)
+  const inflightDecisions = new Set(); // tabIds with a save/update in progress (no replay)
   const PAGE_LISTABLE = new Set(['credit_card', 'identity']);
   let neverSaveFallback = [];
 
@@ -111,8 +112,9 @@
   async function saveVault(host, v) {
     if (v == null || v === '') return undefined;
     if (typeof v !== 'string') throw err('bad_request', 'vault_id');
-    const vaults = await vaultChoices(host);
-    if (!vaults.some((x) => x.id === v)) throw err('not_found', 'vault not found');
+    // Strict call: locked/app_not_running must reach the banner so it can offer unlock, not read as a bad vault.
+    const r = await host('list_vaults');
+    if (!((r && r.vaults) || []).some((x) => x && x.id === v)) throw err('not_found', 'vault not found');
     return v;
   }
 
@@ -224,44 +226,52 @@
       }
       case 'page:save_decision': {
         const p = fresh(pendingSaves, tabId, origin, true);
-        pendingSaves.delete(tabId);
         if (a.action === 'never') {
+          pendingSaves.delete(tabId);
           if (!a.user_click) throw err('denied', 'needs a click');
           const dom = GitpassPolicy.registrableDomain(origin);
           if (dom) await addNeverSave(dom);
           return { done: true, action: 'never' };
         }
         if (!p) throw err('not_found', 'nothing to save');
-        if (a.action === 'dismiss') return { done: false };
+        if (a.action === 'dismiss') { pendingSaves.delete(tabId); return { done: false }; }
         if (!a.user_click) throw err('denied', 'needs a click');
-        const user = p.username || '';
-        if (a.action === 'update') {
-          if (p.prompt !== 'update') throw err('bad_request', 'action');
-          const upArgs = { item_id: p.item_id, password: p.password }; // never an item id from the content side
-          if (user && !p.hasUser) upArgs.username = user;
-          await host('update_password', upArgs);
-          rememberSaved(tabId, origin, p.item_id);
-          return { done: true, action: 'update' };
+        if (inflightDecisions.has(tabId)) throw err('bad_request', 'already saving');
+        inflightDecisions.add(tabId);
+        try {
+          const user = p.username || '';
+          if (a.action === 'update') {
+            if (p.prompt !== 'update') throw err('bad_request', 'action');
+            const upArgs = { item_id: p.item_id, password: p.password }; // never an item id from the content side
+            if (user && !p.hasUser) upArgs.username = user;
+            await host('update_password', upArgs);
+            pendingSaves.delete(tabId);
+            rememberSaved(tabId, origin, p.item_id);
+            return { done: true, action: 'update' };
+          }
+          // save (new prompt) and save_new (second account from an update prompt). Neither carries an
+          // item id, origin or password from the page side: they come from pendingSaves.
+          if (a.action === 'save' || a.action === 'save_new') {
+            if ((a.action === 'save') !== (p.prompt === 'save')) throw err('bad_request', 'action');
+            const title = saveTitle(a.title, p.origin);
+            const vault_id = await saveVault(host, a.vault_id);
+            const args = { origin: p.origin, title, username: user, password: p.password };
+            if (vault_id) args.vault_id = vault_id;
+            const r = await host('save_login', args);
+            pendingSaves.delete(tabId); // only a completed decision consumes the pending capture; errors keep it for retry
+            rememberSaved(tabId, origin, r && r.item_id);
+            return { done: true, action: 'save', item_id: r && r.item_id };
+          }
+          throw err('bad_request', 'action');
+        } finally {
+          inflightDecisions.delete(tabId);
         }
-        // save (new prompt) and save_new (second account from an update prompt). Neither carries an
-        // item id, origin or password from the page side: they come from pendingSaves.
-        if (a.action === 'save' || a.action === 'save_new') {
-          if ((a.action === 'save') !== (p.prompt === 'save')) throw err('bad_request', 'action');
-          const title = saveTitle(a.title, p.origin);
-          const vault_id = await saveVault(host, a.vault_id);
-          const args = { origin: p.origin, title, username: user, password: p.password };
-          if (vault_id) args.vault_id = vault_id;
-          const r = await host('save_login', args);
-          rememberSaved(tabId, origin, r && r.item_id);
-          return { done: true, action: 'save', item_id: r && r.item_id };
-        }
-        throw err('bad_request', 'action');
       }
     }
     throw err('bad_request', 'unknown page message');
   }
 
-  function forgetTab(tabId) { pendingSaves.delete(tabId); lastUsername.delete(tabId); lastSaved.delete(tabId); }
+  function forgetTab(tabId) { pendingSaves.delete(tabId); lastUsername.delete(tabId); lastSaved.delete(tabId); inflightDecisions.delete(tabId); }
   if (root.chrome && chrome.tabs && chrome.tabs.onRemoved) chrome.tabs.onRemoved.addListener(forgetTab);
 
   /** Fill a card into the tab's payment-processor iframes (Stripe Elements & co., see GitpassPolicy.

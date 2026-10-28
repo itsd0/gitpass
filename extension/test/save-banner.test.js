@@ -76,6 +76,7 @@ test('update banner: title prefill, vault picker, Save as new and focus on the p
   const b = roots.find((r) => r.querySelector('.banner'));
   assert.ok(b, 'banner shadow root exists');
   assert.strictEqual(b.querySelector('.banner').getAttribute('role'), 'dialog');
+  assert.strictEqual(b.querySelector('.banner').tabIndex, -1, 'dialog can hold focus while saving');
   assert.strictEqual(b.querySelector('.banner .ti').textContent, 'Update password in gitpass?');
   const title = b.querySelector('.banner input.inp');
   assert.strictEqual(title.value, 'site.example', 'title prefilled with the hostname (no www.)');
