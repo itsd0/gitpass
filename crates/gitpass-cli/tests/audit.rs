@@ -65,6 +65,22 @@ fn audit_json_includes_new_findings_and_titles_only() {
     }];
     let id2 = s.add_record(&vid, rec2).unwrap();
 
+    // 3. Duplicate logins (same normalized site + username)
+    let secret_login_pw = "SuperStrongFakePw123!#";
+    let mut it3 = Item::default();
+    it3.title = "Example Login 1".into();
+    it3.username = Some("alice".into());
+    it3.url = Some("https://example.com/login".into());
+    it3.password = Some(secret_login_pw.into());
+    let id3 = s.add_record(&vid, ItemRecord::new(it3)).unwrap();
+
+    let mut it4 = Item::default();
+    it4.title = "Example Login 2".into();
+    it4.username = Some("Alice".into());
+    it4.url = Some("http://www.example.com/other".into());
+    it4.password = Some("AnotherStrongFakePw456!#".into());
+    let id4 = s.add_record(&vid, ItemRecord::new(it4)).unwrap();
+
     // Run `gitpass audit --json`
     let out = gp(&root, &["audit", "--json"], None);
     assert!(out.status.success(), "audit failed: {}", String::from_utf8_lossy(&out.stderr));
@@ -74,11 +90,13 @@ fn audit_json_includes_new_findings_and_titles_only() {
     assert!(!json_text.contains(secret_card_num), "leaked card number");
     assert!(!json_text.contains(secret_cvv), "leaked CVV");
     assert!(!json_text.contains(secret_api_key), "leaked API key");
+    assert!(!json_text.contains(secret_login_pw), "leaked login password");
 
     // Verify findings carry titles and IDs only
     let v: serde_json::Value = serde_json::from_str(&json_text).expect("valid JSON from audit --json");
     assert_eq!(v["expired"], 1);
     assert_eq!(v["expiring_soon"], 1);
+    assert_eq!(v["duplicates"], 2);
 
     let per_item = v["per_item"].as_array().expect("per_item array");
     let item1 = per_item.iter().find(|i| i["id"] == id1).expect("id1 present");
@@ -89,15 +107,31 @@ fn audit_json_includes_new_findings_and_titles_only() {
     assert_eq!(item2["title"], "Expiring Stripe Key");
     assert!(item2["findings"][0]["expiring_soon"].is_object());
 
+    let item3 = per_item.iter().find(|i| i["id"] == id3).expect("id3 present");
+    assert_eq!(item3["title"], "Example Login 1");
+    let dup_finding3 = item3["findings"].as_array().unwrap().iter().find(|f| f.get("duplicate").is_some()).expect("duplicate finding on id3");
+    assert_eq!(dup_finding3["duplicate"]["group"], "example.com/alice");
+
+    let item4 = per_item.iter().find(|i| i["id"] == id4).expect("id4 present");
+    assert_eq!(item4["title"], "Example Login 2");
+    let dup_finding4 = item4["findings"].as_array().unwrap().iter().find(|f| f.get("duplicate").is_some()).expect("duplicate finding on id4");
+    assert_eq!(dup_finding4["duplicate"]["group"], "example.com/alice");
+
     // Verify text output
     let text_out = gp(&root, &["audit", "--expiring-days", "30"], None);
     assert!(text_out.status.success());
     let text = String::from_utf8_lossy(&text_out.stdout);
     assert!(text.contains("expired: 1"));
     assert!(text.contains("expiring soon (<=30d): 1"));
+    assert!(text.contains("duplicates: 2"));
     assert!(text.contains("Expired Visa Card"));
     assert!(text.contains("expired on 01/20"));
     assert!(text.contains("Expiring Stripe Key"));
+    assert!(text.contains("Example Login 1"));
+    assert!(text.contains("Example Login 2"));
+    assert!(text.contains("duplicate login for example.com/alice"));
+    assert!(!text.contains(secret_login_pw));
+    assert!(!text.contains("/login"));
 }
 
 #[test]

@@ -8,13 +8,16 @@ const it3x = { ...it3, id: 'i3x', title: 'Fake 2FA Site', url: 'https://2fa.exam
 const itExp = { ...it3, id: 'i-exp', category: 'credit_card' as const, title: 'Expired Card', url: null };
 const itSoon = { ...it3, id: 'i-soon', category: 'api_credential' as const, title: 'Expiring API Key', url: 'https://api.example.org' };
 const itInsecure = { ...it3, id: 'i-insecure', title: 'Insecure Website', url: 'http://insecure.example.com/login?token=abc' };
+const itDupOlder = { ...it3, id: 'dup-older', title: 'Site Duplicate 1', subtitle: 'alex', url: 'https://dup.example.com', updatedAt: '2026-10-10T00:00:00Z' };
+const itDupNewer = { ...it3, id: 'dup-newer', title: 'Site Duplicate 2', subtitle: 'alex', url: 'https://dup.example.com', updatedAt: '2026-10-20T00:00:00Z' };
 let hibpOn = false;
 beforeEach(() => {
   hibpOn = false; useSettings.setState({ settings: null });
   vi.spyOn(api, 'getSettings').mockImplementation(async () => ({ autoLockMinutes: 10, clipboardClearSecs: 30, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: hibpOn }));
   vi.spyOn(api, 'setSettings').mockImplementation(async (a: any) => { hibpOn = !!a.settings.hibpCheck; });
-  vi.spyOn(api, 'listItems').mockResolvedValue([it3, it3x, itExp, itSoon, itInsecure]);
-  vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'], passkeyAvailable: ['i3x'], expired: ['i-exp'], expiringSoon: ['i-soon'], insecureUrls: ['i-insecure'], checkedAt: '', hibpChecked: on }; });
+  vi.spyOn(api, 'listItems').mockResolvedValue([it3, it3x, itExp, itSoon, itInsecure, itDupOlder, itDupNewer]);
+  vi.spyOn(api, 'archiveItem').mockResolvedValue(undefined);
+  vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'], passkeyAvailable: ['i3x'], expired: ['i-exp'], expiringSoon: ['i-soon'], insecureUrls: ['i-insecure'], duplicates: [['dup-older', 'dup-newer']], checkedAt: '', hibpChecked: on }; });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -116,7 +119,6 @@ describe('watchtower score', () => {
     expect(screen.getByRole('link', { name: 'Open HTTPS version for Placeholder Forum' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Edit URL for Placeholder Forum' })).toBeTruthy();
   });
-
   it("ignores warning via dropdown menu with undo toast and updates score", async () => {
     let ignored: any[] = [];
     const ignoreSpy = vi.spyOn(api, "ignoreFinding").mockImplementation(async (a) => {
@@ -138,6 +140,7 @@ describe('watchtower score', () => {
       expired: [],
       expiringSoon: [],
       insecureUrls: [],
+      duplicates: [],
       ignored,
       checkedAt: "",
       hibpChecked: false,
@@ -180,5 +183,36 @@ describe('watchtower score', () => {
     fireEvent.keyDown(chip, { key: "F10", shiftKey: true });
 
     expect(await screen.findByRole("menuitem", { name: /Ignore this warning/i })).toBeTruthy();
+  });
+
+  it('extracts duplicates issue IDs uniquely', () => {
+    const r = { score: 0, weak: [], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [], expired: [], expiringSoon: [], insecureUrls: [], duplicates: [['d1', 'd2'], ['d2', 'd3']], ignored: [], checkedAt: '', hibpChecked: false };
+    expect(issueIds(r, 'duplicates')).toEqual(['d1', 'd2', 'd3']);
+  });
+
+  it('renders duplicate logins card and Archive older calls archiveItem for all but the newest item', async () => {
+    const archiveSpy = vi.spyOn(api, 'archiveItem');
+    render(<WatchtowerPage />);
+    await screen.findByTestId('score');
+    expect(screen.getByTestId('count-duplicates').textContent).toBe('2');
+    expect(screen.getByText('Group 1 · 2 items')).toBeTruthy();
+    expect(screen.getByText('Site Duplicate 1')).toBeTruthy();
+    expect(screen.getByText('Site Duplicate 2')).toBeTruthy();
+    // Archive older button is present with group title in aria-label
+    const archiveOlderBtn = screen.getByRole('button', { name: /Archive older/i });
+    expect(archiveOlderBtn).toBeTruthy();
+    expect(archiveOlderBtn.getAttribute('aria-label')).toBe('Archive older: Group 1 · 2 items');
+    fireEvent.click(archiveOlderBtn);
+    await waitFor(() => {
+      expect(archiveSpy).toHaveBeenCalledWith({ vaultId: 'v-private', itemId: 'dup-older', archived: true });
+    });
+    // Newest item should NOT have been archived
+    expect(archiveSpy).not.toHaveBeenCalledWith(expect.objectContaining({ itemId: 'dup-newer' }));
+
+    // Open button opens item
+    const openBtns = screen.getAllByRole('button', { name: 'Open' });
+    fireEvent.click(openBtns[0]);
+    // The items in the duplicate group are sorted newest first, so openBtns[0] corresponds to dup-newer
+    expect(useApp.getState().selectedItemId).toBe('dup-newer');
   });
 });
