@@ -180,7 +180,7 @@ test('popup: shows saving is off note with undo for excepted site', async () => 
     }
   };
 
-  for (const f of ['lib/i18n.js', 'lib/icons.js', 'lib/policy.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/popup.js']) {
+  for (const f of ['lib/i18n.js', 'lib/icons.js', 'lib/policy.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/generator.js', 'popup/popup.js']) {
     w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
   }
 
