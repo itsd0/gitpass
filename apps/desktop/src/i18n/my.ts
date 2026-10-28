@@ -336,6 +336,14 @@ export const my: Partial<Record<Key, string>> = {
   "expiry.expiresInMonths": "နောက် {n} လအတွင်း သက်တမ်းကုန်မည်",
   "expiry.expiresInYearOne": "နောက် ၁ နှစ်အတွင်း သက်တမ်းကုန်မည်",
   "expiry.expiresInYears": "နောက် {n} နှစ်အတွင်း သက်တမ်းကုန်မည်",
+  // password changed relative hints
+  "passwordChanged.today": "စကားဝှက်ကို ယနေ့ ပြောင်းလဲခဲ့သည်",
+  "passwordChanged.dayOne": "စကားဝှက်ကို လွန်ခဲ့သော ၁ ရက်က ပြောင်းလဲခဲ့သည်",
+  "passwordChanged.days": "စကားဝှက်ကို လွန်ခဲ့သော {n} ရက်က ပြောင်းလဲခဲ့သည်",
+  "passwordChanged.monthOne": "စကားဝှက်ကို လွန်ခဲ့သော ၁ လက ပြောင်းလဲခဲ့သည်",
+  "passwordChanged.months": "စကားဝှက်ကို လွန်ခဲ့သော {n} လက ပြောင်းလဲခဲ့သည်",
+  "passwordChanged.yearOne": "စကားဝှက်ကို လွန်ခဲ့သော ၁ နှစ်က ပြောင်းလဲခဲ့သည်",
+  "passwordChanged.years": "စကားဝှက်ကို လွန်ခဲ့သော {n} နှစ်က ပြောင်းလဲခဲ့သည်",
   // item list shell & dropdowns
   "items.allCategories": "အမျိုးအစား အားလုံး",
   "items.sortBy": "အစဉ်လိုက်စီရန်",

@@ -295,3 +295,61 @@ fn audit_help_lists_every_finding_kind() {
     }
     assert!(help.contains("username or site name"), "help should mention the username/site-name rule");
 }
+
+
+#[test]
+fn test_get_shows_password_changed_at_and_audit_old_passwords() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Personal"], None).status.success());
+
+    let sk = gitpass_core::crypto::SecretKey::parse(&std::fs::read_to_string(root.join("secret.key")).unwrap()).unwrap();
+    let s = Session::unlock(&root, "fake-master-pw-123", &sk).unwrap();
+    let vid = s.resolve_vault("Personal").unwrap();
+
+    let past_epoch = 1_600_000_000u64; // 2020-09-13T12:26:40Z
+    let mut it = Item::default();
+    it.title = "Old Service".into();
+    it.username = Some("alice".into());
+    it.password = Some("VerySecurePassword2020!".into());
+    it.url = Some("https://service.example.com".into());
+    it.updated_at = past_epoch.to_string();
+
+    let mut rec = ItemRecord::new(it);
+    rec.created_at = Some(past_epoch);
+    let id = s.add_record(&vid, rec).unwrap();
+
+    // 1. gitpass get human-readable shows password changed
+    let out_get = gp(&root, &["get", "Personal", &id], None);
+    assert!(out_get.status.success());
+    let get_text = String::from_utf8_lossy(&out_get.stdout);
+    assert!(get_text.contains("password changed: 2020-09-13T12:26:40Z"), "expected password changed in text output:\n{get_text}");
+
+    // 2. gitpass get --json exposes password_changed_at without secrets
+    let out_json = gp(&root, &["get", "Personal", &id, "--json"], None);
+    assert!(out_json.status.success());
+    let get_val: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_json.stdout)).unwrap();
+    assert_eq!(get_val["password_changed_at"], "2020-09-13T12:26:40Z");
+    assert!(!String::from_utf8_lossy(&out_json.stdout).contains("VerySecurePassword2020!"));
+
+    // 3. Update notes (simulate item update with unchanged password)
+    let (_, mut rec_read) = s.read_record(&vid, &id).unwrap();
+    rec_read.item.notes = Some("note updated recently".into());
+    s.update_record(&vid, &id, rec_read).unwrap();
+
+    // password_changed_at remains 2020-09-13
+    let out_json_after_note = gp(&root, &["get", "Personal", &id, "--json"], None);
+    let val_after_note: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_json_after_note.stdout)).unwrap();
+    assert_eq!(val_after_note["password_changed_at"], "2020-09-13T12:26:40Z");
+
+    // 4. Update password to a new value
+    let (_, mut rec_read2) = s.read_record(&vid, &id).unwrap();
+    rec_read2.item.password = Some("BrandNewSecurePassword2026!".into());
+    s.update_record(&vid, &id, rec_read2).unwrap();
+
+    let out_json_after_pw = gp(&root, &["get", "Personal", &id, "--json"], None);
+    let val_after_pw: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_json_after_pw.stdout)).unwrap();
+    let pw_changed = val_after_pw["password_changed_at"].as_str().unwrap();
+    assert_ne!(pw_changed, "2020-09-13T12:26:40Z");
+}
