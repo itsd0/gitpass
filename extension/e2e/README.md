@@ -17,6 +17,8 @@ What it does (nothing outside a fresh `$TMPDIR/gitpass-e2e-*` is touched):
    With no saved login for the active site (mock host `no_match_hosts`), the Suggested filter shows the empty state
    “Save a login for localhost”; clicking it opens the Login form with the title and URL prefilled, and nothing is
    saved until the user submits.
+   The popup list shows the live TOTP code for a login with a secret (mock host returns 123456 / 20 s), and
+   clicking the code copies it (the clipboard write is observed in the popup page).
    A two-page login (username page → password page, like x.com) checks exactly one gitpass icon per step and
    that `save_login` carries the step-1 username plus the step-2 password exactly once.
    The checkout card form checks exactly one icon per logical card group, attached to the card number input

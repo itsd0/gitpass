@@ -290,6 +290,22 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
         }, T(4000));
         rec('open popup restores item list on host unlock event', !!restoredList, restoredList ? 'item list restored' : 'popup did not restore');
 
+        // --- TOTP code in the popup list (#62): the mock host returns 123456 / 20 s / 30 s.
+        const totpShown = await until(async () => /123 456/.test(await pop.text()), T(5000));
+        rec('popup list shows a formatted TOTP code for a login with a secret', !!totpShown,
+          totpShown ? 'code 123 456 visible' : 'code not visible: ' + (await pop.text()).slice(0, 160).replace(/\s+/g, ' '));
+        if (totpShown) {
+          await pop.eval(`(() => {
+            window.__copied = [];
+            try { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: (x) => { window.__copied.push(x); return Promise.resolve(); } } }); } catch (_) {}
+            return true;
+          })()`);
+          const chip = await pop.click('/^123 456$/');
+          const copied = await until(async () => { const c = await pop.eval('window.__copied || []'); return Array.isArray(c) && c.includes('123456') && c; }, T(3000));
+          rec('popup TOTP code click copies the code', !!copied,
+            `${chip ? `clicked "${chip}"` : 'code chip not found'}; copied=${JSON.stringify(copied || [])}${await pop.text().then((t) => /Copied/.test(t) ? '; toast shown' : '; no toast').catch(() => '')}`);
+        }
+
         // --- New item (#41): the popup's New item form sends exactly one create_item per item, with the
         // desktop New Item template's category/section/field ids and kinds.
         const panel = () => pop.eval(`(() => {

@@ -56,6 +56,10 @@ test('keyAction maps keyboard shortcuts', () => {
   assert.strictEqual(V.keyAction({ key: 'c', metaKey: true }), 'copyPassword');
   assert.strictEqual(V.keyAction({ key: 'c', ctrlKey: true }), 'copyPassword');
   assert.strictEqual(V.keyAction({ key: 'c', metaKey: true }, { hasSelection: true }), null);
+  assert.strictEqual(V.keyAction({ key: 'C', metaKey: true, shiftKey: true }, { hasTotp: true }), 'copyTotp');
+  assert.strictEqual(V.keyAction({ key: 'C', ctrlKey: true, shiftKey: true }, { hasTotp: true }), 'copyTotp');
+  assert.strictEqual(V.keyAction({ key: 'C', metaKey: true, shiftKey: true }), 'copyPassword', 'no TOTP: shift falls back to the password');
+  assert.strictEqual(V.keyAction({ key: 'C', metaKey: true, shiftKey: true }, { hasTotp: true, hasSelection: true }), null);
   assert.strictEqual(V.keyAction({ key: 'Escape' }), 'close');
   assert.strictEqual(V.keyAction({ key: 'Escape' }, { panel: 'gen' }), 'closePanel');
   assert.strictEqual(V.keyAction({ key: 'ArrowDown' }, { panel: 'gen' }), null);
@@ -69,6 +73,8 @@ test('ringOffset, formatValue, mask', () => {
   assert.strictEqual(V.ringOffset(0, 30, C), 100);
   assert.strictEqual(V.ringOffset(99, 30, C), 0);
   assert.strictEqual(V.formatValue('totp', '123456'), '123 456');
+  assert.strictEqual(V.formatValue('totp', '12345678'), '1234 5678');
+  assert.strictEqual(V.formatValue('totp', '12345'), '12345');
   assert.strictEqual(V.formatValue('card_number', '4242424242424242'), '4242 4242 4242 4242');
   assert.strictEqual(V.formatValue('text', null), '');
   assert.ok(V.mask('password').startsWith('•'));

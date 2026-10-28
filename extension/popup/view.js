@@ -84,6 +84,7 @@
     if (e.key === 'ArrowDown') return 'down';
     if (e.key === 'ArrowUp') return 'up';
     if (e.key === 'Enter' && !mod && !ctx.inForm) return 'fill';
+    if (mod && e.shiftKey && (e.key === 'c' || e.key === 'C') && !ctx.hasSelection) return ctx.hasTotp ? 'copyTotp' : 'copyPassword';
     if (mod && (e.key === 'c' || e.key === 'C') && !ctx.hasSelection) return 'copyPassword';
     return null;
   }
@@ -97,7 +98,7 @@
   function formatValue(kind, value) {
     if (value == null) return '';
     const v = String(value);
-    if (kind === 'totp') return v.length === 6 ? v.slice(0, 3) + ' ' + v.slice(3) : v;
+    if (kind === 'totp') return (v.length === 6 || v.length === 8) ? v.slice(0, v.length / 2) + ' ' + v.slice(v.length / 2) : v;
     if (kind === 'card_number') return v.replace(/\s+/g, '').replace(/(.{4})(?=.)/g, '$1 ');
     return v;
   }
