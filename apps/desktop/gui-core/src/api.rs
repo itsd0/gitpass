@@ -486,6 +486,9 @@ impl App {
 
     fn with<T>(&self, f: impl FnOnce(&mut Unlocked) -> Result<T>) -> Result<T> { self.state.with(f) }
     fn write<T>(&self, f: impl FnOnce(&mut Unlocked) -> Result<T>) -> Result<T> { self.state.with(|u| { GuiState::writable(u)?; f(u) }) }
+    /// Manifest epoch (bumped once per commit); used by tests to assert a single commit.
+    #[cfg(test)]
+    pub(crate) fn session_epoch(&self) -> Result<u64> { self.with(|u| u.session.epoch()) }
 
     // ---------------- session
     pub fn status(&self) -> Result<UnlockState> {
@@ -788,6 +791,17 @@ impl App {
     pub fn purge_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.purge_item(vault_id, item_id)) }
     pub fn ignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.ignore_finding(vault_id, item_id, kind)) }
     pub fn unignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.unignore_finding(vault_id, item_id, kind)) }
+    /// Permanently delete every item in Recently Deleted (all vaults) in one commit.
+    /// Returns how many items were purged; an empty trash is a no-op.
+    pub fn empty_trash(&self) -> Result<usize> {
+        self.write(|u| {
+            let targets: Vec<(String, String)> = Self::all_records(&u.session)?.into_iter()
+                .filter(|(_, _, r)| r.deleted_at.is_some())
+                .map(|(v, i, _)| (v, i)).collect();
+            if targets.is_empty() { return Ok(0); }
+            u.session.remove_items(&targets)
+        })
+    }
     /// Bulk action on many items: one vault write (single manifest commit) for every action except
     /// move (copy commit + remove commit) and items with attachments on move/copy (one extra commit per file).
     pub fn bulk_items(&self, req: &BulkRequest) -> Result<BulkResult> {

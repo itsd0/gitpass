@@ -10,4 +10,13 @@ describe('mock api', () => {
       d.sections.flatMap((x) => x.fields).filter((f) => f.kind === 'concealed' || f.kind === 'totp').forEach((f) => expect(f.value).toBeNull());
     }
   });
+  it('empties only the trash and returns the purged count', async () => {
+    const before = await api.listItems({ filter: { kind: 'deleted' } });
+    expect(before.length).toBeGreaterThan(0);
+    const active = (await api.listItems({ filter: { kind: 'all' } })).length;
+    expect(await api.emptyTrash()).toBe(before.length);
+    expect(await api.listItems({ filter: { kind: 'deleted' } })).toHaveLength(0);
+    expect(await api.listItems({ filter: { kind: 'all' } })).toHaveLength(active);
+    expect(await api.emptyTrash()).toBe(0);
+  });
 });
