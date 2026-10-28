@@ -39,6 +39,8 @@
   .banner .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
   .btn{border:1px solid var(--gp-border);background:var(--gp-btn-bg);color:var(--gp-fg);border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
   .btn.pri{background:var(--gp-accent);border-color:var(--gp-accent);color:var(--gp-accent-fg);font-weight:600}
+  .btn.ter{border:0;background:transparent;color:var(--gp-muted);font-size:12px;padding:6px 8px;cursor:pointer}
+  .btn.ter:hover{color:var(--gp-fg);text-decoration:underline}
   .pk-overlay{position:fixed;inset:0;background:var(--gp-overlay);display:flex;align-items:center;justify-content:center;z-index:2147483647;backdrop-filter:blur(2px)}
   .pk-card{width:360px;background:var(--gp-bg);color:var(--gp-fg);border:1px solid var(--gp-border);border-radius:12px;box-shadow:var(--gp-shadow-lg);font:13px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px}
   .pk-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
@@ -359,8 +361,10 @@
     row.append(lg, m);
     const acts = el('div', 'acts');
     const no = el('button', 'btn', t('csNotNow', 'Not now')); no.type = 'button';
+    const never = el('button', 'btn ter', t('csNever', 'Never for this site')); never.type = 'button';
     const yes = el('button', 'btn pri', p.prompt === 'update' ? t('csUpdate', 'Update') : t('csSave', 'Save')); yes.type = 'button';
     no.addEventListener('click', (e) => { if (!e.isTrusted) return; send('page:save_decision', { action: 'dismiss' }).catch(() => {}); closeBanner(); });
+    never.addEventListener('click', (e) => { if (!e.isTrusted) return; send('page:save_decision', { action: 'never', user_click: true }).catch(() => {}); closeBanner(); });
     yes.addEventListener('click', async (e) => {
       if (!e.isTrusted) return;
       yes.disabled = true;
@@ -377,7 +381,7 @@
         if (code === 'locked') send('page:request_unlock').catch(() => {});
       }
     });
-    acts.append(no, yes); b.append(row, acts); banner.root.append(b);
+    acts.append(no, never, yes); b.append(row, acts); banner.root.append(b);
   }
 
   let lastCapture = 0;

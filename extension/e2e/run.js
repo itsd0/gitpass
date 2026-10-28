@@ -751,11 +751,48 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       await wa.close();
     }
 
-    // --- Options page
+    // --- "Never for this site" banner flow (#56)
+    await page.goto(LOGIN); await sleep(1000);
+    await page.fill('#u', 'neveruser@example.com'); await page.fill('#p', 'Never-Pass-123'); await page.click('#go');
+    const neverBtn = await until(async () => { const h = await findInShadow(page, /^\s*(Never for this site|ဤဆိုက်အတွက် ဘယ်တော့မှမသိမ်းပါနှင့်|ไม่ต้องสำหรับไซต์นี้)\s*$/i); return h.length && h; }, T(6000));
+    rec('save banner offers "Never for this site"', !!neverBtn, neverBtn ? `button "${neverBtn[0].text}"` : 'no Never button found');
+    if (neverBtn) {
+      await page.mouse.click(neverBtn[0].x, neverBtn[0].y);
+      await sleep(500);
+    }
+    // Submit again on the same site -> banner must NOT appear
+    await page.fill('#u', 'neveruser@example.com'); await page.fill('#p', 'Never-Pass-456'); await page.click('#go');
+    await sleep(1500);
+    const suppressedBanner = await findInShadow(page, /^\s*(Save|บันทึก|သိမ်းရန်)\s*$/i);
+    rec('excepted site: submitting login form does not show save banner', !suppressedBanner || suppressedBanner.length === 0, `banner count=${(suppressedBanner || []).length}`);
+
+    // --- Options page (#56)
     const popup = await ctx.newPage();
     await popup.goto(`${EXT}/options/options.html`);
     const opt = await until(async () => (await popup.locator('#autofill').count()) && (await popup.locator('#shortcut').textContent()) !== '—', T(4000));
     rec('options page renders settings + shortcut', !!opt, opt ? `shortcut=${await popup.locator('#shortcut').textContent()}` : '');
+
+    // Verify excepted site is listed in "Never save on these sites" section
+    const exceptedRow = await until(async () => {
+      const rows = await popup.locator('#never-save-list .t').allTextContents();
+      return rows.some((r) => r.includes('localhost')) ? rows : null;
+    }, T(4000));
+    rec('options page lists excepted domain', !!exceptedRow, JSON.stringify(exceptedRow));
+
+    // Remove the exception
+    const removeBtn = popup.locator('#never-save-list button.sec');
+    if (await removeBtn.count()) {
+      await removeBtn.first().click();
+      const emptyState = await until(async () => await popup.locator('#never-save-empty').isVisible(), T(4000));
+      rec('options page: removing exception shows empty state', !!emptyState);
+    }
+
+    // Go back to login page and submit again -> save banner reappears!
+    await page.goto(LOGIN); await sleep(1000);
+    await page.fill('#u', 'neveruser@example.com'); await page.fill('#p', 'Re-Enabled-Pass-789'); await page.click('#go');
+    const reenabledBanner = await until(async () => { const h = await findInShadow(page, /^\s*(Save|บันทึก|သိမ်းရန်)\s*$/i); return h.length && h; }, T(6000));
+    rec('removing exception in options re-enables save banner', !!reenabledBanner, reenabledBanner ? `button "${reenabledBanner[0].text}"` : 'banner did not reappear');
+    if (reenabledBanner) await page.mouse.click(reenabledBanner[0].x, reenabledBanner[0].y);
     const failed = results.filter((r) => !r.ok && r.kind !== 'info');
     exitCode = failed.length ? 1 : 0;
   } catch (e) { rec('harness', false, e.message); } finally {

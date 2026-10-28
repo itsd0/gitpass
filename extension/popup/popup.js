@@ -86,7 +86,64 @@ function show(view) {
 }
 
 // ---------- state ----------
-const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null };
+const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null, neverSave: [] };
+
+async function refreshNeverSave() {
+  if (window.__gitpassMockNeverSave) {
+    S.neverSave = window.__gitpassMockNeverSave;
+    return S.neverSave;
+  }
+  return new Promise((res) => {
+    try {
+      if (globalThis.chrome && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get(['neverSave', 'neverSaveSites'], (r) => {
+          const list = (r && (r.neverSave || r.neverSaveSites)) || [];
+          S.neverSave = Array.isArray(list) ? list : [];
+          res(S.neverSave);
+        });
+      } else {
+        S.neverSave = S.neverSave || [];
+        res(S.neverSave);
+      }
+    } catch (_) {
+      S.neverSave = S.neverSave || [];
+      res(S.neverSave);
+    }
+  });
+}
+
+async function removeNeverSave(domain) {
+  const dom = (domain || '').trim().toLowerCase();
+  if (window.__gitpassMockNeverSave) {
+    window.__gitpassMockNeverSave = window.__gitpassMockNeverSave.filter((d) => (d || '').toLowerCase() !== dom);
+    S.neverSave = window.__gitpassMockNeverSave;
+    return;
+  }
+  return new Promise((res) => {
+    try {
+      if (globalThis.chrome && chrome.storage && chrome.storage.local) {
+        chrome.storage.local.get(['neverSave', 'neverSaveSites'], (r) => {
+          const list = (r && (r.neverSave || r.neverSaveSites)) || [];
+          const next = list.filter((d) => (d || '').toLowerCase() !== dom);
+          chrome.storage.local.set({ neverSave: next }, () => {
+            S.neverSave = next;
+            res();
+          });
+        });
+      } else {
+        S.neverSave = (S.neverSave || []).filter((d) => (d || '').toLowerCase() !== dom);
+        res();
+      }
+    } catch (_) {
+      res();
+    }
+  });
+}
+
+function isSiteExcepted() {
+  if (!S.origin || !S.neverSave || !S.neverSave.length) return false;
+  return GitpassPolicy.isNeverSave(S.origin, S.neverSave);
+}
 
 // ---------- top-level ----------
 async function refresh() {
@@ -169,6 +226,7 @@ async function loadData() {
     send({ type: 'popup:match_active' }).catch(() => ({ items: [], origin: null })),
   ]);
   S.vaults = vaults.vaults || []; S.all = all.items || []; S.suggested = match.items || []; S.origin = match.origin || null;
+  await refreshNeverSave();
   const want = window.__gitpassMockParams && window.__gitpassMockParams.get('filter');
   if (want) S.filter = want; else if (S.view !== 'unlocked-loaded' && !S.suggested.length && S.filter === 'suggested') S.filter = 'all';
   S.view = 'unlocked-loaded';
@@ -187,8 +245,22 @@ function renderFilter() {
     parent.append(o);
   }
   s.value = S.filter;
+  const noteEl = $('siteExceptedNote');
+  if (noteEl) {
+    const showNote = S.filter === 'suggested' && isSiteExcepted();
+    noteEl.classList.toggle('hidden', !showNote);
+  }
 }
 $('filter').onchange = () => { S.filter = $('filter').value; applyFilter(true); };
+const undoExceptedBtn = $('undoExcepted');
+if (undoExceptedBtn) {
+  undoExceptedBtn.onclick = async () => {
+    await removeNeverSave(GitpassPolicy.registrableDomain(S.origin));
+    toast(t('saved', 'Saved'));
+    renderFilter();
+    applyFilter(false);
+  };
+}
 
 function applyFilter(selectFirst) {
   const prevId = S.rows[S.sel] && S.rows[S.sel].id;
@@ -223,7 +295,7 @@ function renderList() {
 
 /** Empty states: offer the action that fills the gap (create the searched item, save this site's login). */
 function renderEmpty(inner) {
-  const st = V.emptyState({ query: S.query, filter: S.filter, origin: S.origin, count: S.all.length });
+  const st = V.emptyState({ query: S.query, filter: S.filter, origin: S.origin, count: S.all.length, excepted: isSiteExcepted() });
   const box = el('div', 'empty');
   const ic = st.kind === 'search' ? UI.search : st.kind === 'site' ? categoryIcon('login', 36) : st.kind === 'nofill' ? UI.external : st.kind === 'vault' ? UI.plus : null;
   if (ic) { const w = el('span', 'empty-ic'); w.innerHTML = ic; box.append(w); }
@@ -235,7 +307,24 @@ function renderEmpty(inner) {
     none: () => t('noItems', 'No items'),
   }[st.kind]();
   box.append(el('p', null, msg));
-  if (st.kind === 'site') box.append(el('div', 'empty-host', st.host));
+  if (st.kind === 'site') {
+    box.append(el('div', 'empty-host', st.host));
+    if (isSiteExcepted()) {
+      const note = el('p', 'empty-excepted-note');
+      const span = el('span', null, t('savingOff', 'Saving is off for this site'));
+      const dot = document.createTextNode(' · ');
+      const undo = el('button', 'btn-link', t('undo', 'Undo'));
+      undo.type = 'button';
+      undo.onclick = async () => {
+        await removeNeverSave(GitpassPolicy.registrableDomain(S.origin));
+        toast(t('saved', 'Saved'));
+        renderFilter();
+        applyFilter(false);
+      };
+      note.append(span, dot, undo);
+      box.append(note);
+    }
+  }
   if (st.kind === 'vault') box.append(el('p', 'empty-sub', t('emptyVaultBody', 'Items you add will appear here.')));
   const acts = el('div', 'empty-actions');
   const btn = (cls, label, fn) => { const b = el('button', cls, label); b.type = 'button'; b.onclick = fn; acts.append(b); };
