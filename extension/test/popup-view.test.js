@@ -60,10 +60,74 @@ test('keyAction maps keyboard shortcuts', () => {
   assert.strictEqual(V.keyAction({ key: 'C', ctrlKey: true, shiftKey: true }, { hasTotp: true }), 'copyTotp');
   assert.strictEqual(V.keyAction({ key: 'C', metaKey: true, shiftKey: true }), 'copyPassword', 'no TOTP: shift falls back to the password');
   assert.strictEqual(V.keyAction({ key: 'C', metaKey: true, shiftKey: true }, { hasTotp: true, hasSelection: true }), null);
+  // ⌘⇧U / Ctrl+Shift+U copy username
+  assert.strictEqual(V.keyAction({ key: 'u', metaKey: true, shiftKey: true }), 'copyUsername');
+  assert.strictEqual(V.keyAction({ key: 'U', metaKey: true, shiftKey: true }), 'copyUsername');
+  assert.strictEqual(V.keyAction({ key: 'u', ctrlKey: true, shiftKey: true }), 'copyUsername');
+  assert.strictEqual(V.keyAction({ key: 'U', ctrlKey: true, shiftKey: true }), 'copyUsername');
+  assert.strictEqual(V.keyAction({ key: 'u', metaKey: true }), null, '⌘U without shift is not copy username');
+  assert.strictEqual(V.keyAction({ key: 'u', metaKey: true, shiftKey: true }, { hasSelection: true }), null);
+  assert.strictEqual(V.keyAction({ key: 'u', metaKey: true, shiftKey: true }, { panel: 'gen' }), null);
+  assert.strictEqual(V.keyAction({ key: 'u', metaKey: true, shiftKey: true }, { panel: 'new' }), null);
+  // ⌘O / Ctrl+O open website
+  assert.strictEqual(V.keyAction({ key: 'o', metaKey: true }), 'openWebsite');
+  assert.strictEqual(V.keyAction({ key: 'O', metaKey: true }), 'openWebsite');
+  assert.strictEqual(V.keyAction({ key: 'o', ctrlKey: true }), 'openWebsite');
+  assert.strictEqual(V.keyAction({ key: 'O', ctrlKey: true }), 'openWebsite');
+  assert.strictEqual(V.keyAction({ key: 'o', metaKey: true, shiftKey: true }), null, '⌘⇧O is not open website');
+  assert.strictEqual(V.keyAction({ key: 'o', metaKey: true }, { hasSelection: true }), null);
+  assert.strictEqual(V.keyAction({ key: 'o', metaKey: true }, { panel: 'gen' }), null);
+  assert.strictEqual(V.keyAction({ key: 'o', metaKey: true }, { panel: 'new' }), null);
+  // ? toggles shortcuts sheet
+  assert.strictEqual(V.keyAction({ key: '?' }), 'toggleShortcuts');
+  assert.strictEqual(V.keyAction({ key: '?' }, { inEditable: true }), null);
+  assert.strictEqual(V.keyAction({ key: '?' }, { inEditable: true, inForm: true }), null);
+  assert.strictEqual(V.keyAction({ key: '?' }, { hasSelection: true }), null);
+  assert.strictEqual(V.keyAction({ key: '?' }, { panel: 'gen' }), null);
+  assert.strictEqual(V.keyAction({ key: '?' }, { panel: 'new' }), null);
+  assert.strictEqual(V.keyAction({ key: '?' }, { panel: 'shortcuts' }), 'toggleShortcuts');
+  assert.strictEqual(V.keyAction({ key: '?', metaKey: true }), null, '⌘? does not toggle shortcuts');
+  // ⌘⇧G generator shortcut
+  assert.strictEqual(V.keyAction({ key: 'g', metaKey: true, shiftKey: true }), 'generator');
+  assert.strictEqual(V.keyAction({ key: 'G', ctrlKey: true, shiftKey: true }), 'generator');
+  assert.strictEqual(V.keyAction({ key: 'g', metaKey: true, shiftKey: true }, { hasSelection: true }), null);
+  // Escape
   assert.strictEqual(V.keyAction({ key: 'Escape' }), 'close');
   assert.strictEqual(V.keyAction({ key: 'Escape' }, { panel: 'gen' }), 'closePanel');
+  assert.strictEqual(V.keyAction({ key: 'Escape' }, { panel: 'shortcuts' }), 'closePanel');
   assert.strictEqual(V.keyAction({ key: 'ArrowDown' }, { panel: 'gen' }), null);
   assert.strictEqual(V.keyAction({ key: 'x' }), null);
+});
+
+test('isAllowedUrl: allowlist only allows http and https with host', () => {
+  assert.strictEqual(V.isAllowedUrl('https://github.com'), true);
+  assert.strictEqual(V.isAllowedUrl('http://localhost:3000/login'), true);
+  assert.strictEqual(V.isAllowedUrl('https://example.com:8443/test?q=1#hash'), true);
+  assert.strictEqual(V.isAllowedUrl('http://127.0.0.1:8080'), true);
+  assert.strictEqual(V.isAllowedUrl('javascript:alert(1)'), false);
+  assert.strictEqual(V.isAllowedUrl('data:text/html,<h1>evil</h1>'), false);
+  assert.strictEqual(V.isAllowedUrl('chrome://settings'), false);
+  assert.strictEqual(V.isAllowedUrl('chrome-extension://abcdef/popup.html'), false);
+  assert.strictEqual(V.isAllowedUrl('file:///etc/passwd'), false);
+  assert.strictEqual(V.isAllowedUrl('ftp://ftp.example.com/file'), false);
+  assert.strictEqual(V.isAllowedUrl('about:blank'), false);
+  assert.strictEqual(V.isAllowedUrl(''), false);
+  assert.strictEqual(V.isAllowedUrl(null), false);
+  assert.strictEqual(V.isAllowedUrl(undefined), false);
+  assert.strictEqual(V.isAllowedUrl('not-a-url'), false);
+  assert.strictEqual(V.isAllowedUrl('http://'), false);
+});
+
+test('itemUsername: extracts username from detail fields or summary', () => {
+  assert.strictEqual(V.itemUsername({ fields: [{ name: 'username', value: 'octocat' }] }), 'octocat');
+  assert.strictEqual(V.itemUsername({ fields: [{ label: 'username', value: 'octocat2' }] }), 'octocat2');
+  assert.strictEqual(V.itemUsername({ username: 'bob' }), 'bob');
+  assert.strictEqual(V.itemUsername(null, { username: 'charlie' }), 'charlie');
+  assert.strictEqual(V.itemUsername({ category: 'login', subtitle: 'dan' }), 'dan');
+  assert.strictEqual(V.itemUsername(null, { category: 'login', subtitle: 'eve' }), 'eve');
+  assert.strictEqual(V.itemUsername({ category: 'credit_card', subtitle: '•••• 4242' }), '');
+  assert.strictEqual(V.itemUsername({ fields: [{ name: 'password', value: 'secret' }] }), '');
+  assert.strictEqual(V.itemUsername(null, null), '');
 });
 
 test('ringOffset, formatValue, mask', () => {

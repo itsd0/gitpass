@@ -555,9 +555,42 @@
     "message": "Loading item details…"
   },
   "searchHints": {
-    "message": "↑↓ navigate · ↵ fill · ⌘C copy password · Esc clear"
+    "message": "↑↓ navigate · ↵ fill · ⌘C copy password · ? all shortcuts · Esc clear"
   },
   "secretKeyPh": {
     "message": "Secret Key (A3-XXXXXX-…)"
+  },
+  "keyboardShortcuts": {
+    "message": "Keyboard shortcuts"
+  },
+  "shortcutNav": {
+    "message": "Navigate list"
+  },
+  "shortcutFill": {
+    "message": "Fill item"
+  },
+  "shortcutCopyPw": {
+    "message": "Copy password"
+  },
+  "shortcutCopyTotp": {
+    "message": "Copy one-time code (TOTP)"
+  },
+  "shortcutCopyUser": {
+    "message": "Copy username"
+  },
+  "shortcutOpenUrl": {
+    "message": "Open website"
+  },
+  "shortcutGen": {
+    "message": "Password generator"
+  },
+  "shortcutClose": {
+    "message": "Close or clear search"
+  },
+  "usernameCopied": {
+    "message": "Username copied"
+  },
+  "noUsername": {
+    "message": "No username"
   }
 }

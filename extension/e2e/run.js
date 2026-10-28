@@ -333,6 +333,68 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
             `${chip ? `clicked "${chip}"` : 'code chip not found'}; copied=${JSON.stringify(copied || [])}${await pop.text().then((t) => /Copied/.test(t) ? '; toast shown' : '; no toast').catch(() => '')}`);
         }
 
+        // --- Keyboard shortcuts (#138): ⌘⇧U copies username; ? opens and Esc closes the shortcuts sheet
+        try {
+          await pop.eval(`(() => {
+            window.__copied = [];
+            try {
+              Object.defineProperty(navigator, 'clipboard', {
+                configurable: true,
+                value: { writeText: (x) => { window.__copied.push(x); return Promise.resolve(); } }
+              });
+            } catch (_) {}
+            const rows = document.querySelectorAll('#listInner .row');
+            if (rows.length) rows[0].click();
+            return true;
+          })()`);
+          await sleep(300);
+
+          await pop.eval(`(() => {
+            const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+            document.dispatchEvent(new KeyboardEvent('keydown', {
+              key: 'u',
+              metaKey: isMac,
+              ctrlKey: !isMac,
+              shiftKey: true,
+              bubbles: true,
+              cancelable: true
+            }));
+          })()`);
+
+          const copiedUser = await until(async () => {
+            const c = await pop.eval('window.__copied || []');
+            return Array.isArray(c) && c.includes('alice@example.com') && c;
+          }, T(3000));
+          rec('popup shortcuts: ⌘⇧U copies selected item username', !!copiedUser, `copied=${JSON.stringify(copiedUser || [])}`);
+
+          await pop.eval(`(() => {
+            if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true }));
+          })()`);
+
+          const sheetOpened = await until(async () => {
+            return await pop.eval(`(() => {
+              const p = document.getElementById('panel');
+              return p && !p.classList.contains('hidden') && p.classList.contains('shortcuts-panel');
+            })()`);
+          }, T(3000));
+          rec('popup shortcuts: ? opens shortcuts sheet', !!sheetOpened, sheetOpened ? 'sheet visible' : 'sheet not opened');
+
+          await pop.eval(`(() => {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+          })()`);
+
+          const sheetClosed = await until(async () => {
+            return await pop.eval(`(() => {
+              const p = document.getElementById('panel');
+              return p && p.classList.contains('hidden');
+            })()`);
+          }, T(3000));
+          rec('popup shortcuts: Esc closes shortcuts sheet', !!sheetClosed, sheetClosed ? 'sheet closed' : 'sheet still open');
+        } catch (e) {
+          rec('popup shortcuts (#138)', false, e.message);
+        }
+
         // --- New item (#41): the popup's New item form sends exactly one create_item per item, with the
         // desktop New Item template's category/section/field ids and kinds.
         const panel = () => pop.eval(`(() => {

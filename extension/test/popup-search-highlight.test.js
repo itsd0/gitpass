@@ -188,7 +188,7 @@ test('popup DOM: footer hint bar displays keyboard shortcuts when results are sh
   const hints = w.document.getElementById('searchHints');
   assert.ok(hints, 'searchHints footer element exists');
   assert.strictEqual(hints.classList.contains('hidden'), false, 'hints visible when list results exist');
-  assert.strictEqual(hints.textContent, '↑↓ navigate · ↵ fill · ⌘C copy password · Esc clear');
+  assert.strictEqual(hints.textContent, '↑↓ navigate · ↵ fill · ⌘C copy password · ? all shortcuts · Esc clear');
 
   // Query with no matches
   const qInput = w.document.getElementById('q');

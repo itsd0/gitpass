@@ -67,7 +67,8 @@ input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 
 .empty-excepted-note { margin: 8px 0 0; font-size: 12px; color: rgb(var(--muted)); }
 .empty-excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--accent)); cursor: pointer; text-decoration: underline; }
 .list { flex: 1; overflow-y: auto; outline: none; }
-.search-hints { display: flex; align-items: center; justify-content: center; height: 26px; padding: 0 8px; background: rgb(var(--sidebar)); border-top: 1px solid rgb(var(--border)); font-size: 11px; color: rgb(var(--muted)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
+.search-hints { display: flex; align-items: center; justify-content: center; height: 26px; padding: 0 8px; background: rgb(var(--sidebar)); border-top: 1px solid rgb(var(--border)); font-size: 11px; color: rgb(var(--muted)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; cursor: pointer; }
+.search-hints:hover { color: rgb(var(--fg)); }
 .search-hints.hidden { display: none !important; }
 .row { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 10px; cursor: pointer; border-left: 3px solid transparent; }
 .row:hover { background: rgb(var(--hover)); }
@@ -125,7 +126,14 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .meta-line { margin-top: 12px; font-size: 11px; color: rgb(var(--muted)); }
 .d-actions { display: flex; gap: 8px; margin-bottom: 12px; }
 /* overlay panel (generator / new item) */
-.panel { position: absolute; top: 48px; right: 0; bottom: 0; width: 440px; background: rgb(var(--panel)); border-left: 1px solid rgb(var(--border)); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: -12px 0 24px #0006; z-index: 10; }
+.panel { position: absolute; top: 48px; right: 0; bottom: 0; width: 440px; max-width: 100%; background: rgb(var(--panel)); border-left: 1px solid rgb(var(--border)); padding: 16px 18px; display: flex; flex-direction: column; gap: 10px; box-shadow: -12px 0 24px #0006; z-index: 10; }
+.panel.shortcuts-panel { width: 360px; max-width: 100%; }
+.shortcuts-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; overflow-y: auto; overflow-x: hidden; }
+.shortcut-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 2px; border-bottom: 1px solid rgb(var(--border) / .35); }
+.shortcut-row:last-child { border-bottom: none; }
+.shortcut-label { font-size: 12px; color: rgb(var(--fg)); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.shortcut-keys { display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.shortcut-keys kbd { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 5px; font-family: ui-monospace, Menlo, Monaco, Consolas, monospace; font-size: 11px; font-weight: 600; color: rgb(var(--fg)); background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-bottom: 2px solid rgb(var(--accent) / .5); border-radius: 4px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12); line-height: 1; }
 .panel h3 { margin: 0; font-size: 15px; display: flex; justify-content: space-between; align-items: center; }
 .panel label { font-size: 11px; color: rgb(var(--label)); }
 .gen-out { display: flex; align-items: center; gap: 6px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 8px; padding: 10px; font-family: ui-monospace, Menlo, monospace; font-size: 14px; word-break: break-all; }
