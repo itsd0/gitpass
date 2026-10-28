@@ -325,6 +325,8 @@ export const th: Partial<Record<Key, string>> = {
   "items.sortTitle": "ชื่อ",
   "items.ariaLabel": "รายการ",
   "items.selectItem": "เลือก {title}",
+  "items.search.resultCount": "ผลลัพธ์ {count} รายการ",
+  "items.search.resultOne": "ผลลัพธ์ 1 รายการ",
   // category labels
   "category.login": "ข้อมูลเข้าสู่ระบบ",
   "category.credit_card": "บัตรเครดิต",
