@@ -77,6 +77,12 @@
   "totpCopied": {
     "message": "TOTP ကူးယူပြီးပါပြီ"
   },
+  "copyTotpCode": {
+    "message": "တစ်ကြိမ်သုံး ကုဒ် ကူးယူရန်"
+  },
+  "totpUnavailable": {
+    "message": "ကုဒ် မရနိုင်ပါ"
+  },
   "notHttps": {
     "message": "https စာမျက်နှာ မဟုတ်ပါ"
   },

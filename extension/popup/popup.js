@@ -86,7 +86,7 @@ function show(view) {
 }
 
 // ---------- state ----------
-const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpTimer: null, panel: null, view: null };
+const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpCache: {}, totpFetching: {}, totpTimer: null, listTotpTimer: null, panel: null, view: null };
 
 // ---------- top-level ----------
 async function refresh() {
@@ -107,13 +107,15 @@ async function refresh() {
 }
 
 function showNoHost(e) {
+  stopListTotp(); clearTotpCache();
   $('hostErr').textContent = String((e && e.message) || '');
   $('hostCmd').textContent = 'cd ~/gitpass && cargo build --release -p gitpass-host\n"$HOME/Library/Application Support/gitpass/bin/gitpass-host" install --browser chrome --extension-id ' + ((globalThis.chrome && chrome.runtime && chrome.runtime.id) || '<id>');
   show('nohost');
 }
 
 function showLocked(view, st) {
-  stopTotp();
+  stopTotp(); stopListTotp(); clearTotpCache();
+  S.revealed = {}; $('detail').textContent = '';
   show('locked');
   $('unlockErr').textContent = '';
   $('unlockForm').classList.add('hidden'); $('primaryBox').classList.remove('hidden');
@@ -201,7 +203,7 @@ function applyFilter(selectFirst) {
 function renderList() {
   const list = $('list'), inner = $('listInner');
   inner.textContent = '';
-  if (!S.rows.length) { renderEmpty(inner); return; }
+  if (!S.rows.length) { stopListTotp(); renderEmpty(inner); return; }
   const w = V.virtualWindow(list.scrollTop, list.clientHeight || 380, ROW_H, S.rows.length);
   inner.style.paddingTop = w.padTop + 'px'; inner.style.paddingBottom = w.padBottom + 'px';
   for (let i = w.start; i < w.end; i++) {
@@ -211,10 +213,12 @@ function renderList() {
     const meta = el('div', 'meta'); meta.append(el('div', 't', it.title), el('div', 'u', it.subtitle || '—'));
     row.append(ic, meta);
     if (it.favorite) { const f = el('span', 'fav'); f.innerHTML = UI.star; row.append(f); }
+    if (it.has_totp) row.append(totpChip(it));
     row.onclick = () => select(i);
     row.ondblclick = () => openAndFill();
     inner.append(row);
   }
+  if (inner.querySelector('[data-totp-id]')) startListTotp(); else stopListTotp();
 }
 
 /** Empty states: offer the action that fills the gap (create the searched item, save this site's login). */
@@ -243,6 +247,88 @@ function renderEmpty(inner) {
   inner.append(box);
 }
 $('list').addEventListener('scroll', () => renderList(), { passive: true });
+
+// ---------- TOTP codes in the list ----------
+// One shared timer for every visible row. Codes are fetched from the host per item (`popup:totp` returns the
+// current code + seconds remaining only, never the secret) and cached until the period rolls over.
+const MINI_RING_C = 2 * Math.PI * 5;
+
+function totpRemaining(c) { return Math.max(0, Math.ceil((c.expiresAt - Date.now()) / 1000)); }
+function chipsFor(id) { return [...document.querySelectorAll('#listInner [data-totp-id]')].filter((x) => x.dataset.totpId === id); }
+function clearTotpCache() { S.totpCache = {}; S.totpFetching = {}; }
+
+function totpRing() {
+  const ns = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', '0 0 12 12'); svg.setAttribute('class', 'ring');
+  const bg = document.createElementNS(ns, 'circle'), fg = document.createElementNS(ns, 'circle');
+  for (const c of [bg, fg]) { c.setAttribute('cx', '6'); c.setAttribute('cy', '6'); c.setAttribute('r', '5'); }
+  bg.setAttribute('class', 'bg'); fg.setAttribute('class', 'fg'); fg.setAttribute('stroke-dasharray', MINI_RING_C.toFixed(3));
+  svg.append(bg, fg);
+  return svg;
+}
+
+function paintTotpChip(chip, c) {
+  const code = chip.querySelector('.totp-code'), svg = chip.querySelector('.ring');
+  if (!code || !svg) return;
+  const fg = svg.querySelector('.fg');
+  chip.title = t('copyTotp', 'Copy TOTP');
+  svg.classList.remove('hidden');
+  paintRing(svg, fg, c ? totpRemaining(c) : 0, c && c.period);
+  if (c && c.error) {
+    code.textContent = '—'; code.classList.add('bad');
+    chip.title = t('totpUnavailable', 'Code unavailable');
+    svg.classList.add('hidden');
+    return;
+  }
+  code.classList.remove('bad');
+  code.textContent = c && c.code ? V.formatValue('totp', c.code) : '••• •••';
+}
+
+function paintRing(svg, fg, remaining, period) {
+  fg.setAttribute('stroke-dashoffset', String(V.ringOffset(remaining, period, MINI_RING_C)));
+  svg.classList.toggle('low', !!period && remaining <= 5);
+}
+
+function totpChip(it) {
+  const b = el('button', 'totp-mini'); b.type = 'button'; b.dataset.totpId = it.id;
+  b.setAttribute('aria-label', t('copyTotpCode', 'Copy one-time code'));
+  b.append(el('span', 'totp-code'), totpRing());
+  b.onclick = (e) => { e.stopPropagation(); copyTotp(it.id).catch(showErr); };
+  paintTotpChip(b, S.totpCache[it.id]);
+  return b;
+}
+
+async function fetchTotp(id) {
+  const r = await send({ type: 'popup:totp', item_id: id });
+  const c = { code: r.code, period: r.period || 30, expiresAt: Date.now() + (Number(r.remaining) || 0) * 1000 };
+  S.totpCache[id] = c;
+  return c;
+}
+
+async function copyTotp(id) {
+  let c = S.totpCache[id];
+  if (!c || c.error || totpRemaining(c) <= 0) c = await fetchTotp(id);
+  for (const chip of chipsFor(id)) paintTotpChip(chip, c);
+  await copy(c.code, t('copied', 'Copied'));
+}
+
+function startListTotp() { if (!S.listTotpTimer) { S.listTotpTimer = setInterval(tickListTotp, 1000); tickListTotp(); } }
+function stopListTotp() { if (S.listTotpTimer) { clearInterval(S.listTotpTimer); S.listTotpTimer = null; } }
+
+async function tickListTotp() {
+  const chips = [...document.querySelectorAll('#listInner [data-totp-id]')];
+  if (!chips.length) return stopListTotp();
+  for (const id of new Set(chips.map((x) => x.dataset.totpId))) {
+    const c = S.totpCache[id];
+    if (c && c.error) continue;
+    if (c && totpRemaining(c) > 0) { for (const chip of chipsFor(id)) paintTotpChip(chip, c); continue; }
+    if (S.totpFetching[id]) continue;
+    S.totpFetching[id] = true;
+    try { const fresh = await fetchTotp(id); for (const chip of chipsFor(id)) paintTotpChip(chip, fresh); }
+    catch (_) { S.totpCache[id] = { error: true }; for (const chip of chipsFor(id)) paintTotpChip(chip, S.totpCache[id]); }
+    finally { delete S.totpFetching[id]; }
+  }
+}
 
 let qt = null;
 $('q').oninput = () => { clearTimeout(qt); qt = setTimeout(() => { S.query = $('q').value.trim(); applyFilter(true); }, 80); };
@@ -316,7 +402,7 @@ function fieldRow(d, f) {
 const RING_C = 2 * Math.PI * 7;
 function renderTotp(d, val) {
   stopTotp();
-  const wrap = el('div', 'totp'); const code = el('span', null, '••• •••');
+  const wrap = el('div', 'totp'); const code = el('span', 'totp-code', '••• •••');
   const ns = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(ns, 'svg'); svg.setAttribute('viewBox', '0 0 18 18'); svg.setAttribute('class', 'ring');
   const bg = document.createElementNS(ns, 'circle'), fg = document.createElementNS(ns, 'circle');
@@ -329,14 +415,15 @@ function renderTotp(d, val) {
     if (!st || st.remaining <= 0) {
       if (fetching) return; fetching = true;
       try { const r = await send({ type: 'popup:totp', item_id: d.id }); st = { code: r.code, remaining: r.remaining, period: r.period || 30 }; S.revealed.totp = r.code; }
-      catch (e) { code.textContent = '—'; return stopTotp(); } finally { fetching = false; }
+      catch (e) { code.textContent = '—'; code.classList.add('bad'); wrap.title = t('totpUnavailable', 'Code unavailable'); svg.classList.add('hidden'); return stopTotp(); } finally { fetching = false; }
       if (!wrap.isConnected) return stopTotp();
       code.textContent = V.formatValue('totp', st.code);
     } else st.remaining -= 1;
     fg.setAttribute('stroke-dashoffset', String(V.ringOffset(st.remaining, st.period, RING_C)));
     svg.classList.toggle('low', st.remaining <= 5);
   };
-  tick(); S.totpTimer = setInterval(tick, 1000);
+  S.totpTimer = setInterval(tick, 1000);
+  setTimeout(tick, 0); // the row is still detached while fieldRow builds it; the isConnected guard needs it mounted
 }
 function stopTotp() { if (S.totpTimer) { clearInterval(S.totpTimer); S.totpTimer = null; } }
 
@@ -478,13 +565,15 @@ document.addEventListener('keydown', (e) => {
   const inForm = !!(a && a.closest && a.closest('#panel, select, .menu, button'));
   const sel = window.getSelection && String(window.getSelection());
   const inputSel = a && a.tagName === 'INPUT' && a.selectionStart !== a.selectionEnd;
-  const act = V.keyAction(e, { panel: S.panel, inForm, hasSelection: !!sel || inputSel });
+  const selected = S.rows[S.sel];
+  const act = V.keyAction(e, { panel: S.panel, inForm, hasSelection: !!sel || inputSel, hasTotp: !!(selected && selected.has_totp) });
   if (!act) return;
   e.preventDefault();
   if (act === 'close') window.close();
   else if (act === 'closePanel') closePanel();
   else if (act === 'down' || act === 'up') select(V.moveSel(S.sel, act === 'down' ? 1 : -1, S.rows.length));
   else if (act === 'fill') openAndFill();
+  else if (act === 'copyTotp') { if (selected) copyTotp(selected.id).catch(showErr); }
   else if (act === 'copyPassword') copyPrimary().catch(showErr);
 });
 
@@ -531,6 +620,7 @@ if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
 }
 
 if (typeof document !== 'undefined') {
+  document.addEventListener('pagehide', () => { stopListTotp(); stopTotp(); });
   GitpassI18n.apply(document);
   refresh();
 }
