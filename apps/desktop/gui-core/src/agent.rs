@@ -349,6 +349,7 @@ impl Agent {
                     let rec = ItemRecord::new(it);
                     x.session.add_record(&vid, rec)
                 })?;
+                self.poll_state();
                 Ok(json!({"item_id": format!("{vid}:{iid}")}))
             }
             "create_item" => {
@@ -380,6 +381,7 @@ impl Agent {
                     }
                     x.session.update_record(&vid, &iid, r)
                 })?;
+                self.poll_state();
                 Ok(json!({"ok": true}))
             }
             "set_favorite" => {
@@ -391,6 +393,7 @@ impl Agent {
                     r.favorite = fav;
                     x.session.update_record(&vid, &iid, r)
                 })?;
+                self.poll_state();
                 Ok(json!({"favorite": fav}))
             }
             "generate" => {
@@ -410,10 +413,12 @@ impl Agent {
                     self.ui.approve("Passkey", &format!("{what} {origin}?"))
                 };
                 if !approved { return Err(err("denied", "passkey use was not approved")); }
-                self.app.state.with(|x| {
+                let res = self.app.state.with(|x| {
                     crate::GuiState::writable(x).map_err(|e| err("denied", e.to_string()))?;
                     if cmd == "passkey_create" { gitpass_host::passkey::create(&x.session, q) } else { gitpass_host::passkey::get(&x.session, q) }
-                }).map_err(host_err)
+                }).map_err(host_err)?;
+                if cmd == "passkey_create" { self.poll_state(); }
+                Ok(res)
             }
             "open_in_app" => {
                 match s("item_id").filter(|v| !v.is_empty()) {
