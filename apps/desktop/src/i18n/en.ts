@@ -302,6 +302,15 @@ export const en = {
   "bulk.toast.remove_tag": "Tag removed",
   "bulk.toast.move": "Moved",
   "bulk.toast.copy": "Copied",
+  // drag and drop & selection actions
+  "drag.nItems": "{n} items",
+  "drag.oneItem": "1 item",
+  "cmd.moveToVault": "Move to vault…",
+  "cmd.addTag": "Add tag…",
+  "moveToVault.title": "Move to vault",
+  "moveToVault.select": "Select destination vault",
+  "addTag.title": "Add tag",
+  "addTag.placeholder": "Tag name",
   // Recently Deleted
   "trash.count": "{n} items",
   "trash.countOne": "1 item",

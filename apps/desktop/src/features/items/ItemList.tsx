@@ -33,6 +33,7 @@ import {
   selectAll,
 } from "./selection";
 import { requestDelete } from "./BulkPane";
+import { useDragStore, getDragPreviewText } from "./dragState";
 import { ItemListEmptyState } from "./ItemListEmptyState";
 import { SearchHighlight } from "./SearchHighlight";
 import { getCategoryLabel } from "./categoryLabel";
@@ -59,6 +60,7 @@ export function ItemList() {
   const selectItem = useApp((s) => s.selectItem);
   const multiIds = useApp((s) => s.multiIds);
   const multiSet = useMemo(() => new Set(multiIds), [multiIds]);
+  const dragged = useDragStore((s) => s.dragged);
   const multiOn = multiIds.length > 1;
   const t = useT();
   const {
@@ -134,6 +136,28 @@ export function ItemList() {
       applySel(clickSelect(order, readSel(), id, { toggle, range }));
     } else selectItem(id);
     parentRef.current?.focus();
+  }
+
+  function onRowDragStart(e: React.DragEvent, item: (typeof items)[number]) {
+    const isMulti = multiOn && multiSet.has(item.id);
+    const draggedItems = isMulti ? items.filter((x) => multiSet.has(x.id)) : [item];
+    useDragStore.getState().startDrag(draggedItems);
+    try {
+      e.dataTransfer.setData("application/json", JSON.stringify({ itemIds: draggedItems.map((x) => x.id) }));
+      e.dataTransfer.setData("text/plain", draggedItems.map((x) => x.id).join(","));
+      e.dataTransfer.effectAllowed = "move";
+    } catch {
+      // ignore
+    }
+    const previewEl = document.getElementById("drag-preview");
+    if (previewEl && e.dataTransfer.setDragImage) {
+      previewEl.textContent = getDragPreviewText(draggedItems, t);
+      e.dataTransfer.setDragImage(previewEl, 10, 10);
+    }
+  }
+
+  function onRowDragEnd() {
+    useDragStore.getState().endDrag();
   }
 
   function onKey(e: React.KeyboardEvent) {
@@ -296,6 +320,10 @@ export function ItemList() {
                   ) : (
                     <div
                       role="option"
+                      data-testid="item-row"
+                      draggable
+                      onDragStart={(e) => onRowDragStart(e, r.item)}
+                      onDragEnd={onRowDragEnd}
                       aria-selected={
                         multiOn
                           ? multiSet.has(r.item.id)
@@ -399,6 +427,14 @@ export function ItemList() {
             })}
           </div>
         )}
+      </div>
+      <div
+        id="drag-preview"
+        data-testid="drag-preview"
+        aria-hidden="true"
+        className="pointer-events-none fixed -left-[9999px] top-0 z-50 rounded-md border border-accent bg-panel px-2.5 py-1 text-xs font-medium text-fg shadow-md"
+      >
+        {dragged ? getDragPreviewText(dragged.items, t) : ""}
       </div>
     </div>
   );
