@@ -281,7 +281,9 @@ value = conflict, local kept and reported; `None` with a clock is a tombstone. v
   copies a field to the clipboard, **blocks** for `--clear-secs` (default 30; the process must stay alive to own
   the X11/Wayland selection), then clears it (only if it still holds our value). `--clear-secs 0` copies and exits
   without clearing. If no clipboard is available (headless), prints a warning and the value to stdout unless `--quiet`.
-  `get` accepts the same `--copy --field --clear-secs --quiet` flags.
+  `get` accepts the same `--copy --field --clear-secs --quiet` flags. On macOS, copied passwords, TOTP codes and
+  other secrets carry the nspasteboard.org concealed/transient markers so clipboard managers and Handoff skip them;
+  usernames, URLs, notes and titles are copied as plain text.
 - `gitpass totp <vault> <query> [--pick N] [--copy] [--clear-secs 30]` prints the current RFC 6238 code and seconds
   remaining. `Item.totp` may be an `otpauth://totp/...?secret=...` URI (digits/period/algorithm SHA1|SHA256|SHA512
   honoured) or a raw base32 secret.

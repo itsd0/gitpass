@@ -17,6 +17,10 @@ impl a::Clipboard for SysClipboard {
         arboard::Clipboard::new().and_then(|mut c| c.set_text(s.to_string())).map_err(|x| anyhow::anyhow!("clipboard: {x}"))
     }
     fn get_text(&self) -> Option<String> { arboard::Clipboard::new().ok()?.get_text().ok() }
+    #[cfg(target_os = "macos")]
+    fn set_marked(&self, s: &str, markers: gitpass_pasteboard::PasteboardMarkers) -> anyhow::Result<()> {
+        gitpass_pasteboard::write(s, markers)
+    }
 }
 
 #[tauri::command] pub fn status(s: State<App>) -> R<a::UnlockState> { s.status().map_err(e) }

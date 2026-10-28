@@ -1,0 +1,15 @@
+[package]
+name = "gitpass-pasteboard"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "macOS pasteboard markers so clipboard managers skip secrets copied by gitpass"
+
+[dependencies]
+anyhow = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSPasteboard"] }
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSData", "NSString"] }
