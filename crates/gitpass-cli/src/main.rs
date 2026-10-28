@@ -198,6 +198,41 @@ enum Cmd {
         /// Show findings that were ignored by the user
         #[arg(long)] include_ignored: bool,
     },
+    /// Generate shell completion scripts for zsh, bash, or fish
+    #[command(hide = true, alias = "completion")]
+    Completions {
+        /// Shell to generate completions for (zsh, bash, fish)
+        shell: ShellTarget,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+#[value(rename_all = "lower")]
+enum ShellTarget {
+    Bash,
+    Zsh,
+    Fish,
+}
+
+impl From<ShellTarget> for clap_complete::Shell {
+    fn from(s: ShellTarget) -> Self {
+        match s {
+            ShellTarget::Bash => clap_complete::Shell::Bash,
+            ShellTarget::Zsh => clap_complete::Shell::Zsh,
+            ShellTarget::Fish => clap_complete::Shell::Fish,
+        }
+    }
+}
+
+fn print_completions(shell: ShellTarget) {
+    use clap::CommandFactory;
+    let mut cmd = Cli::command();
+    clap_complete::generate(
+        clap_complete::Shell::from(shell),
+        &mut cmd,
+        "gitpass",
+        &mut std::io::stdout(),
+    );
 }
 
 #[derive(Clone, Copy, PartialEq, clap::ValueEnum)]
@@ -477,6 +512,10 @@ fn main() {
 
 fn run() -> Result<()> {
     let cli = Cli::parse();
+    if let Cmd::Completions { shell } = &cli.cmd {
+        print_completions(*shell);
+        return Ok(());
+    }
     let root = root(&cli)?;
     match &cli.cmd {
         Cmd::Init { save_secret_key } => {
@@ -890,6 +929,7 @@ fn run() -> Result<()> {
             let sk = load_secret_key(&root)?;
             do_migrate(&root, &pw, &sk)?;
         }
+        Cmd::Completions { .. } => unreachable!(),
     }
     Ok(())
 }

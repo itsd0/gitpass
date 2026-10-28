@@ -124,6 +124,29 @@ Options and environment variables:
 - The Secret Key is read in this order: `GITPASS_SECRET_KEY`, then `<path>/secret.key` (mode 0600, git-ignored, written by `init --save-secret-key`), then an interactive prompt.
 - `GITPASS_PASSWORD` and `GITPASS_ITEM_PASSWORD` supply passwords without prompting. They are meant for scripts and tests only, because environment variables can leak.
 
+## Shell completions
+
+Generate tab completions for `zsh`, `bash`, or `fish` directly to stdout:
+
+```bash
+# zsh (place in ~/.zfunc or any directory on your $fpath)
+mkdir -p ~/.zfunc
+gitpass completions zsh > ~/.zfunc/_gitpass
+# Ensure ~/.zshrc contains:
+#   fpath=(~/.zfunc $fpath)
+#   autoload -Uz compinit && compinit
+
+# bash
+mkdir -p ~/.local/share/bash-completion/completions
+gitpass completions bash > ~/.local/share/bash-completion/completions/gitpass
+# or source on demand in ~/.bashrc:
+#   source <(gitpass completions bash)
+
+# fish
+mkdir -p ~/.config/fish/completions
+gitpass completions fish > ~/.config/fish/completions/gitpass.fish
+```
+
 ## GitHub sync
 ```bash
 cd ~/.gitpass && git init
