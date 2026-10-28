@@ -30,7 +30,7 @@ function setupDom(html) {
 }
 
 function loadScripts(w) {
-  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'content.js']) {
+  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js', 'content.js']) {
     w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
   }
 }
