@@ -613,7 +613,39 @@ fn contract_json_shapes() {
     let inp: ItemInput = serde_json::from_str(r#"{"vaultId":"x","category":"wifi","title":"t","sections":[{"id":"s","title":null,"fields":[{"id":"a","label":"A","kind":"month_year","value":"01/30"}]}]}"#).unwrap();
     assert_eq!(inp.sections[0].fields[0].kind, FieldKind::MonthYear);
     let w = serde_json::to_value(e.app.watchtower(false).unwrap()).unwrap();
-    for k in ["score", "weak", "reused", "old", "breached", "missingTotp", "expired", "expiringSoon", "checkedAt", "hibpChecked"] { assert!(w.get(k).is_some(), "{k}"); }
+    for k in ["score", "weak", "reused", "old", "breached", "missingTotp", "expired", "expiringSoon", "insecureUrls", "checkedAt", "hibpChecked"] { assert!(w.get(k).is_some(), "{k}"); }
+}
+
+#[test]
+fn watchtower_flags_insecure_http_urls() {
+    let e = env();
+    let l1 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "Insecure Forum".into(),
+        url: Some("http://forum.example.org/login".into()),
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("user")), fld("password", FieldKind::Concealed, Some("StrongPassword123!"))] }],
+        notes: None, tags: None, favorite: None
+    }).unwrap();
+    let _l2 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "Secure Site".into(),
+        url: Some("https://secure.example.org/login".into()),
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("user")), fld("password", FieldKind::Concealed, Some("StrongPassword123!"))] }],
+        notes: None, tags: None, favorite: None
+    }).unwrap();
+    let _l3 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "Localhost Site".into(),
+        url: Some("http://localhost:8080".into()),
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("user")), fld("password", FieldKind::Concealed, Some("StrongPassword123!"))] }],
+        notes: None, tags: None, favorite: None
+    }).unwrap();
+
+    let rep = e.app.watchtower(false).unwrap();
+    assert_eq!(rep.insecure_urls, vec![l1.id]);
 }
 
 #[test]

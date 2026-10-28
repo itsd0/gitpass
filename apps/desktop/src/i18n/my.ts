@@ -158,6 +158,10 @@ export const my: Partial<Record<Key, string>> = {
   "watchtower.expiredDesc": "သက်တမ်းကုန်ဆုံးသွားသော ခရက်ဒစ်ကတ်များ သို့မဟုတ် အထောက်အထားများ။",
   "watchtower.expiringSoon": "မကြာမီ သက်တမ်းကုန်တော့မည်",
   "watchtower.expiringSoonDesc": "ရက် ၃၀ အတွင်း သက်တမ်းကုန်ဆုံးမည့် အရာများ။",
+  "watchtower.insecureUrls": "လုံခြုံရေးမရှိသော ဝဘ်ဆိုက်များ",
+  "watchtower.insecureUrlsDesc": "မလုံခြုံသော http:// လိပ်စာများဖြင့် သိမ်းထားသော လော့ဂ်အင်များ။ HTTPS သို့ အဆင့်မြှင့်တင်ပါ။",
+  "watchtower.openHttps": "HTTPS ဗားရှင်းကို ဖွင့်ရန်",
+  "watchtower.editUrl": "URL ပြင်ဆင်ရန်",
   // TODO(i18n-review): native Burmese review of the new export.* wording
   "export.titleVault": "သော့ခတ်သေတ္တာကို export လုပ်ရန်",
   "export.titleSelected": "ရွေးထားသော item များကို export လုပ်ရန်",

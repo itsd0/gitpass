@@ -71,7 +71,7 @@ const logins: [string, string, string, string, number][] = [
   ['Sample Shop', 'shopper@example.com', 'https://shop.example.com', 'S@mple!Shop#2026xyz', 8],
   ['Demo Cloud Console', 'admin@example.dev', 'https://console.example.dev', 'Zx9!qLm#77pWv2', 12],
   ['Test Airline', 'flyer123', 'https://air.example.net', 'password123', 20],
-  ['Placeholder Forum', 'lurker', 'https://forum.example.io', 'qwerty', 34],
+  ['Placeholder Forum', 'lurker', 'http://forum.example.io', 'qwerty', 34],
   ['Example Social', 'demo_social', 'https://social.example.com', 'N0t-A-Real-Pass!!', 41],
   ['Mock Utility Co', 'acct-000123', 'https://utility.example.com', 'Utility#Fake#42', 60],
   ['Sandbox VPN', 'vpnuser', 'https://vpn.example.com', 'v9$Kx!2mQ@zz', 75],
@@ -324,7 +324,22 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
         }
       }
     }
-    return delay<T.WatchtowerReport>({ score: Math.max(0, 100 - weak.length * 6 - reused.length * 8 - old.length * 2), weak, reused, old, breached: hibp ? weak.slice(0, 1) : [], missingTotp, totpAvailable, passkeyAvailable, expired, expiringSoon, checkedAt: new Date().toISOString(), hibpChecked: hibp }, 200);
+    const insecureUrls = logins.filter((r) => {
+      const u = r.detail.url?.trim().toLowerCase();
+      if (!u || !u.startsWith('http://')) return false;
+      try {
+        const parsed = new URL(u);
+        const h = parsed.hostname;
+        if (h === 'localhost' || h.endsWith('.localhost') || h === 'local' || h.endsWith('.local') || h === '::1') return false;
+        if (h.startsWith('127.')) return false;
+        if (h.startsWith('10.') || h.startsWith('192.168.')) return false;
+        if (/^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(h)) return false;
+        return true;
+      } catch {
+        return false;
+      }
+    }).map((r) => r.detail.id);
+    return delay<T.WatchtowerReport>({ score: Math.max(0, 100 - weak.length * 6 - reused.length * 8 - old.length * 2), weak, reused, old, breached: hibp ? weak.slice(0, 1) : [], missingTotp, totpAvailable, passkeyAvailable, expired, expiringSoon, insecureUrls, checkedAt: new Date().toISOString(), hibpChecked: hibp }, 200);
   },
   import_file: (a: { dryRun: boolean }) => { if (!a.dryRun) onboarding = { ...onboarding, imported: true }; return delay<T.ImportResult>({ parsed: 12, added: a.dryRun ? 0 : 10, duplicates: 2, duplicateTitles: ['Example Mail', 'Example Mail'], warnings: ['row 4: skipped empty row'], categories: { login: 10, credit_card: 1, secure_note: 1 },
     preview: [{ title: 'Example Mail', category: 'login', username: 'alice@example.invalid', url: 'https://mail.example.invalid', hasPassword: true, hasTotp: true, tags: ['Work'], fields: 4, archived: false },
