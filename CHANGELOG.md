@@ -79,6 +79,12 @@
 
 ## 0.6.1 — 2026-10-27
 
+### SSH keys, SSH agent and passkeys
+- SSH Key items: generate Ed25519, import OpenSSH private keys (ed25519 / ECDSA P-256, passphrase-protected OK), public key + SHA256 fingerprint stored.
+- Desktop SSH agent at `~/Library/Application Support/gitpass/ssh-agent.sock` (identities + sign, only while unlocked, optional approve-each-use). Settings → SSH Agent shows the `IdentityAgent` line.
+- CLI: `gitpass ssh generate|import|list|public|config|agent`.
+- New `passkey` item type; extension intercepts `navigator.credentials.create/get` (MAIN world) and asks for approval; host/broker `passkey_create` / `passkey_get` (ES256, none attestation).
+
 ### Desktop
 - **Lock always returns to the unlock screen** (750bc18). The backend now emits `locked` on every lock path (idle auto-lock,
   lazy expiry inside a command, manual lock, extension/agent `lock`); any "vault is locked" command error also locks the UI.
@@ -99,12 +105,6 @@
 - CI, iOS and macOS release builds run on a self-hosted Mac runner; tests use an isolated temp `HOME`; Windows/Linux
   release builds are opt-in (`include_windows_linux`); all actions pinned to commit SHAs. macOS builds are signed with the
   self-signed "gitpass Local Signing" identity (not notarized).
-
-## Unreleased — feat/keys (SSH keys, SSH agent, passkeys)
-- SSH Key items: generate Ed25519, import OpenSSH private keys (ed25519 / ECDSA P-256, passphrase-protected OK), public key + SHA256 fingerprint stored.
-- Desktop SSH agent at `~/Library/Application Support/gitpass/ssh-agent.sock` (identities + sign, only while unlocked, optional approve-each-use). Settings → SSH Agent shows the `IdentityAgent` line.
-- CLI: `gitpass ssh generate|import|list|public|config|agent`.
-- New `passkey` item type; extension intercepts `navigator.credentials.create/get` (MAIN world) and asks for approval; host/broker `passkey_create` / `passkey_get` (ES256, none attestation).
 
 ## 0.4.0 — integrated release (keys + data + ext + gui)
 
