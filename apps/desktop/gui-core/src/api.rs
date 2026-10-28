@@ -41,9 +41,16 @@ pub struct ItemSummary {
     pub favorite: bool, pub archived: bool, pub deleted_at: Option<String>, pub tags: Vec<String>,
     pub updated_at: String, pub created_at: String, pub url: Option<String>,
     pub expiry: Option<String>,
+    /// `https://<host>/.well-known/change-password` derived from `url`; absent when there is no usable URL.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub change_password_url: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ignored_findings: Vec<String>,
 }
+/// Active Watchtower finding for the item-detail banner (description is English, like the audit text).
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FindingInfo { pub kind: String, pub description: String }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryRef { pub version: u64, pub updated_at: String }
@@ -54,6 +61,9 @@ pub struct ItemDetail {
     pub summary: ItemSummary,
     pub sections: Vec<Section>, pub notes: Option<String>, pub attachments: Vec<Attachment>,
     pub history: Vec<HistoryRef>, pub password_strength: Option<u8>, pub has_totp: bool,
+    /// Active Watchtower findings (HIBP excluded: the detail view never makes network calls).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub findings: Vec<FindingInfo>,
 }
 /// One item reference for bulk commands.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -412,13 +422,14 @@ fn summary(vid: &str, iid: &str, r: &ItemRecord) -> ItemSummary {
         updated_at: ts(&r.item.updated_at), created_at: r.created_at.map(|c| iso8601(c as i64)).unwrap_or_else(|| ts(&r.item.updated_at)),
         url: r.item.url.clone(),
         expiry: item_expiry(r),
+        change_password_url: r.item.url.as_deref().and_then(audit::change_password_url),
         ignored_findings: r.ignored_findings.clone(),
     }
 }
 
 fn has_totp(r: &ItemRecord) -> bool { r.view_sections().iter().flat_map(|s| s.fields.iter()).any(|f| f.kind == FieldKind::Totp && f.value.is_some()) }
 
-fn detail(vid: &str, iid: &str, r: &ItemRecord) -> ItemDetail {
+fn detail(vid: &str, iid: &str, r: &ItemRecord, findings: Vec<FindingInfo>) -> ItemDetail {
     let pw = r.view_sections().into_iter().flat_map(|s| s.fields).find(|f| f.kind == FieldKind::Concealed && f.value.is_some());
     ItemDetail {
         summary: summary(vid, iid, r), sections: to_dto_sections(r), notes: r.item.notes.clone(),
@@ -426,7 +437,26 @@ fn detail(vid: &str, iid: &str, r: &ItemRecord) -> ItemDetail {
         history: r.history.iter().rev().map(|h| HistoryRef { version: h.version, updated_at: ts(&h.updated_at) }).collect(),
         password_strength: if r.category == Category::Login { r.item.password.as_deref().map(strength) } else { pw.and_then(|f| f.value).map(|v| strength(&v)) },
         has_totp: has_totp(r),
+        findings,
     }
+}
+
+/// Active Watchtower findings for one item. Runs the same audit as [`App::watchtower`] (without
+/// the opt-in HIBP network call) so reuse groups match the Watchtower page.
+fn item_findings(s: &Session, vault_id: &str, item_id: &str) -> Result<Vec<FindingInfo>> {
+    let records = App::all_records(s)?;
+    let passkey_sites: BTreeSet<String> = records.iter()
+        .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
+        .filter_map(|(_, _, r)| r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value))
+        .collect();
+    let items: Vec<(String, String, ItemRecord)> = records.into_iter()
+        .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
+        .collect();
+    let rep = audit::audit_with_passkeys(&items, &passkey_sites, &AuditOpts::default(), None)?;
+    Ok(rep.per_item.into_iter()
+        .filter(|f| f.vault == vault_id && f.id == item_id)
+        .flat_map(|f| f.findings.into_iter().map(|x| FindingInfo { kind: x.kind().to_string(), description: x.to_string() }))
+        .collect())
 }
 
 fn mime_for(name: &str) -> &'static str {
@@ -649,7 +679,11 @@ impl App {
         })
     }
     pub fn get_item(&self, vault_id: &str, item_id: &str) -> Result<ItemDetail> {
-        self.with(|u| { let (_, r) = u.session.read_record(vault_id, item_id)?; Ok(detail(vault_id, item_id, &r)) })
+        self.with(|u| {
+            let (_, r) = u.session.read_record(vault_id, item_id)?;
+            let findings = item_findings(&u.session, vault_id, item_id)?;
+            Ok(detail(vault_id, item_id, &r, findings))
+        })
     }
     /// The ONLY call that returns a stored secret value.
     pub fn reveal_field(&self, vault_id: &str, item_id: &str, field_id: &str) -> Result<Zeroizing<String>> {
@@ -865,7 +899,7 @@ impl App {
     pub fn item_version(&self, vault_id: &str, item_id: &str, version: u64) -> Result<ItemDetail> {
         self.with(|u| {
             let r = u.session.item_version(vault_id, item_id, version)?;
-            let mut d = detail(vault_id, item_id, &r);
+            let mut d = detail(vault_id, item_id, &r, Vec::new());
             d.history.clear();
             d.attachments.clear();
             if let Some(h) = u.session.read_record(vault_id, item_id)?.1.history.iter().find(|h| h.version == version) { d.summary.updated_at = ts(&h.updated_at); }
@@ -943,6 +977,15 @@ impl App {
     // ---------------- tools
     pub fn generate_password(&self, length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String { generate(length, symbols, digits, words, pin) }
     pub fn password_strength(&self, password: &str) -> u8 { strength(password) }
+
+    /// The site's standard change-password URL for an item. Derived in Rust so the webview never
+    /// hands an arbitrary URL to the OS; `None` when the item has no usable http(s) URL.
+    pub fn item_change_password_url(&self, vault_id: &str, item_id: &str) -> Result<Option<String>> {
+        self.with(|u| {
+            let (_, r) = u.session.read_record(vault_id, item_id)?;
+            Ok(r.item.url.as_deref().and_then(audit::change_password_url))
+        })
+    }
 
     /// Watchtower over live login items, reusing core `audit` (HIBP only when `hibp`).
     pub fn watchtower(&self, hibp: bool) -> Result<WatchtowerReport> {
