@@ -77,6 +77,14 @@ describe('detectImportFormat pure function', () => {
     expect(detectImportFormat('Safari Passwords.csv')).toBe('apple-passwords-csv');
   });
 
+  it('ignores apple/safari in parent folders when guessing from the path', () => {
+    expect(
+      detectImportFormat('/Users/demo/Library/Mobile Documents/com~apple~CloudDocs/export.csv')
+    ).toBe('1password-csv');
+    expect(detectImportFormat('/Users/demo/Safari/export.csv')).toBe('1password-csv');
+    expect(detectImportFormat('/Users/demo/Safari/my-bitwarden.csv')).toBe('bitwarden-csv');
+  });
+
   it('falls back to filename cues when content is missing', () => {
     expect(detectImportFormat('my-bitwarden-export.csv')).toBe('bitwarden-csv');
     expect(detectImportFormat('keepass-passwords.csv')).toBe('keepass-csv');

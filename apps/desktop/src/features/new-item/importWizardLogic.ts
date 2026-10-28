@@ -140,7 +140,13 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
     if (lowerName.includes('keepass')) return 'keepass-csv';
     if (lowerName.includes('chrome') || lowerName.includes('chromium')) return 'chrome-csv';
     if (lowerName.includes('1password') || lowerName.includes('onepassword')) return '1password-csv';
-    if (lowerName.includes('apple') || lowerName.includes('safari') || /(^|[\/\\])passwords\.csv$/.test(lowerName)) {
+    // Only look at the basename: folders such as iCloud Drive (com~apple~CloudDocs)
+    // or a "Safari" directory must not force the Apple mapping on unrelated CSVs.
+    const baseName = lowerName.split(/[\/\\]/).pop() ?? lowerName;
+    if (
+      baseName.endsWith('.csv') &&
+      (baseName.includes('apple') || baseName.includes('safari') || baseName === 'passwords.csv')
+    ) {
       return 'apple-passwords-csv';
     }
     if (lowerName.endsWith('.csv')) return '1password-csv';
