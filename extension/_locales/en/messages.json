@@ -77,6 +77,12 @@
   "totpCopied": {
     "message": "TOTP copied"
   },
+  "copyTotpCode": {
+    "message": "Copy one-time code"
+  },
+  "totpUnavailable": {
+    "message": "Code unavailable"
+  },
   "notHttps": {
     "message": "not an https page"
   },
