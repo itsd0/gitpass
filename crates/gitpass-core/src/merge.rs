@@ -190,7 +190,9 @@ impl ItemRecord {
 
     /// Timestamp (unix seconds) when the password was last changed.
     /// Computed from the newest history entry or edit where the password value differs,
-    /// or the item's creation time if it has never changed.
+    /// or the item's creation time if it has never changed. When the history was truncated
+    /// (see [`crate::item::HISTORY_LIMIT`]) and every retained entry has the current password,
+    /// the oldest retained entry's `updated_at` is used instead of the creation time.
     pub fn password_changed_at(&self) -> Option<u64> {
         let cur_pw = record_password(self)?;
         let n = self.history.len();
@@ -203,6 +205,17 @@ impl ItemRecord {
                     &self.item.updated_at
                 };
                 return parse_ts(ts_str);
+            }
+        }
+        // Every retained entry has the current password. If the history was truncated (capped at
+        // HISTORY_LIMIT, or the oldest retained entry is not the item's first version), the real
+        // change may have happened after creation but before the oldest retained entry, so the
+        // oldest retained entry's timestamp is the safest bound (avoids false "Old" findings).
+        // Only fall back to the creation time when the history is complete.
+        if let Some(first) = self.history.first() {
+            let truncated = n >= crate::item::HISTORY_LIMIT || first.version > 1;
+            if truncated {
+                if let Some(t) = parse_ts(&first.updated_at) { return Some(t); }
             }
         }
         let creation = match (self.created_at, parse_ts(&self.item.updated_at)) { (Some(c), Some(u)) => Some(c.min(u)), (Some(c), None) => Some(c), (None, u) => u };
