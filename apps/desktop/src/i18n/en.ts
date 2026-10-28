@@ -347,6 +347,14 @@ export const en = {
   "expiry.expiresInMonths": "Expires in {n} months",
   "expiry.expiresInYearOne": "Expires in 1 year",
   "expiry.expiresInYears": "Expires in {n} years",
+  // password changed relative hints
+  "passwordChanged.today": "Password changed today",
+  "passwordChanged.dayOne": "Password changed 1 day ago",
+  "passwordChanged.days": "Password changed {n} days ago",
+  "passwordChanged.monthOne": "Password changed 1 month ago",
+  "passwordChanged.months": "Password changed {n} months ago",
+  "passwordChanged.yearOne": "Password changed 1 year ago",
+  "passwordChanged.years": "Password changed {n} years ago",
   // item list shell & dropdowns
   "items.allCategories": "All Categories",
   "items.sortBy": "Sort by",
