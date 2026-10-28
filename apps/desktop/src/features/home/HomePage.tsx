@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowRight, ChevronRight, Layers, Plus, Puzzle, Settings, X } from 'lucide-react';
 import type { VaultInfo } from '../../api/types';
 import { api } from '../../api/client';
+import { useT } from '../../i18n';
 import { Avatar, Button, Skeleton } from '../../ui';
 import { useApp } from '../../lib/store';
 import { Checklist } from '../onboarding/Checklist';
@@ -23,6 +24,7 @@ function VaultCard({ v, onOpen, onSettings }: { v: VaultInfo | 'all'; onOpen: ()
       <button aria-label="Open vault" onClick={onOpen} className="ml-auto p-3 text-muted hover:text-fg"><ArrowRight size={18} /></button></div></div>);
 }
 export function HomePage() {
+  const t = useT();
   const { setRoute } = useApp(); const { onboarding, patch } = useOnboarding();
   const [vaults, setVaults] = useState<VaultInfo[] | null>(null); const [err, setErr] = useState<string | null>(null); const [newOpen, setNewOpen] = useState(false);
   useEffect(() => { api.listVaults().then(setVaults).catch(e => setErr(String(e))); }, []);
@@ -36,7 +38,7 @@ export function HomePage() {
             <div className="mt-8 border-t border-border pt-3"><button className="flex items-center gap-1 text-sm text-accent hover:underline" onClick={() => patch({ extensionInstalled: true })}>{onboarding.extensionInstalled ? 'Installed' : 'Get it now'} <ChevronRight size={14} /></button></div></div>
           <div className="flex w-28 items-center justify-center bg-gradient-to-br from-teal-700 to-cyan-900"><Puzzle size={48} className="text-cyan-200" /></div></div></div></section>)}
     <section aria-label="Vaults">
-      <div className="mb-6 flex items-center justify-between"><h2 className="text-xl font-semibold">Vaults</h2><Button variant="outline" onClick={() => setNewOpen(true)}><Plus size={14} /> New Vault</Button></div>
+      <div className="mb-6 flex items-center justify-between"><h2 className="text-xl font-semibold">Vaults</h2><Button variant="outline" onClick={() => setNewOpen(true)}><Plus size={14} /> {t('vault.newTitle')}</Button></div>
       {err && <p role="alert" className="text-sm text-danger">{err}</p>}
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
         {vaults === null && !err ? [0, 1, 2].map(i => <Skeleton key={i} className="h-52" />) : (<>

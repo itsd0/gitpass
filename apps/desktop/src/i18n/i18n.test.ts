@@ -79,4 +79,11 @@ describe('i18n', () => {
     expect(importKeys.length).toBeGreaterThan(0);
     for (const d of [dictionaries.my, dictionaries.th]) for (const k of importKeys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
   });
+  it("covers all vault.* strings in my and th", () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith("vault."));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const d of [dictionaries.my, dictionaries.th]) {
+      for (const k of keys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+    }
+  });
 });

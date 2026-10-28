@@ -82,6 +82,13 @@
         "mac": "Command+Shift+X"
       },
       "description": "Open gitpass"
+    },
+    "fill-login": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "__MSG_cmdFillLogin__"
     }
   }
 }
