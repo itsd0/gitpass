@@ -436,42 +436,15 @@ fn mime_for(name: &str) -> &'static str {
     }
 }
 
-const WORDS: &[&str] = &["acorn","amber","anchor","apple","arrow","aspen","atlas","badge","bamboo","banjo","beacon","birch","bison","blossom","breeze","bridge",
-    "cactus","canyon","carbon","cedar","cherry","cinder","citrus","clover","cobalt","comet","coral","cosmos","crane","crystal","dahlia","delta",
-    "desert","dolphin","dragon","drift","eagle","ember","falcon","fern","fjord","forest","fossil","galaxy","garnet","geyser","glacier","granite",
-    "harbor","hazel","heron","horizon","indigo","island","ivory","jasmine","jungle","kayak","kernel","lagoon","lantern","lava","lemon","lilac",
-    "lotus","lunar","magnet","mango","maple","marble","meadow","meteor","mint","mosaic","nectar","nebula","oasis","ocean","olive","onyx",
-    "orbit","orchid","otter","panda","pebble","pepper","phoenix","pine","planet","plum","polar","prairie","quartz","quill","radar","raven",
-    "reef","ripple","river","rocket","saffron","salmon","sapphire","savanna","sequoia","shadow","sierra","silver","sparrow","spruce","summit","sunset",
-    "thistle","thunder","tiger","topaz","tulip","tundra","turtle","velvet","violet","walnut","willow","winter","zebra","zenith","yarrow","yonder"];
-
 /// Generate a password (`words`: `length` words from a 128-word list joined by '-', ~7 bits/word, `pin`: `length` digits).
 pub fn generate(length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String {
-    use rand::rngs::OsRng;
-    use rand::seq::SliceRandom;
-    use rand::Rng;
-    let mut rng = OsRng;
-    if pin {
-        let n = length.clamp(4, 16);
-        let dg = b"0123456789";
-        return (0..n).map(|_| *dg.choose(&mut rng).unwrap() as char).collect();
-    }
-    if words {
-        let n = length.clamp(3, 20);
-        let mut w: Vec<String> = (0..n).map(|_| WORDS.choose(&mut rng).unwrap().to_string()).collect();
-        if digits { let i = rng.gen_range(0..w.len()); w[i].push_str(&rng.gen_range(0..10).to_string()); }
-        return w.join(if symbols { "-" } else { "." });
-    }
-    let len = length.clamp(8, 128);
-    let mut pool: Vec<u8> = b"ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz".to_vec();
-    let dg = b"23456789"; let sy = b"!@#$%^&*-_=+?";
-    if digits { pool.extend_from_slice(dg); }
-    if symbols { pool.extend_from_slice(sy); }
-    loop {
-        let p: String = (0..len).map(|_| *pool.choose(&mut rng).unwrap() as char).collect();
-        let ok = (!digits || p.bytes().any(|b| dg.contains(&b))) && (!symbols || p.bytes().any(|b| sy.contains(&b)));
-        if ok { return p; }
-    }
+    // The desktop app and the browser host have always floored character passwords at 8.
+    let length = if words || pin { length } else { length.max(8) };
+    gitpass_core::generate::generate(&gitpass_core::generate::Options {
+        length, symbols, digits, words, pin,
+        separator: if symbols { '-' } else { '.' },
+        capitalize: false,
+    })
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<String> {

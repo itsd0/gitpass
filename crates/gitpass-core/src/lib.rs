@@ -4,10 +4,12 @@
 //! - [`store::Session`] (unlock / items / vaults / devices), [`store::Item`]
 //! - [`merge::merge_records`] / [`merge_items`] field-level merge
 //! - [`device`] registry, [`totp::code_now`] / [`totp_now`], [`search::rank`] / [`fuzzy_find`]
+//! - [`generate::generate`] (random password, passphrase or PIN)
 pub mod audit;
 pub mod crypto;
 pub mod device;
 pub mod fsutil;
+pub mod generate;
 pub mod keys;
 pub mod import;
 pub mod item;

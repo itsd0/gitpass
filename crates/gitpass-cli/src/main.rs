@@ -92,8 +92,35 @@ enum Cmd {
     },
     /// Remove an item
     Rm { vault: String, id: String },
-    /// Generate a random password
-    Gen { #[arg(default_value_t = 24)] len: usize },
+    /// Generate a random password, a memorable passphrase or a PIN
+    Gen {
+        /// Length of the random password (default 24)
+        len: Option<usize>,
+        /// Memorable passphrase of N words (3-20) from a 128-word list
+        #[arg(long, value_name = "N")]
+        words: Option<usize>,
+        /// Digits-only PIN of N digits (4-16)
+        #[arg(long, value_name = "N")]
+        pin: Option<usize>,
+        /// Passphrase word separator (default '-' or '.' with --no-symbols)
+        #[arg(long, value_name = "CHAR")]
+        separator: Option<char>,
+        /// Capitalize the first letter of each passphrase word
+        #[arg(long)]
+        capitalize: bool,
+        /// Exclude symbols from random passwords (with --words, use '.' between words)
+        #[arg(long)]
+        no_symbols: bool,
+        /// Exclude digits from random passwords (with --words, drop the passphrase digit)
+        #[arg(long)]
+        no_digits: bool,
+        /// Copy the result to the clipboard as concealed/transient instead of printing it
+        #[arg(long)]
+        copy: bool,
+        /// Seconds before the clipboard is cleared (0 = don't wait/clear)
+        #[arg(long, default_value_t = gitpass_cli::gen::DEFAULT_CLEAR_SECS, requires = "copy")]
+        clear_secs: u64,
+    },
     /// Run a command with secrets from gp://<vault>/<item>/<field> references injected into its
     /// environment only (never written to disk); resolved values are masked in its stdout/stderr
     Run {
@@ -665,7 +692,12 @@ fn run() -> Result<()> {
             s.remove_item(&vid, &iid)?;
             println!("removed {iid}");
         }
-        Cmd::Gen { len } => println!("{}", generate_password(*len)),
+        Cmd::Gen { len, words, pin, separator, capitalize, no_symbols, no_digits, copy, clear_secs } => {
+            let args = gitpass_cli::gen::Args { len: *len, words: *words, pin: *pin, separator: *separator,
+                capitalize: *capitalize, no_symbols: *no_symbols, no_digits: *no_digits, copy: *copy, clear_secs: *clear_secs };
+            let mut out = std::io::stdout();
+            gitpass_cli::gen::run(&args, gitpass_cli::clip::system, &mut out, std::thread::sleep)?;
+        }
         Cmd::Run { env_file, no_masking, cmd } => {
             use gitpass_cli::inject;
             let s = unlock(&cli, &root)?;

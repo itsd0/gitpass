@@ -106,7 +106,10 @@ gitpass list personal
 gitpass get personal github [--password-only]     # query = id, id prefix or title substring
 gitpass edit personal <id|query> --notes "..." [--password | --generate 20]
 gitpass rm personal <id|query>
-gitpass gen 32
+gitpass gen 32               # random password (default 24; --no-symbols, --no-digits)
+gitpass gen --words 5 [--separator .] [--capitalize]   # memorable passphrase (128-word list)
+gitpass gen --pin 6          # digits-only PIN
+gitpass gen --copy 32 [--clear-secs 30]   # copy as concealed/transient; never printed
 gitpass sync                 # lock, commit, backup, pull --rebase, push, then verify the manifest
 gitpass vault create work --description "work logins"   # name + description are encrypted
 gitpass passwd               # new master password (GITPASS_NEW_PASSWORD for scripts)
