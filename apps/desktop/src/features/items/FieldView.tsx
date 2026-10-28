@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
 import { api } from '../../api/client';
-import type { Field } from '../../api/types';
+import type { Field, ItemCategory } from '../../api/types';
+import { useT } from '../../i18n';
+import { checkExpiry, isExpiryField } from './expiry';
 import { cn } from '../../lib/utils';
-import { Button, Tooltip, toast } from '../../ui';
+import { Badge, Button, Tooltip, toast } from '../../ui';
 import { errText } from './actions';
 import { groupCardNumber } from '../../lib/cardMask';
 
@@ -12,13 +14,13 @@ const DOTS = '••••••••••';
 
 interface Ctx { vaultId: string; itemId: string }
 
-export function FieldRow({ field, ctx, strength }: { field: Field; ctx: Ctx; strength?: number | null }) {
+export function FieldRow({ field, ctx, strength, category }: { field: Field; ctx: Ctx; strength?: number | null; category?: ItemCategory }) {
   return (
     <div className="group relative border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-hover/50" data-testid={`field-${field.id}`}>
       <div className="text-xs text-label">{field.label}</div>
       {field.kind === 'concealed' ? <ConcealedValue field={field} ctx={ctx} strength={strength} />
         : field.kind === 'totp' ? <TotpValue ctx={ctx} fieldId={field.id} />
-        : <PlainValue field={field} ctx={ctx} />}
+        : <PlainValue field={field} ctx={ctx} category={category} />}
     </div>
   );
 }
@@ -31,11 +33,35 @@ function CopyBtn({ ctx, fieldId, label }: { ctx: Ctx; fieldId: string; label: st
   );
 }
 
-function PlainValue({ field, ctx }: { field: Field; ctx: Ctx }) {
+function PlainValue({ field, ctx, category }: { field: Field; ctx: Ctx; category?: ItemCategory }) {
+  const t = useT();
   const v = field.value ?? '';
+  const isExp = isExpiryField(field, category);
+  const expiry = isExp && v ? checkExpiry(v, field.kind, undefined, t) : null;
+
   return (
     <div className="flex items-start gap-2">
-      <div className={cn('min-w-0 flex-1 break-words text-[14px]', field.kind === 'multiline' && 'whitespace-pre-wrap font-mono text-xs', field.kind === 'url' && 'text-accent')}>{v || <span className="text-muted">—</span>}</div>
+      <div className={cn('min-w-0 flex-1 break-words text-[14px]', field.kind === 'multiline' && 'whitespace-pre-wrap font-mono text-xs', field.kind === 'url' && 'text-accent')}>
+        {v ? (
+          expiry ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span>{v}</span>
+              <Badge
+                tone={expiry.status === 'expired' ? 'danger' : 'warn'}
+                data-testid="expiry-pill"
+                aria-label={t(expiry.status === 'expired' ? 'expiry.expired' : 'expiry.expiresSoon')}
+              >
+                {t(expiry.status === 'expired' ? 'expiry.expired' : 'expiry.expiresSoon')}
+              </Badge>
+              <span className="text-xs text-muted" data-testid="expiry-hint">{expiry.relativeHint}</span>
+            </div>
+          ) : (
+            v
+          )
+        ) : (
+          <span className="text-muted">—</span>
+        )}
+      </div>
       <div className="flex opacity-0 transition-opacity group-hover:opacity-100">
         {field.kind === 'url' && v && <Tooltip content="Open"><a className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-hover" href={v} target="_blank" rel="noreferrer noopener" aria-label="Open link"><ExternalLink size={13} /></a></Tooltip>}
         {v && <CopyBtn ctx={ctx} fieldId={field.id} label={field.label} />}

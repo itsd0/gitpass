@@ -200,5 +200,22 @@ export const en = {
   "bulk.toast.remove_tag": "Tag removed",
   "bulk.toast.move": "Moved",
   "bulk.toast.copy": "Copied",
+  // expiry pills and relative hints
+  "expiry.expired": "Expired",
+  "expiry.expiresSoon": "Expires soon",
+  "expiry.expiredToday": "Expired today",
+  "expiry.expiredDayOne": "Expired 1 day ago",
+  "expiry.expiredDays": "Expired {n} days ago",
+  "expiry.expiredMonthOne": "Expired 1 month ago",
+  "expiry.expiredMonths": "Expired {n} months ago",
+  "expiry.expiredYearOne": "Expired 1 year ago",
+  "expiry.expiredYears": "Expired {n} years ago",
+  "expiry.expiresToday": "Expires today",
+  "expiry.expiresInDayOne": "Expires in 1 day",
+  "expiry.expiresInDays": "Expires in {n} days",
+  "expiry.expiresInMonthOne": "Expires in 1 month",
+  "expiry.expiresInMonths": "Expires in {n} months",
+  "expiry.expiresInYearOne": "Expires in 1 year",
+  "expiry.expiresInYears": "Expires in {n} years",
 } as const;
 export type Key = keyof typeof en;
