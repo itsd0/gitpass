@@ -617,5 +617,8 @@
   },
   "searchHints": {
     "message": "↑↓ นำทาง · ↵ เติมข้อมูล · ⌘C คัดลอกรหัสผ่าน · Esc ล้าง"
+  },
+  "secretKeyPh": {
+    "message": "Secret Key (A3-XXXXXX-…)"
   }
 }

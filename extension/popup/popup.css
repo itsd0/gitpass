@@ -3,8 +3,7 @@
   --bg: 30 30 32; --panel: 36 36 38; --sidebar: 41 45 52; --card: 44 44 47;
   --hover: 52 54 60; --active: 70 74 82; --border: 60 62 68;
   --fg: 236 237 240; --muted: 150 154 164; --label: 176 160 255;
-  --accent: 46 125 246; --danger: 239 83 80; --ok: 52 199 89; --warn: 245 166 35;
-  --orange: 242 140 40;
+  --accent: 242 140 40; --danger: 239 83 80; --ok: 52 199 89; --warn: 245 166 35;
   color-scheme: dark;
 }
 /* Light palette mirrors apps/desktop/src/styles.css :root. */
@@ -13,8 +12,7 @@
     --bg: 248 248 250; --panel: 255 255 255; --sidebar: 241 242 245; --card: 255 255 255;
     --hover: 232 234 239; --active: 220 224 232; --border: 222 224 230;
     --fg: 24 26 32; --muted: 104 110 124; --label: 88 86 214;
-    --accent: 26 115 232; --danger: 214 48 49; --ok: 22 163 74; --warn: 217 119 6;
-    --orange: 234 88 12;
+    --accent: 194 65 12; --danger: 214 48 49; --ok: 22 163 74; --warn: 217 119 6;
     color-scheme: light;
   }
 }
@@ -65,9 +63,9 @@ input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 
 .left { width: 280px; display: flex; flex-direction: column; border-right: 1px solid rgb(var(--border)); background: rgb(var(--panel)); }
 .filter-wrap { padding: 8px; border-bottom: 1px solid rgb(var(--border)); }
 .excepted-note { margin-top: 6px; font-size: 12px; color: rgb(var(--muted)); display: flex; align-items: center; justify-content: center; gap: 4px; }
-.excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--orange)); cursor: pointer; text-decoration: underline; }
+.excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--accent)); cursor: pointer; text-decoration: underline; }
 .empty-excepted-note { margin: 8px 0 0; font-size: 12px; color: rgb(var(--muted)); }
-.empty-excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--orange)); cursor: pointer; text-decoration: underline; }
+.empty-excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--accent)); cursor: pointer; text-decoration: underline; }
 .list { flex: 1; overflow-y: auto; outline: none; }
 .search-hints { display: flex; align-items: center; justify-content: center; height: 26px; padding: 0 8px; background: rgb(var(--sidebar)); border-top: 1px solid rgb(var(--border)); font-size: 11px; color: rgb(var(--muted)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; }
 .search-hints.hidden { display: none !important; }
@@ -79,7 +77,7 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .row .meta { min-width: 0; flex: 1; }
 .row .t { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row .u { color: rgb(var(--muted)); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.row .fav { color: rgb(var(--orange)); }
+.row .fav { color: rgb(var(--accent)); }
 .row .fav svg.ui { width: 12px; height: 12px; fill: currentColor; }
 .row .totp-mini { display: flex; align-items: center; gap: 4px; flex: none; padding: 3px 4px; border: 0; border-radius: 6px; background: none; color: rgb(var(--muted)); font: 12px/1 ui-monospace, SFMono-Regular, Menlo, monospace; cursor: pointer; }
 .row .totp-mini:hover { background: rgb(var(--hover)); color: rgb(var(--fg)); }
@@ -134,7 +132,7 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .gen-out code { flex: 1; }
 .gen-code { font-family: ui-monospace, Menlo, monospace; font-size: 16px; line-height: 1.6; word-break: break-all; }
 .gen-code .num { color: rgb(var(--warn)); font-weight: 600; }
-.gen-code .sym { color: rgb(var(--orange)); font-weight: 600; }
+.gen-code .sym { color: rgb(var(--accent)); font-weight: 600; }
 .gen-strength { display: flex; align-items: center; gap: 8px; }
 .gen-strength-bar { flex: 1; height: 4px; border-radius: 99px; background: rgb(var(--card)); overflow: hidden; }
 .gen-strength-fill { height: 100%; width: 0; border-radius: 99px; background: rgb(var(--danger)); transition: width .2s; }
@@ -208,7 +206,7 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 
 /* Inline error card */
 .inline-err { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px 16px; gap: 8px; }
-.inline-err-ic { width: 36px; height: 36px; color: rgb(var(--orange)); display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+.inline-err-ic { width: 36px; height: 36px; color: rgb(var(--accent)); display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
 .inline-err-ic svg.ui { width: 28px; height: 28px; }
 .inline-err-msg { font-size: 14px; font-weight: 600; color: rgb(var(--fg)); margin: 0; }
 .inline-err-sub { font-size: 12px; color: rgb(var(--muted)); margin: 0; word-break: break-word; max-width: 220px; }

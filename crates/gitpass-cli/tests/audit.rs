@@ -280,3 +280,18 @@ fn audit_cli_flags_passwords_containing_username_or_site_name() {
     let weak2 = item2["findings"].as_array().unwrap().iter().find(|f| f.get("weak").is_some()).unwrap();
     assert_eq!(weak2["weak"]["reason"], "contains the site name");
 }
+
+#[test]
+fn audit_help_lists_every_finding_kind() {
+    let d = tempfile::tempdir().unwrap();
+    let out = gp(&d.path().join("vault"), &["audit", "--help"], None);
+    assert!(out.status.success(), "audit --help failed: {}", String::from_utf8_lossy(&out.stderr));
+    let help = String::from_utf8_lossy(&out.stdout);
+    for kind in gitpass_core::audit::FINDING_KINDS {
+        assert!(help.contains(kind), "audit --help does not mention {kind}:\n{help}");
+    }
+    for flag in ["--hibp", "--max-age-days", "--expiring-days", "--include-ignored", "--json"] {
+        assert!(help.contains(flag), "audit --help does not mention {flag}");
+    }
+    assert!(help.contains("username or site name"), "help should mention the username/site-name rule");
+}
