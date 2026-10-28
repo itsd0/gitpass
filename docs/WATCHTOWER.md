@@ -13,16 +13,37 @@ Pwned (HIBP) breach check.
 gitpass audit                      # every vault, default thresholds (365 days)
 gitpass audit Personal             # one vault
 gitpass audit --max-age-days 180   # stricter "old password" threshold
+gitpass audit --expiring-days 60   # warn about expiry dates further ahead (default 30)
 gitpass audit --hibp               # opt in to the breach check
+gitpass audit --include-ignored    # also print findings you chose to ignore
+gitpass audit --json               # machine-readable report (counts + per-item findings)
 ```
+
+| Finding (`kind`) | Applies to | Desktop section | Affects the desktop score |
+|---|---|---|---|
+| `weak` | items with a password | Weak | yes (`bad`) |
+| `reused` | items with a password | Reused | yes (`bad`) |
+| `pwned` (opt-in HIBP) | items with a password | Breached | yes (`bad`) |
+| `old` | items with a password | Old | yes |
+| `missing_totp` | items with a URL and no TOTP secret | Missing 2FA | yes |
+| `totp_available` | same, on a site the offline list says supports TOTP | 2FA available | yes (same weight as `missing_totp`) |
+| `passkey_available` | items on a passkey-capable site with no stored passkey | Passkeys available | no |
+| `expired` / `expiring_soon` | any item with an expiry field (cards, API credentials, …) | Expired / Expiring soon | no |
+| `insecure_url` | items whose URL is plain `http://` on a public host | Insecure URLs | no |
+| `duplicate` | Login items with the same site and username in one vault | Duplicates | no |
 
 ## What gets audited
 
-Only **Login** items that are not deleted and not archived. The CLI audits the selected vault (or all
-vaults); the desktop app audits every vault at once, so reuse is detected across vaults. Passkey items
-are read (never reported) to know which sites already have a stored passkey.
+Every item that is not deleted and not archived, **except Passkey items**: logins, secure notes, credit
+cards, identities, API credentials, Wi-Fi, SSH keys, documents and so on. Each check then decides on its
+own whether it applies (see the table above), so in practice most findings come from logins. The CLI
+audits the selected vault (or all vaults; `items_checked` counts every audited item); the desktop app
+audits every vault at once, so reuse is detected across vaults. Passkey items are read (never reported)
+to know which sites already have a stored passkey.
 
 Password findings (`Weak`, `Reused`, `Pwned`, `Old`) only apply to items with a non-empty password.
+`MissingTotp` / `TotpAvailable` / `PasskeyAvailable` and `InsecureUrl` only apply to items with a
+non-empty URL; `Duplicate` only to Login items.
 Findings carry titles and counts only — **passwords, password hashes and TOTP secrets never appear in
 reports, logs or the UI**.
 
@@ -91,7 +112,7 @@ strict, so an item exactly 365 days old is not reported. Only items with a passw
 
 ## Missing TOTP and offline 2FA advice
 
-- `MissingTotp`: the login has a non-empty URL, no TOTP secret, **and** the offline list has no TOTP
+- `MissingTotp`: the item has a non-empty URL, no TOTP secret, **and** the offline list has no TOTP
   advice for the site. This is independent of whether a password is stored.
 - `TotpAvailable { site }`: the URL's host is in the bundled offline list and the site documents TOTP.
   When this advice is given the generic `MissingTotp` finding is suppressed, so each item is reported
@@ -122,6 +143,69 @@ k-anonymity lookup against `api.pwnedpasswords.com`:
 - The desktop performs the check only when the call opts in **and** the persisted setting is on
   (default: off). Without it, breach findings are empty and the report says `hibpChecked: false`.
 
+## Expired and expiring soon
+
+- **Which items:** any audited item with a field whose id is `expiry` / `expires`, or whose id or label
+  contains `expir` (case-insensitive) and that has a non-empty value. In practice: a credit card's
+  `expiry` and an API credential's `expires`, plus custom fields such as "Passport expires". Removed
+  fields are skipped. Each such field is checked on its own.
+- **Date formats** (`parse_expiry()`), interpreted in UTC:
+  - Month and year — `MM/YY`, `MM/YYYY`, `MM-YY`, `MM-YYYY`, `YYYY/MM`, `YYYY-MM` (two-digit years are
+    20YY). The item expires at the **end of that month**: `04/26` is valid until 2026-04-30 23:59:59.
+  - Day — `YYYY-MM-DD` or `YYYY/MM/DD`, valid until the end of that day (23:59:59).
+  - ISO 8601 date-time (`2026-05-10T12:00:00Z`, 19+ characters) — that exact moment.
+  - Unix seconds (9–12 digits).
+  - Anything else (free text, `May 2026`) is ignored rather than guessed.
+- `Expired { on }` when the expiry moment has passed. Otherwise `ExpiringSoon { on, days }` when the
+  whole days left are **≤ `expiring_days`** (default **30**; CLI `--expiring-days`; the desktop uses the
+  default). `on` is the field value exactly as stored.
+- Expiry findings are listed in the desktop but **do not change the score**.
+
+## Insecure URLs
+
+`InsecureUrl { url_host }`: the item's URL starts with `http://` (any case) and points to a public host.
+Not flagged: `https://` and other schemes, `localhost` / `*.localhost`, `local` / `*.local`, loopback
+addresses (`127.0.0.0/8`, `::1`) and private IPv4 ranges (`10/8`, `172.16/12`, `192.168/16`). The finding
+carries only the lowercased host: userinfo, password, port, path, query and fragment are stripped, so
+nothing secret from the URL ends up in a report. It is shown in the desktop but **does not change the
+score**.
+
+## Duplicates
+
+`Duplicate { group }`: two or more **Login** items in the **same vault** with the same site and the same
+username. The site is the URL's host (lowercased, scheme / userinfo / port / path / leading `www.`
+dropped, so `https://www.example.com/login` and `http://example.com:8080` match) and the username is
+compared trimmed and case-insensitively. Items without a username or without a URL are never grouped,
+and items in different vaults are not duplicates of each other. The group label is `<site>/<username>`.
+
+The desktop lists each group with an **Archive older** action: it keeps the most recently updated item
+and archives the rest (with Undo). Archived items are no longer audited. Duplicates **do not change the
+score** (identical passwords in a group are already counted by `Reused`).
+
+## Ignored findings
+
+A finding can be ignored per item and per kind (*Ignore this warning* in the desktop Watchtower; *Stop
+ignoring* in the Watchtower "Ignored warnings" section or in the item's detail). The choice is stored
+in the item (`ignored_findings`), syncs like any other edit, and applies to every finding of that kind
+on that item. `missing_totp` and `totp_available` count as one kind, as do `pwned` and the desktop's
+`breached`.
+
+- Ignored findings are left out of the per-kind counts, the per-item list and the desktop score.
+  The report counts them in `ignored`, and lists them in `ignored_per_item` (`--json`) / the desktop's
+  "Ignored warnings" section.
+- The CLI text output prints only the `ignored` count unless you pass **`--include-ignored`**, which adds
+  an "ignored findings" block with each ignored finding marked `(ignored)`. `--json` always contains
+  `ignored_per_item` when there are ignored findings.
+
+## Change-password links
+
+Each reported item (`per_item` and `ignored_per_item`) carries `change_password_url` when its URL allows
+it: `https://<host>[:port]/.well-known/change-password` (the W3C "well-known change password URL").
+The host's subdomain and an explicit port are kept; `http://` is upgraded to `https://`; path, query,
+fragment and userinfo are dropped. It is omitted for items without an http(s) URL, IP-address hosts,
+`localhost` / `*.local` and malformed hosts. The desktop uses it for the *Change password* action;
+whether a site honours the well-known URL is up to the site.
+
 ## Score weighting (desktop only)
 
 The desktop report turns the findings into one number, so it can only be as good as the underlying checks.
@@ -129,16 +213,17 @@ The desktop report turns the findings into one number, so it can only be as good
 ```
 bad          = number of distinct items flagged Weak, Reused or Pwned   (union: one item counts once)
 with_pw      = items with a non-empty password
-items        = all audited Login items (including password-less ones)
+items        = all audited items (every non-passkey item, including password-less ones)
 missing_totp = items flagged MissingTotp or TotpAvailable (2FA not set up; each item counts once)
 penalty      = 80 × bad / with_pw  +  10 × old / with_pw  +  10 × missing_totp / items
 score        = round(100 − penalty), clamped to 0…100
 ```
 
-- When no login has a password (`with_pw == 0`) the score stays **100** — there is nothing to weigh.
-- `passkey_available` is advice and never changes the score. A login on a TOTP-capable site is reported
-  as `totp_available` rather than `missing_totp`, but both mean "no second factor stored" and carry the
-  same weight.
+- When no audited item has a password (`with_pw == 0`) the score stays **100** — there is nothing to weigh.
+- `passkey_available`, `expired`, `expiring_soon`, `insecure_url` and `duplicate` are advice and never
+  change the score; ignored findings are left out entirely.
+- A login on a TOTP-capable site is reported as `totp_available` rather than `missing_totp`, but both
+  mean "no second factor stored" and carry the same weight.
 - Reused passwords move the score the most because each affected item counts toward `bad`.
 - Rounding is to the nearest integer (`63.33 → 63`).
 - Bands: **≥ 85 Excellent**, **≥ 70 Good**, **≥ 50 Fair**, **< 50 Poor** (same thresholds as the gauge colors).
