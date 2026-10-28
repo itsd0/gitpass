@@ -138,7 +138,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
                   variant="outline"
                   size="sm"
                   onClick={changePassword}
-                  aria-label={`${t('watchtower.changePassword')} for ${detail.title}`}
+                  aria-label={t('watchtower.changePasswordFor', { title: detail.title })}
                 >
                   <ExternalLink size={13} className="text-accent" />{t('watchtower.changePassword')}
                 </Button>

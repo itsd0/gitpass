@@ -229,6 +229,7 @@ export const th: Partial<Record<Key, string>> = {
   "watchtower.stopIgnoring": "หยุดละเว้น",
   "watchtower.moreOptions": "ตัวเลือกเพิ่มเติม",
   "watchtower.changePassword": "เปลี่ยนรหัสผ่าน",
+  "watchtower.changePasswordFor": "เปลี่ยนรหัสผ่านสำหรับ {title}",
   "detail.watchtowerIgnored": "คำเตือน Watchtower ถูกละเว้น",
   "detail.watchtowerFindings": "Watchtower พบปัญหากับรายการนี้",
   "detail.warningRestored": "กู้คืนคำเตือน Watchtower แล้ว",

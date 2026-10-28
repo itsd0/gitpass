@@ -228,6 +228,7 @@ export const en = {
   "watchtower.stopIgnoring": "Stop ignoring",
   "watchtower.moreOptions": "More options",
   "watchtower.changePassword": "Change password",
+  "watchtower.changePasswordFor": "Change password for {title}",
   "detail.watchtowerIgnored": "Watchtower warning ignored",
   "detail.watchtowerFindings": "Watchtower found issues with this item",
   "detail.warningRestored": "Watchtower warning restored",

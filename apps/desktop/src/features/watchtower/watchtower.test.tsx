@@ -3,6 +3,7 @@ import { cleanup } from '@testing-library/react';
 import { api } from '../../api/client';
 import { mock } from '../../api/mock';
 import { useSettings } from '../settings/useSettings';
+import { useI18n } from '../../i18n';
 const it3 = { id: 'i3', vaultId: 'v-private', category: 'login' as const, title: 'Fake Forum', subtitle: 'demo', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: '', createdAt: '', url: 'https://forum.example.org', changePasswordUrl: 'https://forum.example.org/.well-known/change-password' };
 const it3x = { ...it3, id: 'i3x', title: 'Fake 2FA Site', url: 'https://2fa.example.org', changePasswordUrl: 'https://2fa.example.org/.well-known/change-password' };
 const itExp = { ...it3, id: 'i-exp', category: 'credit_card' as const, title: 'Expired Card', url: null, changePasswordUrl: undefined };
@@ -19,7 +20,7 @@ beforeEach(() => {
   vi.spyOn(api, 'archiveItem').mockResolvedValue(undefined);
   vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'], passkeyAvailable: ['i3x'], expired: ['i-exp'], expiringSoon: ['i-soon'], insecureUrls: ['i-insecure'], duplicates: [['dup-older', 'dup-newer']], checkedAt: '', hibpChecked: on }; });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); useI18n.getState().setLang('en'); });
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { gaugeDash, issueIds, scoreBand } from './score';
 import { ScoreGauge, WatchtowerPage } from './WatchtowerPage';
@@ -246,5 +247,16 @@ describe('watchtower score', () => {
 
     expect(screen.getByText("No URL Login")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Change password for No URL Login" })).toBeNull();
+  });
+
+  it("localizes Change password aria-labels in Thai", async () => {
+    vi.mocked(api.getSettings).mockResolvedValue({
+      autoLockMinutes: 10, clipboardClearSecs: 30, theme: "dark", language: "th", biometricUnlock: false, quickAccessHotkey: "CmdOrCtrl+Shift+Space", hibpCheck: false,
+    });
+    const openSpy = vi.spyOn(api, "openChangePassword").mockResolvedValue(undefined);
+    render(<WatchtowerPage />);
+    await screen.findByTestId("score");
+    fireEvent.click((await screen.findAllByRole("button", { name: "เปลี่ยนรหัสผ่านสำหรับ Fake Forum" }))[0]);
+    expect(openSpy).toHaveBeenCalledWith({ vaultId: "v-private", itemId: "i3" });
   });
 });

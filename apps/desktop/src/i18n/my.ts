@@ -236,6 +236,7 @@ export const my: Partial<Record<Key, string>> = {
   "watchtower.stopIgnoring": "လျစ်လျူမရှုတော့ပါ",
   "watchtower.moreOptions": "နောက်ထပ် ရွေးချယ်စရာများ",
   "watchtower.changePassword": "စကားဝှက် ပြောင်းရန်",
+  "watchtower.changePasswordFor": "{title} အတွက် စကားဝှက် ပြောင်းရန်",
   "detail.watchtowerIgnored": "Watchtower သတိပေးချက်ကို လျစ်လျူရှုထားသည်",
   "detail.watchtowerFindings": "Watchtower သည် ဤအရာတွင် ပြဿနာများ တွေ့ရှိထားသည်",
   "detail.warningRestored": "Watchtower သတိပေးချက်ကို ပြန်လည်ထားရှိပြီးပါပြီ",

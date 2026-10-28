@@ -419,7 +419,7 @@ export function WatchtowerPage() {
                                 <button
                                   type="button"
                                   onClick={() => changePassword(item.id)}
-                                  aria-label={`${t("watchtower.changePassword")} for ${item.title}`}
+                                  aria-label={t("watchtower.changePasswordFor", { title: item.title })}
                                   className="rounded px-1 py-1 text-muted hover:text-accent focus-visible:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
                                 >
                                   <ExternalLink size={12} />
@@ -480,7 +480,7 @@ export function WatchtowerPage() {
                               type="button"
                               onClick={() => changePassword(id)}
                               className="inline-flex items-center gap-1 rounded bg-hover px-2 py-1 text-[11px] font-medium text-muted hover:bg-hover/80 hover:text-accent focus-visible:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-                              aria-label={`${t("watchtower.changePassword")} for ${it.title}`}
+                              aria-label={t("watchtower.changePasswordFor", { title: it.title })}
                             >
                               <ExternalLink size={12} />
                               <span>{t("watchtower.changePassword")}</span>
@@ -641,7 +641,7 @@ function FindingChip({
         <button
           type="button"
           onClick={onChangePassword}
-          aria-label={`${t("watchtower.changePassword")} for ${title}`}
+          aria-label={t("watchtower.changePasswordFor", { title })}
           className="px-1 py-1 text-muted hover:text-accent focus-visible:text-accent focus-visible:outline-none"
         >
           <ExternalLink size={12} />
