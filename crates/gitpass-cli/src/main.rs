@@ -1,8 +1,11 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use gitpass_core::crypto::{generate_password, KdfParams, SecretKey};
+use gitpass_core::item::{Category, FieldKind};
+use gitpass_core::merge::ItemRecord;
 use gitpass_core::store::{self, Item, Session, UnlockOpts};
 use gitpass_pasteboard::PasteboardMarkers;
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
@@ -50,15 +53,34 @@ enum Cmd {
         generate: Option<usize>,
     },
     /// Decrypt and print an item (query = id, id prefix, or fuzzy match on title/username/url)
-    Get { vault: String, query: String, /// Print only the password
-        #[arg(long)] password_only: bool,
+    Get {
+        vault: String,
+        query: String,
+        /// Print only the password
+        #[arg(long)]
+        password_only: bool,
         /// Choose the n-th (1-based) ranked candidate when several match
-        #[arg(long)] pick: Option<usize>,
+        #[arg(long)]
+        pick: Option<usize>,
         /// Copy the password (or --field) to the clipboard instead of printing the item
-        #[arg(long)] copy: bool,
-        #[arg(long, value_enum, default_value_t = Field::Password)] field: Field,
-        #[arg(long, default_value_t = 30)] clear_secs: u64,
-        #[arg(long)] quiet: bool },
+        #[arg(long)]
+        copy: bool,
+        #[arg(long, value_enum, default_value_t = Field::Password)]
+        field: Field,
+        #[arg(long, default_value_t = 30)]
+        clear_secs: u64,
+        #[arg(long)]
+        quiet: bool,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+        /// Reveal concealed field values in --json mode
+        #[arg(long)]
+        reveal: bool,
+        /// Include archived and deleted items
+        #[arg(long)]
+        include_archived: bool,
+    },
     /// Copy an item field (default password) to the clipboard; blocks up to --clear-secs, then clears it
     Copy { vault: String, query: String,
         #[arg(long, value_enum, default_value_t = Field::Password)] field: Field,
@@ -73,10 +95,29 @@ enum Cmd {
         #[arg(long)] copy: bool,
         #[arg(long, default_value_t = 30)] clear_secs: u64 },
     /// Ranked fuzzy search over title/username/url
-    Find { vault: String, query: String },
+    Find {
+        vault: String,
+        query: String,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+        /// Include archived and deleted items
+        #[arg(long)]
+        include_archived: bool,
+    },
     /// List items in a vault
-    List { vault: String, /// Fuzzy filter (ranked)
-        #[arg(long)] query: Option<String> },
+    List {
+        vault: String,
+        /// Fuzzy filter (ranked)
+        #[arg(long, short = 'q')]
+        query: Option<String>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+        /// Include archived and deleted items
+        #[arg(long)]
+        include_archived: bool,
+    },
     /// Edit an item
     Edit {
         vault: String, id: String,
@@ -400,25 +441,130 @@ fn field_value(it: &Item, f: Field) -> Result<Zeroizing<String>> {
     v.map(Zeroizing::new).ok_or_else(|| anyhow::anyhow!("item '{}' has no such field", it.title))
 }
 
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliItemSummary {
+    id: String,
+    title: String,
+    category: Category,
+    username: Option<String>,
+    url: Option<String>,
+    tags: Vec<String>,
+    favorite: bool,
+    updated_at: String,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliField {
+    label: String,
+    kind: FieldKind,
+    value: Option<String>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliItemDetail {
+    id: String,
+    title: String,
+    category: Category,
+    username: Option<String>,
+    url: Option<String>,
+    tags: Vec<String>,
+    favorite: bool,
+    archived: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    deleted_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    created_at: Option<String>,
+    updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    notes: Option<String>,
+    fields: Vec<CliField>,
+}
+
+fn ts(s: &str) -> String {
+    s.trim().parse::<i64>().map(gitpass_core::device::iso8601).unwrap_or_else(|_| s.to_string())
+}
+
+fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
+    CliItemSummary {
+        id: id.to_string(),
+        title: r.item.title.clone(),
+        category: r.category,
+        username: r.item.username.clone().filter(|u| !u.trim().is_empty()),
+        url: r.item.url.clone().filter(|u| !u.trim().is_empty()),
+        tags: r.tags.clone(),
+        favorite: r.favorite,
+        updated_at: ts(&r.item.updated_at),
+    }
+}
+
+fn item_detail(id: &str, r: &ItemRecord, reveal: bool) -> CliItemDetail {
+    let mut fields = Vec::new();
+    for section in r.view_sections() {
+        for f in section.fields {
+            let val = if f.kind.is_secret() {
+                if reveal { f.value } else { None }
+            } else {
+                f.value
+            };
+            fields.push(CliField {
+                label: f.label,
+                kind: f.kind,
+                value: val,
+            });
+        }
+    }
+    CliItemDetail {
+        id: id.to_string(),
+        title: r.item.title.clone(),
+        category: r.category,
+        username: r.item.username.clone().filter(|u| !u.trim().is_empty()),
+        url: r.item.url.clone().filter(|u| !u.trim().is_empty()),
+        tags: r.tags.clone(),
+        favorite: r.favorite,
+        archived: r.archived,
+        deleted_at: r.deleted_at.map(|d| gitpass_core::device::iso8601(d as i64)),
+        created_at: r.created_at.map(|c| gitpass_core::device::iso8601(c as i64)),
+        updated_at: ts(&r.item.updated_at),
+        notes: r.item.notes.clone().filter(|n| !n.trim().is_empty()),
+        fields,
+    }
+}
+
 /// Ranked lookup; errors (listing candidates) unless one clear winner or --pick.
-fn pick_item(s: &Session, vid: &str, query: &str, pick: Option<usize>) -> Result<(String, Item)> {
-    let r = gitpass_core::search::rank(query, s.list_items(vid)?);
-    if r.is_empty() { bail!("no item matches '{query}'"); }
+fn pick_record(s: &Session, vid: &str, query: &str, pick: Option<usize>, include_archived: bool) -> Result<(String, ItemRecord)> {
+    let mut recs = s.list_records(vid)?;
+    if !include_archived {
+        recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
+    }
+    let mut ranked: Vec<(i64, String, ItemRecord)> = recs
+        .into_iter()
+        .filter_map(|(id, _, rec)| gitpass_core::search::score_item(query, &id, &rec.item).map(|sc| (sc, id, rec)))
+        .collect();
+    ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+
+    if ranked.is_empty() {
+        bail!("no item matches '{query}'");
+    }
     let idx = match pick {
-        Some(n) if n >= 1 && n <= r.len() => n - 1,
-        Some(n) => bail!("--pick {n} out of range (1..={})", r.len()),
-        None => match gitpass_core::search::clear_winner(&r) {
+        Some(n) if n >= 1 && n <= ranked.len() => n - 1,
+        Some(n) => bail!("--pick {n} out of range (1..={})", ranked.len()),
+        None => match gitpass_core::search::clear_winner(&ranked) {
             Some(i) => i,
             None => {
-                for (i, (sc, id, it)) in r.iter().enumerate() {
-                    eprintln!("{:>3}. {id}  {}  {}  (score {sc})", i + 1, it.title, it.username.clone().unwrap_or_default());
+                for (i, (sc, id, rec)) in ranked.iter().enumerate() {
+                    eprintln!("{:>3}. {id}  {}  {}  (score {sc})", i + 1, rec.item.title, rec.item.username.clone().unwrap_or_default());
                 }
-                bail!("{} items match '{query}'; use --pick <n> or the item id", r.len());
+                bail!("{} items match '{query}'; use --pick <n> or the item id", ranked.len());
             }
         },
     };
-    let (_, id, it) = r.into_iter().nth(idx).unwrap();
-    Ok((id, it))
+    let (_, id, rec) = ranked.into_iter().nth(idx).unwrap();
+    Ok((id, rec))
+}
+
+fn pick_item(s: &Session, vid: &str, query: &str, pick: Option<usize>) -> Result<(String, Item)> {
+    let (id, rec) = pick_record(s, vid, query, pick, false)?;
+    Ok((id, rec.item.clone()))
 }
 
 /// Clipboard markers for a copied field: passwords and TOTP codes are secrets; the rest are plain.
@@ -589,13 +735,26 @@ fn run() -> Result<()> {
                 notes: notes.clone(), totp: totp.clone(), updated_at: store::now() };
             println!("added {}", s.add_item(&vid, &it)?);
         }
-        Cmd::Get { vault, query, password_only, pick, copy, field, clear_secs, quiet } => {
+        Cmd::Get { vault, query, password_only, pick, copy, field, clear_secs, quiet, json, reveal, include_archived } => {
+            if *json && *password_only {
+                bail!("cannot combine --json and --password-only");
+            }
+            if *json && *copy {
+                bail!("cannot combine --json and --copy");
+            }
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            let (id, it) = pick_item(&s, &vid, query, *pick)?;
-            if *copy { do_copy(&field_value(&it, *field)?, *clear_secs, *quiet, "field", field_markers(*field))?; }
-            else if *password_only { println!("{}", it.password.clone().unwrap_or_default()); }
-            else { print_item(&id, &it); }
+            let (id, rec) = pick_record(&s, &vid, query, *pick, *include_archived)?;
+            if *json {
+                let detail = item_detail(&id, &rec, *reveal);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else if *copy {
+                do_copy(&field_value(&rec.item, *field)?, *clear_secs, *quiet, "field", field_markers(*field))?;
+            } else if *password_only {
+                println!("{}", rec.item.password.clone().unwrap_or_default());
+            } else {
+                print_item(&id, &rec.item);
+            }
         }
         Cmd::Copy { vault, query, field, pick, clear_secs, quiet } => {
             let s = unlock(&cli, &root)?;
@@ -612,22 +771,55 @@ fn run() -> Result<()> {
             println!("{code}  ({rem}s remaining)");
             if *copy { do_copy(&code, *clear_secs, true, "TOTP code", Some(PasteboardMarkers::SECRET))?; }
         }
-        Cmd::Find { vault, query } => {
+        Cmd::Find { vault, query, json, include_archived } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            for (sc, id, it) in gitpass_core::search::rank(query, s.list_items(&vid)?) {
-                println!("{id}  {}  {}  {}  (score {sc})", it.title, it.username.clone().unwrap_or_default(), it.url.clone().unwrap_or_default());
+            let mut recs = s.list_records(&vid)?;
+            if !include_archived {
+                recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
+            }
+            let mut ranked: Vec<(i64, String, ItemRecord)> = recs
+                .into_iter()
+                .filter_map(|(id, _, rec)| gitpass_core::search::score_item(query, &id, &rec.item).map(|sc| (sc, id, rec)))
+                .collect();
+            ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+            if *json {
+                let summaries: Vec<CliItemSummary> = ranked.iter().map(|(_, id, rec)| item_summary(id, rec)).collect();
+                println!("{}", serde_json::to_string_pretty(&summaries)?);
+            } else {
+                for (sc, id, rec) in ranked {
+                    println!("{id}  {}  {}  {}  (score {sc})", rec.item.title, rec.item.username.clone().unwrap_or_default(), rec.item.url.clone().unwrap_or_default());
+                }
             }
         }
-        Cmd::List { vault, query } => {
+        Cmd::List { vault, query, json, include_archived } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            let items: Vec<(String, Item)> = match query {
-                Some(q) => gitpass_core::search::rank(q, s.list_items(&vid)?).into_iter().map(|(_, id, it)| (id, it)).collect(),
-                None => s.list_items(&vid)?,
+            let mut recs = s.list_records(&vid)?;
+            if !include_archived {
+                recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
+            }
+            let items: Vec<(String, ItemRecord)> = match query {
+                Some(q) => {
+                    let mut ranked: Vec<(i64, String, ItemRecord)> = recs
+                        .into_iter()
+                        .filter_map(|(id, _, rec)| gitpass_core::search::score_item(q, &id, &rec.item).map(|sc| (sc, id, rec)))
+                        .collect();
+                    ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+                    ranked.into_iter().map(|(_, id, rec)| (id, rec)).collect()
+                }
+                None => {
+                    recs.sort_by(|a, b| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()));
+                    recs.into_iter().map(|(id, _, rec)| (id, rec)).collect()
+                }
             };
-            for (id, it) in items {
-                println!("{id}  {}  {}", it.title, it.username.clone().unwrap_or_default());
+            if *json {
+                let summaries: Vec<CliItemSummary> = items.iter().map(|(id, rec)| item_summary(id, rec)).collect();
+                println!("{}", serde_json::to_string_pretty(&summaries)?);
+            } else {
+                for (id, rec) in items {
+                    println!("{id}  {}  {}", rec.item.title, rec.item.username.clone().unwrap_or_default());
+                }
             }
         }
         Cmd::Edit { vault, id, title, username, url, notes, totp, password, generate } => {
