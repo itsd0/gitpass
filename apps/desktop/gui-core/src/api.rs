@@ -41,6 +41,8 @@ pub struct ItemSummary {
     pub favorite: bool, pub archived: bool, pub deleted_at: Option<String>, pub tags: Vec<String>,
     pub updated_at: String, pub created_at: String, pub url: Option<String>,
     pub expiry: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ignored_findings: Vec<String>,
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -113,6 +115,16 @@ pub struct Filter {
     pub kind: FilterKind, #[serde(default)] pub vault_id: Option<String>, #[serde(default)] pub tag: Option<String>,
     #[serde(default)] pub category: Option<Category>, #[serde(default)] pub query: Option<String>, #[serde(default)] pub sort: Option<Sort>,
 }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct IgnoredFindingItem {
+    pub item_id: String,
+    pub vault_id: String,
+    pub title: String,
+    pub kind: String,
+    pub description: String,
+}
+
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct WatchtowerReport {
@@ -120,6 +132,8 @@ pub struct WatchtowerReport {
     pub missing_totp: Vec<String>, pub totp_available: Vec<String>, pub passkey_available: Vec<String>,
     pub expired: Vec<String>, pub expiring_soon: Vec<String>,
     pub insecure_urls: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ignored: Vec<IgnoredFindingItem>,
     pub checked_at: String, pub hibp_checked: bool,
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -397,6 +411,7 @@ fn summary(vid: &str, iid: &str, r: &ItemRecord) -> ItemSummary {
         updated_at: ts(&r.item.updated_at), created_at: r.created_at.map(|c| iso8601(c as i64)).unwrap_or_else(|| ts(&r.item.updated_at)),
         url: r.item.url.clone(),
         expiry: item_expiry(r),
+        ignored_findings: r.ignored_findings.clone(),
     }
 }
 
@@ -798,6 +813,8 @@ impl App {
     pub fn delete_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.soft_delete(vault_id, item_id)) }
     pub fn restore_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.restore(vault_id, item_id)) }
     pub fn purge_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.purge_item(vault_id, item_id)) }
+    pub fn ignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.ignore_finding(vault_id, item_id, kind)) }
+    pub fn unignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.unignore_finding(vault_id, item_id, kind)) }
     /// Bulk action on many items: one vault write (single manifest commit) for every action except
     /// move (copy commit + remove commit) and items with attachments on move/copy (one extra commit per file).
     pub fn bulk_items(&self, req: &BulkRequest) -> Result<BulkResult> {
@@ -957,6 +974,7 @@ impl App {
             let mut out = WatchtowerReport { score: 100, weak: vec![], reused: vec![], old: vec![], breached: vec![], missing_totp: vec![],
                 totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
                 insecure_urls: vec![],
+                ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
             let mut groups: BTreeMap<usize, Vec<String>> = BTreeMap::new();
             for f in &rep.per_item {
@@ -976,6 +994,17 @@ impl App {
                 }
             }
             out.reused = groups.into_values().collect();
+            for f in &rep.ignored_per_item {
+                for x in &f.findings {
+                    out.ignored.push(IgnoredFindingItem {
+                        item_id: f.id.clone(),
+                        vault_id: f.vault.clone(),
+                        title: f.title.clone(),
+                        kind: x.kind().to_string(),
+                        description: x.to_string(),
+                    });
+                }
+            }
             let with_pw = items.iter().filter(|(_, _, i)| i.item.password.as_deref().is_some_and(|p| !p.is_empty())).count();
             if with_pw > 0 {
                 let bad: BTreeSet<&String> = out.weak.iter().chain(out.breached.iter()).chain(out.reused.iter().flatten()).collect();

@@ -168,6 +168,8 @@ enum Cmd {
         #[arg(long, default_value_t = 365)] max_age_days: u64,
         #[arg(long, default_value_t = 30)] expiring_days: u64,
         #[arg(long)] json: bool,
+        /// Show findings that were ignored by the user
+        #[arg(long)] include_ignored: bool,
     },
     /// Generate shell completion scripts for zsh, bash, or fish
     #[command(hide = true, alias = "completion")]
@@ -844,7 +846,7 @@ fn run() -> Result<()> {
             #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(out, std::fs::Permissions::from_mode(0o600))?; }
             println!("exported {} item(s) to {}{}", items.len(), out.display(), if *encrypted { " (encrypted)" } else { " (PLAINTEXT)" });
         }
-        Cmd::Audit { vault, hibp, max_age_days, expiring_days, json } => {
+        Cmd::Audit { vault, hibp, max_age_days, expiring_days, json, include_ignored } => {
             use gitpass_core::{audit, passkey, Category};
             let s = unlock(&cli, &root)?;
             let vids: Vec<(String, String)> = match vault {
@@ -867,19 +869,27 @@ fn run() -> Result<()> {
                 all.extend(rows);
             }
             let client = UreqHibp(ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(15)).build());
-            let opts = audit::AuditOpts { max_age_days: *max_age_days, expiring_days: *expiring_days, ..Default::default() };
+            let opts = audit::AuditOpts { max_age_days: *max_age_days, expiring_days: *expiring_days, include_ignored: *include_ignored, ..Default::default() };
             let r = audit::audit_with_passkeys(&all, &passkeys, &opts, if *hibp { Some(&client) } else { None })?;
             if *json {
                 println!("{}", serde_json::to_string_pretty(&r)?);
                 return Ok(());
             }
             println!("audited {} item(s) in {} vault(s){}", r.items_checked, vids.len(), if *hibp { " (with HIBP)" } else { "" });
-            println!("  weak: {}  reused: {} ({} group(s))  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}",
+            println!("  weak: {}  reused: {} ({} group(s))  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}  ignored: {}",
                 r.weak, r.reused, r.reused_groups, r.old, r.expired, r.expiring_soon, r.insecure_urls, r.missing_totp, r.totp_available, r.passkey_available,
-                if *hibp { format!("  pwned: {}", r.pwned) } else { String::new() });
+                if *hibp { format!("  pwned: {}", r.pwned) } else { String::new() },
+                r.ignored);
             for f in &r.per_item {
                 println!("\n[{}] {} ({})", f.vault, f.title, &f.id[..f.id.len().min(8)]);
                 for x in &f.findings { println!("  - {x}"); }
+            }
+            if *include_ignored && !r.ignored_per_item.is_empty() {
+                println!("\nignored findings ({}):", r.ignored);
+                for f in &r.ignored_per_item {
+                    println!("\n[{}] {} ({}) [ignored]", f.vault, f.title, &f.id[..f.id.len().min(8)]);
+                    for x in &f.findings { println!("  - {x} (ignored)"); }
+                }
             }
         }
         Cmd::Migrate => {

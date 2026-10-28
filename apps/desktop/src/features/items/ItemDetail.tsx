@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Archive, ArchiveRestore, ChevronRight, Copy, Download, FolderInput, MoreVertical, Paperclip, Pencil, Plus, RotateCcw, Share2, Star, Trash2, Users } from 'lucide-react';
+import { Archive, ArchiveRestore, ChevronRight, Copy, Download, EyeOff, FolderInput, MoreVertical, Paperclip, Pencil, Plus, RotateCcw, Share2, Star, Trash2, Users } from 'lucide-react';
 import { api } from '../../api/client';
 import type { ItemDetail as Detail, VaultInfo } from '../../api/types';
 import { useApp } from '../../lib/store';
@@ -118,6 +118,35 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
               </Button></Tooltip>}
           </div>
           {deleted && <div className="mb-4 rounded-lg border border-danger/40 bg-danger/10 px-4 py-2 text-sm">{t('detail.inTrash')}</div>}
+          {detail.ignoredFindings && detail.ignoredFindings.length > 0 && (
+            <div
+              className="mb-4 flex items-center justify-between rounded-lg border border-border bg-card/60 px-4 py-2 text-xs text-muted"
+              data-testid="watchtower-ignored-note"
+            >
+              <div className="flex items-center gap-1.5">
+                <EyeOff size={14} className="text-muted" />
+                <span>{t('detail.watchtowerIgnored')}</span>
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    for (const k of detail.ignoredFindings ?? []) {
+                      await api.unignoreFinding({ vaultId: detail.vaultId, itemId: detail.id, kind: k });
+                    }
+                    toast(t('detail.warningRestored'));
+                    refreshItems();
+                    selectItem(detail.id);
+                  } catch (e) {
+                    toast(errText(e), 'danger');
+                  }
+                }}
+                className="font-medium text-accent hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+              >
+                {t('common.undo')}
+              </button>
+            </div>
+          )}
 
           {detail.sections.filter((s) => s.fields.length).map((s) => (
             <div key={s.id} className="mb-4">

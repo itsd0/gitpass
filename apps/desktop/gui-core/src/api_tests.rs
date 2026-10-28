@@ -1087,3 +1087,64 @@ fn tag_rename_merge_delete_and_lifecycle() {
     e.app.restore_item(&e.vault, &item3.id).unwrap();
     assert_eq!(e.app.list_tags().unwrap(), vec!["gamma"]);
 }
+
+#[test]
+fn watchtower_ignore_stop_ignoring_and_score_change() {
+    let e = env();
+    // Item with weak password and insecure HTTP url
+    let item = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "Test Insecure Router".into(),
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                Field { id: "username".into(), label: "username".into(), kind: FieldKind::Text, value: Some("admin".into()), masked: None },
+                Field { id: "password".into(), label: "password".into(), kind: FieldKind::Concealed, value: Some("123456".into()), masked: None },
+            ],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+        url: Some("http://router.example.com/admin".into()),
+    }).unwrap();
+
+    // 1. Initial watchtower run: weak, insecureUrls, and score penalized (< 100)
+    let rep1 = e.app.watchtower(false).unwrap();
+    assert!(rep1.weak.contains(&item.id));
+    assert!(rep1.insecure_urls.contains(&item.id));
+    assert!(rep1.ignored.is_empty());
+    let score_before = rep1.score;
+    assert!(score_before < 100);
+
+    // 2. Ignore weak warning
+    e.app.ignore_finding(&e.vault, &item.id, "weak").unwrap();
+    let rep2 = e.app.watchtower(false).unwrap();
+    assert!(!rep2.weak.contains(&item.id));
+    assert!(rep2.insecure_urls.contains(&item.id));
+    assert_eq!(rep2.ignored.len(), 1);
+    assert_eq!(rep2.ignored[0].item_id, item.id);
+    assert_eq!(rep2.ignored[0].kind, "weak");
+    assert!(rep2.score > score_before); // score improved
+
+    // 3. Ignore insecure_url warning as well
+    e.app.ignore_finding(&e.vault, &item.id, "insecure_url").unwrap();
+    let rep3 = e.app.watchtower(false).unwrap();
+    assert!(!rep3.weak.contains(&item.id));
+    assert!(!rep3.insecure_urls.contains(&item.id));
+    assert_eq!(rep3.ignored.len(), 2);
+
+    // Verify item detail contains ignored_findings
+    let det = e.app.get_item(&e.vault, &item.id).unwrap();
+    assert_eq!(det.summary.ignored_findings, vec!["weak", "insecure_url"]);
+
+    // 4. Stop ignoring "weak"
+    e.app.unignore_finding(&e.vault, &item.id, "weak").unwrap();
+    let rep4 = e.app.watchtower(false).unwrap();
+    assert!(rep4.weak.contains(&item.id));
+    assert!(!rep4.insecure_urls.contains(&item.id));
+    assert_eq!(rep4.ignored.len(), 1);
+    assert_eq!(rep4.ignored[0].kind, "insecure_url");
+    assert_eq!(rep4.score, score_before); // score back to initial penalized score
+}
