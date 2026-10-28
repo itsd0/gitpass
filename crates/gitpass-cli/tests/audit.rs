@@ -27,7 +27,7 @@ fn audit_json_includes_new_findings_and_titles_only() {
     let vid = s.resolve_vault("Personal").unwrap();
 
     let secret_card_num = "4111222233334444";
-    let secret_cvv = "999";
+    let secret_cvv = "999888";
     let secret_api_key = "sk_test_SUPER_SECRET_KEY_12345";
 
     // 1. Expired credit card (past month: 01/20)
@@ -98,4 +98,53 @@ fn audit_json_includes_new_findings_and_titles_only() {
     assert!(text.contains("Expired Visa Card"));
     assert!(text.contains("expired on 01/20"));
     assert!(text.contains("Expiring Stripe Key"));
+}
+
+#[test]
+fn audit_cli_respects_ignored_findings_and_flag() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Personal"], None).status.success());
+
+    let sk = gitpass_core::crypto::SecretKey::parse(&std::fs::read_to_string(root.join("secret.key")).unwrap()).unwrap();
+    let s = Session::unlock(&root, "fake-master-pw-123", &sk).unwrap();
+    let vid = s.resolve_vault("Personal").unwrap();
+
+    let mut it = Item::default();
+    it.title = "Internal Router".into();
+    it.url = Some("http://public-router.example.com".into());
+    it.password = Some("SuperSecurePassword123!".into());
+    let mut rec = ItemRecord::new(it);
+    rec.ignore_finding("insecure_url");
+    let id = s.add_record(&vid, rec).unwrap();
+
+    // 1. Regular audit: ignored count is 1, insecure_url is 0, item is NOT listed under active findings
+    let out = gp(&root, &["audit"], None);
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("insecure URLs: 0"));
+    assert!(text.contains("ignored: 1"));
+    assert!(!text.contains("saved with unencrypted HTTP URL"));
+    assert!(!text.contains("ignored findings ("));
+
+    // 2. Audit with --include-ignored: ignored finding details are printed
+    let out_inc = gp(&root, &["audit", "--include-ignored"], None);
+    assert!(out_inc.status.success());
+    let text_inc = String::from_utf8_lossy(&out_inc.stdout);
+    assert!(text_inc.contains("insecure URLs: 0"));
+    assert!(text_inc.contains("ignored: 1"));
+    assert!(text_inc.contains("ignored findings (1):"));
+    assert!(text_inc.contains("Internal Router"));
+    assert!(text_inc.contains("saved with unencrypted HTTP URL (public-router.example.com) (ignored)"));
+
+    // 3. JSON output
+    let out_json = gp(&root, &["audit", "--json"], None);
+    assert!(out_json.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_json.stdout)).unwrap();
+    assert_eq!(v["insecure_urls"], 0);
+    assert_eq!(v["ignored"], 1);
+    let ignored_items = v["ignored_per_item"].as_array().unwrap();
+    assert_eq!(ignored_items.len(), 1);
+    assert_eq!(ignored_items[0]["id"], id);
 }
