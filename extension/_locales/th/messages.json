@@ -53,6 +53,48 @@
   "symbols": {
     "message": "สัญลักษณ์"
   },
+  "genModeRandom": {
+    "message": "สุ่ม"
+  },
+  "genModeMemorable": {
+    "message": "จำง่าย"
+  },
+  "genModePin": {
+    "message": "PIN"
+  },
+  "genWords": {
+    "message": "จำนวนคำ"
+  },
+  "genIncludeDigits": {
+    "message": "ใส่ตัวเลข"
+  },
+  "genIncludeSymbols": {
+    "message": "ใส่สัญลักษณ์"
+  },
+  "genSaveAsLogin": {
+    "message": "บันทึกเป็น Login ใหม่…"
+  },
+  "genOpen": {
+    "message": "สร้างรหัสผ่าน…"
+  },
+  "genFilled": {
+    "message": "กรอกในหน้านี้แล้ว"
+  },
+  "genFillFailed": {
+    "message": "ไม่สามารถกรอกในหน้านี้ได้"
+  },
+  "genStrengthWeak": {
+    "message": "อ่อน"
+  },
+  "genStrengthFair": {
+    "message": "พอใช้"
+  },
+  "genStrengthGood": {
+    "message": "ดี"
+  },
+  "genStrengthExcellent": {
+    "message": "ยอดเยี่ยม"
+  },
   "copy": {
     "message": "คัดลอก"
   },

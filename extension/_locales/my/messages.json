@@ -53,6 +53,48 @@
   "symbols": {
     "message": "သင်္ကေတများ"
   },
+  "genModeRandom": {
+    "message": "ကျပန်း"
+  },
+  "genModeMemorable": {
+    "message": "မှတ်မိလွယ်"
+  },
+  "genModePin": {
+    "message": "PIN"
+  },
+  "genWords": {
+    "message": "စကားလုံးများ"
+  },
+  "genIncludeDigits": {
+    "message": "ဂဏန်းများ ထည့်ရန်"
+  },
+  "genIncludeSymbols": {
+    "message": "သင်္ကေတများ ထည့်ရန်"
+  },
+  "genSaveAsLogin": {
+    "message": "Login အသစ်အဖြစ် သိမ်းရန်…"
+  },
+  "genOpen": {
+    "message": "စကားဝှက် ထုတ်ရန်…"
+  },
+  "genFilled": {
+    "message": "ဤစာမျက်နှာတွင် ဖြည့်ပြီးပါပြီ"
+  },
+  "genFillFailed": {
+    "message": "ဤစာမျက်နှာတွင် ဖြည့်၍ မရပါ"
+  },
+  "genStrengthWeak": {
+    "message": "အားနည်း"
+  },
+  "genStrengthFair": {
+    "message": "အသင့်အတင့်"
+  },
+  "genStrengthGood": {
+    "message": "ကောင်း"
+  },
+  "genStrengthExcellent": {
+    "message": "အလွန်ကောင်း"
+  },
   "copy": {
     "message": "ကူးယူရန်"
   },

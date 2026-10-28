@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { JSDOM } = require('jsdom');
 const root = path.join(__dirname, '..');
-const SCRIPTS = ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/popup.js'];
+const SCRIPTS = ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/generator.js', 'popup/popup.js'];
 
 const item = (id, title, hasTotp) => ({
   id, vault_id: 'v1', vault_name: 'Personal', category: 'login', title, subtitle: 'me@example.invalid',
