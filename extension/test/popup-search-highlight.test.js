@@ -13,7 +13,7 @@ const { JSDOM } = require('jsdom');
 const V = require('../popup/view.js');
 
 const root = path.join(__dirname, '..');
-const SCRIPTS = ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/popup.js'];
+const SCRIPTS = ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/generator.js', 'popup/popup.js'];
 
 const ITEMS = [
   { id: 'v1:i1', vault_id: 'v1', vault_name: 'Personal', category: 'login', title: 'GitHub', subtitle: 'alice@github.com', url: 'https://github.com', favorite: false },
