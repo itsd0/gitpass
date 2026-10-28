@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, Eye, EyeOff, ExternalLink } from 'lucide-react';
+import { Copy, Eye, EyeOff, ExternalLink, Maximize2 } from 'lucide-react';
 import { api } from '../../api/client';
 import type { Field, ItemCategory } from '../../api/types';
 import { useT } from '../../i18n';
 import { checkExpiry, isExpiryField } from './expiry';
+import { LargeTypeDialog } from './LargeType';
 import { cn } from '../../lib/utils';
 import { Badge, Button, Tooltip, toast } from '../../ui';
 import { errText } from './actions';
@@ -72,10 +73,25 @@ function PlainValue({ field, ctx, category }: { field: Field; ctx: Ctx; category
 
 /** Concealed values are never in the payload; only fetched via revealField, auto-hidden after 30s. */
 export function ConcealedValue({ field, ctx, strength }: { field: Field; ctx: Ctx; strength?: number | null }) {
+  const t = useT();
   const [revealed, setRevealed] = useState<string | null>(null);
+  const [largeTypeOpen, setLargeTypeOpen] = useState(false);
+  const [largeTypeValue, setLargeTypeValue] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>();
+  const containerRef = useRef<HTMLDivElement>(null);
+  const largeTypeBtnRef = useRef<HTMLButtonElement>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
+  const wasOpenRef = useRef(false);
+  useEffect(() => {
+    if (wasOpenRef.current && !largeTypeOpen) {
+      lastFocusedRef.current?.focus();
+    }
+    wasOpenRef.current = largeTypeOpen;
+  }, [largeTypeOpen]);
+
   useEffect(() => () => { clearTimeout(timer.current); }, []);
-  useEffect(() => { setRevealed(null); }, [ctx.itemId, field.id]);
+  useEffect(() => { setRevealed(null); setLargeTypeOpen(false); }, [ctx.itemId, field.id]);
+
   async function toggle() {
     if (revealed !== null) { setRevealed(null); return; }
     try {
@@ -83,11 +99,54 @@ export function ConcealedValue({ field, ctx, strength }: { field: Field; ctx: Ct
       setRevealed(v); clearTimeout(timer.current); timer.current = setTimeout(() => setRevealed(null), REVEAL_MS);
     } catch (e) { toast(errText(e), 'danger'); }
   }
+
+  async function openLargeType() {
+    lastFocusedRef.current = (document.activeElement && document.activeElement !== document.body ? document.activeElement as HTMLElement : null) || largeTypeBtnRef.current || containerRef.current;
+    
+    let v = revealed;
+    if (v === null) {
+      try {
+        v = await api.revealField({ ...ctx, fieldId: field.id });
+      } catch (e) {
+        toast(errText(e), 'danger');
+        return;
+      }
+    }
+    setLargeTypeValue(v);
+    setLargeTypeOpen(true);
+  }
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.altKey && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'l') {
+      e.preventDefault();
+      e.stopPropagation();
+      void openLargeType();
+    }
+  };
+
   return (
-    <div>
+    <div
+      ref={containerRef}
+      tabIndex={0}
+      onKeyDown={onKeyDown}
+      className="outline-none focus-within:ring-1 focus-within:ring-accent/40 rounded px-1 -mx-1"
+      data-testid={`concealed-field-${field.id}`}
+    >
       <div className="flex items-center gap-2">
         <div className={cn('min-w-0 flex-1 break-all font-mono text-[14px]', revealed === null && 'tracking-widest')} data-testid="concealed-value">{revealed === null ? (field.masked || DOTS) : field.masked ? groupCardNumber(revealed) : revealed}</div>
         <div className="flex opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+          <Tooltip content={t('largetype.action')}>
+            <Button
+              ref={largeTypeBtnRef}
+              variant="ghost"
+              size="iconSm"
+              aria-label={t('largetype.ariaField', { label: field.label })}
+              data-testid="large-type-trigger"
+              onClick={() => void openLargeType()}
+            >
+              <Maximize2 size={13} />
+            </Button>
+          </Tooltip>
           <Tooltip content={revealed === null ? 'Reveal' : 'Conceal'}>
             <Button variant="ghost" size="iconSm" aria-label={revealed === null ? `Reveal ${field.label}` : `Conceal ${field.label}`} onClick={toggle}>{revealed === null ? <Eye size={13} /> : <EyeOff size={13} />}</Button>
           </Tooltip>
@@ -95,6 +154,15 @@ export function ConcealedValue({ field, ctx, strength }: { field: Field; ctx: Ct
         </div>
       </div>
       {strength != null && /password/i.test(field.label) && <StrengthMeter score={strength} />}
+      {largeTypeOpen && largeTypeValue !== null && (
+        <LargeTypeDialog
+          open={largeTypeOpen}
+          onOpenChange={setLargeTypeOpen}
+          title={field.label}
+          value={largeTypeValue}
+          triggerRef={lastFocusedRef}
+        />
+      )}
     </div>
   );
 }

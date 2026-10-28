@@ -395,4 +395,11 @@ export const my: Partial<Record<Key, string>> = {
   "settings.repoHelp": "GitHub ပေါ်ရှိ source code နှင့် စာရွက်စာတမ်းများကို ကြည့်ပါ",
   "settings.issuesHelp": "GitHub တွင် ပြဿနာများကို အစီရင်ခံပါ သို့မဟုတ် အကြံပြုပါ",
 
+  // large type view
+  'largetype.action': 'စာလုံးကြီးဖြင့် ကြည့်ရန်',
+  'largetype.ariaField': '{label} ကို စာလုံးကြီးဖြင့် ကြည့်ရန်',
+  'largetype.close': 'ပိတ်ရန်',
+  'largetype.label': 'စာလုံးကြီးမြင်ကွင်း',
+  'largetype.title': 'စာလုံးကြီးမြင်ကွင်း',
+  'cmd.showLargeType': 'စကားဝှက်ကို စာလုံးကြီးဖြင့် ကြည့်ရန်',
 };
