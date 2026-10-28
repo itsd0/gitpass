@@ -724,5 +724,29 @@
         "content": "$1"
       }
     }
+  },
+  "cmdFillLogin": {
+    "message": "ဤစာမျက်နှာအတွက် အကိုက်ညီဆုံး လော့ဂ်အင်ကို ဖြည့်ပါ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csCmdAppNotRunning": {
+    "message": "gitpass အက်ပ်ကို ဖွင့်ပြီး ထပ်ကြိုးစားပါ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csCmdNoForm": {
+    "message": "ဤစာမျက်နှာတွင် လော့ဂ်အင် ဖောင် မတွေ့ပါ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csCmdFailed": {
+    "message": "gitpass သည် ဤစာမျက်နှာကို ဖြည့်၍ မရပါ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optFillShortcut": {
+    "message": "လော့ဂ်အင် ဖြည့်ရန်",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optFillShortcutBody": {
+    "message": "popup မဖွင့်ဘဲ လက်ရှိစာမျက်နှာအတွက် အကိုက်ညီဆုံး လော့ဂ်အင်ကို ဖြည့်ပါသည်။",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   }
 }

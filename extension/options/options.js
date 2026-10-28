@@ -259,12 +259,15 @@ async function initSettings() {
 
 async function renderShortcut() {
   const shortcutEl = $('shortcut');
-  if (shortcutEl) {
+  const fillShortcutEl = $('fill-shortcut');
+  if (shortcutEl || fillShortcutEl) {
     try {
       const r = await GitpassOnboard.send({ type: 'onboard-shortcut' });
-      shortcutEl.textContent = r.shortcut || 'not set';
+      if (shortcutEl) shortcutEl.textContent = r.shortcut || 'not set';
+      if (fillShortcutEl) fillShortcutEl.textContent = r.fillShortcut || 'not set';
     } catch (_) {
-      shortcutEl.textContent = 'Cmd+Shift+X';
+      if (shortcutEl) shortcutEl.textContent = 'Cmd+Shift+X';
+      if (fillShortcutEl) fillShortcutEl.textContent = 'Cmd+Shift+L';
     }
   }
 

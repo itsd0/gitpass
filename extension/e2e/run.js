@@ -934,6 +934,43 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       await wa.close();
     }
 
+    // --- ⌘⇧L / Ctrl+Shift+L "fill-login" command (#124). Playwright can't press extension shortcuts, so the
+    // test calls the same handler chrome.commands.onCommand runs, from the service worker.
+    if (!REAL) {
+      const ctrl = (o) => fs.writeFileSync(path.join(mockDir, 'control.json'), JSON.stringify({ ...o, seq: Date.now() }));
+      const runCmd = () => sw.evaluate(() => globalThis.gitpassFillLoginCommand()).catch((e) => ({ error: e.message }));
+      const vals = () => page.evaluate(() => [document.getElementById('u').value, document.getElementById('p').value]);
+      ctrl({ unlocked: true, only_match_ids: ['v1:i1'] }); await sleep(400);
+      await page.goto(LOGIN); await page.bringToFront(); await sleep(800);
+      const one = await runCmd();
+      const filled = await until(async () => { const v = await vals(); return v[0] === 'alice@example.com' && v[1] === 'Corr3ct-H0rse-Battery' && v; }, T(4000));
+      rec('fill-login command: one match fills username + password', one && one.action === 'fill' && !!filled, `${JSON.stringify(one)} values=${JSON.stringify(await vals())}`);
+
+      ctrl({ unlocked: true, only_match_ids: ['v1:i1', 'v1:cmd2'], add_item: { id: 'v1:cmd2', category: 'login', title: 'Second Command Login', subtitle: 'bob@example.com', url: 'http://localhost', favorite: false, _u: 'bob@example.com', _p: 'FAKE-second-pass' } }); await sleep(400);
+      await page.goto(LOGIN); await page.bringToFront(); await sleep(800);
+      const two = await runCmd();
+      const menu = await until(async () => { const t = await shadowText(page); return /Localhost Test Login/.test(t) && /Second Command Login/.test(t) && t; }, T(4000));
+      const empty = (await vals()).every((v) => v === '');
+      rec('fill-login command: two matches open the inline menu, nothing filled', two && two.action === 'menu' && !!menu && empty, `${JSON.stringify(two)} menu=${!!menu} empty=${empty}`);
+      if (menu) { const row = await until(async () => { const h = await findInShadow(page, /Second Command Login/); return h.length && h[0]; }, T(2000)); if (row) await page.mouse.click(row.x, row.y); }
+      const picked = await until(async () => { const v = await vals(); return v[0] === 'bob@example.com' && v; }, T(4000));
+      rec('fill-login command: picking from the menu fills that login', !!picked, JSON.stringify(await vals()));
+
+      ctrl({ unlocked: false }); await sleep(400);
+      await page.goto(LOGIN); await page.bringToFront(); await sleep(800);
+      const locked = await runCmd();
+      const lockedNote = await until(async () => { const t = await shadowText(page); return /Unlock gitpass first/.test(t) && t; }, T(4000));
+      rec('fill-login command: locked shows the in-page notice, nothing filled', locked && locked.action === 'notice' && locked.code === 'locked' && !!lockedNote && (await vals()).every((v) => v === ''), `${JSON.stringify(locked)} notice=${!!lockedNote}`);
+
+      const pagesBefore = ctx.pages().length;
+      const ext = await ctx.newPage(); await ext.goto(`${EXT}/options/options.html`); await ext.bringToFront(); await sleep(300);
+      const ignored = await runCmd();
+      rec('fill-login command: extension/non-http page is ignored without errors', ignored && ignored.action === 'ignore', JSON.stringify(ignored));
+      await ext.close();
+      rec('fill-login command never opened a gitpass window', ctx.pages().length === pagesBefore, `pages=${ctx.pages().length}`);
+      ctrl({ unlocked: true, delete_item: 'v1:cmd2' }); await sleep(400);
+    }
+
     // --- "Never for this site" banner flow (#56)
     await page.goto(LOGIN); await sleep(1000);
     await page.fill('#u', 'neveruser@example.com'); await page.fill('#p', 'Never-Pass-123'); await page.click('#go');
