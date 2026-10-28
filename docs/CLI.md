@@ -175,10 +175,10 @@ gitpass ssh agent                                  # foreground; the desktop app
 ```
 
 `ssh generate` creates an Ed25519 key in a new SSH Key item. `ssh import` reads an
-OpenSSH private key (ed25519 or ECDSA P-256; a passphrase comes from
-`GITPASS_SSH_PASSPHRASE` or a prompt). `ssh public` prints the `authorized_keys` line;
-`ssh config` prints the `~/.ssh/config` `IdentityAgent` snippet (both `config` and
-`agent` accept `--socket PATH`).
+OpenSSH private key (ed25519 or ECDSA P-256/P-384; RSA keys are rejected; a passphrase
+comes from `GITPASS_SSH_PASSPHRASE` or a prompt). `ssh public` prints the
+`authorized_keys` line; `ssh config` prints the `~/.ssh/config` `IdentityAgent` snippet
+(both `config` and `agent` accept `--socket PATH`).
 
 ## Devices and identity
 
@@ -207,8 +207,9 @@ gitpass audit --hibp --json
 gitpass audit --include-ignored
 ```
 
-`audit` checks live login items for weak, reused and old passwords, missing TOTP,
-insecure URLs, duplicates, and expired or expiring credentials. `--hibp` opts in to Have I
+`audit` checks live items: weak, reused and old passwords, missing TOTP, insecure URLs
+and duplicates on login items, plus expired or expiring credentials on cards and API
+credentials; it also reports offline 2FA/passkey availability. `--hibp` opts in to Have I
 Been Pwned k-anonymity checks (only five hex characters of a SHA-1 leave the machine).
 `--max-age-days` defaults to 365 and `--expiring-days` to 30. The scoring and checks are
 documented in [WATCHTOWER.md](WATCHTOWER.md).
