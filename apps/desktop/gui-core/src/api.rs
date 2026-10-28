@@ -859,6 +859,54 @@ impl App {
         self.with(|u| Ok(Self::all_records(&u.session)?.iter().filter(|(_, _, r)| r.deleted_at.is_none())
             .flat_map(|(_, _, r)| r.tags.clone()).collect::<BTreeSet<_>>().into_iter().collect()))
     }
+    pub fn rename_tag(&self, old: &str, new: &str) -> Result<BulkResult> {
+        let old = old.trim();
+        let new = new.trim();
+        if old.is_empty() { bail!("tag name cannot be empty"); }
+        if new.is_empty() { bail!("new tag name cannot be empty"); }
+        if old == new { return Ok(BulkResult { count: 0, items: vec![] }); }
+        self.write(|u| {
+            let records = Self::all_records(&u.session)?;
+            let targets: Vec<(String, String)> = records.into_iter()
+                .filter(|(_, _, r)| r.tags.iter().any(|t| t == old))
+                .map(|(v, i, _)| (v, i))
+                .collect();
+            if targets.is_empty() {
+                return Ok(BulkResult { count: 0, items: vec![] });
+            }
+            let count = u.session.mutate_records(&targets, |r| {
+                let mut new_tags = Vec::with_capacity(r.tags.len());
+                for t in &r.tags {
+                    let target = if t == old { new } else { t };
+                    if !new_tags.iter().any(|x| x == target) {
+                        new_tags.push(target.to_string());
+                    }
+                }
+                r.tags = new_tags;
+            })?;
+            let items = targets.into_iter().map(|(vault_id, item_id)| ItemRef { vault_id, item_id }).collect();
+            Ok(BulkResult { count, items })
+        })
+    }
+    pub fn delete_tag(&self, name: &str) -> Result<BulkResult> {
+        let name = name.trim();
+        if name.is_empty() { bail!("tag name cannot be empty"); }
+        self.write(|u| {
+            let records = Self::all_records(&u.session)?;
+            let targets: Vec<(String, String)> = records.into_iter()
+                .filter(|(_, _, r)| r.tags.iter().any(|t| t == name))
+                .map(|(v, i, _)| (v, i))
+                .collect();
+            if targets.is_empty() {
+                return Ok(BulkResult { count: 0, items: vec![] });
+            }
+            let count = u.session.mutate_records(&targets, |r| {
+                r.tags.retain(|t| t != name);
+            })?;
+            let items = targets.into_iter().map(|(vault_id, item_id)| ItemRef { vault_id, item_id }).collect();
+            Ok(BulkResult { count, items })
+        })
+    }
 
     // ---------------- tools
     pub fn generate_password(&self, length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String { generate(length, symbols, digits, words, pin) }
