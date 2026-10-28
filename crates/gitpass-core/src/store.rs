@@ -1265,8 +1265,10 @@ impl Session {
     pub fn add_record(&self, vid: &str, mut rec: ItemRecord) -> Result<String> {
         let iid = uuid::Uuid::new_v4().to_string();
         let now = merge::now_ms();
-        if rec.item.updated_at.is_empty() { rec.item.updated_at = (now / 1000).to_string(); }
-        rec.created_at.get_or_insert(now / 1000);
+        let now_sec = now / 1000;
+        if rec.item.updated_at.is_empty() { rec.item.updated_at = now_sec.to_string(); }
+        let up_sec = rec.item.updated_at.trim().parse::<u64>().unwrap_or(now_sec);
+        rec.created_at.get_or_insert(up_sec);
         rec.clocks = Some(merge::stamp(None, &rec.item, now));
         merge::stamp_ext(None, &mut rec, now);
         rec.history.clear();

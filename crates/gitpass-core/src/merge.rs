@@ -187,6 +187,62 @@ impl ItemRecord {
         } }
         self.sections = new_sections;
     }
+
+    /// Timestamp (unix seconds) when the password was last changed.
+    /// Computed from the newest history entry or edit where the password value differs,
+    /// or the item's creation time if it has never changed. When the history was truncated
+    /// (see [`crate::item::HISTORY_LIMIT`]) and every retained entry has the current password,
+    /// the oldest retained entry's `updated_at` is used instead of the creation time.
+    pub fn password_changed_at(&self) -> Option<u64> {
+        let cur_pw = record_password(self)?;
+        let n = self.history.len();
+        for i in (0..n).rev() {
+            let hist_pw = snapshot_password(&self.history[i].snapshot);
+            if hist_pw != Some(cur_pw) {
+                let ts_str = if i + 1 < n {
+                    &self.history[i + 1].updated_at
+                } else {
+                    &self.item.updated_at
+                };
+                return parse_ts(ts_str);
+            }
+        }
+        // Every retained entry has the current password. If the history was truncated (capped at
+        // HISTORY_LIMIT, or the oldest retained entry is not the item's first version), the real
+        // change may have happened after creation but before the oldest retained entry, so the
+        // oldest retained entry's timestamp is the safest bound (avoids false "Old" findings).
+        // Only fall back to the creation time when the history is complete.
+        if let Some(first) = self.history.first() {
+            let truncated = n >= crate::item::HISTORY_LIMIT || first.version > 1;
+            if truncated {
+                if let Some(t) = parse_ts(&first.updated_at) { return Some(t); }
+            }
+        }
+        let creation = match (self.created_at, parse_ts(&self.item.updated_at)) { (Some(c), Some(u)) => Some(c.min(u)), (Some(c), None) => Some(c), (None, u) => u };
+        creation.or_else(|| self.history.first().and_then(|h| parse_ts(&h.updated_at))).or_else(|| parse_ts(&self.item.updated_at))
+    }
+}
+
+fn record_password(r: &ItemRecord) -> Option<&str> {
+    if let Some(p) = r.item.password.as_deref().filter(|p| !p.is_empty()) {
+        return Some(p);
+    }
+    r.sections.iter().flat_map(|s| &s.fields).find(|f| !f.removed && f.kind == FieldKind::Concealed && (f.id == "password" || f.label.eq_ignore_ascii_case("password"))).and_then(|f| f.value.as_deref()).filter(|p| !p.is_empty())
+}
+
+fn snapshot_password(s: &Snapshot) -> Option<&str> {
+    if let Some(p) = s.item.password.as_deref().filter(|p| !p.is_empty()) {
+        return Some(p);
+    }
+    s.sections.iter().flat_map(|s| &s.fields).find(|f| !f.removed && f.kind == FieldKind::Concealed && (f.id == "password" || f.label.eq_ignore_ascii_case("password"))).and_then(|f| f.value.as_deref()).filter(|p| !p.is_empty())
+}
+
+fn parse_ts(s: &str) -> Option<u64> {
+    let trimmed = s.trim();
+    if let Ok(secs) = trimmed.parse::<u64>() {
+        return Some(secs);
+    }
+    crate::device::parse_iso8601(trimmed).and_then(|s| if s >= 0 { Some(s as u64) } else { None })
 }
 
 fn field_map(r: &ItemRecord) -> BTreeMap<String, (String, Field)> {

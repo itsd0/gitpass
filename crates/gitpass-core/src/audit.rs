@@ -634,7 +634,7 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
             if let Some(reason) = weak_reason { record_finding(Finding::Weak { reason }, &mut r.weak); }
             if let Some(&(group, others)) = reuse.get(&i) { record_finding(Finding::Reused { group, others }, &mut r.reused); }
             if let Some(c) = hibp { let n = pwned_count(c, p, &mut cache)?; if n > 0 { record_finding(Finding::Pwned { count: n }, &mut r.pwned); } }
-            if let Ok(t) = it.updated_at.trim().parse::<u64>() {
+            if let Some(t) = rec.password_changed_at() {
                 let days = o.now_secs.saturating_sub(t) / 86400;
                 if days > o.max_age_days { record_finding(Finding::Old { days }, &mut r.old); }
             }
@@ -1342,4 +1342,169 @@ mod tests {
         assert!(!ok_findings.iter().any(|f| matches!(f, Finding::Weak { .. })));
     }
 
+
+    #[test]
+    fn test_password_changed_at_derivation() {
+        use crate::item::{HistoryEntry, Snapshot};
+
+        // 1. New item without history: uses created_at
+        let mut it = Item::default();
+        it.title = "Login".into();
+        it.password = Some("secretA".into());
+        it.updated_at = "1000".into();
+        let mut rec = ItemRecord::new(it);
+        rec.created_at = Some(1000);
+        assert_eq!(rec.password_changed_at(), Some(1000));
+
+        // 2. Edit note at t=2000 (password unchanged): still returns 1000
+        rec.history.push(HistoryEntry {
+            version: 1,
+            updated_at: "1000".into(),
+            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![] },
+        });
+        rec.item.notes = Some("updated note".into());
+        rec.item.updated_at = "2000".into();
+        assert_eq!(rec.password_changed_at(), Some(1000));
+
+        // 3. Edit password to secretB at t=3000: returns 3000
+        rec.history.push(HistoryEntry {
+            version: 2,
+            updated_at: "2000".into(),
+            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![] },
+        });
+        rec.item.password = Some("secretB".into());
+        rec.item.updated_at = "3000".into();
+        assert_eq!(rec.password_changed_at(), Some(3000));
+
+        // 4. Edit tags at t=4000 (password secretB unchanged): still returns 3000
+        rec.history.push(HistoryEntry {
+            version: 3,
+            updated_at: "3000".into(),
+            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![] },
+        });
+        rec.tags = vec!["tag1".into()];
+        rec.item.updated_at = "4000".into();
+        assert_eq!(rec.password_changed_at(), Some(3000));
+
+        // 5. Item without password: returns None
+        rec.item.password = None;
+        assert_eq!(rec.password_changed_at(), None);
+    }
+
+    #[test]
+    fn test_old_password_audit_uses_password_change_time() {
+        use crate::item::{HistoryEntry, Snapshot};
+
+        let now_secs = 2_000_000_000u64;
+        let day = 86400u64;
+        let created = now_secs - 400 * day; // 400 days old
+
+        let mut it = Item::default();
+        it.title = "Old Login".into();
+        it.password = Some("SecureLongPassword123!".into());
+        it.updated_at = created.to_string();
+        let mut rec = ItemRecord::new(it);
+        rec.created_at = Some(created);
+
+        let opts = AuditOpts { now_secs, max_age_days: 365, ..Default::default() };
+
+        // Fresh audit: 400 days > 365 => flagged as Old
+        let report = audit(&[("v".into(), "item1".into(), rec.clone())], &opts, None).unwrap();
+        assert_eq!(report.old, 1);
+        let findings = &report.per_item[0].findings;
+        assert!(findings.iter().any(|f| matches!(f, Finding::Old { days } if *days >= 400)));
+
+        // Simulate editing a note today (now_secs - day). Password did not change.
+        rec.history.push(HistoryEntry {
+            version: 1,
+            updated_at: created.to_string(),
+            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![] },
+        });
+        rec.item.notes = Some("new note added today".into());
+        rec.item.updated_at = (now_secs - day).to_string();
+
+        // Crucial test: editing notes does NOT reset password age!
+        let report2 = audit(&[("v".into(), "item1".into(), rec.clone())], &opts, None).unwrap();
+        assert_eq!(report2.old, 1, "editing notes must not reset old password age");
+
+        // Now change password to a new password 10 days ago
+        rec.history.push(HistoryEntry {
+            version: 2,
+            updated_at: rec.item.updated_at.clone(),
+            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![] },
+        });
+        rec.item.password = Some("BrandNewPassword123!".into());
+        rec.item.updated_at = (now_secs - 10 * day).to_string();
+
+        // Changing password resets age: 10 days < 365 => no Old finding
+        let report3 = audit(&[("v".into(), "item1".into(), rec)], &opts, None).unwrap();
+        assert_eq!(report3.old, 0, "changing password must reset old password age");
+    }
+
+    #[test]
+    fn test_truncated_history_does_not_report_false_old() {
+        use crate::item::{HistoryEntry, HISTORY_LIMIT, Snapshot};
+
+        let now_secs = 2_000_000_000u64;
+        let day = 86400u64;
+        let created = now_secs - 400 * day; // item created 400 days ago
+
+        let mut it = Item::default();
+        it.title = "Busy Login".into();
+        it.password = Some("OriginalPassword123!".into());
+        it.updated_at = created.to_string();
+        let mut rec = ItemRecord::new(it);
+        rec.created_at = Some(created);
+        let mut version = 1u64;
+
+        // Push the current content to history (like Session::prepare_update), capped at HISTORY_LIMIT.
+        let push = |rec: &mut ItemRecord, version: &mut u64| {
+            rec.history.push(HistoryEntry {
+                version: *version,
+                updated_at: rec.item.updated_at.clone(),
+                snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: rec.sections.clone(), tags: rec.tags.clone() },
+            });
+            let n = rec.history.len();
+            if n > HISTORY_LIMIT { rec.history.drain(..n - HISTORY_LIMIT); }
+            *version += 1;
+        };
+
+        // Password changed 100 days ago.
+        push(&mut rec, &mut version);
+        rec.item.password = Some("ChangedPassword456!".into());
+        rec.item.updated_at = (now_secs - 100 * day).to_string();
+
+        // Followed by more than HISTORY_LIMIT metadata-only edits (notes), one per day.
+        for k in 0..(HISTORY_LIMIT as u64 + 5) {
+            push(&mut rec, &mut version);
+            rec.item.notes = Some(format!("note {k}"));
+            rec.item.updated_at = (now_secs - (90 - k) * day).to_string();
+        }
+
+        // The password-change entry was drained: every retained entry has the current password.
+        assert_eq!(rec.history.len(), HISTORY_LIMIT);
+        assert!(rec.history.first().unwrap().version > 1);
+        assert!(rec.history.iter().all(|h| h.snapshot.item.password.as_deref() == Some("ChangedPassword456!")));
+
+        // Truncated history: fall back to the oldest retained entry, not created_at.
+        let oldest: u64 = rec.history.first().unwrap().updated_at.parse().unwrap();
+        assert_eq!(rec.password_changed_at(), Some(oldest));
+        assert!(oldest > created);
+
+        let opts = AuditOpts { now_secs, max_age_days: 365, ..Default::default() };
+        let report = audit(&[("v".into(), "item1".into(), rec.clone())], &opts, None).unwrap();
+        assert_eq!(report.old, 0, "truncated history must not produce a false Old finding");
+        assert!(!report.per_item.iter().flat_map(|i| &i.findings).any(|f| matches!(f, Finding::Old { .. })));
+
+        // Complete history (never truncated, starts at version 1): created_at fallback still applies.
+        let mut fresh = rec.clone();
+        fresh.history.clear();
+        fresh.item.password = Some("ChangedPassword456!".into());
+        fresh.history.push(HistoryEntry {
+            version: 1,
+            updated_at: created.to_string(),
+            snapshot: Snapshot { item: fresh.item.clone(), category: fresh.category, sections: vec![], tags: vec![] },
+        });
+        assert_eq!(fresh.password_changed_at(), Some(created));
+    }
 }
