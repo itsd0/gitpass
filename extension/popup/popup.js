@@ -372,6 +372,20 @@ function renderDetailError(err, onRetry) {
 }
 
 // ---------- data + list ----------
+// The host caps one reply at 1 MiB, so fetch every item in pages (#165: the popup must list all items).
+const LIST_PAGE = 500;
+async function listAllItems() {
+  let items = [], offset = 0;
+  for (let guard = 0; guard < 1000; guard++) {
+    const r = await send({ type: 'popup:list_items', limit: LIST_PAGE, offset });
+    items = items.concat((r && r.items) || []);
+    const next = r && r.next_offset;
+    if (typeof next !== 'number' || next <= offset) break;
+    offset = next;
+  }
+  return { items };
+}
+
 async function loadData() {
   startListLoading();
   let listError = null;
@@ -382,7 +396,7 @@ async function loadData() {
   try {
     const results = await Promise.all([
       send({ type: 'popup:list_vaults' }).catch(() => ({ vaults: [] })),
-      send({ type: 'popup:list_items' }),
+      listAllItems(),
       send({ type: 'popup:match_active' }).catch(() => ({ items: [], origin: null })),
     ]);
     vaults = results[0];
@@ -1532,7 +1546,7 @@ function liveReload() {
   clearTimeout(liveT);
   liveT = setTimeout(async () => {
     const [all, match] = await Promise.all([
-      send({ type: 'popup:list_items' }).catch(() => null),
+      listAllItems().catch(() => null),
       send({ type: 'popup:match_active' }).catch(() => null),
     ]);
     if (!all) return;

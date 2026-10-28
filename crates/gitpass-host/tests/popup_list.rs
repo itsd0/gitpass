@@ -22,6 +22,18 @@ fn list_items_has_no_default_cap_but_honours_limit() {
     assert!(all["items"].as_array().unwrap().iter().any(|i| i["title"] == "Fake item 0519"));
     let capped = ok(&mut f.host, json!({"cmd":"list_items","limit":7}));
     assert_eq!(capped["items"].as_array().unwrap().len(), 7);
+    assert_eq!(capped["next_offset"], 7);
+    assert_eq!(all["next_offset"], serde_json::Value::Null);
+    // Paging (replies are capped at 1 MiB): walking next_offset returns every item exactly once, in order.
+    let (mut got, mut off) = (vec![], 0u64);
+    loop {
+        let r = ok(&mut f.host, json!({"cmd":"list_items","limit":200,"offset":off}));
+        assert_eq!(r["total"], 524);
+        got.extend(r["items"].as_array().unwrap().iter().map(|i| i["id"].clone()));
+        match r["next_offset"].as_u64() { Some(n) => off = n, None => break }
+    }
+    let ids: Vec<_> = all["items"].as_array().unwrap().iter().map(|i| i["id"].clone()).collect();
+    assert_eq!(got, ids);
 }
 
 #[test]

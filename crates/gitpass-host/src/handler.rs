@@ -373,6 +373,8 @@ impl Host {
                 let q = req.get("query").and_then(Value::as_str).map(str::to_lowercase).filter(|q| !q.is_empty());
                 // No cap unless the caller asks for one: the popup lists every item (a silent default cap dropped items past the 500th title).
                 let limit = req.get("limit").and_then(Value::as_u64).map(|n| n as usize);
+                // Paging: a reply is capped at 1 MiB (framing::MAX_OUT), so big vaults are fetched in pages via `offset`.
+                let offset = req.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
                 let mut out = vec![];
                 for (vid, vname, iid, r) in self.all_records(vault)? {
                     if cat.is_some_and(|c| c != r.category.as_str()) { continue; }
@@ -384,8 +386,11 @@ impl Host {
                     out.push(s);
                 }
                 out.sort_by(|a, b| a["title"].as_str().unwrap_or("").to_lowercase().cmp(&b["title"].as_str().unwrap_or("").to_lowercase()));
-                if let Some(l) = limit { out.truncate(l); }
-                Ok(json!({"items": out}))
+                let total = out.len();
+                let out: Vec<Value> = out.into_iter().skip(offset).take(limit.unwrap_or(usize::MAX)).collect();
+                let end = offset.saturating_add(out.len());
+                let next_offset = (end < total).then_some(end);
+                Ok(json!({"items": out, "total": total, "next_offset": next_offset}))
             }
             "match" => {
                 // `url` accepted for 0.5 extensions.
