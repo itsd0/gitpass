@@ -14,6 +14,7 @@ use gitpass_core::item::{Category, FieldKind};
 use gitpass_core::merge::ItemRecord;
 use gitpass_core::store::{Item, Session, UnlockOpts};
 use gitpass_core::{import, item, totp};
+use gitpass_pasteboard::PasteboardMarkers;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -237,14 +238,25 @@ pub struct LocalFile {
 pub trait Clipboard: Send + Sync {
     fn set_text(&self, s: &str) -> Result<()>;
     fn get_text(&self) -> Option<String>;
+    /// Copy a secret: macOS implementations declare the nspasteboard.org markers so clipboard
+    /// managers do not record or sync it. The default (and non-macOS) writes plain text.
+    fn set_marked(&self, s: &str, _markers: PasteboardMarkers) -> Result<()> { self.set_text(s) }
 }
 
 /// In-memory clipboard (tests / headless).
 #[derive(Default)]
-pub struct MemClipboard(pub Mutex<Option<String>>);
+pub struct MemClipboard { text: Mutex<Option<String>>, markers: Mutex<Option<PasteboardMarkers>> }
+impl MemClipboard {
+    pub fn markers(&self) -> Option<PasteboardMarkers> { *self.markers.lock().unwrap() }
+}
 impl Clipboard for MemClipboard {
-    fn set_text(&self, s: &str) -> Result<()> { *self.0.lock().unwrap() = Some(s.to_string()); Ok(()) }
-    fn get_text(&self) -> Option<String> { self.0.lock().unwrap().clone() }
+    fn set_text(&self, s: &str) -> Result<()> { *self.text.lock().unwrap() = Some(s.to_string()); *self.markers.lock().unwrap() = None; Ok(()) }
+    fn get_text(&self) -> Option<String> { self.text.lock().unwrap().clone() }
+    fn set_marked(&self, s: &str, markers: PasteboardMarkers) -> Result<()> {
+        self.set_text(s)?;
+        *self.markers.lock().unwrap() = Some(markers);
+        Ok(())
+    }
 }
 
 /// Real HIBP range client (k-anonymity; only 5 hex chars of SHA-1 leave the process).
@@ -293,6 +305,17 @@ pub(crate) fn is_card_number(f: &item::Field) -> bool {
     let l = f.label.to_lowercase();
     if f.id == "cvv" || f.id == "pin" || ["cvv", "cvc", "verification", "security", "pin", "holder", "name", "type", "expir", "valid"].iter().any(|k| l.contains(k)) { return false; }
     f.id == "number" || l.contains("number") || l.contains("card")
+}
+fn is_card_cvv(f: &item::Field) -> bool {
+    let l = f.label.to_lowercase();
+    f.id == "cvv" || f.id == "cvc" || ["cvv", "cvc", "verification", "security code"].iter().any(|k| l.contains(k))
+}
+
+/// Fields whose copied value clipboard managers must not record. Secret field kinds cover
+/// passwords, TOTP codes, card numbers/CVVs and API credentials; card data stored as plain text
+/// by an old import is still recognised by label/id.
+pub(crate) fn is_secret_copy(category: Category, f: &item::Field) -> bool {
+    f.kind.is_secret() || (category == Category::CreditCard && (is_card_number(f) || is_card_cvv(f)))
 }
 fn card_digits(r: &ItemRecord) -> Option<String> {
     if r.category != Category::CreditCard { return None; }
@@ -613,14 +636,19 @@ impl App {
     }
     /// Copy a field value (TOTP fields: the current code) to the clipboard; cleared after
     /// `clipboardClearSecs` only if the clipboard still holds this value and nothing newer was copied.
+    /// Secret fields carry the macOS concealed/transient markers; plain fields do not.
     pub fn copy_field(&self, vault_id: &str, item_id: &str, field_id: &str) -> Result<()> {
-        let v = self.with(|u| {
+        let (v, markers) = self.with(|u| {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
             let f = r.find_field(field_id).ok_or_else(|| anyhow!("item has no field '{field_id}'"))?;
+            let markers = is_secret_copy(r.category, &f).then_some(PasteboardMarkers::SECRET);
             let raw = f.value.clone().filter(|v| !v.is_empty()).ok_or_else(|| anyhow!("field '{field_id}' is empty"))?;
-            Ok(Zeroizing::new(if f.kind == FieldKind::Totp { totp::code_now(&totp::parse(&raw)?).0 } else { raw }))
+            Ok((Zeroizing::new(if f.kind == FieldKind::Totp { totp::code_now(&totp::parse(&raw)?).0 } else { raw }), markers))
         })?;
-        self.clipboard.set_text(&v)?;
+        match markers {
+            Some(m) => self.clipboard.set_marked(&v, m)?,
+            None => self.clipboard.set_text(&v)?,
+        }
         if let Ok(mut lc) = self.last_copied.lock() {
             *lc = Some(Zeroizing::new(v.to_string()));
         }
