@@ -345,6 +345,8 @@ export const my: Partial<Record<Key, string>> = {
   "items.sortTitle": "ခေါင်းစဉ်",
   "items.ariaLabel": "Item များ",
   "items.selectItem": "{title} ကို ရွေးပါ",
+  "items.search.resultCount": "ရလဒ် {count} ခု",
+  "items.search.resultOne": "ရလဒ် ၁ ခု",
   // category labels
   "category.login": "လော့ဂ်အင်",
   "category.credit_card": "ခရက်ဒစ်ကတ်",
