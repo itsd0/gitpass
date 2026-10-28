@@ -973,3 +973,85 @@ fn copy_password_clears_clipboard_only_if_unchanged() {
     std::thread::sleep(std::time::Duration::from_millis(1600));
     assert_eq!(e.clip.get_text().as_deref(), Some(""));
 }
+
+#[test]
+fn tag_rename_merge_delete_and_lifecycle() {
+    let e = env();
+    // 1. Setup items across active, archived, and trashed states
+    let item1 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::Login, title: "Item 1".into(),
+        url: None, sections: vec![], notes: None, tags: Some(vec!["alpha".into(), "beta".into()]), favorite: None,
+    }).unwrap();
+
+    let item2 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::Login, title: "Item 2".into(),
+        url: None, sections: vec![], notes: None, tags: Some(vec!["alpha".into()]), favorite: None,
+    }).unwrap();
+    e.app.archive_item(&e.vault, &item2.id, true).unwrap();
+
+    let item3 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::Login, title: "Item 3".into(),
+        url: None, sections: vec![], notes: None, tags: Some(vec!["alpha".into(), "gamma".into()]), favorite: None,
+    }).unwrap();
+    e.app.delete_item(&e.vault, &item3.id).unwrap();
+
+    let item4 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::Login, title: "Item 4".into(),
+        url: None, sections: vec![], notes: None, tags: Some(vec!["beta".into()]), favorite: None,
+    }).unwrap();
+
+    assert_eq!(e.app.list_tags().unwrap(), vec!["alpha", "beta"]);
+
+    // Validation errors
+    assert!(e.app.rename_tag("", "new").is_err());
+    assert!(e.app.rename_tag("alpha", "").is_err());
+    assert!(e.app.delete_tag("").is_err());
+
+    // No-op rename to same name
+    let noop = e.app.rename_tag("alpha", "alpha").unwrap();
+    assert_eq!(noop.count, 0);
+    assert!(noop.items.is_empty());
+
+    // No-op on unknown tag
+    let unknown_rename = e.app.rename_tag("nonexistent", "anything").unwrap();
+    assert_eq!(unknown_rename.count, 0);
+    assert!(unknown_rename.items.is_empty());
+
+    let unknown_delete = e.app.delete_tag("nonexistent").unwrap();
+    assert_eq!(unknown_delete.count, 0);
+    assert!(unknown_delete.items.is_empty());
+
+    // 2. Rename "alpha" -> "delta" across all items
+    let res = e.app.rename_tag("alpha", "delta").unwrap();
+    assert_eq!(res.count, 3);
+    assert_eq!(res.items.len(), 3);
+
+    assert_eq!(e.app.get_item(&e.vault, &item1.id).unwrap().summary.tags, vec!["delta", "beta"]);
+    assert_eq!(e.app.get_item(&e.vault, &item2.id).unwrap().summary.tags, vec!["delta"]);
+    assert_eq!(e.app.get_item(&e.vault, &item3.id).unwrap().summary.tags, vec!["delta", "gamma"]);
+    assert_eq!(e.app.get_item(&e.vault, &item4.id).unwrap().summary.tags, vec!["beta"]);
+    assert_eq!(e.app.list_tags().unwrap(), vec!["beta", "delta"]);
+
+    // 3. Merge "delta" -> "beta" (item 1 dedupes to single "beta")
+    let merge_res = e.app.rename_tag("delta", "beta").unwrap();
+    assert_eq!(merge_res.count, 3);
+
+    assert_eq!(e.app.get_item(&e.vault, &item1.id).unwrap().summary.tags, vec!["beta"]);
+    assert_eq!(e.app.get_item(&e.vault, &item2.id).unwrap().summary.tags, vec!["beta"]);
+    assert_eq!(e.app.get_item(&e.vault, &item3.id).unwrap().summary.tags, vec!["beta", "gamma"]);
+    assert_eq!(e.app.get_item(&e.vault, &item4.id).unwrap().summary.tags, vec!["beta"]);
+    assert_eq!(e.app.list_tags().unwrap(), vec!["beta"]);
+
+    // 4. Delete "beta"
+    let del_res = e.app.delete_tag("beta").unwrap();
+    assert_eq!(del_res.count, 4);
+
+    assert_eq!(e.app.get_item(&e.vault, &item1.id).unwrap().summary.tags, Vec::<String>::new());
+    assert_eq!(e.app.get_item(&e.vault, &item2.id).unwrap().summary.tags, Vec::<String>::new());
+    assert_eq!(e.app.get_item(&e.vault, &item3.id).unwrap().summary.tags, vec!["gamma"]);
+    assert_eq!(e.app.get_item(&e.vault, &item4.id).unwrap().summary.tags, Vec::<String>::new());
+    assert_eq!(e.app.list_tags().unwrap(), Vec::<String>::new());
+
+    e.app.restore_item(&e.vault, &item3.id).unwrap();
+    assert_eq!(e.app.list_tags().unwrap(), vec!["gamma"]);
+}
