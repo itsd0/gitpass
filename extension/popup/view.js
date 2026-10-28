@@ -43,6 +43,18 @@
       .sort((a, b) => (b.favorite - a.favorite) || String(a.title).localeCompare(String(b.title)));
   }
 
+  /** Which empty state to show when the list has no rows. ctx: { query, filter, origin, count } */
+  function emptyState(ctx = {}) {
+    const q = String(ctx.query || '').trim();
+    if (q) return { kind: 'search', query: q };
+    if (ctx.filter === 'suggested') {
+      const host = hostOfUrl(ctx.origin);
+      return host ? { kind: 'site', host } : { kind: 'nofill' };
+    }
+    if (ctx.filter === 'all' && !ctx.count) return { kind: 'vault' };
+    return { kind: 'none' };
+  }
+
   /** Fixed-row-height virtual window. */
   function virtualWindow(scrollTop, viewport, rowH, count, overscan = 4) {
     const start = Math.max(0, Math.floor(scrollTop / rowH) - overscan);
@@ -121,7 +133,7 @@
 
   function hostOfUrl(u) { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (_) { return ''; } }
 
-  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, buildFilters, filterItems, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl };
+  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

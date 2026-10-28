@@ -2,7 +2,7 @@
 'use strict';
 // gitpass popup v0.6: 1Password-style 2-pane UI. All host calls go through background.js as `popup:*` messages.
 const $ = (id) => document.getElementById(id);
-const t = (k, f) => GitpassI18n.t(k, f);
+const t = (k, f, subs) => GitpassI18n.t(k, f, subs);
 const V = typeof GitpassView !== 'undefined' ? GitpassView : (typeof require !== 'undefined' ? require('./view.js') : null);
 const { UI, categoryIcon } = typeof GitpassPopupIcons !== 'undefined' ? GitpassPopupIcons : (typeof require !== 'undefined' ? require('./icons.js') : { UI: {} });
 const ROW_H = 52;
@@ -201,10 +201,7 @@ function applyFilter(selectFirst) {
 function renderList() {
   const list = $('list'), inner = $('listInner');
   inner.textContent = '';
-  if (!S.rows.length) {
-    const msg = S.query ? t('noResults', 'No items found') : S.filter === 'suggested' ? (S.origin ? t('noMatches', 'No saved logins for this site') : t('notFillable', 'Open an https page to fill')) : t('noItems', 'No items');
-    inner.append(el('div', 'empty', msg)); return;
-  }
+  if (!S.rows.length) { renderEmpty(inner); return; }
   const w = V.virtualWindow(list.scrollTop, list.clientHeight || 380, ROW_H, S.rows.length);
   inner.style.paddingTop = w.padTop + 'px'; inner.style.paddingBottom = w.padBottom + 'px';
   for (let i = w.start; i < w.end; i++) {
@@ -218,6 +215,32 @@ function renderList() {
     row.ondblclick = () => openAndFill();
     inner.append(row);
   }
+}
+
+/** Empty states: offer the action that fills the gap (create the searched item, save this site's login). */
+function renderEmpty(inner) {
+  const st = V.emptyState({ query: S.query, filter: S.filter, origin: S.origin, count: S.all.length });
+  const box = el('div', 'empty');
+  const ic = st.kind === 'search' ? UI.search : st.kind === 'site' ? categoryIcon('login', 36) : st.kind === 'nofill' ? UI.external : st.kind === 'vault' ? UI.plus : null;
+  if (ic) { const w = el('span', 'empty-ic'); w.innerHTML = ic; box.append(w); }
+  const msg = {
+    search: () => t('noResults', 'No items found'),
+    site: () => t('noMatches', 'No saved logins for this site'),
+    nofill: () => t('notFillable', 'Open an https page to fill'),
+    vault: () => t('emptyVaultTitle', 'Your vault is empty'),
+    none: () => t('noItems', 'No items'),
+  }[st.kind]();
+  box.append(el('p', null, msg));
+  if (st.kind === 'site') box.append(el('div', 'empty-host', st.host));
+  if (st.kind === 'vault') box.append(el('p', 'empty-sub', t('emptyVaultBody', 'Items you add will appear here.')));
+  const acts = el('div', 'empty-actions');
+  const btn = (cls, label, fn) => { const b = el('button', cls, label); b.type = 'button'; b.onclick = fn; acts.append(b); };
+  if (st.kind === 'search') btn('btn btn-primary', t('emptyCreateNamed', 'Create item named “$1”', [st.query]), () => openNewItem('login', { title: st.query }));
+  else if (st.kind === 'site') btn('btn btn-primary', t('emptySaveLoginFor', 'Save a login for $1', [st.host]), () => openNewItem('login', { title: st.host, url: S.origin }));
+  else if (st.kind === 'vault') btn('btn btn-primary', t('newItem', 'New item'), () => openNewItem());
+  if (st.kind === 'site' || st.kind === 'nofill') btn('btn btn-link', t('emptyShowAll', 'Show all items'), () => { S.filter = 'all'; renderFilter(); applyFilter(true); });
+  if (acts.children.length) box.append(acts);
+  inner.append(box);
 }
 $('list').addEventListener('scroll', () => renderList(), { passive: true });
 
@@ -375,8 +398,9 @@ function openGenerator() {
 
 /** New item: every type the desktop app supports (except passkeys, which websites create, and documents,
  *  which need a file). Fields/ids come from popup/newitem.js (mirrors the GUI templates); saved via `create_item`. */
-function openNewItem(typeId) {
+function openNewItem(typeId, prefill) {
   const N = GitpassNewItem;
+  const pre = prefill || {};
   const p = $('panel'); p.textContent = ''; p.classList.remove('hidden'); S.panel = 'new';
   const type = N.typeById(typeId || S.newType || 'login'); S.newType = type.id;
   p.append(panelHead(t('newItem', 'New item')));
@@ -407,8 +431,8 @@ function openNewItem(typeId) {
     inputs[id] = i; return i;
   };
   const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
-  add('title', type.titleLabel || 'Title', 'text', type.id === 'login' && S.origin ? V.hostOfUrl(S.origin) : '', { required: true });
-  if (type.url) add('url', t('website', 'Website'), 'url', S.origin || '');
+  add('title', type.titleLabel || 'Title', 'text', pre.title != null ? String(pre.title) : (type.id === 'login' && S.origin ? V.hostOfUrl(S.origin) : ''), { required: true });
+  if (type.url) add('url', t('website', 'Website'), 'url', pre.url != null ? String(pre.url) : (S.origin || ''));
   for (const sec of N.sectionsOf(type)) {
     if (sec.title) f.append(el('div', 'sec-title', sec.title));
     for (const fl of sec.fields) add(fl.id, fl.hintLabel || cap(fl.label), fl.ui, '', fl);
@@ -445,7 +469,13 @@ $('lock').innerHTML = UI.lock; $('searchIc').innerHTML = UI.search;
 document.addEventListener('keydown', (e) => {
   if ($('unlocked').classList.contains('hidden')) { if (e.key === 'Escape') window.close(); return; }
   const a = document.activeElement;
-  const inForm = !!(a && a.closest && a.closest('#panel, select, .menu'));
+  // Enter on a search with no results: create the item the user was looking for (before the debounce fires).
+  if (e.key === 'Enter' && a && a.id === 'q') {
+    const q = $('q').value.trim();
+    if (q !== S.query) { S.query = q; applyFilter(true); }
+    if (S.query && !S.rows.length) { e.preventDefault(); openNewItem('login', { title: S.query }); return; }
+  }
+  const inForm = !!(a && a.closest && a.closest('#panel, select, .menu, button'));
   const sel = window.getSelection && String(window.getSelection());
   const inputSel = a && a.tagName === 'INPUT' && a.selectionStart !== a.selectionEnd;
   const act = V.keyAction(e, { panel: S.panel, inForm, hasSelection: !!sel || inputSel });
