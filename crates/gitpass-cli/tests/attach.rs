@@ -155,3 +155,52 @@ fn attach_add_ls_get_rm_lifecycle() {
     assert!(!out_add_missing.status.success());
     assert!(String::from_utf8_lossy(&out_add_missing.stderr).contains("does not exist"));
 }
+
+fn gp_in(root: &Path, cwd: &Path, args: &[&str]) -> std::process::Output {
+    Command::new(env!("CARGO_BIN_EXE_gitpass"))
+        .args(args)
+        .current_dir(cwd)
+        .env("GITPASS_PATH", root)
+        .env("GITPASS_PASSWORD", "fake-master-pw-123")
+        .env("GITPASS_DEVICE_NAME", "test")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap()
+}
+
+#[test]
+fn attach_get_without_output_never_writes_outside_cwd() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Personal"], None).status.success());
+    let sk = SecretKey::parse(&std::fs::read_to_string(root.join("secret.key")).unwrap()).unwrap();
+    let s = Session::unlock(&root, "fake-master-pw-123", &sk).unwrap();
+    let vid = s.resolve_vault("Personal").unwrap();
+    let mut it = Item::default();
+    it.title = "Synced Item".into();
+    let item_id = s.add_record(&vid, ItemRecord::new(it)).unwrap();
+
+    // Names as they could arrive from another (malicious or buggy) device via sync.
+    let abs_target = dir.path().join("abs_target.txt");
+    let traversal = s.add_attachment(&vid, &item_id, "../../evil_authorized_keys", "text/plain", b"FAKE traversal").unwrap();
+    let absolute = s.add_attachment(&vid, &item_id, abs_target.to_str().unwrap(), "text/plain", b"FAKE absolute").unwrap();
+    let dotdot = s.add_attachment(&vid, &item_id, "..", "text/plain", b"FAKE dotdot").unwrap();
+
+    let cwd = dir.path().join("work").join("sub");
+    std::fs::create_dir_all(&cwd).unwrap();
+
+    let o = gp_in(&root, &cwd, &["attach", "get", "Personal", &item_id, &traversal.id]);
+    assert!(o.status.success(), "stderr: {}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(std::fs::read(cwd.join("evil_authorized_keys")).unwrap(), b"FAKE traversal");
+    assert!(!dir.path().join("evil_authorized_keys").exists(), "../ name must not escape cwd");
+
+    let o = gp_in(&root, &cwd, &["attach", "get", "Personal", &item_id, &absolute.id]);
+    assert!(o.status.success(), "stderr: {}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(std::fs::read(cwd.join("abs_target.txt")).unwrap(), b"FAKE absolute");
+    assert!(!abs_target.exists(), "absolute name must not be honoured");
+
+    let o = gp_in(&root, &cwd, &["attach", "get", "Personal", &item_id, &dotdot.id]);
+    assert!(o.status.success(), "stderr: {}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(std::fs::read(cwd.join("attachment")).unwrap(), b"FAKE dotdot");
+}

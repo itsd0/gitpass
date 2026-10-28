@@ -466,3 +466,52 @@ fn remove_attachment_deletes_file_and_manifest_and_records_history() {
     let s_unlocked = Session::unlock_with(d.path(), "fake-pw", &sk, &opts()).unwrap();
     assert_eq!(s_unlocked.list_records(&v).unwrap().len(), 1);
 }
+
+#[test]
+fn removed_attachment_stays_removed_after_concurrent_edit() {
+    let (d, _sk, s, v) = vault();
+    let id = s.add_record(&v, rec(Category::Login, "shared", sample(Category::Login))).unwrap();
+    let keep = s.add_attachment(&v, &id, "keep.txt", "text/plain", b"FAKE keep").unwrap();
+    let drop = s.add_attachment(&v, &id, "drop.txt", "text/plain", b"FAKE drop").unwrap();
+    let (_, base) = s.read_record(&v, &id).unwrap();
+    assert!(base.removed_attachments.is_empty());
+    assert!(!serde_json::to_string(&base).unwrap().contains("removed_attachments"), "no tombstone key when empty");
+
+    // Device B (remote): edits the item without knowing about the removal.
+    let mut remote = base.clone();
+    remote.tags = vec!["edited-on-b".into()];
+    gitpass_core::merge::stamp_ext(Some(&base), &mut remote, base.xclocks.values().max().copied().unwrap_or(0) + 1000);
+    assert_eq!(remote.attachments.len(), 2);
+
+    // Device A (local): removes drop.txt — record, blob and manifest change in one commit.
+    let epoch_before = s.load_manifest().unwrap().epoch;
+    s.remove_attachment(&v, &id, &drop.id).unwrap();
+    assert_eq!(s.load_manifest().unwrap().epoch, epoch_before + 1, "remove_attachment must be a single commit");
+    let (_, local) = s.read_record(&v, &id).unwrap();
+    assert_eq!(local.removed_attachments, vec![drop.id.clone()]);
+    assert!(!d.path().join("vaults").join(&v).join("files").join(format!("{}.enc", drop.id)).exists());
+
+    // A applies B's edit: the edit lands, the removed attachment does not come back.
+    s.merge_item(&v, &id, &remote).unwrap();
+    let (_, m) = s.read_record(&v, &id).unwrap();
+    assert_eq!(m.tags, vec!["edited-on-b".to_string()]);
+    assert_eq!(m.attachments.iter().map(|a| a.id.clone()).collect::<Vec<_>>(), vec![keep.id.clone()]);
+    assert!(m.removed_attachments.contains(&drop.id));
+    assert_eq!(s.read_attachment(&v, &id, &keep.id).unwrap(), b"FAKE keep");
+
+    // B applies A's record: the tombstone removes drop.txt there too.
+    let (out, rep) = merge_records(&remote, &local);
+    assert!(rep.changed_local());
+    assert_eq!(out.attachments.iter().map(|a| a.id.clone()).collect::<Vec<_>>(), vec![keep.id.clone()]);
+    assert!(out.removed_attachments.contains(&drop.id));
+    assert_eq!(out.tags, vec!["edited-on-b".to_string()]);
+
+    // A later plain edit on A keeps the tombstone.
+    let (_, cur) = s.read_record(&v, &id).unwrap();
+    let mut it = cur.item.clone();
+    it.title = "renamed".into();
+    s.update_item(&v, &id, &it).unwrap();
+    let (_, after) = s.read_record(&v, &id).unwrap();
+    assert!(after.removed_attachments.contains(&drop.id));
+    assert_eq!(after.attachments.len(), 1);
+}

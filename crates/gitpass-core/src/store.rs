@@ -1298,7 +1298,10 @@ impl Session {
             new.item.updated_at = old.item.updated_at.clone();
         }
         new.created_at = old.created_at.or(new.created_at);
-        if new.attachments.is_empty() { new.attachments = old.attachments.clone(); }
+        if new.removed_attachments.is_empty() { new.removed_attachments = old.removed_attachments.clone(); }
+        if new.attachments.is_empty() {
+            new.attachments = old.attachments.iter().filter(|a| !new.removed_attachments.contains(&a.id)).cloned().collect();
+        }
         new.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &new.item, now));
         merge::stamp_ext(Some(&old), &mut new, now);
         Ok((v + 1, new))
@@ -1569,18 +1572,10 @@ impl Session {
         self.ensure_not_revoked()?;
         let (v, old) = self.read_record(vid, iid)?;
         let idx = old.attachments.iter().position(|a| a.id == fid).ok_or_else(|| anyhow!("item has no attachment {fid}"))?;
-        let d = self.vdir(vid);
-        let fp = d.join(FILES_DIR).join(format!("{fid}.enc"));
-        self.commit(|m| {
-            if fp.exists() { fs::remove_file(&fp)?; }
-            if let Some(ve) = m.vaults.get_mut(vid) {
-                ve.files.remove(fid);
-            }
-            Ok(())
-        })?;
         let now = merge::now_ms();
         let mut rec = old.clone();
         rec.attachments.remove(idx);
+        if !rec.removed_attachments.iter().any(|x| x == fid) { rec.removed_attachments.push(fid.to_string()); }
         rec.history.push(crate::item::HistoryEntry {
             version: v,
             updated_at: old.item.updated_at.clone(),
@@ -1591,7 +1586,23 @@ impl Session {
         rec.item.updated_at = (now / 1000).to_string();
         rec.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &rec.item, now));
         merge::stamp_ext(Some(&old), &mut rec, now);
-        self.put_item(vid, iid, v + 1, &rec)
+        let vk = self.vault_key(vid)?;
+        let d = self.vdir(vid);
+        let fp = d.join(FILES_DIR).join(format!("{fid}.enc"));
+        // One manifest commit: the new record (without the attachment, with its tombstone), the blob
+        // deletion and the manifest `files` entry all land together, like `remove_item`.
+        self.commit(|m| {
+            let ve = m.vaults.get_mut(vid).ok_or_else(|| anyhow!("vault {vid} not in manifest"))?;
+            let hash = Self::write_item_in(&d, &vk, vid, iid, v + 1, &rec)?;
+            ve.items.insert(iid.to_string(), ItemEntry { version: v + 1, hash });
+            if fp.exists() {
+                fs::remove_file(&fp)?;
+                if let Some(parent) = fp.parent() { fsutil::fsync_dir(parent); }
+            }
+            ve.files.remove(fid);
+            Ok(())
+        })?;
+        Ok(())
     }
 }
 

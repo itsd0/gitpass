@@ -604,6 +604,17 @@ struct CliHistoryEntry {
     current: bool,
 }
 
+/// Default output file name for `attach get` without `-o`: only the final path component of the
+/// stored name (which comes from synced vault data and must not be trusted), so names like
+/// `../../.ssh/authorized_keys` or `/etc/passwd` can never write outside the current directory.
+fn safe_attachment_filename(name: &str) -> PathBuf {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or("");
+    match std::path::Path::new(base).file_name() {
+        Some(f) if !f.is_empty() => PathBuf::from(f),
+        _ => PathBuf::from("attachment"),
+    }
+}
+
 fn find_attachment<'a>(attachments: &'a [gitpass_core::item::AttachmentMeta], target: &str) -> Result<&'a gitpass_core::item::AttachmentMeta> {
     if let Some(a) = attachments.iter().find(|a| a.id == target) {
         return Ok(a);
@@ -926,7 +937,7 @@ fn run() -> Result<()> {
                 let vid = s.resolve_vault(vault)?;
                 let (iid, rec) = pick_record(&s, &vid, query, None, false)?;
                 let att = find_attachment(&rec.attachments, target)?;
-                let dest = out.clone().unwrap_or_else(|| PathBuf::from(&att.name));
+                let dest = out.clone().unwrap_or_else(|| safe_attachment_filename(&att.name));
                 if dest.exists() && !*force {
                     bail!("destination '{}' already exists (use --force to overwrite)", dest.display());
                 }

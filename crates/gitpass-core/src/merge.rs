@@ -77,6 +77,11 @@ pub struct ItemRecord {
     pub ignored_findings: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<AttachmentMeta>,
+    /// Tombstones: ids of attachments removed from this item. Merged as a union and applied after the
+    /// attachment union, so a concurrent edit on another device cannot resurrect a removed attachment
+    /// (whose blob is gone). Omitted when empty, so older payloads stay byte-compatible.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub removed_attachments: Vec<String>,
 }
 fn is_login(c: &Category) -> bool { *c == Category::Login }
 fn is_false(b: &bool) -> bool { !*b }
@@ -276,10 +281,17 @@ fn merge_ext(local: &ItemRecord, remote: &ItemRecord, out: &mut ItemRecord) -> (
             out.xclocks.insert(k.to_string(), rc(k));
         } else if rc(k) == lc(k) && lm[i].1 != rm[i].1 && (rc(k) != 0) { conf.push(k.to_string()); }
     }
-    // attachments: union by id
+    // attachment tombstones: union (applied after the attachment union below)
+    for id in &remote.removed_attachments {
+        if !out.removed_attachments.contains(id) { out.removed_attachments.push(id.clone()); from_r.push(format!("a-:{id}")); }
+    }
+    // attachments: union by id, minus anything removed on either side
     for a in &remote.attachments {
+        if out.removed_attachments.contains(&a.id) { continue; }
         if !out.attachments.iter().any(|x| x.id == a.id) { out.attachments.push(a.clone()); from_r.push(format!("a:{}", a.id)); }
     }
+    let removed = out.removed_attachments.clone();
+    out.attachments.retain(|a| !removed.contains(&a.id));
     // history: union by (version, updated_at), keep newest HISTORY_LIMIT
     for h in &remote.history {
         if !out.history.iter().any(|x| x.version == h.version && x.updated_at == h.updated_at) { out.history.push(h.clone()); }
