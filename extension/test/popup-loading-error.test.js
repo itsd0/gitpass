@@ -407,7 +407,7 @@ test('popup.css includes reduced-motion disable for shimmer and light theme toke
 
   // Light theme tokens
   assert.match(css, /@media[\s]*\(prefers-color-scheme:[\s]*light\)/);
-  assert.match(css, /--orange:/);
+  assert.match(css, /--accent:/);
   assert.match(css, /--bg:/);
   assert.match(css, /--panel:/);
   assert.match(css, /--fg:/);
