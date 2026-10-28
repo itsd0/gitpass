@@ -113,7 +113,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
       <div className="flex-1 overflow-y-auto px-6 py-6">
         <div className="mx-auto max-w-3xl">
           <div className="mb-6 flex items-center gap-4">
-            <ItemIcon item={detail} size={48} />
+            <ItemIcon item={detail} size={40} />
             <h1 className="min-w-0 flex-1 truncate text-xl font-semibold">{detail.title}</h1>
             {!deleted && <Tooltip content={detail.favorite ? t('detail.unfavorite') : t('detail.favorite')}>
               <Button variant="ghost" size="icon" aria-label={t('detail.toggleFavorite')} onClick={() => run(api.setFavorite({ ...ctx, favorite: !detail.favorite }), detail.favorite ? t('bulk.toast.unfavorite') : t('bulk.toast.favorite'))}>

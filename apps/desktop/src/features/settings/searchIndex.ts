@@ -26,6 +26,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     descriptionKey: 'settings.languageHelp',
     keywords: ['locale', 'translation', 'burmese', 'thai', 'english'],
   },
+  {
+    id: 'setting-show-website-icons',
+    tab: 'general',
+    labelKey: 'settings.showWebsiteIcons',
+    descriptionKey: 'settings.showWebsiteIconsHelp',
+    keywords: ['favicon', 'website icons', 'site icons', 'icons', 'logos', 'monogram'],
+  },
   // Security
   {
     id: 'setting-autolock',

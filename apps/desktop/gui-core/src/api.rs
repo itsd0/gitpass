@@ -193,13 +193,16 @@ pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_length: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_digits: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_symbols: Option<bool>,
+    /// Privacy: Settings → Appearance gets a toggle, "Show website icons" (off by default, because fetching tells each site you have a login there).
+    #[serde(default)] pub show_website_icons: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
         Settings { auto_lock_minutes: 5, clipboard_clear_secs: crate::CLIPBOARD_CLEAR_SECS, theme: Theme::Dark, language: Language::En,
             biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false, ssh_approve_each_use: false,
             lock_on_sleep: true, lock_on_screen_lock: true, lock_on_user_switch: true,
-            generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None }
+            generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
+            show_website_icons: false }
     }
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -341,6 +344,7 @@ pub struct App {
     fresh_secret: Mutex<Option<(String, Zeroizing<String>)>>,
     biometric: Box<dyn BiometricStore>,
     file_lock: Mutex<()>,
+    favicon_cache_dir: Mutex<Option<PathBuf>>,
 }
 
 fn ts(secs_str: &str) -> String { secs_str.trim().parse::<i64>().map(iso8601).unwrap_or_else(|_| secs_str.to_string()) }
@@ -554,7 +558,8 @@ impl App {
     /// `settings_dir`: where `.gitpass-settings.json` lives (the desktop app uses the default vault dir).
     pub fn new(settings_dir: PathBuf, clipboard: Arc<dyn Clipboard>) -> Self {
         let app = App { state: GuiState::new(5), settings_dir, clipboard, clip_gen: Arc::new(AtomicU64::new(0)), last_copied: Arc::new(Mutex::new(None)), hibp: Box::new(UreqHibp),
-            unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), fresh_secret: Mutex::new(None), biometric: Box::new(NoBiometrics), file_lock: Mutex::new(()) };
+            unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), fresh_secret: Mutex::new(None), biometric: Box::new(NoBiometrics), file_lock: Mutex::new(()),
+            favicon_cache_dir: Mutex::new(None) };
         let s = app.get_settings();
         app.state.set_auto_lock_minutes(s.auto_lock_minutes);
         app
@@ -1284,6 +1289,11 @@ impl App {
             let root = self.status()?.vault_path;
             self.biometric.delete(&root)?;
         }
+        let was_icons = self.get_settings().show_website_icons;
+        if was_icons && !s.show_website_icons {
+            let cache_dir = self.favicon_cache_dir.lock().unwrap().clone().unwrap_or_else(crate::favicon::default_favicon_cache_dir);
+            let _ = crate::favicon::clear_favicon_cache(&cache_dir);
+        }
         if s.auto_lock_minutes > 24 * 60 { bail!("autoLockMinutes must be <= 1440"); }
         if s.clipboard_clear_secs > 3600 { bail!("clipboardClearSecs must be <= 3600"); }
         self.update_local(|l| l.settings = Some(s.clone()))?;
@@ -1409,9 +1419,20 @@ impl App {
         Ok(SyncResult { message: m })
     }
 
-    /// Favicons are opt-in (Rust-only `allowFavicons` key, default off). MVP: always `None` (letter
-    /// avatar); no network request is ever made.
-    pub fn favicon_url(&self, _url: &str) -> Option<String> { let _ = self.read_local().allow_favicons; None }
+    /// Favicons are opt-in (`showWebsiteIcons` setting or Rust-only `allowFavicons` key).
+    /// Returns None immediately without network calls when off.
+    pub fn favicon_url(&self, url: &str) -> Option<String> {
+        let s = self.get_settings();
+        if !s.show_website_icons && !self.read_local().allow_favicons {
+            return None;
+        }
+        let cache_dir = self.favicon_cache_dir.lock().unwrap().clone().unwrap_or_else(crate::favicon::default_favicon_cache_dir);
+        crate::favicon::fetch_and_cache(url, &cache_dir, false).ok().flatten()
+    }
+
+    pub fn set_favicon_cache_dir(&self, dir: PathBuf) {
+        *self.favicon_cache_dir.lock().unwrap() = Some(dir);
+    }
 }
 
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {
