@@ -7,6 +7,8 @@ export const IMPORT_FORMATS = [
   { id: '1password-1pux', label: '1Password (.1pux)', ext: '1pux' },
   { id: 'keepass-csv', label: 'KeePass (.csv)', ext: 'csv' },
   { id: 'chrome-csv', label: 'Chrome / Chromium (.csv)', ext: 'csv' },
+  { id: 'lastpass-csv', label: 'LastPass (.csv)', ext: 'csv' },
+  { id: 'protonpass-csv', label: 'Proton Pass (.csv)', ext: 'csv' },
   { id: 'gitpass-json', label: 'gitpass (.json)', ext: 'json' },
 ] as const;
 
@@ -93,6 +95,20 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
         return 'bitwarden-csv';
       }
 
+      // LastPass CSV distinctive headers
+      if (cols.includes('grouping') || (cols.includes('extra') && cols.includes('fav'))) {
+        return 'lastpass-csv';
+      }
+
+      // Proton Pass CSV distinctive headers
+      if (
+        (cols.includes('createtime') && cols.includes('modifytime')) ||
+        (cols.includes('vault') && cols.includes('email')) ||
+        (cols.includes('type') && cols.includes('email') && cols.includes('username'))
+      ) {
+        return 'protonpass-csv';
+      }
+
       // KeePass CSV distinctive headers
       if (cols.some((c) => ['group', 'account', 'login name', 'web site', 'comments', 'icon', 'last modified'].includes(c))) {
         return 'keepass-csv';
@@ -110,6 +126,8 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
     }
 
     if (lowerName.includes('bitwarden')) return 'bitwarden-csv';
+    if (lowerName.includes('lastpass')) return 'lastpass-csv';
+    if (lowerName.includes('proton') || lowerName.includes('protonpass')) return 'protonpass-csv';
     if (lowerName.includes('keepass')) return 'keepass-csv';
     if (lowerName.includes('chrome') || lowerName.includes('chromium')) return 'chrome-csv';
     if (lowerName.includes('1password') || lowerName.includes('onepassword')) return '1password-csv';

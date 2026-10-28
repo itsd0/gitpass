@@ -44,6 +44,16 @@ describe('detectImportFormat pure function', () => {
     expect(detectImportFormat('export.csv', content)).toBe('chrome-csv');
   });
 
+  it('detects lastpass CSV from fixture header', () => {
+    const content = fs.readFileSync(path.join(FIXTURES_DIR, 'lastpass.csv'), 'utf8');
+    expect(detectImportFormat('export.csv', content)).toBe('lastpass-csv');
+  });
+
+  it('detects protonpass CSV from fixture header', () => {
+    const content = fs.readFileSync(path.join(FIXTURES_DIR, 'protonpass.csv'), 'utf8');
+    expect(detectImportFormat('export.csv', content)).toBe('protonpass-csv');
+  });
+
   it('detects keepass CSV from fixture header', () => {
     const content = fs.readFileSync(path.join(FIXTURES_DIR, 'keepass.csv'), 'utf8');
     expect(detectImportFormat('export.csv', content)).toBe('keepass-csv');
@@ -66,6 +76,8 @@ describe('detectImportFormat pure function', () => {
     expect(detectImportFormat('my-bitwarden-export.csv')).toBe('bitwarden-csv');
     expect(detectImportFormat('keepass-passwords.csv')).toBe('keepass-csv');
     expect(detectImportFormat('Chrome Passwords.csv')).toBe('chrome-csv');
+    expect(detectImportFormat('lastpass_export.csv')).toBe('lastpass-csv');
+    expect(detectImportFormat('proton_pass.csv')).toBe('protonpass-csv');
     expect(detectImportFormat('1Password Export.csv')).toBe('1password-csv');
     expect(detectImportFormat('gitpass-backup.json')).toBe('gitpass-json');
     expect(detectImportFormat('bitwarden-backup.json')).toBe('bitwarden-json');
@@ -109,6 +121,8 @@ describe('import wizard reducer', () => {
       '1password-1pux',
       'keepass-csv',
       'chrome-csv',
+      'lastpass-csv',
+      'protonpass-csv',
       'gitpass-json',
     ]);
   });

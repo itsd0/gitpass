@@ -327,11 +327,16 @@ export function ImportWizard({ onBack, onDone }: { onBack: () => void; onDone: (
                 <option value="" disabled>
                   {t('import.selectFormat')}
                 </option>
-                {IMPORT_FORMATS.map((f) => (
-                  <option key={f.id} value={f.id}>
-                    {f.label}
-                  </option>
-                ))}
+                {IMPORT_FORMATS.map((f) => {
+                  let label: string = f.label;
+                  if (f.id === 'lastpass-csv') label = t('import.formatLastpass');
+                  else if (f.id === 'protonpass-csv') label = t('import.formatProtonPass');
+                  return (
+                    <option key={f.id} value={f.id}>
+                      {label}
+                    </option>
+                  );
+                })}
               </select>
             </label>
 
