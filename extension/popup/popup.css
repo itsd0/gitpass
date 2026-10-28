@@ -7,6 +7,16 @@
   --orange: 242 140 40;
   color-scheme: dark;
 }
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg: 248 248 250; --panel: 255 255 255; --sidebar: 241 242 245; --card: 255 255 255;
+    --hover: 232 234 239; --active: 220 224 232; --border: 222 224 230;
+    --fg: 24 26 32; --muted: 104 110 124; --label: 88 86 214;
+    --accent: 26 115 232; --danger: 214 48 49; --ok: 22 163 74; --warn: 217 119 6;
+    --orange: 234 88 12;
+    color-scheme: light;
+  }
+}
 * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: rgb(var(--active)) transparent; }
 html, body { margin: 0; width: 720px; height: 480px; overflow: hidden; }
 body { background: rgb(var(--bg)); color: rgb(var(--fg)); font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans Myanmar", "Noto Sans Thai", sans-serif; -webkit-font-smoothing: antialiased; }
@@ -133,3 +143,50 @@ input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 
 .newitem .bad { border-color: rgb(239 68 68) !important; }
 .newitem .field .eye + .eye { right: 30px; }
 .newitem > * { flex-shrink: 0; }
+
+.icon-btn .spinner { width: 14px; height: 14px; border: 2px solid rgb(var(--muted) / .3); border-top-color: rgb(var(--fg)); }
+.btn:focus-visible, .icon-btn:focus-visible { outline: none; border-color: rgb(var(--accent)); box-shadow: 0 0 0 3px rgb(var(--accent) / .25); }
+
+/* Skeletons */
+.skeleton-row { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 10px; pointer-events: none; }
+.skeleton-head { pointer-events: none; }
+.skeleton-fields { pointer-events: none; }
+.skeleton-field { pointer-events: none; }
+.skeleton-icon { width: 32px; height: 32px; border-radius: 50%; background: rgb(var(--border) / .7); flex-shrink: 0; }
+.skeleton-icon.lg { width: 44px; height: 44px; border-radius: 12px; }
+.skeleton-meta { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.skeleton-bar { border-radius: 4px; background: rgb(var(--border) / .7); display: block; }
+.skeleton-bar.t { width: 65%; height: 12px; }
+.skeleton-bar.u { width: 40%; height: 10px; }
+.skeleton-bar.h { width: 55%; height: 16px; }
+.skeleton-bar.sub { width: 35%; height: 11px; }
+.skeleton-bar.lbl { width: 25%; height: 9px; margin-bottom: 4px; }
+.skeleton-bar.val { width: 75%; height: 13px; }
+
+/* Subtle Shimmer Animation */
+.skeleton-shimmer { position: relative; overflow: hidden; }
+.skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(var(--hover) / .6), transparent);
+  animation: skeleton-shimmer 1.5s infinite;
+}
+@keyframes skeleton-shimmer {
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-shimmer::after {
+    animation: none !important;
+    display: none !important;
+  }
+}
+
+/* Inline error card */
+.inline-err { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 32px 16px; gap: 8px; }
+.inline-err-ic { width: 36px; height: 36px; color: rgb(var(--orange)); display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+.inline-err-ic svg.ui { width: 28px; height: 28px; }
+.inline-err-msg { font-size: 14px; font-weight: 600; color: rgb(var(--fg)); margin: 0; }
+.inline-err-sub { font-size: 12px; color: rgb(var(--muted)); margin: 0; word-break: break-word; max-width: 220px; }
+.inline-err .btn-retry { margin-top: 8px; }
