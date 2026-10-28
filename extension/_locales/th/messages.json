@@ -653,5 +653,46 @@
   },
   "noUsername": {
     "message": "ไม่มีชื่อผู้ใช้"
+  },
+  "settingsSubtitle": {
+    "message": "การตั้งค่าและการผสานรวมเบราว์เซอร์"
+  },
+  "statusCardTitle": {
+    "message": "การเชื่อมต่อเดสก์ท็อป"
+  },
+  "statusConnectedUnlocked": {
+    "message": "เชื่อมต่อกับ gitpass แล้ว (ปลดล็อกแล้ว)"
+  },
+  "statusAppLocked": {
+    "message": "gitpass ถูกล็อกอยู่"
+  },
+  "statusAppNotFound": {
+    "message": "ไม่พบแอปเดสก์ท็อป"
+  },
+  "troubleshootingDocs": {
+    "message": "เอกสารการแก้ไขปัญหา"
+  },
+  "secGeneral": {
+    "message": "ทั่วไป"
+  },
+  "secAutofillSaving": {
+    "message": "การกรอกอัตโนมัติและการบันทึก"
+  },
+  "secAbout": {
+    "message": "เกี่ยวกับ"
+  },
+  "aboutExt": {
+    "message": "ส่วนขยายเบราว์เซอร์สำหรับเติมข้อมูลและบันทึกข้อมูลประจำตัว"
+  },
+  "optNeverSaveEmptyBody": {
+    "message": "ไซต์ที่คุณเลือก 'ไม่ต้องบันทึก' จะปรากฏที่นี่"
+  },
+  "siteRemoved": {
+    "message": "ลบ $1 แล้ว",
+    "placeholders": {
+      "1": {
+        "content": "$1"
+      }
+    }
   }
 }

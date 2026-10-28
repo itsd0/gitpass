@@ -1,16 +1,133 @@
-<!doctype html><html><head><meta charset="utf-8"><title>gitpass settings</title><link rel="stylesheet" href="../welcome/welcome.css"></head>
-<body><div class="wrap" style="margin-top:16px">
-<header><img src="../icons/icon128.png" alt=""><h1 data-i18n="settingsTitle">gitpass settings</h1></header>
-<div class="step">
-<label class="t"><span><b data-i18n="optAutolock">Auto-lock follows the gitpass app</b><br><span class="mut" data-i18n="optAutolockBody">Lock the extension when the app locks (idle timeout is set in the app).</span></span><input type="checkbox" id="autolockFollowsApp"></label>
-<label class="t"><span><b data-i18n="optAutofill">Autofill suggestions on pages</b><br><span class="mut" data-i18n="optAutofillBody">Show the gitpass menu under login fields.</span></span><input type="checkbox" id="autofill"></label>
-<label class="t"><span><b data-i18n="optSave">Offer to save logins</b><br><span class="mut" data-i18n="optSaveBody">Ask to save or update a password after you sign in.</span></span><input type="checkbox" id="savePrompts"></label>
-<div class="t" style="border:0"><span><b data-i18n="optShortcut">Keyboard shortcut</b><br><span class="mut" data-i18n="optShortcutBody">Opens the gitpass popup.</span></span><span><kbd id="shortcut">—</kbd> <button class="sec" id="change-shortcut" data-i18n="change">Change</button></span></div>
-</div>
-<div class="step" id="never-save-section">
-<h2 data-i18n="optNeverSave">Never save on these sites</h2>
-<div class="mut" style="margin-bottom:12px" data-i18n="optNeverSaveBody">gitpass will not offer to save or update passwords on these sites.</div>
-<div id="never-save-list"></div>
-<div id="never-save-empty" class="mut" data-i18n="optNeverSaveEmpty" style="display:none;padding:6px 0">No sites excluded</div>
-</div><div class="status" id="saved"></div></div>
-<script src="../lib/i18n.js"></script><script src="../lib/onboard-common.js"></script><script src="options.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title data-i18n="settingsTitle">gitpass settings</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="app-header">
+      <img src="../icons/icon128.png" alt="" class="logo">
+      <div>
+        <h1 data-i18n="settingsTitle">gitpass settings</h1>
+        <p class="header-sub" data-i18n="settingsSubtitle">Preferences and browser integration</p>
+      </div>
+    </header>
+
+    <!-- Connection Status Card -->
+    <div id="connection-card" class="card status-card" role="region" aria-labelledby="status-card-label">
+      <div class="status-indicator">
+        <span id="status-dot" class="status-dot checking" aria-hidden="true"></span>
+      </div>
+      <div class="status-info">
+        <div class="status-head">
+          <span id="status-card-label" class="status-section-label" data-i18n="statusCardTitle">Desktop connection</span>
+        </div>
+        <div id="status-text" class="status-message" role="status" aria-live="polite" data-i18n="checking">Checking…</div>
+        <div id="status-troubleshoot-wrap" class="status-actions hidden">
+          <button id="status-retry-btn" class="btn btn-sm btn-sec" type="button" data-i18n="retry">Retry</button>
+          <a id="status-docs-link" href="https://github.com/itsd0/gitpass#browser-extension" target="_blank" rel="noopener noreferrer" class="link-sec" data-i18n="troubleshootingDocs">Troubleshooting docs</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Section: General -->
+    <section class="card section-card" aria-labelledby="sec-general-title">
+      <h2 id="sec-general-title" class="section-title" data-i18n="secGeneral">General</h2>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <label for="autolockFollowsApp" class="setting-label" data-i18n="optAutolock">Auto-lock follows the gitpass app</label>
+          <span class="setting-desc" data-i18n="optAutolockBody">Lock the extension when the app locks (idle timeout is set in the app).</span>
+        </div>
+        <div class="setting-control">
+          <label class="switch">
+            <input type="checkbox" id="autolockFollowsApp">
+            <span class="slider" aria-hidden="true"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Autofill & saving -->
+    <section class="card section-card" aria-labelledby="sec-autofill-title">
+      <h2 id="sec-autofill-title" class="section-title" data-i18n="secAutofillSaving">Autofill &amp; saving</h2>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <label for="autofill" class="setting-label" data-i18n="optAutofill">Autofill suggestions on pages</label>
+          <span class="setting-desc" data-i18n="optAutofillBody">Show the gitpass menu under login fields.</span>
+        </div>
+        <div class="setting-control">
+          <label class="switch">
+            <input type="checkbox" id="autofill">
+            <span class="slider" aria-hidden="true"></span>
+          </label>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <label for="savePrompts" class="setting-label" data-i18n="optSave">Offer to save logins</label>
+          <span class="setting-desc" data-i18n="optSaveBody">Ask to save or update a password after you sign in.</span>
+        </div>
+        <div class="setting-control">
+          <label class="switch">
+            <input type="checkbox" id="savePrompts">
+            <span class="slider" aria-hidden="true"></span>
+          </label>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Never-save sites -->
+    <section class="card section-card" id="never-save-section" aria-labelledby="sec-never-save-title">
+      <h2 id="sec-never-save-title" class="section-title" data-i18n="optNeverSave">Never save on these sites</h2>
+      <p class="section-desc" data-i18n="optNeverSaveBody">gitpass will not offer to save or update passwords on these sites.</p>
+
+      <div id="never-save-undo-banner" class="undo-banner hidden" role="status" aria-live="polite">
+        <span id="never-save-undo-text"></span>
+        <button id="never-save-undo-btn" class="btn btn-link btn-undo" type="button" data-i18n="undo">Undo</button>
+      </div>
+
+      <div id="never-save-list" class="never-save-list"></div>
+      <div id="never-save-empty" class="empty-state" data-i18n="optNeverSaveEmpty" style="display:none">No sites excluded</div>
+      <p id="never-save-empty-desc" class="empty-desc hidden" data-i18n="optNeverSaveEmptyBody">Sites where you choose 'Never save' will appear here.</p>
+    </section>
+
+    <!-- Section: Keyboard shortcut -->
+    <section class="card section-card" aria-labelledby="sec-shortcut-title">
+      <h2 id="sec-shortcut-title" class="section-title" data-i18n="optShortcut">Keyboard shortcut</h2>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <span class="setting-label" data-i18n="optShortcut">Keyboard shortcut</span>
+          <span class="setting-desc" data-i18n="optShortcutBody">Opens the gitpass popup.</span>
+        </div>
+        <div class="setting-control shortcut-control">
+          <kbd id="shortcut">—</kbd>
+          <button id="change-shortcut" class="btn btn-sec" type="button" data-i18n="change">Change</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: About -->
+    <section class="card section-card" aria-labelledby="sec-about-title">
+      <h2 id="sec-about-title" class="section-title" data-i18n="secAbout">About</h2>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <span class="setting-label">gitpass</span>
+          <span class="setting-desc" data-i18n="aboutExt">Browser extension for autofill and saving credentials</span>
+        </div>
+        <div class="setting-control">
+          <span id="extension-version" class="version-badge">0.6.3</span>
+        </div>
+      </div>
+    </section>
+
+    <div id="saved" class="toast hidden" role="status" aria-live="polite"></div>
+  </div>
+
+  <script src="../lib/i18n.js"></script>
+  <script src="../lib/onboard-common.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
