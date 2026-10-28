@@ -286,9 +286,14 @@ impl Agent {
                 let query = s("query").unwrap_or_default().trim().to_lowercase();
                 let vault = s("vault_id").filter(|v| !v.is_empty());
                 let limit = q.get("limit").and_then(|l| l.as_u64()).map(|l| l as usize).unwrap_or(usize::MAX);
+                let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
                 let mut items: Vec<(Value, String)> = self.records()?.into_iter()
                     .filter(|(vid, _, _, r)| vault.as_ref().is_none_or(|v| v == vid) && cat.is_none_or(|c| c == r.category))
-                    .map(|(vid, vname, iid, r)| (summary(&vid, &vname, &iid, &r), r.item.title.to_lowercase()))
+                    .map(|(vid, vname, iid, r)| {
+                        let mut s = summary(&vid, &vname, &iid, &r);
+                        if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
+                        (s, r.item.title.to_lowercase())
+                    })
                     .filter(|(v, _)| query.is_empty() || ["title", "subtitle", "url"].iter().any(|k| v[*k].as_str().unwrap_or("").to_lowercase().contains(&query)))
                     .collect();
                 items.sort_by(|a, b| a.1.cmp(&b.1));
@@ -297,12 +302,25 @@ impl Agent {
             "match" => {
                 let origin = req("origin")?;
                 if gitpass_host::origin::parse_request_origin(&origin).is_none() { return Err(err("origin_mismatch", "origin must be https:// (or http:// on loopback)")); }
+                let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
                 let items: Vec<Value> = self.records()?.into_iter()
                     .filter(|(_, _, _, r)| r.category == Category::Login && r.item.url.as_deref().is_some_and(|u| gitpass_host::origin::origin_matches(u, &origin)))
-                    .map(|(vid, vname, iid, r)| summary(&vid, &vname, &iid, &r)).collect();
+                    .map(|(vid, vname, iid, r)| {
+                        let mut s = summary(&vid, &vname, &iid, &r);
+                        if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
+                        s
+                    }).collect();
                 Ok(json!({"items": items}))
             }
-            "get_item" => { let (vid, iid) = split_id(&req("item_id")?)?; let (vname, r) = self.record(&vid, &iid)?; Ok(json!({"item": detail(&vid, &vname, &iid, &r)})) }
+            "get_item" => {
+                let (vid, iid) = split_id(&req("item_id")?)?;
+                let (vname, r) = self.record(&vid, &iid)?;
+                let mut d = detail(&vid, &vname, &iid, &r);
+                if let Ok(Some(lu)) = self.app.state.with(|x| Ok(x.session.last_used(&iid))) {
+                    d["last_used"] = json!(lu);
+                }
+                Ok(json!({"item": d}))
+            }
             "reveal" => {
                 if source != "popup" { return Err(err("denied", "reveal is allowed only from the popup")); }
                 let (vid, iid) = split_id(&req("item_id")?)?;
@@ -318,6 +336,7 @@ impl Agent {
                 if !r.item.url.as_deref().is_some_and(|u| gitpass_host::origin::origin_matches(u, &origin)) {
                     return Err(err("origin_mismatch", "the item's website does not match this page"));
                 }
+                let _ = self.app.state.with(|x| Ok(x.session.touch_item_used(&iid)));
                 let mut v = json!({"username": r.item.username.clone().unwrap_or_default(), "password": r.item.password.clone().unwrap_or_default()});
                 if let Some(t) = r.item.totp.as_deref().filter(|t| !t.is_empty()) { v["totp"] = json!(gitpass_core::totp::code_now(&gitpass_core::totp::parse(t)?).0); }
                 Ok(v)
@@ -328,6 +347,7 @@ impl Agent {
                 let (_, r) = self.record(&vid, &iid)?;
                 let want = if cmd == "fill_card" { Category::CreditCard } else { Category::Identity };
                 if r.category != want { return Err(err("bad_request", format!("item is not a {}", want.as_str()))); }
+                let _ = self.app.state.with(|x| Ok(x.session.touch_item_used(&iid)));
                 let mut m = serde_json::Map::new();
                 for f in r.view_sections().into_iter().flat_map(|s| s.fields) { if let Some(v) = f.value { m.insert(f.id, json!(v)); } }
                 Ok(Value::Object(m))

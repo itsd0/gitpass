@@ -748,5 +748,11 @@
   "optFillShortcutBody": {
     "message": "popup မဖွင့်ဘဲ လက်ရှိစာမျက်နှာအတွက် အကိုက်ညီဆုံး လော့ဂ်အင်ကို ဖြည့်ပါသည်။",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "recentlyUsed": {
+    "message": "မကြာသေးမီက သုံးခဲ့သည်"
+  },
+  "allItems": {
+    "message": "ပစ္စည်းအားလုံး"
   }
 }

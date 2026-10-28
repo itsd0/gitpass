@@ -748,5 +748,11 @@
   "optFillShortcutBody": {
     "message": "เติมข้อมูลเข้าสู่ระบบที่ตรงที่สุดในหน้าปัจจุบันโดยไม่ต้องเปิดป๊อปอัป",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "recentlyUsed": {
+    "message": "ใช้งานล่าสุด"
+  },
+  "allItems": {
+    "message": "รายการทั้งหมด"
   }
 }

@@ -111,6 +111,9 @@ enum Cmd {
         /// Fuzzy filter (ranked)
         #[arg(long, short = 'q')]
         query: Option<String>,
+        /// Sort order (e.g. "recent")
+        #[arg(long, value_name = "ORDER")]
+        sort: Option<String>,
         /// Output JSON
         #[arg(long)]
         json: bool,
@@ -522,6 +525,8 @@ struct CliItemSummary {
     tags: Vec<String>,
     favorite: bool,
     updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_used: Option<u64>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -548,6 +553,8 @@ struct CliItemDetail {
     updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     password_changed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_used_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     notes: Option<String>,
     fields: Vec<CliField>,
@@ -600,10 +607,11 @@ fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
         tags: r.tags.clone(),
         favorite: r.favorite,
         updated_at: ts(&r.item.updated_at),
+        last_used: None,
     }
 }
 
-fn item_detail(id: &str, r: &ItemRecord, reveal: bool) -> CliItemDetail {
+fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<String>) -> CliItemDetail {
     let mut fields = Vec::new();
     for section in r.view_sections() {
         for f in section.fields {
@@ -632,6 +640,7 @@ fn item_detail(id: &str, r: &ItemRecord, reveal: bool) -> CliItemDetail {
         created_at: r.created_at.map(|c| gitpass_core::device::iso8601(c as i64)),
         updated_at: ts(&r.item.updated_at),
         password_changed_at: r.password_changed_at().map(|t| gitpass_core::device::iso8601(t as i64)),
+        last_used_at,
         notes: r.item.notes.clone().filter(|n| !n.trim().is_empty()),
         fields,
     }
@@ -857,11 +866,17 @@ fn run() -> Result<()> {
             let vid = s.resolve_vault(vault)?;
             let (id, rec) = pick_record(&s, &vid, query, *pick, *include_archived)?;
             if *json {
-                let detail = item_detail(&id, &rec, *reveal);
+                if *reveal {
+                    let _ = s.touch_item_used(&id);
+                }
+                let last_used_at = s.last_used(&id).map(|t| gitpass_core::device::iso8601(t as i64));
+                let detail = item_detail(&id, &rec, *reveal, last_used_at);
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else if *copy {
+                let _ = s.touch_item_used(&id);
                 do_copy(&field_value(&rec.item, *field)?, *clear_secs, *quiet, "field", field_markers(*field))?;
             } else if *password_only {
+                let _ = s.touch_item_used(&id);
                 println!("{}", rec.item.password.clone().unwrap_or_default());
             } else {
                 print_item(&id, &rec);
@@ -870,17 +885,21 @@ fn run() -> Result<()> {
         Cmd::Copy { vault, query, field, pick, clear_secs, quiet } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            let (_, it) = pick_item(&s, &vid, query, *pick)?;
+            let (id, it) = pick_item(&s, &vid, query, *pick)?;
+            let _ = s.touch_item_used(&id);
             do_copy(&field_value(&it, *field)?, *clear_secs, *quiet, &format!("'{}'", it.title), field_markers(*field))?;
         }
         Cmd::Totp { vault, query, pick, copy, clear_secs } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            let (_, it) = pick_item(&s, &vid, query, *pick)?;
+            let (id, it) = pick_item(&s, &vid, query, *pick)?;
             let t = it.totp.as_deref().ok_or_else(|| anyhow::anyhow!("item '{}' has no TOTP secret", it.title))?;
             let (code, rem) = gitpass_core::totp::code_now(&gitpass_core::totp::parse(t)?);
             println!("{code}  ({rem}s remaining)");
-            if *copy { do_copy(&code, *clear_secs, true, "TOTP code", Some(PasteboardMarkers::SECRET))?; }
+            if *copy {
+                let _ = s.touch_item_used(&id);
+                do_copy(&code, *clear_secs, true, "TOTP code", Some(PasteboardMarkers::SECRET))?;
+            }
         }
         Cmd::Find { vault, query, json, include_archived } => {
             let s = unlock(&cli, &root)?;
@@ -889,13 +908,18 @@ fn run() -> Result<()> {
             if !include_archived {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
+            let usage = s.all_last_used();
             let ranked = gitpass_core::search::rank_by(
                 query,
                 recs.into_iter().map(|(id, _, rec)| (id, rec)),
                 |r| &r.item,
             );
             if *json {
-                let summaries: Vec<CliItemSummary> = ranked.iter().map(|(_, id, rec)| item_summary(id, rec)).collect();
+                let summaries: Vec<CliItemSummary> = ranked.iter().map(|(_, id, rec)| {
+                    let mut sum = item_summary(id, rec);
+                    sum.last_used = usage.get(id).copied();
+                    sum
+                }).collect();
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
             } else {
                 for (sc, id, rec) in ranked {
@@ -903,13 +927,14 @@ fn run() -> Result<()> {
                 }
             }
         }
-        Cmd::List { vault, query, json, include_archived } => {
+        Cmd::List { vault, query, sort, json, include_archived } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
             let mut recs = s.list_records(&vid)?;
             if !include_archived {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
+            let usage = s.all_last_used();
             let items: Vec<(String, ItemRecord)> = match query {
                 Some(q) => gitpass_core::search::rank_by(
                     q,
@@ -920,12 +945,24 @@ fn run() -> Result<()> {
                 .map(|(_, id, rec)| (id, rec))
                 .collect(),
                 None => {
-                    recs.sort_by(|a, b| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()));
+                    if sort.as_deref() == Some("recent") {
+                        recs.sort_by(|a, b| {
+                            let a_u = usage.get(&a.0).copied().unwrap_or(0);
+                            let b_u = usage.get(&b.0).copied().unwrap_or(0);
+                            b_u.cmp(&a_u).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()))
+                        });
+                    } else {
+                        recs.sort_by(|a, b| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()));
+                    }
                     recs.into_iter().map(|(id, _, rec)| (id, rec)).collect()
                 }
             };
             if *json {
-                let summaries: Vec<CliItemSummary> = items.iter().map(|(id, rec)| item_summary(id, rec)).collect();
+                let summaries: Vec<CliItemSummary> = items.iter().map(|(id, rec)| {
+                    let mut sum = item_summary(id, rec);
+                    sum.last_used = usage.get(id).copied();
+                    sum
+                }).collect();
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
             } else {
                 for (id, rec) in items {

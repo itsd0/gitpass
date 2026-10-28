@@ -72,6 +72,7 @@ gitpass get Personal github --json --reveal
 gitpass get Personal github --copy --field password --clear-secs 30
 gitpass copy Personal github --field username
 gitpass list Personal
+gitpass list Personal --sort recent
 gitpass list Personal --query git --json
 gitpass find Personal "git hub"
 gitpass edit Personal github --notes "2FA enabled"

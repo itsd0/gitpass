@@ -45,11 +45,12 @@ export const HEADER_H = 32,
 export const rowHeight = (r: Row) => (r.type === "header" ? HEADER_H : ITEM_H);
 const SORTS: {
   id: NonNullable<Filter["sort"]>;
-  labelKey: "items.sortUpdated" | "items.sortCreated" | "items.sortTitle";
+  labelKey: "items.sortUpdated" | "items.sortCreated" | "items.sortTitle" | "items.sortRecent";
 }[] = [
   { id: "updated", labelKey: "items.sortUpdated" },
   { id: "created", labelKey: "items.sortCreated" },
   { id: "title", labelKey: "items.sortTitle" },
+  { id: "recent", labelKey: "items.sortRecent" },
 ];
 
 export function ItemList() {
@@ -99,7 +100,16 @@ export function ItemList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(base), debounced, sort, category, version]);
 
-  const rows = useMemo(() => groupRows(items, sort), [items, sort]);
+  const showRecentSection = base.kind === "all" && !searchQuery && sort !== "recent";
+  const rows = useMemo(
+    () =>
+      groupRows(items, sort, {
+        showRecentSection,
+        recentLabel: t("items.recentlyUsed"),
+        neverUsedLabel: t("items.neverUsed"),
+      }),
+    [items, sort, showRecentSection, t]
+  );
   const parentRef = useRef<HTMLDivElement>(null);
   const virt = useVirtualizer({
     count: rows.length,
@@ -112,10 +122,16 @@ export function ItemList() {
 
   // auto-select first item when nothing selected
   useEffect(() => {
-    if (!selectedItemId && items[0]) selectItem(items[0].id);
-  }, [items, selectedItemId, selectItem]);
+    if (!selectedItemId && rows.length > 0) {
+      const first = rows.find((r) => r.type === "item");
+      if (first && first.type === "item") selectItem(first.item.id);
+    }
+  }, [rows, selectedItemId, selectItem]);
   // drop selected ids that left the list (refresh, filter, search)
-  const order = useMemo(() => items.map((x) => x.id), [items]);
+  const order = useMemo(
+    () => rows.filter((r) => r.type === "item").map((r) => r.item.id),
+    [rows]
+  );
   useEffect(() => {
     const s = readSel();
     if (!s.multi.length) return;

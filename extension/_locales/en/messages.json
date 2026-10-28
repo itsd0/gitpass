@@ -681,5 +681,11 @@
   },
   "optFillShortcutBody": {
     "message": "Fills the best-matching login on the current page without opening the popup."
+  },
+  "recentlyUsed": {
+    "message": "Recently used"
+  },
+  "allItems": {
+    "message": "All items"
   }
 }

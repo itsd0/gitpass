@@ -366,6 +366,42 @@ fn refuses_newer_format() {
     assert!(unlock(d.path(), PW, &sk).unwrap_err().to_string().contains("newer"));
 }
 
+#[test]
+fn test_last_used_tracking_and_no_git_changes() {
+    let (d, sk, vid, iid) = setup();
+    let s = unlock(d.path(), PW, &sk).unwrap();
+
+    // 1. Initial state: item has never been used
+    assert_eq!(s.last_used(&iid), None);
+
+    // 2. Viewing/reading the item does NOT update last_used
+    let _ = s.read_item(&vid, &iid).unwrap();
+    let _ = s.list_items(&vid).unwrap();
+    let _ = s.read_record(&vid, &iid).unwrap();
+    assert_eq!(s.last_used(&iid), None);
+
+    // 3. Touching last_used updates timestamp and persists to local state
+    let ts = s.touch_item_used(&iid).unwrap();
+    assert!(ts > 0);
+    assert_eq!(s.last_used(&iid), Some(ts));
+    assert_eq!(s.all_last_used().get(&iid), Some(&ts));
+
+    // 4. Verify no git tracking: init git repo and verify .gitpass-state.json is ignored
+    std::process::Command::new("git")
+        .args(["init"])
+        .current_dir(d.path())
+        .output()
+        .unwrap();
+    let status = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(d.path())
+        .output()
+        .unwrap();
+    let out = String::from_utf8_lossy(&status.stdout);
+    // .gitpass-state.json must not be tracked or staged
+    assert!(!out.contains(".gitpass-state.json"));
+}
+
 // ---------------- proptest ----------------
 mod prop {
     use super::*;

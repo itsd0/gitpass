@@ -362,10 +362,12 @@ impl Host {
                 if let Some(c) = cat { c.parse::<Category>().map_err(|e| coded(code::BAD_REQUEST, e.to_string()))?; }
                 let q = req.get("query").and_then(Value::as_str).map(str::to_lowercase).filter(|q| !q.is_empty());
                 let limit = req.get("limit").and_then(Value::as_u64).unwrap_or(500) as usize;
+                let usage = self.sess()?.all_last_used();
                 let mut out = vec![];
                 for (vid, vname, iid, r) in self.all_records(vault)? {
                     if cat.is_some_and(|c| c != r.category.as_str()) { continue; }
-                    let s = summary(&vid, &vname, &iid, &r);
+                    let mut s = summary(&vid, &vname, &iid, &r);
+                    if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
                     if let Some(q) = &q {
                         let hay = format!("{} {} {}", r.item.title, s["subtitle"].as_str().unwrap_or(""), r.item.url.as_deref().unwrap_or("")).to_lowercase();
                         if !hay.contains(q.as_str()) { continue; }
@@ -381,10 +383,13 @@ impl Host {
                 let origin = req.get("origin").or_else(|| req.get("url")).and_then(Value::as_str)
                     .ok_or_else(|| coded(code::BAD_REQUEST, "missing string argument 'origin'"))?;
                 check_request_origin(origin)?;
+                let usage = self.sess()?.all_last_used();
                 let mut out = vec![];
                 for (vid, vname, iid, r) in self.all_records(None)? {
                     if r.category == Category::Login && r.item.url.as_deref().is_some_and(|u| origin_matches(u, origin)) {
-                        out.push(summary(&vid, &vname, &iid, &r));
+                        let mut s = summary(&vid, &vname, &iid, &r);
+                        if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
+                        out.push(s);
                     }
                 }
                 Ok(json!({"items": out}))
@@ -404,27 +409,33 @@ impl Host {
             }
             "get_item" => {
                 let (vid, iid, r) = self.record(arg_str(req, "item_id")?)?;
-                Ok(json!({"item": detail(&vid, &self.vault_name(&vid)?, &iid, &r)}))
+                let mut d = detail(&vid, &self.vault_name(&vid)?, &iid, &r);
+                if let Some(lu) = self.sess()?.last_used(&iid) {
+                    d["last_used"] = json!(lu);
+                }
+                Ok(json!({"item": d}))
             }
             "reveal" => {
                 if req.get("source").and_then(Value::as_str) != Some("popup") {
                     return Err(coded(code::DENIED, "reveal is allowed only from the popup"));
                 }
-                let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
+                let (_, iid, r) = self.record(arg_str(req, "item_id")?)?;
                 let field = arg_str(req, "field")?;
                 let value = match field {
                     "notes" => r.item.notes.clone(),
                     "url" => r.item.url.clone(),
                     _ => r.find_field(field).and_then(|f| f.value),
                 }.ok_or_else(|| coded(code::NOT_FOUND, format!("no field '{field}'")))?;
+                let _ = self.sess()?.touch_item_used(&iid);
                 Ok(json!({"value": value}))
             }
             "fill" => {
                 let origin = arg_str(req, "origin")?;
                 check_request_origin(origin)?;
-                let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
+                let (_, iid, r) = self.record(arg_str(req, "item_id")?)?;
                 let ok = r.item.url.as_deref().is_some_and(|u| origin_matches(u, origin));
                 if !ok { return Err(coded(code::ORIGIN_MISMATCH, format!("refused: item URL does not match origin {origin}"))); }
+                let _ = self.sess()?.touch_item_used(&iid);
                 let totp = match nonempty(&r.item.totp) {
                     Some(t) => Some(gitpass_core::totp_now(&gitpass_core::totp::parse(t)?).0),
                     None => None,
@@ -434,8 +445,9 @@ impl Host {
             "fill_card" | "fill_identity" => {
                 Self::require_user_action(req, cmd)?;
                 let want = if cmd == "fill_card" { Category::CreditCard } else { Category::Identity };
-                let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
+                let (_, iid, r) = self.record(arg_str(req, "item_id")?)?;
                 if r.category != want { return Err(coded(code::BAD_REQUEST, format!("item is a {}, not a {}", r.category.as_str(), want.as_str()))); }
+                let _ = self.sess()?.touch_item_used(&iid);
                 let mut m = Map::new();
                 for f in fields_of(&r) {
                     if let Some(v) = f.value.filter(|v| !v.is_empty()) { m.entry(f.id).or_insert(json!(v)); }

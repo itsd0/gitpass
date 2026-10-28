@@ -267,9 +267,14 @@ pub fn read_format(root: &Path) -> Result<Format> {
     Ok(f)
 }
 
-// ---------- local (non-git) state: last seen epoch ----------
+// ---------- local (non-git) state: last seen epoch & item usage ----------
 #[derive(Serialize, Deserialize, Default)]
-struct LocalState { account_id: String, epoch: u64 }
+struct LocalState {
+    account_id: String,
+    epoch: u64,
+    #[serde(default)]
+    last_used: BTreeMap<String, u64>,
+}
 fn state_path(root: &Path) -> PathBuf { root.join(".gitpass-state.json") }
 /// Last manifest epoch this device has seen for `account_id` (None = first use on this device: TOFU).
 pub fn last_epoch(root: &Path, account_id: &str) -> Option<u64> {
@@ -277,7 +282,30 @@ pub fn last_epoch(root: &Path, account_id: &str) -> Option<u64> {
     (s.account_id == account_id).then_some(s.epoch)
 }
 fn save_epoch(root: &Path, account_id: &str, epoch: u64) -> Result<()> {
-    write_json(&state_path(root), &LocalState { account_id: account_id.into(), epoch }).map(|_| ())
+    let mut s: LocalState = read_json(&state_path(root)).unwrap_or_default();
+    s.account_id = account_id.into();
+    s.epoch = epoch;
+    write_json(&state_path(root), &s).map(|_| ())
+}
+
+/// Record that an item was used at timestamp `ts` (seconds since unix epoch).
+/// Stored in `.gitpass-state.json` (local-only, git-ignored) so no git commit or sync conflict is created.
+pub fn touch_item_used(root: &Path, item_id: &str, ts: u64) -> Result<()> {
+    let mut s: LocalState = read_json(&state_path(root)).unwrap_or_default();
+    s.last_used.insert(item_id.into(), ts);
+    write_json(&state_path(root), &s).map(|_| ())
+}
+
+/// Retrieve the last used timestamp for an item (None if never used on this device).
+pub fn get_item_last_used(root: &Path, item_id: &str) -> Option<u64> {
+    let s: LocalState = read_json(&state_path(root)).ok()?;
+    s.last_used.get(item_id).copied()
+}
+
+/// Retrieve all recorded item last used timestamps on this device.
+pub fn get_all_last_used(root: &Path) -> BTreeMap<String, u64> {
+    let s: LocalState = read_json(&state_path(root)).ok().unwrap_or_default();
+    s.last_used
 }
 
 fn seal_manifest(root: &Path, ak: &Key32, m: &Manifest) -> Result<()> {
@@ -1063,6 +1091,23 @@ impl Session {
             if let Some(d) = r.devices.iter_mut().find(|d| d.id == id) { d.public_key = Some(pk); }
             Ok(())
         })
+    }
+
+    /// Record that an item was used right now on this device.
+    pub fn touch_item_used(&self, item_id: &str) -> Result<u64> {
+        let ts = now_secs();
+        touch_item_used(&self.root, item_id, ts)?;
+        Ok(ts)
+    }
+
+    /// Last used timestamp for an item on this device (None if never used).
+    pub fn last_used(&self, item_id: &str) -> Option<u64> {
+        get_item_last_used(&self.root, item_id)
+    }
+
+    /// All item last used timestamps recorded on this device.
+    pub fn all_last_used(&self) -> BTreeMap<String, u64> {
+        get_all_last_used(&self.root)
     }
 
     // ---------- identity + sharing (v4) ----------
