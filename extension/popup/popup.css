@@ -132,7 +132,7 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .gen-out code { flex: 1; }
 .gen-code { font-family: ui-monospace, Menlo, monospace; font-size: 16px; line-height: 1.6; word-break: break-all; }
 .gen-code .num { color: rgb(var(--warn)); font-weight: 600; }
-.gen-code .sym { color: rgb(var(--orange)); font-weight: 600; }
+.gen-code .sym { color: rgb(var(--accent)); font-weight: 600; }
 .gen-strength { display: flex; align-items: center; gap: 8px; }
 .gen-strength-bar { flex: 1; height: 4px; border-radius: 99px; background: rgb(var(--card)); overflow: hidden; }
 .gen-strength-fill { height: 100%; width: 0; border-radius: 99px; background: rgb(var(--danger)); transition: width .2s; }
