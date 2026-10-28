@@ -377,5 +377,17 @@ export const en = {
   "settings.repoHelp": "View source code, release notes, and documentation on GitHub",
   "settings.issuesHelp": "Report bugs or submit feature suggestions on GitHub",
 
+
+  // import wizard
+  "import.title": "Migrate data into gitpass",
+  "import.formatApplePasswords": "Apple Passwords / Safari (.csv)",
+  "import.hintApplePasswords": "Passwords app (File → Export All Passwords…) or Safari (File → Export → Passwords…)",
+  "import.formatBitwardenJson": "Bitwarden (.json)",
+  "import.formatBitwardenCsv": "Bitwarden (.csv)",
+  "import.format1PasswordCsv": "1Password 8 (.csv)",
+  "import.format1Password1pux": "1Password (.1pux)",
+  "import.formatKeepassCsv": "KeePass (.csv)",
+  "import.formatChromeCsv": "Chrome / Chromium (.csv)",
+  "import.formatGitpassJson": "gitpass (.json)",
 } as const;
 export type Key = keyof typeof en;

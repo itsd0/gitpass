@@ -18,7 +18,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ImportFormat { BitwardenJson, BitwardenCsv, OnePasswordCsv, OnePassword1pux, KeepassCsv, ChromeCsv, GitpassJson }
+pub enum ImportFormat { BitwardenJson, BitwardenCsv, OnePasswordCsv, OnePassword1pux, KeepassCsv, ChromeCsv, ApplePasswordsCsv, GitpassJson }
 
 impl std::str::FromStr for ImportFormat {
     type Err = anyhow::Error;
@@ -30,8 +30,9 @@ impl std::str::FromStr for ImportFormat {
             "1password-1pux" | "1pux" => Self::OnePassword1pux,
             "keepass-csv" | "keepassxc-csv" => Self::KeepassCsv,
             "chrome-csv" => Self::ChromeCsv,
+            "apple-passwords-csv" | "apple-passwords" | "apple-csv" | "apple" | "safari-csv" | "safari" => Self::ApplePasswordsCsv,
             "gitpass-json" => Self::GitpassJson,
-            o => bail!("unknown import format '{o}' (bitwarden-json, bitwarden-csv, 1password-csv, 1password-1pux, keepass-csv, chrome-csv, gitpass-json)"),
+            o => bail!("unknown import format '{o}' (bitwarden-json, bitwarden-csv, 1password-csv, 1password-1pux, keepass-csv, chrome-csv, apple-passwords-csv, gitpass-json)"),
         })
     }
 }
@@ -51,6 +52,7 @@ pub fn parse(format: ImportFormat, data: &str, passphrase: Option<&str>) -> Resu
         ImportFormat::OnePasswordCsv => parse_csv(data, &ONEPASSWORD_CSV),
         ImportFormat::KeepassCsv => parse_csv(data, &KEEPASS_CSV),
         ImportFormat::ChromeCsv => parse_csv(data, &CHROME_CSV),
+        ImportFormat::ApplePasswordsCsv => parse_csv(data, &APPLE_PASSWORDS_CSV),
         ImportFormat::OnePassword1pux => parse_1pux_json(data),
     }
 }
@@ -156,6 +158,15 @@ const CHROME_CSV: CsvSpec = CsvSpec {
     title: &["name", "origin"], username: &["username"], password: &["password"],
     url: &["url", "origin_url"], notes: &["note", "notes"], totp: &[], modified: &[],
     tags: &[], tag_sep: &[], favorite: &[], archived: &[], ignore: &[], note_type: None,
+};
+// Apple Passwords / Safari CSV (macOS 15 Passwords app / Safari export): Title,URL,Username,Password,Notes,OTPAuth
+const APPLE_PASSWORDS_CSV: CsvSpec = CsvSpec {
+    name: "apple-passwords-csv",
+    title: &["title"], username: &["username", "user name"], password: &["password"],
+    url: &["url", "website"], notes: &["notes", "note"],
+    totp: &["otpauth", "totp", "otp"], modified: &[],
+    tags: &[], tag_sep: &[], favorite: &[], archived: &[],
+    ignore: &[], note_type: None,
 };
 
 /// KeePass group path "Root/Work/Mail" -> tag "Work/Mail" (the root group alone gives no tag).
@@ -634,4 +645,78 @@ pub fn import_items(s: &Session, vid: &str, parsed: Parsed, opts: ImportOpts) ->
         r.added += 1;
     }
     Ok(r)
+}
+
+/// Auto-detect the import format from text content or headers.
+pub fn detect_format(data: &str) -> Option<ImportFormat> {
+    let data = data.strip_prefix('\u{feff}').unwrap_or(data);
+    let trimmed = data.trim_start();
+    if trimmed.starts_with('{') {
+        if let Ok(v) = serde_json::from_str::<Value>(trimmed) {
+            if v.get("gitpass_export").is_some() || v.get("gitpass_encrypted_export").is_some() {
+                return Some(ImportFormat::GitpassJson);
+            }
+            if v.get("items").is_some() || v.get("folders").is_some() || v.get("collections").is_some() {
+                return Some(ImportFormat::BitwardenJson);
+            }
+        }
+    }
+    // Check CSV header
+    let first_line = trimmed.lines().next()?;
+    let mut rdr = csv::ReaderBuilder::new().flexible(true).trim(csv::Trim::Headers).from_reader(first_line.as_bytes());
+    let headers: Vec<String> = rdr.headers().ok()?.iter().map(|h| h.trim().to_ascii_lowercase()).collect();
+    if headers.is_empty() { return None; }
+
+    // Bitwarden CSV distinctive headers
+    if headers.iter().any(|h| ["login_username", "login_uri", "login_password", "login_totp"].contains(&h.as_str())) {
+        return Some(ImportFormat::BitwardenCsv);
+    }
+
+    // KeePass CSV distinctive headers
+    if headers.iter().any(|h| ["group", "login name", "web site", "comments"].contains(&h.as_str())) {
+        return Some(ImportFormat::KeepassCsv);
+    }
+
+    // Apple Passwords vs 1Password 8:
+    // 1Password 8 CSV header: Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
+    // Apple Passwords CSV header: Title,URL,Username,Password,Notes,OTPAuth
+    if headers.contains(&"otpauth".to_string()) {
+        if headers.iter().any(|h| ["favorite", "archived", "tags"].contains(&h.as_str())) {
+            return Some(ImportFormat::OnePasswordCsv);
+        }
+        if headers.contains(&"title".to_string()) || headers.contains(&"url".to_string()) {
+            return Some(ImportFormat::ApplePasswordsCsv);
+        }
+    }
+
+    // 1Password older CSV (without otpauth) or containing favorite/archived/tags
+    if headers.iter().any(|h| ["favorite", "archived", "tags", "notesplain"].contains(&h.as_str())) {
+        return Some(ImportFormat::OnePasswordCsv);
+    }
+
+    // Chrome CSV: name,url,username,password
+    if headers.contains(&"url".to_string())
+        && headers.contains(&"username".to_string())
+        && headers.contains(&"password".to_string())
+        && (headers.contains(&"name".to_string())
+            || headers.contains(&"origin".to_string())
+            || headers.contains(&"origin_url".to_string()))
+    {
+        return Some(ImportFormat::ChromeCsv);
+    }
+
+    None
+}
+
+/// Auto-detect the import format from raw file bytes.
+pub fn detect_format_bytes(data: &[u8]) -> Option<ImportFormat> {
+    if data.starts_with(&[0x50, 0x4b, 0x03, 0x04]) {
+        if let Ok(mut z) = zip::ZipArchive::new(std::io::Cursor::new(data)) {
+            if z.by_name("export.data").is_ok() {
+                return Some(ImportFormat::OnePassword1pux);
+            }
+        }
+    }
+    let s = std::str::from_utf8(data).ok()?;
+    detect_format(s)
 }

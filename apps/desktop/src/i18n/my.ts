@@ -385,5 +385,15 @@ export const my: Partial<Record<Key, string>> = {
   "settings.updateHelp": "ဗားရှင်းအသစ်များကို စစ်ဆေးပြီး အပ်ဒိတ်ထည့်သွင်းပါ",
   "settings.repoHelp": "GitHub ပေါ်ရှိ source code နှင့် စာရွက်စာတမ်းများကို ကြည့်ပါ",
   "settings.issuesHelp": "GitHub တွင် ပြဿနာများကို အစီရင်ခံပါ သို့မဟုတ် အကြံပြုပါ",
-
+  // import wizard
+  "import.title": "ဒေတာများကို gitpass သို့ ပြောင်းရွှေ့ရန်",
+  "import.formatApplePasswords": "Apple Passwords / Safari (.csv)",
+  "import.hintApplePasswords": "Passwords အက်ပ် (File → Export All Passwords…) သို့မဟုတ် Safari (File → Export → Passwords…)",
+  "import.formatBitwardenJson": "Bitwarden (.json)",
+  "import.formatBitwardenCsv": "Bitwarden (.csv)",
+  "import.format1PasswordCsv": "1Password 8 (.csv)",
+  "import.format1Password1pux": "1Password (.1pux)",
+  "import.formatKeepassCsv": "KeePass (.csv)",
+  "import.formatChromeCsv": "Chrome / Chromium (.csv)",
+  "import.formatGitpassJson": "gitpass (.json)",
 };

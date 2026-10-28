@@ -378,5 +378,15 @@ export const th: Partial<Record<Key, string>> = {
   "settings.updateHelp": "ตรวจสอบเวอร์ชันใหม่และติดตั้งการอัปเดต",
   "settings.repoHelp": "ดูซอร์สโค้ด บันทึกประจำรุ่น และเอกสารบน GitHub",
   "settings.issuesHelp": "รายงานปัญหาหรือส่งข้อเสนอแนะบน GitHub",
-
+  // import wizard
+  "import.title": "นำเข้าข้อมูลไปยัง gitpass",
+  "import.formatApplePasswords": "Apple Passwords / Safari (.csv)",
+  "import.hintApplePasswords": "แอป Passwords (File → Export All Passwords…) หรือ Safari (File → Export → Passwords…)",
+  "import.formatBitwardenJson": "Bitwarden (.json)",
+  "import.formatBitwardenCsv": "Bitwarden (.csv)",
+  "import.format1PasswordCsv": "1Password 8 (.csv)",
+  "import.format1Password1pux": "1Password (.1pux)",
+  "import.formatKeepassCsv": "KeePass (.csv)",
+  "import.formatChromeCsv": "Chrome / Chromium (.csv)",
+  "import.formatGitpassJson": "gitpass (.json)",
 };
