@@ -651,5 +651,23 @@
         "content": "$1"
       }
     }
+  },
+  "cmdFillLogin": {
+    "message": "Fill the best-matching login on this page"
+  },
+  "csCmdAppNotRunning": {
+    "message": "Open the gitpass app, then try again"
+  },
+  "csCmdNoForm": {
+    "message": "No login form found on this page"
+  },
+  "csCmdFailed": {
+    "message": "gitpass could not fill this page"
+  },
+  "optFillShortcut": {
+    "message": "Fill login"
+  },
+  "optFillShortcutBody": {
+    "message": "Fills the best-matching login on the current page without opening the popup."
   }
 }

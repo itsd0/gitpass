@@ -49,7 +49,8 @@
       case 'onboard-shortcut': {
         const cmds = chrome.commands ? await chrome.commands.getAll() : [];
         const c = cmds.find((x) => x.name === '_execute_action' || x.name === 'open-popup');
-        return { shortcut: (c && c.shortcut) || '' };
+        const f = cmds.find((x) => x.name === 'fill-login');
+        return { shortcut: (c && c.shortcut) || '', fillShortcut: (f && f.shortcut) || '' };
       }
       case 'onboard-pinned': {
         const s = chrome.action && chrome.action.getUserSettings ? await chrome.action.getUserSettings() : null;

@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path');
 const root = path.join(__dirname, '..'), out = path.join(root, 'dist', 'firefox');
 fs.rmSync(out, { recursive: true, force: true });
-for (const f of ['background.js', 'content.js', 'lib', 'popup', 'icons', '_locales', 'welcome', 'options', 'bg-onboard.js', 'bg-page.js', 'bg-passkey.js'])
+for (const f of ['background.js', 'content.js', 'lib', 'popup', 'icons', '_locales', 'welcome', 'options', 'bg-onboard.js', 'bg-page.js', 'bg-passkey.js', 'bg-command.js'])
   fs.cpSync(path.join(root, f), path.join(out, f), { recursive: true });
 fs.copyFileSync(path.join(root, 'manifest.firefox.json'), path.join(out, 'manifest.json'));
 // Fail the build if the manifest references a file we didn't copy (web-ext lint: MANIFEST_BACKGROUND_FILE_NOT_FOUND).

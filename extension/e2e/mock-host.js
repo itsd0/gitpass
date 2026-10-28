@@ -40,7 +40,9 @@ const pub = (i) => { const o = { ...i }; delete o._u; delete o._p; return o; };
 const host = (s) => { try { return new URL(s).hostname; } catch { return ''; } };
 // control.json `no_match_hosts: ["localhost"]` simulates a site with no saved login.
 const noMatchHosts = () => { const l = readJson(CTRL, {}).no_match_hosts; return Array.isArray(l) ? l : []; };
-const matches = (o) => getItems().filter((i) => i.url && host(i.url) && host(i.url) === host(o) && !noMatchHosts().includes(host(o)));
+// control.json `only_match_ids: [...]` narrows matches to those item ids (fill-login command e2e, #124).
+const onlyMatchIds = () => { const l = readJson(CTRL, {}).only_match_ids; return Array.isArray(l) ? l : null; };
+const matches = (o) => getItems().filter((i) => i.url && host(i.url) && host(i.url) === host(o) && !noMatchHosts().includes(host(o)) && (!onlyMatchIds() || onlyMatchIds().includes(i.id)));
 
 function send(obj) {
   const b = Buffer.from(JSON.stringify(obj)); const h = Buffer.alloc(4); h.writeUInt32LE(b.length);
