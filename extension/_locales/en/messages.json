@@ -511,5 +511,8 @@
   },
   "loadingDetail": {
     "message": "Loading item details…"
+  },
+  "searchHints": {
+    "message": "↑↓ navigate · ↵ fill · ⌘C copy password · Esc clear"
   }
 }
