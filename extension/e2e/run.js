@@ -259,6 +259,37 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     } catch (e) { how += ' ' + e.message; }
     rec('fill via popup', !!viaPopup, `${how}; u=${JSON.stringify(await page.inputValue('#u'))} p=${(await page.inputValue('#p')) ? '[set]' : '[empty]'}; fill cmd sent=${cmdsIn(mockDir).some((m) => m.cmd === 'fill')}`);
 
+    // --- Empty popup state (#52): a site with no saved login offers "Save a login for <host>".
+    // The mock host hides localhost matches so the Suggested filter is empty (the popup falls back to All Items).
+    try {
+      fs.writeFileSync(path.join(mockDir, 'control.json'), JSON.stringify({ unlocked: true, no_match_hosts: ['localhost'], seq: Date.now() }));
+      await sleep(300); // the mock host polls control.json every 100 ms
+      const emptyPop = await openRealPopup(ctx, sw, page, EXT);
+      const loaded = await until(async () => /Localhost Test Login/.test(await emptyPop.text()), T(8000));
+      await emptyPop.eval(`(() => { const s = document.getElementById('filter'); s.value = 'suggested'; s.dispatchEvent(new Event('change', { bubbles: true })); return s.value; })()`);
+      const emptyTxt = await until(async () => { const x = await emptyPop.text(); return /No saved logins for this site/.test(x) && x; }, T(5000));
+      rec('popup empty state: no saved logins offers Save a login for localhost',
+        !!loaded && !!emptyTxt && /Save a login for localhost/.test(emptyTxt),
+        emptyTxt ? 'empty state shown' : (await emptyPop.text().catch(() => 'ERR')).slice(0, 160).replace(/\s+/g, ' '));
+      const mark = cmdsIn(mockDir).length;
+      const clicked = await emptyPop.click('/^Save a login for localhost$/');
+      const form = await until(() => emptyPop.eval(`(() => {
+        const sel = document.querySelector('#panel select');
+        const title = document.querySelector('#panel [data-field=title]');
+        const url = document.querySelector('#panel [data-field=url]');
+        return sel && title && url ? { type: sel.value, title: title.value, url: url.value } : null;
+      })()`), T(5000));
+      rec('popup empty state: Save a login opens the Login form with the URL prefilled',
+        !!form && form.type === 'login' && form.title === 'localhost' && form.url === `http://localhost:${server.address().port}`,
+        `${clicked ? `clicked "${clicked}"` : 'button not clicked'}; ${JSON.stringify(form)}`);
+      const created = cmdsIn(mockDir).slice(mark).filter((m) => m.cmd === 'create_item');
+      rec('popup empty state: nothing is saved until the user submits', created.length === 0, `create_item count=${created.length}`);
+      await emptyPop.close();
+    } catch (e) { rec('popup empty state: no saved logins', false, e.message); } finally {
+      fs.writeFileSync(path.join(mockDir, 'control.json'), JSON.stringify({ unlocked: true, seq: Date.now() }));
+      await sleep(300);
+    }
+
     // --- Save prompt after submit
     await page.goto(LOGIN); await sleep(1000);
     await page.fill('#u', 'newuser@example.com'); await page.fill('#p', 'Brand-New-Pass-42'); await page.click('#go');

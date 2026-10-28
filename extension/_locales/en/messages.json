@@ -182,6 +182,31 @@
   "noItems": {
     "message": "No items"
   },
+  "emptyCreateNamed": {
+    "message": "Create item named “$1”",
+    "placeholders": {
+      "query": {
+        "content": "$1"
+      }
+    }
+  },
+  "emptySaveLoginFor": {
+    "message": "Save a login for $1",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
+    }
+  },
+  "emptyShowAll": {
+    "message": "Show all items"
+  },
+  "emptyVaultTitle": {
+    "message": "Your vault is empty"
+  },
+  "emptyVaultBody": {
+    "message": "Items you add will appear here."
+  },
   "selectItem": {
     "message": "Select an item"
   },

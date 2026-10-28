@@ -182,6 +182,31 @@
   "noItems": {
     "message": "အရာ မရှိပါ"
   },
+  "emptyCreateNamed": {
+    "message": "“$1” အမည်ဖြင့် အရာ ဖန်တီးရန်",
+    "placeholders": {
+      "query": {
+        "content": "$1"
+      }
+    }
+  },
+  "emptySaveLoginFor": {
+    "message": "“$1” အတွက် လော့ဂ်အင် သိမ်းရန်",
+    "placeholders": {
+      "host": {
+        "content": "$1"
+      }
+    }
+  },
+  "emptyShowAll": {
+    "message": "အရာအားလုံး ပြရန်"
+  },
+  "emptyVaultTitle": {
+    "message": "သင့်သော့ခတ်သေတ္တာ ဗလာဖြစ်နေပါသည်"
+  },
+  "emptyVaultBody": {
+    "message": "သင်ထည့်သော အရာများ ဤနေရာတွင် ပေါ်ပါမည်။"
+  },
   "selectItem": {
     "message": "အရာတစ်ခု ရွေးပါ"
   },
