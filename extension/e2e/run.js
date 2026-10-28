@@ -655,9 +655,9 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     rec('identity fill via popup Fill', ...await viaPop('Home Identity', ID_IDS, ID_WANT, 'fill_identity'));
     await cardPage.close();
 
-    // --- Passkeys: the in-page prompt (closed shadow DOM) approves create/get; cancel or a get
-    // with no gitpass match falls back to the browser's own authenticator (CDP virtual authenticator)
-    // and must not open a gitpass window.
+    // --- Passkeys: the in-page prompt (closed shadow DOM) approves create/get; cancel (create or get)
+    // or a get with no gitpass match falls back to the browser's own authenticator (CDP virtual
+    // authenticator) and must not open a gitpass window.
     {
       const WA = `http://localhost:${server.address().port}/webauthn`;
       const outJson = async (pg) => { try { return JSON.parse((await pg.locator('#out').textContent()) || 'null'); } catch { return null; } };
@@ -700,7 +700,7 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       const nativePage = await ctx.newPage(); await nativePage.goto(WA); await sleep(500); await nativePage.bringToFront();
       const cdp = await cdpSession(nativePage);
       await cdp.send('WebAuthn.enable', { enableUI: false });
-      await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
+      const { authenticatorId } = await cdp.send('WebAuthn.addVirtualAuthenticator', { options: { protocol: 'ctap2', transport: 'internal', hasResidentKey: true, hasUserVerification: true, isUserVerified: true, automaticPresenceSimulation: true } });
       let pages = ctx.pages().length;
       let mark = cmdsIn(mockDir).length;
       const cancelReg = await act(nativePage, '#reg', /^Save passkey$/, true);
@@ -719,6 +719,33 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       rec('passkey get with no gitpass match -> native fallback verified',
         noMatch.verified === true && noNewWindow(pages) && (REAL || !noMatchCmds.some((m) => m.cmd === 'passkey_get')),
         JSON.stringify(noMatch) + (REAL ? ' (real host; not logged)' : `; cmds=${JSON.stringify(noMatchCmds.map((m) => m.cmd))}`));
+
+      // Cancel an in-page get prompt that gitpass did match: the same request must go to the browser.
+      // Seed a gitpass passkey through the in-page create flow, then give the CDP virtual authenticator
+      // the same key so the native fallback can actually sign (headless has no platform authenticator).
+      if (REAL) {
+        rec('passkey get cancelled in-page -> native fallback', false, 'skipped in real-host mode: needs a CDP virtual authenticator seeded with the gitpass key', 'info');
+      } else {
+        const seeded = await act(nativePage, '#reg', /^Save passkey$/, false);
+        await promptGone(nativePage, /^Save passkey$/);
+        let cancelGet = { error: 'seed create failed: ' + JSON.stringify(seeded) };
+        let cancelGetCmds = [];
+        if (seeded.registered === true) {
+          try {
+            const pks = JSON.parse(fs.readFileSync(path.join(mockDir, 'passkeys.json'), 'utf8'));
+            const pk = pks.find((p) => p.rp_id === 'localhost');
+            if (!pk) throw new Error('no localhost passkey in the mock store');
+            const b64 = (s) => Buffer.from(s, 'base64url').toString('base64');
+            await cdp.send('WebAuthn.addCredential', { authenticatorId, credential: { credentialId: b64(pk.credential_id), isResidentCredential: true, rpId: pk.rp_id, privateKey: b64(pk.pkcs8), userHandle: b64(pk.user_handle), signCount: 1 } });
+            pages = ctx.pages().length; mark = cmdsIn(mockDir).length;
+            cancelGet = await act(nativePage, '#login', /^Sign in$/, true);
+            cancelGetCmds = cmdsIn(mockDir).slice(mark).filter((m) => /^passkey_/.test(m.cmd));
+          } catch (e) { cancelGet = { error: 'native seed failed: ' + e.message }; }
+        }
+        rec('passkey get cancelled in-page -> native authenticator, no gitpass window',
+          cancelGet.verified === true && noNewWindow(pages) && !cancelGetCmds.some((m) => m.cmd === 'passkey_get') && cancelGetCmds.some((m) => m.cmd === 'passkey_query'),
+          JSON.stringify(cancelGet) + (cancelGetCmds.length ? `; cmds=${JSON.stringify(cancelGetCmds.map((m) => m.cmd))}` : ''));
+      }
       await nativePage.close();
 
       // 2. In-page prompt approval: create, get (ES256 verified by the RP), signCount, duplicates.
