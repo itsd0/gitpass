@@ -384,9 +384,6 @@
   "csSearchGitpass": {
     "message": "Search gitpass…"
   },
-  "csSearchLoginsPh": {
-    "message": "Search gitpass…"
-  },
   "csNoMatchingLogins": {
     "message": "No matching logins"
   },

@@ -407,9 +407,6 @@
   "csSearchGitpass": {
     "message": "ค้นหาใน gitpass…"
   },
-  "csSearchLoginsPh": {
-    "message": "ค้นหาใน gitpass…"
-  },
   "csNoMatchingLogins": {
     "message": "ไม่พบบัญชีที่ตรงกัน"
   },
