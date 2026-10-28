@@ -71,7 +71,7 @@ impl Client {
     }
 }
 
-fn fld(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), label: id.into(), kind, value: Some(v.into()), masked: None } }
+fn fld(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), label: id.into(), kind, value: Some(v.into()), masked: None, diff: None } }
 fn add_login(e: &Env, title: &str, url: &str, user: &str, pw: &str) -> String {
     let s = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some(url.into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, user), fld("password", FieldKind::Concealed, pw)] }],

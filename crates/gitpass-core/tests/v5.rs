@@ -167,6 +167,58 @@ fn history_keeps_last_n_versions() {
 }
 
 #[test]
+fn restore_version_restores_snapshot_and_is_append_only() {
+    let (_d, _sk, s, v) = vault();
+    let id = s.add_record(&v, rec(Category::ApiCredential, "api v1", sample(Category::ApiCredential))).unwrap();
+    // v2: change title & key
+    let (_, mut r) = s.read_record(&v, &id).unwrap();
+    r.item.title = "api v2".into();
+    r.apply_sections(&[sec("api", vec![f("key", FieldKind::Concealed, "FAKE-key-v2")])]);
+    s.update_record(&v, &id, r).unwrap();
+
+    // v3: change title & key again
+    let (_, mut r) = s.read_record(&v, &id).unwrap();
+    r.item.title = "api v3".into();
+    r.apply_sections(&[sec("api", vec![f("key", FieldKind::Concealed, "FAKE-key-v3")])]);
+    s.update_record(&v, &id, r).unwrap();
+
+    let (v3_ver, v3_rec) = s.read_record(&v, &id).unwrap();
+    assert_eq!(v3_ver, 3);
+    assert_eq!(v3_rec.history.len(), 2);
+
+    // Restore v1
+    let new_ver = s.restore_version(&v, &id, 1).unwrap();
+    assert_eq!(new_ver, 4);
+
+    let (v4_ver, v4_rec) = s.read_record(&v, &id).unwrap();
+    assert_eq!(v4_ver, 4);
+    assert_eq!(v4_rec.item.title, "api v1");
+    assert_eq!(v4_rec.find_field("key").unwrap().value.as_deref(), Some("FAKE-KEY"));
+    // Pre-restore state (v3) is retained in history, so history now has 3 entries: v1, v2, v3
+    assert_eq!(v4_rec.history.len(), 3);
+    assert_eq!(v4_rec.history[2].version, 3);
+    assert_eq!(v4_rec.history[2].snapshot.item.title, "api v3");
+
+    // Restore v3 (the pre-restore state, simulating Undo)
+    let undo_ver = s.restore_version(&v, &id, 3).unwrap();
+    assert_eq!(undo_ver, 5);
+    let (v5_ver, v5_rec) = s.read_record(&v, &id).unwrap();
+    assert_eq!(v5_ver, 5);
+    assert_eq!(v5_rec.item.title, "api v3");
+    assert_eq!(v5_rec.find_field("key").unwrap().value.as_deref(), Some("FAKE-key-v3"));
+    assert_eq!(v5_rec.history.len(), 4);
+
+    // Errors cleanly for unknown version
+    let err_unknown = s.restore_version(&v, &id, 999).unwrap_err();
+    assert!(err_unknown.to_string().contains("no version 999 in item history"));
+
+    // Errors cleanly for deleted item
+    s.soft_delete(&v, &id).unwrap();
+    let err_deleted = s.restore_version(&v, &id, 1).unwrap_err();
+    assert!(err_deleted.to_string().contains("cannot restore version of deleted item"));
+}
+
+#[test]
 fn attachments_round_trip_and_tamper_detected() {
     let (d, sk, s, v) = vault();
     let id = s.add_record(&v, rec(Category::Document, "doc", sample(Category::Document))).unwrap();

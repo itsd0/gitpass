@@ -138,8 +138,35 @@ const vaultInfo = () => vaults.map((v) => ({ ...v, itemCount: [...db.values()].f
 const touch = (r: Rec) => {
   r.versions.push(structuredClone(r.detail));
   const now = new Date().toISOString(); r.detail.updatedAt = now;
-  r.detail.history = [...r.detail.history, { version: r.detail.history.length + 1, updatedAt: now }];
+  const nextVer = (r.detail.version ?? r.detail.history.length) + 1;
+  r.detail.version = nextVer;
+  r.detail.history = [...r.detail.history, { version: nextVer, updatedAt: now }];
 };
+function annotateMockDiff(snap: T.ItemDetail, cur: T.ItemDetail) {
+  const curFields = cur.sections.flatMap((s) => s.fields);
+  const snapFields = snap.sections.flatMap((s) => s.fields);
+  for (const s of snap.sections) {
+    for (const f of s.fields) {
+      const cf = curFields.find((x) => x.id === f.id);
+      if (cf) {
+        if (f.value !== cf.value) f.diff = 'changed';
+      } else {
+        f.diff = 'removed';
+      }
+    }
+  }
+  const added = curFields.filter((cf) => !snapFields.some((sf) => sf.id === cf.id)).map((cf) => ({
+    ...structuredClone(cf),
+    diff: 'added' as const,
+  }));
+  if (added.length > 0) {
+    if (snap.sections[0]) {
+      snap.sections[0].fields.push(...added);
+    } else {
+      snap.sections.push({ id: 'added', title: null, fields: added });
+    }
+  }
+}
 const subtitleFor = (input: T.ItemInput): string => {
   const flds = input.sections.flatMap((s) => s.fields);
   if (input.category === 'credit_card') { const n = flds.find((x) => x.id === 'number' || x.label === 'number'); return n?.value ? cardLabel(n.value) : ''; }
@@ -277,7 +304,11 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     return delay(xs.map(summary));
   },
   get_item: (a: { itemId: string }) => delay({ ...get(a.itemId).detail, findings: mockFindings(a.itemId) }),
-  reveal_field: (a: { itemId: string; fieldId: string }) => { const v = get(a.itemId).secrets[a.fieldId]; return v == null ? Promise.reject(new Error('not a concealed field')) : delay(v); },
+  reveal_field: (a: { itemId: string; fieldId: string; version?: number | null }) => {
+    const r = get(a.itemId);
+    const v = r.secrets[a.fieldId] ?? r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId)?.value;
+    return v == null ? Promise.reject(new Error('not a concealed field')) : delay(v);
+  },
   copy_field: (a: { itemId: string; fieldId: string }) => {
     const r = get(a.itemId); const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId);
     const v = r.secrets[a.fieldId] ?? fld?.value ?? '';
@@ -330,7 +361,32 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     r.versions = []; Object.assign(r.detail, { id: uid('i'), title: `${src.detail.title} (copy)`, createdAt: now, updatedAt: now, history: [{ version: 1, updatedAt: now }] });
     db.set(r.detail.id, r); return delay(summary(r.detail));
   },
-  item_version: (a: { itemId: string; version: number }) => { const r = get(a.itemId); return delay(r.versions[a.version - 1] ?? r.detail); },
+  item_version: (a: { itemId: string; version: number }) => {
+    const r = get(a.itemId);
+    const snap = r.versions.find((v) => (v as any).version === a.version) ?? (r.detail.version === a.version ? r.detail : r.versions[a.version - 1] ?? r.detail);
+    const copy = structuredClone(snap);
+    copy.history = [];
+    copy.attachments = [];
+    annotateMockDiff(copy, r.detail);
+    return delay(copy);
+  },
+  restore_item_version: (a: { vaultId: string; itemId: string; version: number }) => {
+    const r = get(a.itemId);
+    if (r.detail.deletedAt) return Promise.reject(new Error('cannot restore version of deleted item'));
+    const target = r.versions.find((v) => (v as any).version === a.version) ?? (r.detail.version === a.version ? r.detail : r.versions[a.version - 1]);
+    if (!target) return Promise.reject(new Error(`no version ${a.version} in item history`));
+    touch(r);
+    r.detail.title = target.title;
+    r.detail.category = target.category;
+    r.detail.sections = structuredClone(target.sections);
+    r.detail.notes = target.notes;
+    r.detail.tags = [...target.tags];
+    r.detail.url = target.url;
+    r.detail.subtitle = target.subtitle;
+    r.detail.hasTotp = target.hasTotp;
+    r.detail.passwordStrength = target.passwordStrength;
+    return delay(r.detail);
+  },
   add_attachment: (a: { itemId: string; path: string }) => { const att: T.Attachment = { id: uid('a'), name: a.path.split(/[\\/]/).pop() || 'file', size: 4096, mime: 'application/octet-stream' }; get(a.itemId).detail.attachments.push(att); return delay(att); },
   save_attachment: () => delay(undefined),
   list_tags: () => delay([...new Set([...db.values()].flatMap((r) => r.detail.tags))].sort()),
