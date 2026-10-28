@@ -14,29 +14,14 @@
   "masterPassword": {
     "message": "รหัสผ่านหลัก"
   },
-  "secretKey": {
-    "message": "Secret Key"
-  },
-  "skHint": {
-    "message": "ใช้เพื่อปลดล็อกเพียงครั้งเดียว เก็บไว้ในหน่วยความจำขณะปลดล็อกเท่านั้น และไม่บันทึกลงดิสก์"
-  },
   "unlock": {
     "message": "ปลดล็อก"
-  },
-  "touchIdSoon": {
-    "message": "การปลดล็อกด้วย Touch ID จะมาเร็วๆ นี้ Secret Key อยู่ใน Emergency Kit ของคุณ"
   },
   "searchPh": {
     "message": "ค้นหาในห้องนิรภัย"
   },
   "lock": {
     "message": "ล็อก"
-  },
-  "forThisSite": {
-    "message": "สำหรับเว็บไซต์นี้"
-  },
-  "searchResults": {
-    "message": "ผลการค้นหา"
   },
   "generator": {
     "message": "ตัวสร้างรหัสผ่าน"
@@ -116,17 +101,11 @@
   "copyTotp": {
     "message": "คัดลอก TOTP"
   },
-  "totpCopied": {
-    "message": "คัดลอก TOTP แล้ว"
-  },
   "copyTotpCode": {
     "message": "คัดลอกโค้ดใช้ครั้งเดียว"
   },
   "totpUnavailable": {
     "message": "ไม่สามารถแสดงโค้ดได้"
-  },
-  "notHttps": {
-    "message": "ไม่ใช่หน้า https"
   },
   "noMatches": {
     "message": "ไม่มีข้อมูลเข้าสู่ระบบที่บันทึกไว้สำหรับเว็บไซต์นี้"
@@ -148,9 +127,6 @@
   },
   "csNoLogins": {
     "message": "ไม่มีข้อมูลเข้าสู่ระบบ gitpass สำหรับเว็บไซต์นี้"
-  },
-  "csLocked": {
-    "message": "gitpass ถูกล็อกอยู่ ปลดล็อกจากไอคอนบนแถบเครื่องมือ"
   },
   "extDesc": {
     "message": "กรอกข้อมูลอัตโนมัติด้วย gitpass คีย์อยู่ในโปรเซส gitpass-host บนเครื่องนี้เท่านั้น"
@@ -184,9 +160,6 @@
   },
   "newItem": {
     "message": "รายการใหม่"
-  },
-  "newLogin": {
-    "message": "ข้อมูลเข้าสู่ระบบใหม่"
   },
   "filterSuggested": {
     "message": "แนะนำสำหรับเว็บไซต์นี้"
@@ -338,9 +311,6 @@
   },
   "saved": {
     "message": "บันทึกแล้ว"
-  },
-  "needUrlPw": {
-    "message": "ต้องระบุเว็บไซต์และรหัสผ่าน"
   },
   "csSuggest": {
     "message": "แนะนำรหัสผ่านที่รัดกุม",
@@ -591,14 +561,6 @@
   },
   "pkGetTitle": {
     "message": "ลงชื่อเข้าใช้ด้วยพาสคีย์ไหม?"
-  },
-  "pkFor": {
-    "message": "สำหรับ $SITE$",
-    "placeholders": {
-      "site": {
-        "content": "$1"
-      }
-    }
   },
   "pkSite": {
     "message": "เว็บไซต์"

@@ -14,29 +14,14 @@
   "masterPassword": {
     "message": "မာစတာ စကားဝှက်"
   },
-  "secretKey": {
-    "message": "Secret Key"
-  },
-  "skHint": {
-    "message": "သော့ဖွင့်ရန် တစ်ကြိမ်သာ သုံးပါသည်။ သော့ဖွင့်ထားစဉ် memory ထဲတွင်သာ ထားပြီး ဘယ်တော့မှ မသိမ်းပါ။"
-  },
   "unlock": {
     "message": "သော့ဖွင့်ရန်"
-  },
-  "touchIdSoon": {
-    "message": "Touch ID ဖြင့် သော့ဖွင့်ခြင်း မကြာမီ ရနိုင်ပါမည်။ သင့် Secret Key သည် Emergency Kit ထဲတွင် ရှိပါသည်။"
   },
   "searchPh": {
     "message": "သော့ခတ်သေတ္တာတွင် ရှာရန်"
   },
   "lock": {
     "message": "သော့ခတ်ရန်"
-  },
-  "forThisSite": {
-    "message": "ဤဆိုက်အတွက်"
-  },
-  "searchResults": {
-    "message": "ရှာဖွေမှု ရလဒ်များ"
   },
   "generator": {
     "message": "စကားဝှက် ထုတ်ပေးကိရိယာ"
@@ -116,17 +101,11 @@
   "copyTotp": {
     "message": "TOTP ကူးယူရန်"
   },
-  "totpCopied": {
-    "message": "TOTP ကူးယူပြီးပါပြီ"
-  },
   "copyTotpCode": {
     "message": "တစ်ကြိမ်သုံး ကုဒ် ကူးယူရန်"
   },
   "totpUnavailable": {
     "message": "ကုဒ် မရနိုင်ပါ"
-  },
-  "notHttps": {
-    "message": "https စာမျက်နှာ မဟုတ်ပါ"
   },
   "noMatches": {
     "message": "ဤဆိုက်အတွက် သိမ်းထားသော လော့ဂ်အင် မရှိပါ"
@@ -148,9 +127,6 @@
   },
   "csNoLogins": {
     "message": "ဤဆိုက်အတွက် gitpass လော့ဂ်အင် မရှိပါ"
-  },
-  "csLocked": {
-    "message": "gitpass ကို သော့ခတ်ထားပါသည်။ toolbar ရှိ icon မှ သော့ဖွင့်ပါ။"
   },
   "extDesc": {
     "message": "gitpass autofill။ Key များသည် ဤကွန်ပျူတာရှိ gitpass-host ထဲတွင်သာ ရှိပါသည်။"
@@ -184,9 +160,6 @@
   },
   "newItem": {
     "message": "အရာအသစ်"
-  },
-  "newLogin": {
-    "message": "လော့ဂ်အင် အသစ်"
   },
   "filterSuggested": {
     "message": "ဤဆိုက်အတွက် အကြံပြုချက်များ"
@@ -338,9 +311,6 @@
   },
   "saved": {
     "message": "သိမ်းပြီးပါပြီ"
-  },
-  "needUrlPw": {
-    "message": "ဝက်ဘ်ဆိုက်နှင့် စကားဝှက် လိုအပ်ပါသည်"
   },
   "csSuggest": {
     "message": "ခိုင်မာသော စကားဝှက် အကြံပြုရန်",
@@ -591,14 +561,6 @@
   },
   "pkGetTitle": {
     "message": "passkey ဖြင့် ဝင်မလား?"
-  },
-  "pkFor": {
-    "message": "$SITE$ အတွက်",
-    "placeholders": {
-      "site": {
-        "content": "$1"
-      }
-    }
   },
   "pkSite": {
     "message": "ဆိုက်"
