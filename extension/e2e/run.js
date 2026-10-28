@@ -227,6 +227,69 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       const listed = pop && await until(async () => { const t = await pop.text(); return titles.test(t) && t.match(titles)[0]; }, T(8000));
       const after = cmdsIn(mockDir).slice(before).map((m) => m.cmd);
       rec('popup lists items from host', !!listed, `${listed || 'none visible'}; host cmds after unlock: ${[...new Set(after)].join(',') || 'none'}`);
+
+      if (!REAL) {
+        // --- Live sync: open popup refreshes on host changed/lock/unlock events (#42)
+        // 1. Mock host adds an item and emits changed; open popup shows it within ~2s without reopening
+        const NEW_TITLE = 'Live Alpha Item';
+        const startAdd = Date.now();
+        fs.writeFileSync(path.join(mockDir, 'control.json'), JSON.stringify({
+          add_item: {
+            id: 'v1:live_synced',
+            category: 'login',
+            title: NEW_TITLE,
+            subtitle: 'live@example.com',
+            url: 'http://localhost',
+            favorite: false,
+            _u: 'live@example.com',
+            _p: 'live-secret-pw',
+          },
+          event: 'changed',
+          seq: Date.now(),
+        }));
+        const addedVisible = await until(async () => (await pop.text()).includes(NEW_TITLE), 2000);
+        const addElapsed = Date.now() - startAdd;
+        rec('open popup shows new item on host changed event within 2s', !!addedVisible, `visible=${!!addedVisible} elapsed=${addElapsed}ms`);
+
+        // 2. An edit (title change) pushed via changed updates the visible title
+        const RENAMED_TITLE = 'Live Beta Item';
+        const startEdit = Date.now();
+        fs.writeFileSync(path.join(mockDir, 'control.json'), JSON.stringify({
+          edit_item: {
+            id: 'v1:live_synced',
+            title: RENAMED_TITLE,
+          },
+          event: 'changed',
+          seq: Date.now(),
+        }));
+        const editedVisible = await until(async () => {
+          const txt = await pop.text();
+          return txt.includes(RENAMED_TITLE) && !txt.includes(NEW_TITLE);
+        }, 2000);
+        const editElapsed = Date.now() - startEdit;
+        rec('open popup updates item title on host changed event', !!editedVisible, `visible=${!!editedVisible} elapsed=${editElapsed}ms`);
+
+        // 3. Mock host emits lock; the open popup switches to the locked state. unlock restores the list.
+        fs.writeFileSync(path.join(mockDir, 'control.json'), JSON.stringify({
+          unlocked: false,
+          seq: Date.now(),
+        }));
+        const lockedState = await until(async () => {
+          const t = await pop.text();
+          return /unlock/i.test(t) && !titles.test(t);
+        }, T(4000));
+        rec('open popup switches to locked state on host lock event', !!lockedState, lockedState ? 'locked view shown' : 'popup did not lock');
+
+        fs.writeFileSync(path.join(mockDir, 'control.json'), JSON.stringify({
+          unlocked: true,
+          seq: Date.now(),
+        }));
+        const restoredList = await until(async () => {
+          const t = await pop.text();
+          return titles.test(t);
+        }, T(4000));
+        rec('open popup restores item list on host unlock event', !!restoredList, restoredList ? 'item list restored' : 'popup did not restore');
+      }
     }
     if (pop) await pop.close();
 

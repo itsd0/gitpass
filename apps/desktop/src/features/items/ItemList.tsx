@@ -1,3 +1,5 @@
+import { useT } from "../../i18n";
+import { getItemExpiry } from "./expiry";
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ArrowDownUp, Check, ChevronDown, LayoutGrid, Star } from 'lucide-react';
@@ -5,7 +7,7 @@ import { api } from '../../api/client';
 import type { Filter } from '../../api/types';
 import { useApp } from '../../lib/store';
 import { cn } from '../../lib/utils';
-import { Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, Skeleton, toast } from '../../ui';
+import { Badge, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger, Skeleton, toast } from '../../ui';
 import { CATEGORIES, ItemIcon, catMeta } from './categories';
 import { CategoryIcon } from '../../components/CategoryIcon';
 import { groupRows, type Row } from './grouping';
@@ -29,6 +31,7 @@ export function ItemList() {
   const multiIds = useApp((s) => s.multiIds);
   const multiSet = useMemo(() => new Set(multiIds), [multiIds]);
   const multiOn = multiIds.length > 1;
+  const t = useT();
   const { query, category, setCategory, sort, setSort, items, setItems, loading, setLoading } = useItemsUI();
   const base: Filter = route.name === 'items' ? route.filter : { kind: 'all' };
 
@@ -128,6 +131,20 @@ export function ItemList() {
                         <div className="truncate text-[14px] font-medium leading-5">{r.item.title}</div>
                         {r.item.subtitle ? <div className="truncate text-xs leading-4 text-muted">{r.item.subtitle}</div> : null}
                       </div>
+                      {(() => {
+                        const expiry = getItemExpiry(r.item, undefined, t);
+                        if (!expiry) return null;
+                        return (
+                          <Badge
+                            tone={expiry.status === "expired" ? "danger" : "warn"}
+                            className="shrink-0 text-[11px] px-1.5 py-0"
+                            data-testid="expiry-pill"
+                            aria-label={t(expiry.status === "expired" ? "expiry.expired" : "expiry.expiresSoon")}
+                          >
+                            {t(expiry.status === "expired" ? "expiry.expired" : "expiry.expiresSoon")}
+                          </Badge>
+                        );
+                      })()}
                       {r.item.favorite && <Star size={12} className="shrink-0 fill-warn text-warn" />}
                     </div>
                   )}

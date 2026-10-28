@@ -5,6 +5,7 @@ use gitpass_core::crypto::KdfParams;
 use gitpass_core::import::{self, ImportFormat};
 use gitpass_core::item::{Category, FieldKind};
 use gitpass_core::store::{self, UnlockOpts};
+use gitpass_pasteboard::PasteboardMarkers;
 use std::sync::Arc;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 
@@ -153,6 +154,44 @@ fn filters_favorite_archive_delete_restore_purge_move_duplicate() {
 }
 
 #[test]
+fn copied_secrets_carry_pasteboard_markers() {
+    let e = env();
+    let l = login(&e, "Marked", "user", "pw-FAKE-marked");
+    e.app.copy_field(&e.vault, &l.id, "password").unwrap();
+    assert_eq!(e.clip.markers(), Some(PasteboardMarkers::SECRET));
+    assert_eq!(e.clip.get_text().as_deref(), Some("pw-FAKE-marked"));
+    e.app.copy_field(&e.vault, &l.id, "username").unwrap();
+    assert_eq!(e.clip.markers(), None, "username is not a secret");
+    let c = card(&e);
+    for field in ["number", "cvv"] {
+        e.app.copy_field(&e.vault, &c.id, field).unwrap();
+        assert_eq!(e.clip.markers(), Some(PasteboardMarkers::SECRET), "card {field}");
+    }
+    e.app.copy_field(&e.vault, &c.id, "expiry").unwrap();
+    assert_eq!(e.clip.markers(), None, "expiry is not a secret");
+    let api = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::ApiCredential, title: "API".into(), url: None,
+        sections: vec![Section { id: "main".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("svc")), fld("credential", FieldKind::Concealed, Some("FAKE-token"))] }],
+        notes: None, tags: None, favorite: None }).unwrap();
+    e.app.copy_field(&e.vault, &api.id, "credential").unwrap();
+    assert_eq!(e.clip.markers(), Some(PasteboardMarkers::SECRET));
+    e.app.copy_field(&e.vault, &api.id, "username").unwrap();
+    assert_eq!(e.clip.markers(), None);
+}
+
+#[test]
+fn secret_copy_decision_covers_kinds_and_legacy_card_fields() {
+    let f = |id: &str, kind: FieldKind, label: &str| gitpass_core::item::Field { id: id.into(), label: label.into(), kind, value: Some("FAKE".into()), removed: false };
+    assert!(is_secret_copy(Category::Login, &f("password", FieldKind::Concealed, "password")));
+    assert!(is_secret_copy(Category::Login, &f("otp", FieldKind::Totp, "one-time password")));
+    assert!(is_secret_copy(Category::ApiCredential, &f("credential", FieldKind::Concealed, "credential")));
+    assert!(is_secret_copy(Category::CreditCard, &f("number", FieldKind::Text, "number")), "legacy plain-text card number");
+    assert!(is_secret_copy(Category::CreditCard, &f("cvv", FieldKind::Text, "cvv")), "legacy plain-text CVV");
+    assert!(!is_secret_copy(Category::Login, &f("username", FieldKind::Text, "username")));
+    assert!(!is_secret_copy(Category::Login, &f("website", FieldKind::Url, "website")));
+    assert!(!is_secret_copy(Category::CreditCard, &f("expiry", FieldKind::MonthYear, "expiry")));
+}
+
+#[test]
 fn copy_field_clears_clipboard_only_if_unchanged() {
     let e = env();
     let mut s = e.app.get_settings();
@@ -208,6 +247,7 @@ fn totp_now_and_totp_field_copy() {
     assert_eq!((t.code.len(), t.period), (6, 30));
     e.app.copy_field(&e.vault, &it.id, "totp").unwrap();
     assert_eq!(e.clip.get_text().unwrap().len(), 6);
+    assert_eq!(e.clip.markers(), Some(PasteboardMarkers::SECRET));
     assert!(e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "bad".into(), url: None,
         sections: vec![Section { id: "x".into(), title: None, fields: vec![fld("t", FieldKind::Totp, Some("not base32!!"))] }], notes: None, tags: None, favorite: None }).is_err());
 }
