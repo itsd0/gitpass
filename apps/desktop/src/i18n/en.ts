@@ -129,6 +129,13 @@ export const en = {
   'palette.placeholder': 'Search items or type a command…', 'palette.commands': 'Commands', 'palette.items': 'Items', 'palette.empty': 'No results for “{q}”',
   'palette.label': 'Command palette', 'cmd.newItem': 'New item', 'cmd.lock': 'Lock gitpass', 'cmd.watchtower': 'Go to Watchtower', 'cmd.settings': 'Go to Settings', 'cmd.people': 'Go to People',
   'cmd.toggleTheme': 'Toggle theme', 'cmd.sync': 'Sync now', 'cmd.shortcuts': 'Keyboard shortcuts', 'cmd.home': 'Go to Home',
+  'cmd.showLargeType': 'Show password in large type',
+  // large type view
+  'largetype.action': 'Show in large type',
+  'largetype.ariaField': 'Show {label} in large type',
+  'largetype.close': 'Close',
+  'largetype.label': 'Large type view',
+  'largetype.title': 'Large type',
   'shortcuts.title': 'Keyboard shortcuts', 'shortcuts.palette': 'Open command palette', 'shortcuts.help': 'Show this help', 'shortcuts.newItem': 'New item', 'shortcuts.lock': 'Lock',
   // quick access
   'qa.placeholder': 'Search gitpass', 'qa.label': 'Quick Access', 'qa.copyPassword': 'Copy password', 'qa.copyUsername': 'Copy username', 'qa.passwordCopied': 'Password copied',

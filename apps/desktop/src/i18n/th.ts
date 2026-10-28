@@ -383,4 +383,11 @@ export const th: Partial<Record<Key, string>> = {
   "settings.repoHelp": "ดูซอร์สโค้ด บันทึกประจำรุ่น และเอกสารบน GitHub",
   "settings.issuesHelp": "รายงานปัญหาหรือส่งข้อเสนอแนะบน GitHub",
 
+  // large type view
+  'largetype.action': 'แสดงด้วยตัวอักษรขนาดใหญ่',
+  'largetype.ariaField': 'แสดง {label} ด้วยตัวอักษรขนาดใหญ่',
+  'largetype.close': 'ปิด',
+  'largetype.label': 'มุมมองตัวอักษรขนาดใหญ่',
+  'largetype.title': 'มุมมองตัวอักษรขนาดใหญ่',
+  'cmd.showLargeType': 'แสดงรหัสผ่านด้วยตัวอักษรขนาดใหญ่',
 };
