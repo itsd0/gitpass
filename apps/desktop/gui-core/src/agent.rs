@@ -17,6 +17,7 @@ use std::io::{ErrorKind, Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::BTreeSet;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 use zeroize::Zeroizing;
@@ -137,6 +138,7 @@ pub struct Agent {
     cv: Condvar,
     pub socket_path: PathBuf,
     unlock_timeout: Mutex<Duration>,
+    audit_cache: Mutex<Option<(Option<u64>, Arc<gitpass_core::audit::AuditReport>)>>,
 }
 
 /// Create the dir (0700), write a fresh token (0600), bind the socket (0600).
@@ -172,7 +174,7 @@ impl Agent {
     /// Bind in `dir` and start the accept loop + lock-state watcher threads.
     pub fn start(app: Arc<App>, ui: Arc<dyn AgentUi>, dir: &Path) -> Result<Arc<Agent>> {
         let (l, sp, token) = bind(dir)?;
-        let a = Arc::new(Agent { state: Mutex::new(app.state.is_unlocked()), stamp: Mutex::new(app.state.change_stamp()), app, ui, token, conns: Mutex::new(vec![]), cv: Condvar::new(), socket_path: sp, unlock_timeout: Mutex::new(UNLOCK_TIMEOUT) });
+        let a = Arc::new(Agent { state: Mutex::new(app.state.is_unlocked()), stamp: Mutex::new(app.state.change_stamp()), app, ui, token, conns: Mutex::new(vec![]), cv: Condvar::new(), socket_path: sp, unlock_timeout: Mutex::new(UNLOCK_TIMEOUT), audit_cache: Mutex::new(None) });
         let a2 = a.clone();
         std::thread::spawn(move || for s in l.incoming() { match s { Ok(s) => { let a = a2.clone(); std::thread::spawn(move || a.serve(s)); } Err(_) => continue } });
         let w = Arc::downgrade(&a);
@@ -434,6 +436,75 @@ impl Agent {
                 }).map_err(host_err)?;
                 if cmd == "passkey_create" { self.poll_state(); }
                 Ok(res)
+            }
+            "item_findings" => {
+                let id = req("item_id")?;
+                let (vid, iid) = split_id(&id)?;
+                let (_, r) = self.record(&vid, &iid)?;
+                let rep = {
+                    let current_stamp = self.app.state.change_stamp();
+                    let cache = self.audit_cache.lock().unwrap();
+                    if let Some((stamp, rep)) = &*cache {
+                        if *stamp == current_stamp {
+                            Some(Arc::clone(rep))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                };
+                let rep = match rep {
+                    Some(rep) => rep,
+                    None => {
+                        let fresh = self.app.state.with(|x| {
+                            let s = &x.session;
+                            let records = App::all_records(s)?;
+                            let passkey_sites: BTreeSet<String> = records.iter()
+                                .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
+                                .filter_map(|(_, _, r)| r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value))
+                                .collect();
+                            let items: Vec<(String, String, ItemRecord)> = records.into_iter()
+                                .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
+                                .collect();
+                            gitpass_core::audit::audit_with_passkeys(&items, &passkey_sites, &gitpass_core::audit::AuditOpts::default(), None)
+                        })?;
+                        let fresh = Arc::new(fresh);
+                        let current_stamp = self.app.state.change_stamp();
+                        *self.audit_cache.lock().unwrap() = Some((current_stamp, Arc::clone(&fresh)));
+                        fresh
+                    }
+                };
+                let item_finding = rep.per_item.iter().find(|f| f.vault == vid && f.id == iid);
+                let change_pw_url = r.item.url.as_deref().and_then(gitpass_core::audit::change_password_url);
+                let mut kinds = vec![];
+                let mut reused_count = None;
+                let mut pwned_count = None;
+                let mut old_days = None;
+                let mut expiring_days = None;
+                let mut insecure_url_host = None;
+
+                if let Some(f) = item_finding {
+                    for finding in &f.findings {
+                        kinds.push(finding.kind().to_string());
+                        match finding {
+                            gitpass_core::audit::Finding::Reused { others, .. } => reused_count = Some(others + 1),
+                            gitpass_core::audit::Finding::Pwned { count } => pwned_count = Some(*count),
+                            gitpass_core::audit::Finding::Old { days } => old_days = Some(*days),
+                            gitpass_core::audit::Finding::ExpiringSoon { days, .. } => expiring_days = Some(*days),
+                            gitpass_core::audit::Finding::InsecureUrl { url_host } => insecure_url_host = Some(url_host.clone()),
+                            _ => {}
+                        }
+                    }
+                }
+                let mut out = json!({ "kinds": kinds });
+                if let Some(c) = reused_count { out["reused_count"] = json!(c); }
+                if let Some(c) = pwned_count { out["pwned_count"] = json!(c); }
+                if let Some(d) = old_days { out["old_days"] = json!(d); }
+                if let Some(d) = expiring_days { out["expiring_days"] = json!(d); }
+                if let Some(h) = insecure_url_host { out["insecure_url_host"] = json!(h); }
+                if let Some(u) = change_pw_url { out["change_password_url"] = json!(u); }
+                Ok(out)
             }
             "open_in_app" => {
                 match s("item_id").filter(|v| !v.is_empty()) {

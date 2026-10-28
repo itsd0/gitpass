@@ -395,6 +395,26 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
           rec('popup shortcuts (#138)', false, e.message);
         }
 
+        // --- Watchtower warnings in popup (#155): warning dot in list and warning strip in detail
+        try {
+          const dotVisible = await until(async () => {
+            return pop.eval(`(() => {
+              const rows = [...document.querySelectorAll('#listInner .row')];
+              const target = rows.find((r) => /Localhost Test Login/.test(r.innerText));
+              return Boolean(target && target.querySelector('.warn-dot[aria-label]'));
+            })()`);
+          }, T(4000));
+          rec('popup list shows warning dot on item with findings', !!dotVisible);
+
+          const stripVisible = await until(async () => {
+            const t = await pop.text();
+            return /Weak password/.test(t) && /Reused on 3 items/.test(t) && /Generate & update/.test(t) && /Change on site/.test(t);
+          }, T(4000));
+          rec('popup detail shows watchtower warning strip with chips and action buttons', !!stripVisible, stripVisible ? 'chips and action buttons visible' : (await pop.text()).slice(0, 160));
+        } catch (e) {
+          rec('popup watchtower findings e2e', false, e.message);
+        }
+
         // --- New item (#41): the popup's New item form sends exactly one create_item per item, with the
         // desktop New Item template's category/section/field ids and kinds.
         const panel = () => pop.eval(`(() => {

@@ -375,3 +375,58 @@ fn item_added_via_host_agent_socket_emits_changed_exactly_once() {
     }
     assert_eq!(c_watcher.events.iter().filter(|v| v["event"] == json!("changed")).count(), 0);
 }
+
+#[test]
+fn item_findings_agent_contract_and_security() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+
+    // 1. Unknown id gives not_found
+    assert_eq!(c.err("item_findings", json!({"item_id": format!("{}:nope", e.vault)})), "not_found");
+
+    // 2. Bad item_id format gives bad_request
+    assert_eq!(c.err("item_findings", json!({"item_id": "bad_id"})), "bad_request");
+
+    // 3. Add two items with the same weak password ("123456")
+    let secret = "123456";
+    let r1 = c.ok("save_login", json!({
+        "source": "popup",
+        "origin": "https://accounts.example.org",
+        "username": "alice",
+        "password": secret
+    }));
+    let id1 = r1["item_id"].as_str().unwrap().to_string();
+
+    let r2 = c.ok("save_login", json!({
+        "source": "popup",
+        "origin": "https://service.example.org",
+        "username": "bob",
+        "password": secret
+    }));
+    let id2 = r2["item_id"].as_str().unwrap().to_string();
+
+    let f1 = c.ok("item_findings", json!({"item_id": id1}));
+    let kinds: Vec<&str> = f1["kinds"].as_array().unwrap().iter().map(|k| k.as_str().unwrap()).collect();
+    assert!(kinds.contains(&"weak"), "must flag weak password: {f1:?}");
+    assert!(kinds.contains(&"reused"), "must flag reused password: {f1:?}");
+    assert_eq!(f1["reused_count"], 2);
+    assert_eq!(f1["change_password_url"], "https://accounts.example.org/.well-known/change-password");
+
+    // 4. No secret values or other item IDs leak
+    let json_str = f1.to_string();
+    assert!(!json_str.contains(secret), "secret password must never leak: {json_str}");
+    assert!(!json_str.contains(&id2), "other item ids must never leak: {json_str}");
+
+    // 5. Ignored finding is hidden
+    let (vid, iid) = id1.split_once(':').unwrap();
+    e.app.ignore_finding(vid, iid, "weak").unwrap();
+
+    let f1_after = c.ok("item_findings", json!({"item_id": id1}));
+    let kinds_after: Vec<&str> = f1_after["kinds"].as_array().unwrap().iter().map(|k| k.as_str().unwrap()).collect();
+    assert!(!kinds_after.contains(&"weak"), "ignored finding must be hidden: {f1_after:?}");
+    assert!(kinds_after.contains(&"reused"), "non-ignored finding must still be visible");
+
+    // 6. When locked gives locked
+    e.app.lock();
+    assert_eq!(c.err("item_findings", json!({"item_id": id1})), "locked");
+}

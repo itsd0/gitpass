@@ -60,6 +60,21 @@ function handle(m) {
     case 'get_item': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
       const fields = i.fields ? i.fields : (i._u ? [{ name: 'username', label: 'username', value: i._u, concealed: false, kind: 'text' }, { name: 'password', label: 'password', concealed: true, kind: 'password' }] : []);
       return { item: { ...pub(i), fields, tags: i.tags || [], created_at: i.created_at || now } }; }
+    case 'item_findings': { needUnlock();
+      const i = getItems().find((x) => x.id === m.item_id);
+      if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
+      const custom = (readJson(CTRL, {}).findings || {})[m.item_id];
+      if (custom) return custom;
+      if (i.findings) return i.findings;
+      if (i.id === 'v1:i1' || i.id === 'v1:i2') {
+        return {
+          kinds: ['weak', 'reused'],
+          reused_count: 3,
+          change_password_url: (i.url && i.url.startsWith('https://') ? i.url : 'https://example.com') + '/.well-known/change-password',
+        };
+      }
+      return { kinds: [] };
+    }
     case 'reveal': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); return { value: i && m.field === 'password' ? i._p : (i && i._u) || '' }; }
     case 'fill': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
       if (!matches(origin).some((x) => x.id === i.id)) throw Object.assign(new Error('origin mismatch'), { code: 'origin_mismatch' });

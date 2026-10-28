@@ -748,5 +748,86 @@
   "optFillShortcutBody": {
     "message": "popup မဖွင့်ဘဲ လက်ရှိစာမျက်နှာအတွက် အကိုက်ညီဆုံး လော့ဂ်အင်ကို ဖြည့်ပါသည်။",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "watchtowerWarnings": {
+    "message": "Watchtower သတိပေးချက်များ"
+  },
+  "watchtowerWarning": {
+    "message": "လုံခြုံရေး သတိပေးချက်"
+  },
+  "watchtowerWeak": {
+    "message": "စကားဝှက် အားနည်းသည်"
+  },
+  "watchtowerReused": {
+    "message": "ထပ်သုံးထားသော စကားဝှက်"
+  },
+  "watchtowerReusedN": {
+    "message": "အရာ $1 ခုတွင် ထပ်သုံးထားသည်",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerPwned": {
+    "message": "ဒေတာပေါက်ကြားမှုတွင် ပါဝင်သည်"
+  },
+  "watchtowerOld": {
+    "message": "စကားဝှက် သက်တမ်းကြာပြီ"
+  },
+  "watchtowerOld1Yr": {
+    "message": "၁ နှစ် မပြောင်းရသေးပါ"
+  },
+  "watchtowerOldNYrs": {
+    "message": "$1 နှစ် မပြောင်းရသေးပါ",
+    "placeholders": {
+      "years": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerOldNDays": {
+    "message": "$1 ရက် မပြောင်းရသေးပါ",
+    "placeholders": {
+      "days": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerInsecureUrl": {
+    "message": "လုံခြုံမှုမရှိသော ဝဘ်ဆိုက် (HTTP)"
+  },
+  "watchtowerMissingTotp": {
+    "message": "2FA မသတ်မှတ်ရသေးပါ"
+  },
+  "watchtowerTotpAvailable": {
+    "message": "ဆိုဒ်တွင် 2FA အသုံးပြုနိုင်သည်"
+  },
+  "watchtowerPasskeyAvailable": {
+    "message": "Passkey အသုံးပြုနိုင်သည်"
+  },
+  "watchtowerExpired": {
+    "message": "သက်တမ်းကုန်ဆုံးသည်"
+  },
+  "watchtowerExpiringSoon": {
+    "message": "မကြာမီ သက်တမ်းကုန်မည်"
+  },
+  "watchtowerDuplicate": {
+    "message": "ထပ်နေသော လော့ဂ်အင်"
+  },
+  "generateAndUpdate": {
+    "message": "ထုတ်လုပ်ပြီး အသစ်ပြင်ဆင်ရန်"
+  },
+  "changeOnSite": {
+    "message": "ဆိုက်တွင် ပြောင်းရန်"
+  },
+  "openInGitpass": {
+    "message": "gitpass တွင် ဖွင့်ရန်"
+  },
+  "passwordUpdated": {
+    "message": "စကားဝှက်ကို အသစ်ပြင်ဆင်ပြီးပါပြီ"
+  },
+  "updatePassword": {
+    "message": "စကားဝှက် အသစ်ပြင်ဆင်ရန်"
   }
 }
