@@ -275,6 +275,213 @@ pub fn entropy_bits(pw: &str) -> f64 {
     pw.chars().count() as f64 * (pool as f64).log2()
 }
 
+
+/// Normalize a string for personal-info substring matching:
+/// lowercases, strips common separators, and applies leetspeak substitutions:
+/// 0->o, 1->i, l->i, 3->e, 4/@->a, 5/$->s.
+fn normalize_for_match(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        for lc in c.to_lowercase() {
+            match lc {
+                '0' => out.push('o'),
+                '1' | 'l' => out.push('i'),
+                '3' => out.push('e'),
+                '4' | '@' => out.push('a'),
+                '5' | '$' => out.push('s'),
+                c if c.is_whitespace() || (c.is_ascii_punctuation() && c != '@' && c != '$') || c == '—' || c == '–' || c == '·' => {
+                    // separator: ignore
+                }
+                other => out.push(other),
+            }
+        }
+    }
+    out
+}
+
+fn matches_personal_info(pw: &str, target: &str) -> bool {
+    let t_clean = target.trim();
+    if t_clean.chars().count() < 4 {
+        return false;
+    }
+    let norm_target = normalize_for_match(t_clean);
+    if norm_target.chars().count() < 4 {
+        return false;
+    }
+    let norm_pw = normalize_for_match(pw);
+    norm_pw.contains(&norm_target)
+}
+
+/// Extracts the registrable site name from a URL or host.
+/// E.g. "https://login.github.com" -> Some("github")
+///      "https://github.com" -> Some("github")
+///      "sub.example.co.uk" -> Some("example")
+///      "amazon.co.jp" -> Some("amazon")
+///      "münchen.de" -> Some("münchen")
+///      "xn--mnchen-3ya.de" -> Some("xn--mnchen-3ya")
+/// Returns None if no host is found or if the host is an IP address.
+pub fn extract_site_name(url_or_host: &str) -> Option<String> {
+    let host = host_of(url_or_host)?;
+    if host.is_empty() || host.parse::<std::net::IpAddr>().is_ok() {
+        return None;
+    }
+    let labels: Vec<&str> = host.split('.').filter(|s| !s.is_empty()).collect();
+    if labels.is_empty() {
+        return None;
+    }
+    if labels.len() == 1 {
+        return Some(labels[0].to_string());
+    }
+    if labels.len() >= 3 {
+        let last = labels[labels.len() - 1];
+        let second_last = labels[labels.len() - 2];
+        const CC_SLDS: &[&str] = &[
+            "co", "com", "org", "net", "edu", "gov", "ac", "ne", "or", "gen", "nom", "ind",
+        ];
+        const MULTI_PSL: &[&str] = &[
+            "github.io", "gitlab.io", "pages.dev", "vercel.app", "herokuapp.com", "azurewebsites.net", "cloudfront.net",
+        ];
+        let is_cc_sld = last.len() == 2 && last.chars().all(|c| c.is_ascii_alphabetic()) && CC_SLDS.contains(&second_last);
+        let pair = format!("{second_last}.{last}");
+        if is_cc_sld || MULTI_PSL.contains(&pair.as_str()) {
+            return Some(labels[labels.len() - 3].to_string());
+        }
+    }
+    Some(labels[labels.len() - 2].to_string())
+}
+
+/// Pure RFC 3492 Punycode decoder for IDN labels without external dependencies.
+/// Returns decoded Unicode string if `encoded` is valid punycode, or None.
+pub fn decode_punycode(encoded: &str) -> Option<String> {
+    let input = encoded.strip_prefix("xn--").unwrap_or(encoded);
+    const BASE: u32 = 36;
+    const TMIN: u32 = 1;
+    const TMAX: u32 = 26;
+    const SKEW: u32 = 38;
+    const DAMP: u32 = 700;
+    const INITIAL_BIAS: u32 = 72;
+    const INITIAL_N: u32 = 128;
+
+    fn adapt(mut delta: u32, numpoints: u32, firsttime: bool) -> u32 {
+        delta = if firsttime { delta / DAMP } else { delta / 2 };
+        delta += delta / numpoints;
+        let mut k = 0;
+        while delta > ((BASE - TMIN) * TMAX) / 2 {
+            delta /= BASE - TMIN;
+            k += BASE;
+        }
+        k + (((BASE - TMIN + 1) * delta) / (delta + SKEW))
+    }
+
+    let mut n = INITIAL_N;
+    let mut i = 0u32;
+    let mut bias = INITIAL_BIAS;
+    let mut output = Vec::new();
+
+    let delim = input.rfind('-');
+    let (basic, mut pos) = if let Some(d) = delim {
+        (&input[..d], d + 1)
+    } else {
+        ("", 0)
+    };
+    for c in basic.chars() {
+        output.push(c);
+    }
+
+    let chars: Vec<char> = input.chars().collect();
+    while pos < chars.len() {
+        let oldi = i;
+        let mut w = 1u32;
+        let mut k = BASE;
+        loop {
+            if pos >= chars.len() { return None; }
+            let c = chars[pos];
+            pos += 1;
+            let digit = match c {
+                'a'..='z' => (c as u32) - ('a' as u32),
+                'A'..='Z' => (c as u32) - ('A' as u32),
+                '0'..='9' => (c as u32) - ('0' as u32) + 26,
+                _ => return None,
+            };
+            i = i.checked_add(digit.checked_mul(w)?)?;
+            let t = if k <= bias {
+                TMIN
+            } else if k >= bias + TMAX {
+                TMAX
+            } else {
+                k - bias
+            };
+            if digit < t { break; }
+            w = w.checked_mul(BASE - t)?;
+            k += BASE;
+        }
+        let out_len = (output.len() + 1) as u32;
+        bias = adapt(i - oldi, out_len, oldi == 0);
+        n = n.checked_add(i / out_len)?;
+        i %= out_len;
+        let ch = char::from_u32(n)?;
+        output.insert(i as usize, ch);
+        i += 1;
+    }
+
+    Some(output.into_iter().collect())
+}
+
+/// Returns Some("contains the username") or Some("contains the site name") if the password
+/// case-insensitively, and ignoring common separators and leetspeak substitutions,
+/// contains:
+/// - the username or the local part of an email username (when that part is at least 4 characters), or
+/// - the registrable site name from the item URL (when at least 4 characters).
+pub fn contains_personal_info(pw: &str, username: Option<&str>, url_host: Option<&str>) -> Option<String> {
+    let pw = pw.trim();
+    if pw.is_empty() { return None; }
+
+    // 1. Check username
+    if let Some(u) = username.map(str::trim).filter(|u| !u.is_empty()) {
+        let mut candidates = Vec::new();
+        if let Some((local, _)) = u.split_once('@') {
+            let local = local.trim();
+            if local.chars().count() >= 4 {
+                candidates.push(local);
+            }
+        }
+        if u.chars().count() >= 4 {
+            candidates.push(u);
+        }
+        for cand in candidates {
+            if matches_personal_info(pw, cand) {
+                return Some("contains the username".to_string());
+            }
+        }
+    }
+
+    // 2. Check site name
+    if let Some(url) = url_host.map(str::trim).filter(|u| !u.is_empty()) {
+        if let Some(site) = extract_site_name(url) {
+            let mut candidates = Vec::new();
+            if site.starts_with("xn--") {
+                if let Some(decoded) = decode_punycode(&site) {
+                    if decoded.chars().count() >= 4 {
+                        candidates.push(decoded);
+                    }
+                }
+                if site.chars().count() >= 4 {
+                    candidates.push(site);
+                }
+            } else if site.chars().count() >= 4 {
+                candidates.push(site);
+            }
+            for cand in candidates {
+                if matches_personal_info(pw, &cand) {
+                    return Some("contains the site name".to_string());
+                }
+            }
+        }
+    }
+
+    None
+}
+
 /// Returns a reason if the password is weak.
 pub fn weakness(pw: &str, o: &AuditOpts) -> Option<String> {
     let lower = pw.to_lowercase();
@@ -417,8 +624,11 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
         if let Some(group) = dup_findings.get(&i) {
             record_finding(Finding::Duplicate { group: group.clone() }, &mut r.duplicates);
         }
+        let url = it.url.as_deref().filter(|u| !u.trim().is_empty());
         if let Some(p) = it.password.as_deref().filter(|p| !p.is_empty()) {
-            if let Some(reason) = weakness(p, o) { record_finding(Finding::Weak { reason }, &mut r.weak); }
+            let weak_reason = contains_personal_info(p, it.username.as_deref(), url)
+                .or_else(|| weakness(p, o));
+            if let Some(reason) = weak_reason { record_finding(Finding::Weak { reason }, &mut r.weak); }
             if let Some(&(group, others)) = reuse.get(&i) { record_finding(Finding::Reused { group, others }, &mut r.reused); }
             if let Some(c) = hibp { let n = pwned_count(c, p, &mut cache)?; if n > 0 { record_finding(Finding::Pwned { count: n }, &mut r.pwned); } }
             if let Ok(t) = it.updated_at.trim().parse::<u64>() {
@@ -426,7 +636,6 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
                 if days > o.max_age_days { record_finding(Finding::Old { days }, &mut r.old); }
             }
         }
-        let url = it.url.as_deref().filter(|u| !u.trim().is_empty());
         let no_totp = it.totp.as_deref().is_none_or(|t| t.trim().is_empty());
         let host = url.and_then(host_of);
         let support = host.as_deref().and_then(|h| lookup_mfa_site(sites, h));
@@ -937,4 +1146,185 @@ mod tests {
             assert!(find(id).iter().all(|f| !matches!(f, Finding::Duplicate { .. })), "{id} should not have Duplicate finding");
         }
     }
+
+    #[test]
+    fn test_contains_personal_info_username() {
+        // Direct match
+        assert_eq!(
+            contains_personal_info("github-alice-2024!", Some("alice"), None),
+            Some("contains the username".into())
+        );
+
+        // Leetspeak substitutions: 4->a, 1->i, 3->e
+        assert_eq!(
+            contains_personal_info("4l1c3-2024!", Some("alice"), None),
+            Some("contains the username".into())
+        );
+
+        // Leetspeak @->a, 1->i
+        assert_eq!(
+            contains_personal_info("@l1ce", Some("alice"), None),
+            Some("contains the username".into())
+        );
+
+        // Separators: a-l-i-c-e, a_l_1_c_e
+        assert_eq!(
+            contains_personal_info("a-l-i-c-e", Some("alice"), None),
+            Some("contains the username".into())
+        );
+        assert_eq!(
+            contains_personal_info("a_l_1_c_e", Some("alice"), None),
+            Some("contains the username".into())
+        );
+        assert_eq!(
+            contains_personal_info("al1ce", Some("alice"), None),
+            Some("contains the username".into())
+        );
+        assert_eq!(
+            contains_personal_info("a1ice", Some("alice"), None),
+            Some("contains the username".into())
+        );
+        assert_eq!(
+            contains_personal_info("a11ce", Some("alice"), None),
+            Some("contains the username".into())
+        );
+
+        // Leetspeak $->s, 5->s
+        assert_eq!(
+            contains_personal_info("$m1th", Some("smith"), None),
+            Some("contains the username".into())
+        );
+        assert_eq!(
+            contains_personal_info("5m1th", Some("smith"), None),
+            Some("contains the username".into())
+        );
+
+        // Email username: local part >= 4 chars
+        assert_eq!(
+            contains_personal_info("alice2024!", Some("alice@example.com"), None),
+            Some("contains the username".into())
+        );
+        assert_eq!(
+            contains_personal_info("alicesmith2024!", Some("alice.smith@example.com"), None),
+            Some("contains the username".into())
+        );
+        assert_eq!(
+            contains_personal_info("alice-smith-2024!", Some("alice.smith@example.com"), None),
+            Some("contains the username".into())
+        );
+    }
+
+    #[test]
+    fn test_contains_personal_info_site_name() {
+        // Direct and leetspeak matches on registrable site name
+        assert_eq!(
+            contains_personal_info("G1thub#99", None, Some("https://login.github.com")),
+            Some("contains the site name".into())
+        );
+        assert_eq!(
+            contains_personal_info("github-2024-strong!", None, Some("https://github.com")),
+            Some("contains the site name".into())
+        );
+        assert_eq!(
+            contains_personal_info("Example-Pass-2024", None, Some("https://sub.portal.example.co.uk")),
+            Some("contains the site name".into())
+        );
+        assert_eq!(
+            contains_personal_info("Amazon2024!", None, Some("https://amazon.co.jp")),
+            Some("contains the site name".into())
+        );
+        assert_eq!(
+            contains_personal_info("g00g1e-pass", None, Some("https://google.com")),
+            Some("contains the site name".into())
+        );
+        assert_eq!(
+            contains_personal_info("goog1e-pass", None, Some("https://google.com")),
+            Some("contains the site name".into())
+        );
+
+        // IDN / punycode hosts
+        assert_eq!(
+            contains_personal_info("München2024!", None, Some("https://login.münchen.de")),
+            Some("contains the site name".into())
+        );
+        assert_eq!(
+            contains_personal_info("xn--mnchen-3ya-pass!", None, Some("https://xn--mnchen-3ya.de")),
+            Some("contains the site name".into())
+        );
+        assert_eq!(
+            contains_personal_info("München2024!", None, Some("https://xn--mnchen-3ya.de")),
+            Some("contains the site name".into())
+        );
+    }
+
+    #[test]
+    fn test_contains_personal_info_near_misses() {
+        // Short username < 4 chars: ignored
+        assert_eq!(contains_personal_info("bobby123!", Some("bob"), None), None);
+        assert_eq!(contains_personal_info("amysecret!", Some("amy"), None), None);
+        assert_eq!(contains_personal_info("daniel2024!", Some("dan@example.com"), None), None);
+
+        // Short site name < 4 chars: ignored
+        assert_eq!(contains_personal_info("x-factor-2024!", None, Some("https://x.com")), None);
+        assert_eq!(contains_personal_info("ticket-master!", None, Some("https://t.co")), None);
+
+        // Unrelated words
+        assert_eq!(
+            contains_personal_info("correct-horse-battery-staple", Some("alice"), Some("https://github.com")),
+            None
+        );
+        assert_eq!(
+            contains_personal_info("Xq7#vR2!mK9@pL4$wZ", Some("alice"), Some("https://github.com")),
+            None
+        );
+        assert_eq!(
+            contains_personal_info("gitlab-charlie-2024!", Some("alice"), Some("https://github.com")),
+            None
+        );
+
+        // Near misses
+        assert_eq!(contains_personal_info("alicia-2024!", Some("alice"), None), None);
+        assert_eq!(contains_personal_info("alec-2024!", Some("alice"), None), None);
+    }
+
+    #[test]
+    fn test_audit_flags_personal_info_weakness() {
+        let mut it_user = Item::default();
+        it_user.title = "User Password".into();
+        it_user.username = Some("alice".into());
+        it_user.url = Some("https://gitlab.com".into());
+        it_user.password = Some("github-alice-2024!".into());
+
+        let mut it_site = Item::default();
+        it_site.title = "Site Password".into();
+        it_site.username = Some("charlie".into());
+        it_site.url = Some("https://login.github.com".into());
+        it_site.password = Some("G1thub#99-Secure!".into());
+
+        let mut it_ok = Item::default();
+        it_ok.title = "OK Item".into();
+        it_ok.username = Some("bob".into());
+        it_ok.url = Some("https://example.com".into());
+        it_ok.password = Some("Xq7#vR2!mK9@pL4$wZ".into());
+
+        let items = vec![
+            ("v".into(), "user_item".into(), ItemRecord::new(it_user)),
+            ("v".into(), "site_item".into(), ItemRecord::new(it_site)),
+            ("v".into(), "ok_item".into(), ItemRecord::new(it_ok)),
+        ];
+
+        let report = audit(&items, &AuditOpts::default(), None).unwrap();
+        assert_eq!(report.weak, 2);
+
+        let find = |id: &str| report.per_item.iter().find(|i| i.id == id).map(|i| i.findings.clone()).unwrap_or_default();
+        let u_findings = find("user_item");
+        assert!(u_findings.iter().any(|f| matches!(f, Finding::Weak { reason } if reason == "contains the username")));
+
+        let s_findings = find("site_item");
+        assert!(s_findings.iter().any(|f| matches!(f, Finding::Weak { reason } if reason == "contains the site name")));
+
+        let ok_findings = find("ok_item");
+        assert!(!ok_findings.iter().any(|f| matches!(f, Finding::Weak { .. })));
+    }
+
 }

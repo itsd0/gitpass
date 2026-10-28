@@ -1459,6 +1459,42 @@ impl Session {
         Ok(out)
     }
 
+    /// Restore an item to a previous version from its history.
+    /// Writes a new version whose content equals the chosen snapshot.
+    /// History is append-only: the pre-restore state is pushed to history, and no versions are deleted.
+    /// Errors cleanly for an unknown version or a deleted item.
+    pub fn restore_version(&self, vid: &str, iid: &str, version: u64) -> Result<u64> {
+        let (v, old) = self.read_record(vid, iid)?;
+        if old.deleted_at.is_some() {
+            bail!("cannot restore version of deleted item");
+        }
+        let h = old.history.iter().find(|h| h.version == version).ok_or_else(|| anyhow!("no version {version} in item history"))?;
+        let snapshot = h.snapshot.clone();
+        let now = merge::now_ms();
+        let mut new = ItemRecord::from_snapshot(&snapshot);
+        new.favorite = old.favorite;
+        new.archived = old.archived;
+        new.ignored_findings = old.ignored_findings.clone();
+        new.attachments = old.attachments.clone();
+        new.created_at = old.created_at;
+        new.history = old.history.clone();
+        new.history.push(crate::item::HistoryEntry {
+            version: v,
+            updated_at: old.item.updated_at.clone(),
+            snapshot: old.snapshot(),
+        });
+        let n = new.history.len();
+        if n > crate::item::HISTORY_LIMIT {
+            new.history.drain(..n - crate::item::HISTORY_LIMIT);
+        }
+        new.item.updated_at = (now / 1000).to_string();
+        new.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &new.item, now));
+        merge::stamp_ext(Some(&old), &mut new, now);
+        let new_v = v + 1;
+        self.put_item(vid, iid, new_v, &new)?;
+        Ok(new_v)
+    }
+
     /// Copy an item (content, tags, attachments) to a new id in `to_vid` (title unchanged).
     pub fn copy_item_to(&self, vid: &str, iid: &str, to_vid: &str) -> Result<String> {
         let (_, r) = self.read_record(vid, iid)?;
