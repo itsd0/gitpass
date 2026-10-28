@@ -21,6 +21,7 @@
     "scripts": [
       "lib/policy.js",
       "bg-page.js",
+      "bg-command.js",
       "background.js",
       "bg-onboard.js",
       "bg-passkey.js"
@@ -102,6 +103,13 @@
         "mac": "Command+Shift+X"
       },
       "description": "Open gitpass"
+    },
+    "fill-login": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L",
+        "mac": "Command+Shift+L"
+      },
+      "description": "__MSG_cmdFillLogin__"
     }
   }
 }
