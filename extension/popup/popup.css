@@ -6,6 +6,7 @@
   --accent: 242 140 40; --danger: 239 83 80; --ok: 52 199 89; --warn: 245 166 35;
   color-scheme: dark;
 }
+/* Light palette mirrors apps/desktop/src/styles.css :root. */
 @media (prefers-color-scheme: light) {
   :root {
     --bg: 248 248 250; --panel: 255 255 255; --sidebar: 241 242 245; --card: 255 255 255;
@@ -129,6 +130,24 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .panel label { font-size: 11px; color: rgb(var(--label)); }
 .gen-out { display: flex; align-items: center; gap: 6px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 8px; padding: 10px; font-family: ui-monospace, Menlo, monospace; font-size: 14px; word-break: break-all; }
 .gen-out code { flex: 1; }
+.gen-code { font-family: ui-monospace, Menlo, monospace; font-size: 16px; line-height: 1.6; word-break: break-all; }
+.gen-code .num { color: rgb(var(--warn)); font-weight: 600; }
+.gen-code .sym { color: rgb(var(--orange)); font-weight: 600; }
+.gen-strength { display: flex; align-items: center; gap: 8px; }
+.gen-strength-bar { flex: 1; height: 4px; border-radius: 99px; background: rgb(var(--card)); overflow: hidden; }
+.gen-strength-fill { height: 100%; width: 0; border-radius: 99px; background: rgb(var(--danger)); transition: width .2s; }
+.gen-strength-fill.fair { background: rgb(var(--warn)); }
+.gen-strength-fill.good, .gen-strength-fill.excellent { background: rgb(var(--ok)); }
+.gen-strength-lab { font-size: 11px; color: rgb(var(--muted)); min-width: 64px; text-align: right; }
+.gen-modes { display: flex; gap: 2px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 8px; padding: 2px; }
+.gen-mode { flex: 1; border: 0; background: none; color: rgb(var(--muted)); font: inherit; font-size: 12px; padding: 5px 0; border-radius: 6px; cursor: pointer; }
+.gen-mode:hover { color: rgb(var(--fg)); }
+.gen-mode.sel { background: rgb(var(--hover)); color: rgb(var(--fg)); font-weight: 600; }
+.gen-num { width: 64px; height: 32px; flex: none; border-radius: 8px; border: 1px solid rgb(var(--border)); background: rgb(var(--card)); color: rgb(var(--fg)); padding: 0 8px; font: inherit; text-align: right; outline: none; }
+.gen-num:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 3px rgb(var(--accent) / .25); }
+.gen-toggles { gap: 16px; }
+.gen-acts { display: flex; align-items: center; gap: 8px; margin-top: auto; }
+.gen-acts .btn-link { margin-right: auto; padding-left: 0; }
 .gen-row { display: flex; align-items: center; gap: 10px; }
 .gen-row input[type=range] { flex: 1; accent-color: rgb(var(--accent)); }
 .tog { display: flex; align-items: center; gap: 6px; font-size: 13px !important; color: rgb(var(--fg)) !important; }

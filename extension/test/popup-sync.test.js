@@ -106,7 +106,7 @@ function createPopup(initialState = { unlocked: true }) {
     },
   };
 
-  for (const f of ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/popup.js']) {
+  for (const f of ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/generator.js', 'popup/popup.js']) {
     w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
   }
 
