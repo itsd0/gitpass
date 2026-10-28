@@ -62,6 +62,7 @@ input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 
 .panes { flex: 1; display: flex; min-height: 0; }
 .left { width: 280px; display: flex; flex-direction: column; border-right: 1px solid rgb(var(--border)); background: rgb(var(--panel)); }
 .filter-wrap { padding: 8px; border-bottom: 1px solid rgb(var(--border)); }
+.sort-select { margin-top: 6px; }
 .excepted-note { margin-top: 6px; font-size: 12px; color: rgb(var(--muted)); display: flex; align-items: center; justify-content: center; gap: 4px; }
 .excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--accent)); cursor: pointer; text-decoration: underline; }
 .empty-excepted-note { margin: 8px 0 0; font-size: 12px; color: rgb(var(--muted)); }
