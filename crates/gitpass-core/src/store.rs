@@ -1379,6 +1379,7 @@ impl Session {
             let (_, r) = self.read_record(&vid, &iid)?;
             let mut n = ItemRecord::from_snapshot(&r.snapshot());
             n.favorite = r.favorite;
+            n.ignored_findings = r.ignored_findings.clone();
             n.archived = r.archived;
             if n.item.updated_at.is_empty() { n.item.updated_at = (now / 1000).to_string(); }
             n.created_at.get_or_insert(now / 1000);
@@ -1417,6 +1418,8 @@ impl Session {
 
     pub fn set_favorite(&self, vid: &str, iid: &str, fav: bool) -> Result<()> { self.mutate_record(vid, iid, |r| r.favorite = fav) }
     pub fn set_archived(&self, vid: &str, iid: &str, a: bool) -> Result<()> { self.mutate_record(vid, iid, |r| r.archived = a) }
+    pub fn ignore_finding(&self, vid: &str, iid: &str, kind: &str) -> Result<()> { self.mutate_record(vid, iid, |r| { r.ignore_finding(kind); }) }
+    pub fn unignore_finding(&self, vid: &str, iid: &str, kind: &str) -> Result<()> { self.mutate_record(vid, iid, |r| { r.unignore_finding(kind); }) }
     /// Soft delete: the item stays (encrypted) with `deleted_at` set and is purged after 30 days.
     pub fn soft_delete(&self, vid: &str, iid: &str) -> Result<()> { let t = now_secs(); self.mutate_record(vid, iid, |r| r.deleted_at = Some(t)) }
     pub fn restore(&self, vid: &str, iid: &str) -> Result<()> { self.mutate_record(vid, iid, |r| r.deleted_at = None) }

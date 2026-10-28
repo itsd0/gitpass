@@ -56,7 +56,7 @@ function add(vaultId: string, category: T.ItemCategory, title: string, subtitle:
     updatedAt: ts, createdAt: new Date(Date.parse(ts) - 30 * 86400000).toISOString(), url: null,
     sections: [{ id: uid('s'), title: null, fields: fs }], notes: null, attachments: [],
     history: [{ version: 1, updatedAt: ts }], passwordStrength: pwField ? strength(secrets[pwField.id]) : null,
-    hasTotp: fs.some((x) => x.kind === 'totp'), ...extra,
+    hasTotp: fs.some((x) => x.kind === 'totp'), ignoredFindings: [], ...extra,
   };
   db.set(d.id, { detail: d, secrets, versions: [] });
   return d;
@@ -131,7 +131,7 @@ const summary = (d: T.ItemDetail): T.ItemSummary => {
     const fld = flds.find((x) => x.id === "expires" || x.label === "expires" || x.kind === "date");
     expiry = fld?.value ?? null;
   }
-  return { ...s, ...(expiry ? { expiry } : {}) };
+  return { ...s, ...(expiry ? { expiry } : {}), ignoredFindings: d.ignoredFindings ?? [] };
 };
 const get = (id: string) => { const r = db.get(id); if (!r) throw new Error(`item not found: ${id}`); return r; };
 const vaultInfo = () => vaults.map((v) => ({ ...v, itemCount: [...db.values()].filter((r) => r.detail.vaultId === v.id && !r.detail.deletedAt).length }));
@@ -318,6 +318,21 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     return delay(undefined);
   },
   password_strength: (a: { password: string }) => delay(strength(a.password), 5),
+  ignore_finding: (a: { vaultId: string; itemId: string; kind: string }) => {
+    const r = db.get(a.itemId);
+    if (r) {
+      const cur = r.detail.ignoredFindings ?? [];
+      if (!cur.includes(a.kind)) r.detail.ignoredFindings = [...cur, a.kind];
+    }
+    return delay(undefined, 20);
+  },
+  unignore_finding: (a: { vaultId: string; itemId: string; kind: string }) => {
+    const r = db.get(a.itemId);
+    if (r) {
+      r.detail.ignoredFindings = (r.detail.ignoredFindings ?? []).filter((k) => k !== a.kind);
+    }
+    return delay(undefined, 20);
+  },
   watchtower: (a: { hibp: boolean }) => {
     const pw = [...db.values()].map((r) => { const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed' && /password/.test(x.label)); return fld ? [r.detail.id, r.secrets[fld.id]] as const : null; }).filter(Boolean) as (readonly [string, string])[];
     const hibp = a.hibp && settings.hibpCheck; // like Rust: network check only when opted in
@@ -387,7 +402,100 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
         return false;
       }
     }).map((r) => r.detail.id);
-    return delay<T.WatchtowerReport>({ score: Math.max(0, 100 - weak.length * 6 - reused.length * 8 - old.length * 2), weak, reused, old, breached: hibp ? weak.slice(0, 1) : [], missingTotp, totpAvailable, passkeyAvailable, expired, expiringSoon, insecureUrls, checkedAt: new Date().toISOString(), hibpChecked: hibp }, 200);
+    const isIgnored = (id: string, kind: string) => {
+      const it = db.get(id);
+      return (it?.detail.ignoredFindings ?? []).some(
+        (k) =>
+          k === kind ||
+          (kind === "missing_totp" && k === "totp_available") ||
+          (kind === "totp_available" && k === "missing_totp") ||
+          (kind === "pwned" && k === "breached") ||
+          (kind === "breached" && k === "pwned")
+      );
+    };
+
+    const ignoredList: T.IgnoredFinding[] = [];
+    const checkOrIgnore = (id: string, kind: string, desc: string, activeList: string[]) => {
+      if (isIgnored(id, kind)) {
+        const item = db.get(id)?.detail;
+        ignoredList.push({
+          itemId: id,
+          vaultId: item?.vaultId ?? "",
+          title: item?.title ?? id,
+          kind,
+          description: desc,
+        });
+      } else {
+        activeList.push(id);
+      }
+    };
+
+    const activeWeak: string[] = [];
+    for (const id of weak) checkOrIgnore(id, "weak", "Weak password", activeWeak);
+
+    const activeReused: string[][] = [];
+    for (const g of reused) {
+      const filtered: string[] = [];
+      for (const id of g) {
+        if (isIgnored(id, "reused")) {
+          const item = db.get(id)?.detail;
+          ignoredList.push({
+            itemId: id,
+            vaultId: item?.vaultId ?? "",
+            title: item?.title ?? id,
+            kind: "reused",
+            description: "Reused password",
+          });
+        } else {
+          filtered.push(id);
+        }
+      }
+      if (filtered.length > 1) activeReused.push(filtered);
+    }
+
+    const activeOld: string[] = [];
+    for (const id of old) checkOrIgnore(id, "old", "Old password", activeOld);
+
+    const activeMissingTotp: string[] = [];
+    for (const id of missingTotp) checkOrIgnore(id, "missing_totp", "Missing two-factor authentication", activeMissingTotp);
+
+    const activeTotpAvailable: string[] = [];
+    for (const id of totpAvailable) checkOrIgnore(id, "totp_available", "Two-factor authentication available", activeTotpAvailable);
+
+    const activePasskeyAvailable: string[] = [];
+    for (const id of passkeyAvailable) checkOrIgnore(id, "passkey_available", "Passkey available", activePasskeyAvailable);
+
+    const activeExpired: string[] = [];
+    for (const id of expired) checkOrIgnore(id, "expired", "Expired", activeExpired);
+
+    const activeExpiringSoon: string[] = [];
+    for (const id of expiringSoon) checkOrIgnore(id, "expiring_soon", "Expiring soon", activeExpiringSoon);
+
+    const activeInsecureUrls: string[] = [];
+    for (const id of insecureUrls) checkOrIgnore(id, "insecure_url", "Saved with unencrypted HTTP URL", activeInsecureUrls);
+
+    const activeBreached: string[] = [];
+    if (hibp && activeWeak.length > 0) {
+      const candidate = activeWeak[0];
+      checkOrIgnore(candidate, "pwned", "Breached password (HIBP)", activeBreached);
+    }
+
+    return delay<T.WatchtowerReport>({
+      score: Math.max(0, 100 - activeWeak.length * 6 - activeReused.length * 8 - activeOld.length * 2),
+      weak: activeWeak,
+      reused: activeReused,
+      old: activeOld,
+      breached: activeBreached,
+      missingTotp: activeMissingTotp,
+      totpAvailable: activeTotpAvailable,
+      passkeyAvailable: activePasskeyAvailable,
+      expired: activeExpired,
+      expiringSoon: activeExpiringSoon,
+      insecureUrls: activeInsecureUrls,
+      ignored: ignoredList,
+      checkedAt: new Date().toISOString(),
+      hibpChecked: hibp,
+    }, 200);
   },
   import_file: (a: { dryRun: boolean }) => { if (!a.dryRun) onboarding = { ...onboarding, imported: true }; return delay<T.ImportResult>({ parsed: 12, added: a.dryRun ? 0 : 10, duplicates: 2, duplicateTitles: ['Example Mail', 'Example Mail'], warnings: ['row 4: skipped empty row'], categories: { login: 10, credit_card: 1, secure_note: 1 },
     preview: [{ title: 'Example Mail', category: 'login', username: 'alice@example.invalid', url: 'https://mail.example.invalid', hasPassword: true, hasTotp: true, tags: ['Work'], fields: 4, archived: false },
