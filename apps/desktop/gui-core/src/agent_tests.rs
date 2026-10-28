@@ -210,6 +210,7 @@ fn save_login_and_update_password_write_real_items() {
     assert!(!e.app.get_item(vid, iid).unwrap().history.is_empty(), "old version kept in history");
     let t = c.ok("save_login", json!({"origin": "https://x.example.net", "title": "My X", "username": "", "password": "p", "vault_id": e.vault}));
     assert!(t["item_id"].as_str().unwrap().starts_with(&e.vault));
+    assert_eq!(c.err("save_login", json!({"origin": "https://x.example.net", "username": "u", "password": "p", "vault_id": "nope"})), "not_found");
 }
 
 #[test]

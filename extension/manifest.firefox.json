@@ -67,6 +67,7 @@
         "lib/forms.js",
         "lib/i18n.js",
         "lib/icons.js",
+        "lib/banner.js",
         "content.js"
       ],
       "all_frames": false,

@@ -34,9 +34,20 @@
   .m{min-width:0;flex:1}.ti{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.u{font-size:12px;color:var(--gp-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
   .msg{padding:12px 10px;color:var(--gp-muted)}.err{color:var(--gp-danger)}
-  .banner{position:fixed;top:16px;right:16px;width:340px;background:var(--gp-bg);color:var(--gp-fg);border:1px solid var(--gp-border);border-radius:12px;box-shadow:var(--gp-shadow-lg);font:13px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:14px}
+  .banner{position:fixed;top:16px;right:16px;width:340px;background:var(--gp-bg);color:var(--gp-fg);border:1px solid var(--gp-border);border-radius:12px;box-shadow:var(--gp-shadow-lg);font:13px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans Myanmar","Noto Sans Thai",sans-serif;padding:14px}
   .banner .row{display:flex;align-items:center;gap:10px}
-  .banner .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+  .banner .fields{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+  .banner .fld{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:600;letter-spacing:.4px;text-transform:uppercase;color:var(--gp-muted)}
+  .banner .inp{width:100%;box-sizing:border-box;background:var(--gp-field);color:var(--gp-fg);border:1px solid var(--gp-border);border-radius:8px;padding:7px 9px;font:13px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans Myanmar","Noto Sans Thai",sans-serif}
+  .banner .inp:focus-visible,.banner .btn:focus-visible{outline:2px solid var(--gp-accent);outline-offset:2px}
+  .banner .err{color:var(--gp-danger);font-size:12px;margin-top:8px}
+  .banner .err[hidden]{display:none}
+  .banner .acts{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .banner .grow{flex:1}
+  .banner .btn:disabled{opacity:.65;cursor:default}
+  .banner .spin{display:inline-block;width:11px;height:11px;margin-right:6px;vertical-align:-1px;border-radius:50%;border:2px solid currentColor;border-top-color:transparent;animation:gp-spin .8s linear infinite}
+  @keyframes gp-spin{to{transform:rotate(360deg)}}
+  .banner .ok{color:var(--gp-ok);font-size:15px;font-weight:700}
   .btn{border:1px solid var(--gp-border);background:var(--gp-btn-bg);color:var(--gp-fg);border-radius:8px;padding:6px 12px;font:inherit;cursor:pointer}
   .btn.pri{background:var(--gp-accent);border-color:var(--gp-accent);color:var(--gp-accent-fg);font-weight:600}
   .btn.ter{border:0;background:transparent;color:var(--gp-muted);font-size:12px;padding:6px 8px;cursor:pointer}
@@ -356,41 +367,161 @@
 
   // ---------- save / update banner ----------
   let banner = null;
-  function closeBanner() { if (banner) { banner.host.remove(); banner = null; } }
+  let bannerTimer = null;
+  function clearBannerTimer() { if (bannerTimer) { clearTimeout(bannerTimer); bannerTimer = null; } }
+  function closeBanner() {
+    clearBannerTimer();
+    if (banner) {
+      if (banner.docKey) document.removeEventListener('keydown', banner.docKey, true);
+      banner.host.remove();
+      banner = null;
+    }
+  }
+  function siteName() { return location.hostname.replace(/^www\./, ''); }
   function showBanner(p) {
     if (!p || !p.prompt || !SETTINGS.savePrompts) return;
     closeBanner();
     banner = shadowHost(true);
+    const me = banner;
     banner.host.style.zIndex = '2147483647'; banner.host.style.top = '0'; banner.host.style.right = '0';
     const b = el('div', 'banner'); b.setAttribute('role', 'dialog');
+    const isUpdate = p.prompt === 'update';
+    const headTitle = isUpdate ? t('csUpdateQ', 'Update password in gitpass?') : t('csSaveQ', 'Save login to gitpass?');
+    b.setAttribute('aria-label', headTitle);
     const row = el('div', 'row'); const lg = el('img'); lg.src = LOGO; lg.alt = ''; lg.style.cssText = 'width:24px;height:24px;border-radius:6px';
     const m = el('div', 'm');
-    m.append(el('div', 'ti', p.prompt === 'update' ? t('csUpdateQ', 'Update password in gitpass?') : t('csSaveQ', 'Save login to gitpass?')));
-    m.append(el('div', 'u', (p.title ? p.title + ' · ' : location.hostname + ' · ') + (p.username || t('csNoUser', '(no username)'))));
+    m.append(el('div', 'ti', headTitle));
+    m.append(el('div', 'u', (p.title ? p.title + ' · ' : siteName() + ' · ') + (p.username || t('csNoUser', '(no username)'))));
     row.append(lg, m);
+
+    const title = el('input', 'inp'); title.type = 'text'; title.value = siteName(); title.maxLength = GitpassBanner.MAX_TITLE;
+    title.autocomplete = 'off'; title.spellcheck = false;
+    const titleFld = el('label', 'fld'); titleFld.append(el('span', null, t('title', 'Title')), title);
+    const fields = el('div', 'fields'); fields.append(titleFld);
+
+    const vaults = GitpassBanner.vaultList(p.vaults);
+    let vault = null;
+    if (vaults.length) {
+      vault = el('select', 'inp');
+      for (const v of vaults) { const o = el('option', null, v.name); o.value = v.id; vault.append(o); }
+      vault.value = GitpassBanner.selectVault(vaults, vault.value);
+      const vf = el('label', 'fld'); vf.append(el('span', null, t('vault', 'Vault')), vault);
+      fields.append(vf);
+    }
+
+    const errLine = el('div', 'err'); errLine.setAttribute('role', 'alert'); errLine.hidden = true;
+
     const acts = el('div', 'acts');
     const no = el('button', 'btn', t('csNotNow', 'Not now')); no.type = 'button';
     const never = el('button', 'btn ter', t('csNever', 'Never for this site')); never.type = 'button';
-    const yes = el('button', 'btn pri', p.prompt === 'update' ? t('csUpdate', 'Update') : t('csSave', 'Save')); yes.type = 'button';
-    no.addEventListener('click', (e) => { if (!e.isTrusted) return; send('page:save_decision', { action: 'dismiss' }).catch(() => {}); closeBanner(); });
-    never.addEventListener('click', (e) => { if (!e.isTrusted) return; send('page:save_decision', { action: 'never', user_click: true }).catch(() => {}); closeBanner(); });
-    yes.addEventListener('click', async (e) => {
-      if (!e.isTrusted) return;
-      yes.disabled = true;
-      try {
-        await send('page:save_decision', { action: p.prompt === 'update' ? 'update' : 'save', username: p.username, item_id: p.item_id, user_click: true });
-        m.firstChild.textContent = p.prompt === 'update' ? t('csUpdated', 'Password updated') : t('csSaved', 'Saved to gitpass');
-        acts.remove();
-        setTimeout(closeBanner, 1800);
+    const saveNew = isUpdate ? el('button', 'btn', t('csSaveAsNew', 'Save as new')) : null;
+    if (saveNew) saveNew.type = 'button';
+    const primary = el('button', 'btn pri', isUpdate ? t('csUpdate', 'Update') : t('csSave', 'Save')); primary.type = 'button';
+    const primaryLabel = primary.textContent;
+    acts.append(never, el('span', 'grow'), no);
+    if (saveNew) acts.append(saveNew);
+    acts.append(primary);
+
+    const controls = () => [title, vault, never, no, saveNew, primary].filter(Boolean);
+    function setBusy(label) {
+      me.busy = true;
+      for (const c of controls()) c.disabled = true;
+      b.setAttribute('aria-busy', 'true');
+      primary.textContent = '';
+      const sp = el('span', 'spin'); sp.setAttribute('aria-hidden', 'true');
+      primary.append(sp, document.createTextNode(label));
+    }
+    function setIdle() {
+      me.busy = false;
+      for (const c of controls()) c.disabled = false;
+      b.removeAttribute('aria-busy');
+      primary.textContent = primaryLabel;
+    }
+    function showError(msg, focusEl) { if (banner !== me) return; errLine.textContent = msg; errLine.hidden = false; setIdle(); (focusEl || primary).focus(); }
+    function dismiss() {
+      if (banner && banner.done) { closeBanner(); return; }
+      send('page:save_decision', { action: 'dismiss' }).catch(() => {});
+      closeBanner();
+    }
+    function armClose(ms) {
+      clearBannerTimer();
+      bannerTimer = setTimeout(() => {
+        bannerTimer = null;
+        if (banner !== me || !me.done) return;
+        if (me.host.matches(':hover') || me.root.activeElement) { armClose(2000); return; }
+        closeBanner();
+      }, ms);
+    }
+    function showDone(action) {
+      if (banner !== me) return; // Esc closed the banner while the request was in flight
+      me.busy = false;
+      me.done = true;
+      fields.remove(); acts.remove(); errLine.remove();
+      m.firstChild.textContent = action === 'update' ? t('csUpdated', 'Password updated')
+        : action === 'save_new' ? t('csSavedNew', 'Saved as a new login') : t('csSaved', 'Saved to gitpass');
+      m.lastChild.textContent = siteName() + ' · ' + (p.username || t('csNoUser', '(no username)'));
+      const done = el('div', 'acts');
+      const mark = el('span', 'ok', '✓'); mark.setAttribute('aria-hidden', 'true');
+      const open = el('button', 'btn pri', t('openInApp', 'Open in gitpass')); open.type = 'button';
+      open.addEventListener('click', (e) => {
+        if (!e.isTrusted) return;
+        send('page:open_app', { last_save: true }).catch(() => {});
+        closeBanner();
+      });
+      done.append(mark, el('span', 'grow'), open);
+      b.append(done);
+      open.focus();
+      armClose(4000);
+    }
+    async function decide(action) {
+      if (action !== 'update') {
+        const problem = GitpassBanner.titleError(title.value);
+        if (problem) {
+          showError(problem === 'too_long' ? t('csTitleTooLong', 'Title is too long (max 200 characters)') : t('csTitleRequired', 'Title is required'), title);
+          return;
+        }
       }
-      catch (err) {
-        yes.disabled = false;
+      errLine.hidden = true;
+      setBusy(action === 'update' ? t('csUpdating', 'Updating…') : t('csSaving', 'Saving…'));
+      try {
+        const msg = { action, title: GitpassBanner.titleForSave(title.value, siteName()), user_click: true };
+        const vaultId = vault ? GitpassBanner.selectVault(vaults, vault.value) : '';
+        if (vaultId) msg.vault_id = vaultId;
+        await send('page:save_decision', msg);
+        showDone(action);
+      } catch (err) {
         const code = err.code || codeOf(err.message);
-        m.lastChild.textContent = code === 'locked' ? t('csLockedShort', 'Unlock gitpass first, then try again') : 'gitpass: ' + err.message;
+        showError(code === 'locked' ? t('csLockedShort', 'Unlock gitpass first, then try again') : 'gitpass: ' + err.message);
         if (code === 'locked') send('page:request_unlock').catch(() => {});
       }
+    }
+
+    no.addEventListener('click', (e) => { if (!e.isTrusted) return; dismiss(); });
+    never.addEventListener('click', (e) => { if (!e.isTrusted) return; send('page:save_decision', { action: 'never', user_click: true }).catch(() => {}); closeBanner(); });
+    primary.addEventListener('click', (e) => { if (!e.isTrusted) return; decide(isUpdate ? 'update' : 'save'); });
+    if (saveNew) saveNew.addEventListener('click', (e) => { if (!e.isTrusted) return; decide('save_new'); });
+
+    // Esc = Not now, even when focus left the banner; Tab stays inside it while open.
+    const onDocKey = (e) => {
+      if (!e.isTrusted || !GitpassBanner.isEscape(e.key) || me.busy) return;
+      e.preventDefault(); e.stopPropagation(); dismiss();
+    };
+    document.addEventListener('keydown', onDocKey, true);
+    banner.docKey = onDocKey;
+    banner.root.addEventListener('keydown', (e) => {
+      if (!e.isTrusted || e.key !== 'Tab') return;
+      const list = Array.from(banner.root.querySelectorAll('input,select,button')).filter((x) => !x.disabled);
+      const at = list.indexOf(banner.root.activeElement);
+      const next = GitpassBanner.trapTab(e.key, e.shiftKey, at, list.length);
+      if (next != null) { e.preventDefault(); list[next].focus(); }
     });
-    acts.append(no, never, yes); b.append(row, acts); banner.root.append(b);
+    banner.host.addEventListener('mouseenter', clearBannerTimer);
+    banner.host.addEventListener('focusin', clearBannerTimer);
+    banner.host.addEventListener('mouseleave', () => { if (banner && banner.done) armClose(4000); });
+    banner.host.addEventListener('focusout', () => { if (banner && banner.done) armClose(4000); });
+
+    b.append(row, fields, errLine, acts); banner.root.append(b);
+    primary.focus();
   }
 
   let lastCapture = 0;

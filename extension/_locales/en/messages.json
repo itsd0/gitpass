@@ -366,6 +366,24 @@
   "csLockedShort": {
     "message": "Unlock gitpass first, then try again"
   },
+  "csSaveAsNew": {
+    "message": "Save as new"
+  },
+  "csSaving": {
+    "message": "Saving…"
+  },
+  "csUpdating": {
+    "message": "Updating…"
+  },
+  "csSavedNew": {
+    "message": "Saved as a new login"
+  },
+  "csTitleRequired": {
+    "message": "Title is required"
+  },
+  "csTitleTooLong": {
+    "message": "Title is too long (max 200 characters)"
+  },
   "allSet": {
     "message": "All set"
   },

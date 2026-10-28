@@ -5,6 +5,7 @@ globalThis.GitpassPolicy = require('../lib/policy.js');
 const B = require('../bg-page.js');
 
 const tab = (url, frameId = 0, id = 1) => ({ tab: { id, url }, frameId, url });
+const VAULTS = [{ id: 'v1', name: 'Personal', item_count: 2 }, { id: 'v2', name: 'Work', item_count: 0 }];
 function fakeHost(items, pw = 'old') {
   const calls = [];
   const h = async (cmd, args) => {
@@ -15,6 +16,7 @@ function fakeHost(items, pw = 'old') {
     if (cmd === 'update_password') return { ok: true };
     if (cmd === 'totp') return { code: '123456', remaining: 10 };
     if (cmd === 'list_items') return { items: [{ id: 'v:c', category: 'credit_card' }, { id: 'v:l', category: 'login' }] };
+    if (cmd === 'list_vaults') return { vaults: VAULTS };
     return {};
   };
   h.calls = calls; return h;
@@ -51,9 +53,10 @@ test('capture -> save banner -> save_login, password never returned to page', as
   const h = fakeHost([]);
   const s = tab('https://site.example/login', 0, 7);
   const r = await B.handle({ type: 'page:capture', kind: 'login', username: 'new@x', password: 'pw1' }, s, h);
-  assert.deepStrictEqual(r, { prompt: 'save', username: 'new@x', title: null });
+  assert.deepStrictEqual(r, { prompt: 'save', username: 'new@x', title: null, vaults: [{ id: 'v1', name: 'Personal' }, { id: 'v2', name: 'Work' }] });
   const p = await B.handle({ type: 'page:pending' }, tab('https://www.site.example/home', 0, 7), h); // redirect, same site
   assert.strictEqual(p.prompt, 'save'); assert.ok(!('password' in p));
+  assert.deepStrictEqual(p.vaults, [{ id: 'v1', name: 'Personal' }, { id: 'v2', name: 'Work' }]);
   await B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h);
   assert.deepStrictEqual(h.calls.at(-1), ['save_login', { origin: 'https://site.example', title: 'site.example', username: 'new@x', password: 'pw1' }]);
   await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h), /nothing to save/);
@@ -70,6 +73,71 @@ test('capture with changed password -> update; same password -> no prompt; multi
   await B.handle({ type: 'page:save_decision', action: 'update', user_click: true }, s, h);
   assert.deepStrictEqual(h.calls.at(-1), ['update_password', { item_id: 'v:1', password: 'newer' }]);
   assert.strictEqual((await B.handle({ type: 'page:pending' }, tab('https://other.example/', 0, 9), h)).prompt, null);
+});
+
+test('save decision: trimmed custom title, chosen vault, page-side item id ignored', async () => {
+  const h = fakeHost([]);
+  const s = tab('https://site.example/login', 0, 21);
+  await B.handle({ type: 'page:capture', kind: 'login', username: 'new@x', password: 'pw1' }, s, h);
+  const r = await B.handle({
+    type: 'page:save_decision', action: 'save', title: '  Work Login  ', vault_id: 'v2',
+    item_id: 'v:victim', username: 'evil', password: 'evil', user_click: true,
+  }, s, h);
+  assert.deepStrictEqual(r, { done: true, action: 'save', item_id: 'v:new' });
+  assert.deepStrictEqual(h.calls.find(([cmd]) => cmd === 'save_login')[1], {
+    origin: 'https://site.example', title: 'Work Login', username: 'new@x', password: 'pw1', vault_id: 'v2',
+  });
+});
+
+test('save decision: unknown vault and over-long titles are rejected', async () => {
+  const s = tab('https://site.example/login', 0, 22);
+  const capture = (host) => B.handle({ type: 'page:capture', kind: 'login', username: 'new@x', password: 'pw1' }, s, host);
+  let h = fakeHost([]);
+  await capture(h);
+  await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save', vault_id: 'nope', user_click: true }, s, h), /vault not found/);
+  assert.ok(!h.calls.some(([cmd]) => cmd === 'save_login'));
+  h = fakeHost([]);
+  await capture(h);
+  await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save', title: 'x'.repeat(201), user_click: true }, s, h), /too long/);
+  assert.ok(!h.calls.some(([cmd]) => cmd === 'save_login'));
+  // A cleared title still falls back to the hostname (same as the old banner).
+  h = fakeHost([]);
+  await capture(h);
+  await B.handle({ type: 'page:save_decision', action: 'save', title: '   ', user_click: true }, s, h);
+  assert.strictEqual(h.calls.find(([cmd]) => cmd === 'save_login')[1].title, 'site.example');
+});
+
+test('update prompt: save_new makes a second login; save/update actions are not interchangeable', async () => {
+  const s = tab('https://site.example/', 0, 23);
+  let h = fakeHost([login], 'old');
+  assert.strictEqual((await B.handle({ type: 'page:capture', kind: 'login', username: 'me', password: 'newer' }, s, h)).prompt, 'update');
+  await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h), /action/);
+  h = fakeHost([login], 'old');
+  assert.strictEqual((await B.handle({ type: 'page:capture', kind: 'login', username: 'me', password: 'newer' }, s, h)).prompt, 'update');
+  const r = await B.handle({ type: 'page:save_decision', action: 'save_new', title: 'Second account', vault_id: 'v2', user_click: true }, s, h);
+  assert.deepStrictEqual(r, { done: true, action: 'save', item_id: 'v:new' });
+  assert.deepStrictEqual(h.calls.find(([cmd]) => cmd === 'save_login')[1], {
+    origin: 'https://site.example', title: 'Second account', username: 'me', password: 'newer', vault_id: 'v2',
+  });
+  // save_new is only for update prompts, and update needs an update prompt.
+  const savePrompt = fakeHost([]);
+  assert.strictEqual((await B.handle({ type: 'page:capture', kind: 'login', username: 'other', password: 'pw' }, s, savePrompt)).prompt, 'save');
+  await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save_new', user_click: true }, s, savePrompt), /action/);
+  assert.strictEqual((await B.handle({ type: 'page:capture', kind: 'login', username: 'other', password: 'pw' }, s, savePrompt)).prompt, 'save');
+  await assert.rejects(B.handle({ type: 'page:save_decision', action: 'update', user_click: true }, s, savePrompt), /action/);
+});
+
+test('page:open_app forwards only the item saved from this tab', async () => {
+  const h = fakeHost([]);
+  const s = tab('https://site.example/', 0, 24);
+  await B.handle({ type: 'page:open_app' }, s, h);
+  assert.deepStrictEqual(h.calls.at(-1), ['open_in_app', {}]);
+  await B.handle({ type: 'page:capture', kind: 'login', username: 'new@x', password: 'pw1' }, s, h);
+  await B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h);
+  await B.handle({ type: 'page:open_app', last_save: true, item_id: 'v:victim' }, s, h);
+  assert.deepStrictEqual(h.calls.at(-1), ['open_in_app', { item_id: 'v:new' }]);
+  await B.handle({ type: 'page:open_app', last_save: true }, tab('https://other.example/', 0, 25), h);
+  assert.deepStrictEqual(h.calls.at(-1), ['open_in_app', {}]);
 });
 
 test('sameSite', () => {

@@ -383,6 +383,30 @@
     "message": "ปลดล็อก gitpass ก่อน แล้วลองอีกครั้ง",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "csSaveAsNew": {
+    "message": "บันทึกเป็นรายการใหม่",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csSaving": {
+    "message": "กำลังบันทึก…",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csUpdating": {
+    "message": "กำลังอัปเดต…",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csSavedNew": {
+    "message": "บันทึกเป็นรายการเข้าสู่ระบบใหม่แล้ว",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csTitleRequired": {
+    "message": "ต้องระบุชื่อรายการ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csTitleTooLong": {
+    "message": "ชื่อรายการยาวเกินไป (สูงสุด 200 อักขระ)",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
   "allSet": {
     "message": "พร้อมใช้งานแล้ว",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
