@@ -117,6 +117,7 @@ pub struct Filter {
 pub struct WatchtowerReport {
     pub score: u8, pub weak: Vec<String>, pub reused: Vec<Vec<String>>, pub old: Vec<String>, pub breached: Vec<String>,
     pub missing_totp: Vec<String>, pub totp_available: Vec<String>, pub passkey_available: Vec<String>,
+    pub expired: Vec<String>, pub expiring_soon: Vec<String>,
     pub checked_at: String, pub hibp_checked: bool,
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -845,12 +846,12 @@ impl App {
                 .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
                 .filter_map(|(_, _, r)| r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value))
                 .collect();
-            let items: Vec<(String, String, Item)> = records.into_iter()
-                .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Login)
-                .map(|(v, i, r)| (v, i, r.item.clone())).collect();
+            let items: Vec<(String, String, ItemRecord)> = records.into_iter()
+                .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
+                .collect();
             let rep = audit::audit_with_passkeys(&items, &passkey_sites, &AuditOpts::default(), client)?;
             let mut out = WatchtowerReport { score: 100, weak: vec![], reused: vec![], old: vec![], breached: vec![], missing_totp: vec![],
-                totp_available: vec![], passkey_available: vec![],
+                totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
             let mut groups: BTreeMap<usize, Vec<String>> = BTreeMap::new();
             for f in &rep.per_item {
@@ -863,11 +864,13 @@ impl App {
                         Finding::MissingTotp => out.missing_totp.push(f.id.clone()),
                         Finding::TotpAvailable { .. } => out.totp_available.push(f.id.clone()),
                         Finding::PasskeyAvailable { .. } => out.passkey_available.push(f.id.clone()),
+                        Finding::Expired { .. } => out.expired.push(f.id.clone()),
+                        Finding::ExpiringSoon { .. } => out.expiring_soon.push(f.id.clone()),
                     }
                 }
             }
             out.reused = groups.into_values().collect();
-            let with_pw = items.iter().filter(|(_, _, i)| i.password.as_deref().is_some_and(|p| !p.is_empty())).count();
+            let with_pw = items.iter().filter(|(_, _, i)| i.item.password.as_deref().is_some_and(|p| !p.is_empty())).count();
             if with_pw > 0 {
                 let bad: BTreeSet<&String> = out.weak.iter().chain(out.breached.iter()).chain(out.reused.iter().flatten()).collect();
                 // Sites with documented TOTP surface as TotpAvailable instead of MissingTotp, but both mean

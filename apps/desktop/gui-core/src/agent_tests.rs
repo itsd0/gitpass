@@ -283,3 +283,77 @@ fn changed_event_pushed_for_gui_and_agent_writes() {
     c.wait_event("lock");
     assert!(c.events.iter().all(|v| v["event"] != json!("changed")));
 }
+
+#[test]
+fn item_added_via_host_agent_socket_emits_changed_exactly_once() {
+    let e = env();
+    let (mut c_popup, _) = Client::connect(&e);
+    let (mut c_watcher, _) = Client::connect(&e);
+    std::thread::sleep(Duration::from_millis(400)); // allow background watcher to observe initial stamp
+    c_popup.events.clear();
+    c_watcher.events.clear();
+
+    // 1. Add item via create_item with source: "popup" (as the extension does)
+    let t = std::time::Instant::now();
+    let r = c_popup.ok(
+        "create_item",
+        json!({
+            "source": "popup",
+            "item": {
+                "category": "login",
+                "title": "GitHub New",
+                "url": "https://github.com",
+                "sections": [{
+                    "id": "login",
+                    "title": null,
+                    "fields": [
+                        {"id": "username", "label": "username", "kind": "text", "value": "mona"},
+                        {"id": "password", "label": "password", "kind": "concealed", "value": "FAKE-pw-123"}
+                    ]
+                }]
+            }
+        }),
+    );
+    assert!(r["item_id"].as_str().is_some());
+    assert_eq!(r["title"], "GitHub New");
+
+    // Both the popup connection and the watching connection receive the "changed" event
+    c_watcher.wait_event("changed");
+    c_popup.wait_event("changed");
+    assert!(t.elapsed() < Duration::from_millis(1500), "changed event took too long: {:?}", t.elapsed());
+
+    // Wait long enough for the background watcher loop (250 ms tick) to run
+    std::thread::sleep(Duration::from_millis(400));
+
+    // Drain and verify that "changed" was emitted exactly once across both connections
+    c_watcher.s.set_read_timeout(Some(Duration::from_millis(50))).unwrap();
+    while let Ok(Some(v)) = read_frame(&mut c_watcher.s) {
+        c_watcher.events.push(v);
+    }
+    assert_eq!(
+        c_watcher.events.iter().filter(|v| v["event"] == json!("changed")).count(),
+        0,
+        "watcher received duplicate changed events: {:?}",
+        c_watcher.events
+    );
+
+    // 2. Also test save_login with source: "popup" emits "changed" exactly once
+    c_watcher.events.clear();
+    c_popup.events.clear();
+    let r2 = c_popup.ok(
+        "save_login",
+        json!({
+            "source": "popup",
+            "origin": "https://gitlab.example.invalid",
+            "username": "alice",
+            "password": "FAKE-pw-456"
+        }),
+    );
+    assert!(r2["item_id"].as_str().is_some());
+    c_watcher.wait_event("changed");
+    std::thread::sleep(Duration::from_millis(400));
+    while let Ok(Some(v)) = read_frame(&mut c_watcher.s) {
+        c_watcher.events.push(v);
+    }
+    assert_eq!(c_watcher.events.iter().filter(|v| v["event"] == json!("changed")).count(), 0);
+}

@@ -4,13 +4,15 @@ import { api } from '../../api/client';
 import { useSettings } from '../settings/useSettings';
 const it3 = { id: 'i3', vaultId: 'v-private', category: 'login' as const, title: 'Fake Forum', subtitle: 'demo', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: '', createdAt: '' };
 const it3x = { ...it3, id: 'i3x', title: 'Fake 2FA Site' };
+const itExp = { ...it3, id: 'i-exp', category: 'credit_card' as const, title: 'Expired Card' };
+const itSoon = { ...it3, id: 'i-soon', category: 'api_credential' as const, title: 'Expiring API Key' };
 let hibpOn = false;
 beforeEach(() => {
   hibpOn = false; useSettings.setState({ settings: null });
   vi.spyOn(api, 'getSettings').mockImplementation(async () => ({ autoLockMinutes: 10, clipboardClearSecs: 30, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: hibpOn }));
   vi.spyOn(api, 'setSettings').mockImplementation(async (a: any) => { hibpOn = !!a.settings.hibpCheck; });
-  vi.spyOn(api, 'listItems').mockResolvedValue([it3, it3x]);
-  vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'], passkeyAvailable: ['i3x'], checkedAt: '', hibpChecked: on }; });
+  vi.spyOn(api, 'listItems').mockResolvedValue([it3, it3x, itExp, itSoon]);
+  vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'], passkeyAvailable: ['i3x'], expired: ['i-exp'], expiringSoon: ['i-soon'], checkedAt: '', hibpChecked: on }; });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
@@ -59,5 +61,20 @@ describe('watchtower score', () => {
     fireEvent.click(screen.getAllByText('Fake 2FA Site')[0]);
     expect(useApp.getState().selectedItemId).toBe('i3x');
     expect(useApp.getState().route).toEqual({ name: 'items', filter: { kind: 'vault', vaultId: 'v-private' } });
+  });
+  it('extracts expired and expiringSoon issue IDs', () => {
+    const r = { score: 0, weak: [], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [], expired: ['i-exp'], expiringSoon: ['i-soon'], checkedAt: '', hibpChecked: false };
+    expect(issueIds(r, 'expired')).toEqual(['i-exp']);
+    expect(issueIds(r, 'expiringSoon')).toEqual(['i-soon']);
+  });
+  it('renders expired and expiring soon cards with counts and links items', async () => {
+    render(<WatchtowerPage />);
+    await screen.findByTestId('score');
+    expect(screen.getByTestId('count-expired').textContent).toBe('1');
+    expect(screen.getByTestId('count-expiringSoon').textContent).toBe('1');
+    expect(screen.getByText('Expired Card')).toBeTruthy();
+    expect(screen.getByText('Expiring API Key')).toBeTruthy();
+    fireEvent.click(screen.getByText('Expired Card'));
+    expect(useApp.getState().selectedItemId).toBe('i-exp');
   });
 });

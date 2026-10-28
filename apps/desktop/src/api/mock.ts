@@ -272,7 +272,49 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     const totpAvailable = logins.filter((r) => !r.detail.hasTotp && /github/i.test(r.detail.title)).map((r) => r.detail.id);
     const passkeyAvailable = logins.filter((r) => /github|bank/i.test(r.detail.title)).map((r) => r.detail.id);
     const old = logins.filter((r) => Date.parse(r.detail.updatedAt) < Date.parse('2026-09-01')).map((r) => r.detail.id);
-    return delay<T.WatchtowerReport>({ score: Math.max(0, 100 - weak.length * 6 - reused.length * 8 - old.length * 2), weak, reused, old, breached: hibp ? weak.slice(0, 1) : [], missingTotp, totpAvailable, passkeyAvailable, checkedAt: new Date().toISOString(), hibpChecked: hibp }, 200);
+    const now = Date.now();
+    const expired: string[] = [];
+    const expiringSoon: string[] = [];
+    for (const r of db.values()) {
+      if (r.detail.archived) continue;
+      for (const s of r.detail.sections) {
+        for (const fl of s.fields) {
+          if (!fl.value || (!fl.id.toLowerCase().includes('expir') && !fl.label.toLowerCase().includes('expir'))) continue;
+          const v = fl.value.trim();
+          let expTs: number | null = null;
+          const m = /^\s*(\d{1,2})\s*[/\-. ]?\s*(\d{2}|\d{4})\s*$/.exec(v);
+          if (m) {
+            const mm = Number(m[1]);
+            let yy = Number(m[2]);
+            if (yy < 100) yy += 2000;
+            if (mm >= 1 && mm <= 12) {
+              const nextM = mm === 12 ? 1 : mm + 1;
+              const nextY = mm === 12 ? yy + 1 : yy;
+              expTs = Date.UTC(nextY, nextM - 1, 1) - 1000;
+            }
+          } else {
+            const ym = /^\s*(\d{4})\s*[/\-. ]\s*(\d{1,2})\s*$/.exec(v);
+            if (ym) {
+              const yy = Number(ym[1]);
+              const mm = Number(ym[2]);
+              if (mm >= 1 && mm <= 12) {
+                const nextM = mm === 12 ? 1 : mm + 1;
+                const nextY = mm === 12 ? yy + 1 : yy;
+                expTs = Date.UTC(nextY, nextM - 1, 1) - 1000;
+              }
+            } else {
+              const d = Date.parse(v);
+              if (!isNaN(d)) expTs = d;
+            }
+          }
+          if (expTs !== null) {
+            if (now > expTs) expired.push(r.detail.id);
+            else if ((expTs - now) / 86400000 <= 30) expiringSoon.push(r.detail.id);
+          }
+        }
+      }
+    }
+    return delay<T.WatchtowerReport>({ score: Math.max(0, 100 - weak.length * 6 - reused.length * 8 - old.length * 2), weak, reused, old, breached: hibp ? weak.slice(0, 1) : [], missingTotp, totpAvailable, passkeyAvailable, expired, expiringSoon, checkedAt: new Date().toISOString(), hibpChecked: hibp }, 200);
   },
   import_file: (a: { dryRun: boolean }) => { if (!a.dryRun) onboarding = { ...onboarding, imported: true }; return delay<T.ImportResult>({ parsed: 12, added: a.dryRun ? 0 : 10, duplicates: 2, duplicateTitles: ['Example Mail', 'Example Mail'], warnings: ['row 4: skipped empty row'], categories: { login: 10, credit_card: 1, secure_note: 1 },
     preview: [{ title: 'Example Mail', category: 'login', username: 'alice@example.invalid', url: 'https://mail.example.invalid', hasPassword: true, hasTotp: true, tags: ['Work'], fields: 4, archived: false },

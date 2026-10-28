@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Clock, Copy, KeyRound, ShieldAlert, ShieldCheck, Smartphone, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Clock, Copy, KeyRound, ShieldAlert, ShieldCheck, Smartphone, RefreshCw, CalendarX, CalendarClock } from 'lucide-react';
 import type { ItemSummary, WatchtowerReport } from '../../api/types';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
@@ -26,6 +26,8 @@ export function WatchtowerPage() {
   const cards = [...CARDS,
     { key: 'totpAvailable' as const, title: t('watchtower.totpAvailable'), desc: t('watchtower.totpAvailableDesc'), Icon: Smartphone },
     { key: 'passkeyAvailable' as const, title: t('watchtower.passkeyAvailable'), desc: t('watchtower.passkeyAvailableDesc'), Icon: KeyRound },
+    { key: 'expired' as const, title: t('watchtower.expired'), desc: t('watchtower.expiredDesc'), Icon: CalendarX },
+    { key: 'expiringSoon' as const, title: t('watchtower.expiringSoon'), desc: t('watchtower.expiringSoonDesc'), Icon: CalendarClock },
   ];
   const { selectItem, setRoute } = useApp();
   // Opt-in HIBP lives in Rust-persisted Settings.hibpCheck (default off); Rust also refuses the network
@@ -55,7 +57,7 @@ export function WatchtowerPage() {
     <div className="grid gap-4 md:grid-cols-2">{cards.map(({ key, title, desc, Icon }) => { const ids = report ? issueIds(report, key) : [];
       const off = key === 'breached' && report && !report.hibpChecked;
       return (<section key={key} aria-label={title} className="rounded-xl border border-border bg-panel p-4">
-        <div className="flex items-center gap-2"><Icon size={18} className={ids.length ? 'text-warn' : 'text-ok'} /><h2 className="font-semibold">{title}</h2>
+        <div className="flex items-center gap-2"><Icon size={18} className={ids.length ? (key === 'expired' ? 'text-danger' : key === 'expiringSoon' ? 'text-accent' : 'text-warn') : 'text-ok'} /><h2 className="font-semibold">{title}</h2>
           <span data-testid={`count-${key}`} className="ml-auto rounded-full bg-hover px-2 text-sm">{report ? (off ? '—' : ids.length) : '…'}</span></div>
         <p className="mt-1 text-xs text-muted">{desc}</p>
         {off ? <p className="mt-3 text-xs text-muted">Enable the breach check above to scan.</p>

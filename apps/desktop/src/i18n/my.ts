@@ -154,6 +154,10 @@ export const my: Partial<Record<Key, string>> = {
   "watchtower.totpAvailableDesc": "ဤဆိုက်တွင် authenticator app ကုဒ်များ အသုံးပြုနိုင်သော်လည်း ဤလော့ဂ်အင်တွင် TOTP မသိမ်းထားပါ။",
   "watchtower.passkeyAvailable": "Passkey အသုံးပြုနိုင်သည်",
   "watchtower.passkeyAvailableDesc": "ဤဆိုက်တွင် passkey အသုံးပြုနိုင်သော်လည်း ယင်းအတွက် passkey မသိမ်းထားပါ။",
+  "watchtower.expired": "သက်တမ်းကုန်ပြီးသော အရာများ",
+  "watchtower.expiredDesc": "သက်တမ်းကုန်ဆုံးသွားသော ခရက်ဒစ်ကတ်များ သို့မဟုတ် အထောက်အထားများ။",
+  "watchtower.expiringSoon": "မကြာမီ သက်တမ်းကုန်တော့မည်",
+  "watchtower.expiringSoonDesc": "ရက် ၃၀ အတွင်း သက်တမ်းကုန်ဆုံးမည့် အရာများ။",
   // TODO(i18n-review): native Burmese review of the new export.* wording
   "export.titleVault": "သော့ခတ်သေတ္တာကို export လုပ်ရန်",
   "export.titleSelected": "ရွေးထားသော item များကို export လုပ်ရန်",

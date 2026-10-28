@@ -166,6 +166,8 @@ enum Cmd {
         /// Check passwords against Have I Been Pwned (k-anonymity; only 5 hex chars of SHA-1 are sent)
         #[arg(long)] hibp: bool,
         #[arg(long, default_value_t = 365)] max_age_days: u64,
+        #[arg(long, default_value_t = 30)] expiring_days: u64,
+        #[arg(long)] json: bool,
     },
 }
 
@@ -803,7 +805,7 @@ fn run() -> Result<()> {
             #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; std::fs::set_permissions(out, std::fs::Permissions::from_mode(0o600))?; }
             println!("exported {} item(s) to {}{}", items.len(), out.display(), if *encrypted { " (encrypted)" } else { " (PLAINTEXT)" });
         }
-        Cmd::Audit { vault, hibp, max_age_days } => {
+        Cmd::Audit { vault, hibp, max_age_days, expiring_days, json } => {
             use gitpass_core::{audit, passkey, Category};
             let s = unlock(&cli, &root)?;
             let vids: Vec<(String, String)> = match vault {
@@ -815,24 +817,26 @@ fn run() -> Result<()> {
             for (vid, name) in &vids {
                 let mut rows = vec![];
                 for (iid, _, rec) in s.list_records(vid)? {
-                    if rec.deleted_at.is_some() { continue; }
-                    match rec.category {
-                        Category::Login if !rec.archived => rows.push((name.clone(), iid, rec.item.clone())),
-                        Category::Passkey if !rec.archived => {
-                            if let Some(v) = rec.find_field(passkey::F_RP_ID).and_then(|f| f.value) { passkeys.insert(v); }
-                        }
-                        _ => {}
+                    if rec.deleted_at.is_some() || rec.archived { continue; }
+                    if rec.category == Category::Passkey {
+                        if let Some(v) = rec.find_field(passkey::F_RP_ID).and_then(|f| f.value) { passkeys.insert(v); }
+                    } else {
+                        rows.push((name.clone(), iid, rec));
                     }
                 }
-                rows.sort_by(|a, b| a.2.title.to_lowercase().cmp(&b.2.title.to_lowercase()));
+                rows.sort_by(|a, b| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()));
                 all.extend(rows);
             }
             let client = UreqHibp(ureq::AgentBuilder::new().timeout(std::time::Duration::from_secs(15)).build());
-            let opts = audit::AuditOpts { max_age_days: *max_age_days, ..Default::default() };
+            let opts = audit::AuditOpts { max_age_days: *max_age_days, expiring_days: *expiring_days, ..Default::default() };
             let r = audit::audit_with_passkeys(&all, &passkeys, &opts, if *hibp { Some(&client) } else { None })?;
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&r)?);
+                return Ok(());
+            }
             println!("audited {} item(s) in {} vault(s){}", r.items_checked, vids.len(), if *hibp { " (with HIBP)" } else { "" });
-            println!("  weak: {}  reused: {} ({} group(s))  old (>{max_age_days}d): {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}",
-                r.weak, r.reused, r.reused_groups, r.old, r.missing_totp, r.totp_available, r.passkey_available,
+            println!("  weak: {}  reused: {} ({} group(s))  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}",
+                r.weak, r.reused, r.reused_groups, r.old, r.expired, r.expiring_soon, r.missing_totp, r.totp_available, r.passkey_available,
                 if *hibp { format!("  pwned: {}", r.pwned) } else { String::new() });
             for f in &r.per_item {
                 println!("\n[{}] {} ({})", f.vault, f.title, &f.id[..f.id.len().min(8)]);

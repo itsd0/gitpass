@@ -602,7 +602,7 @@ fn contract_json_shapes() {
     let inp: ItemInput = serde_json::from_str(r#"{"vaultId":"x","category":"wifi","title":"t","sections":[{"id":"s","title":null,"fields":[{"id":"a","label":"A","kind":"month_year","value":"01/30"}]}]}"#).unwrap();
     assert_eq!(inp.sections[0].fields[0].kind, FieldKind::MonthYear);
     let w = serde_json::to_value(e.app.watchtower(false).unwrap()).unwrap();
-    for k in ["score", "weak", "reused", "old", "breached", "missingTotp", "checkedAt", "hibpChecked"] { assert!(w.get(k).is_some(), "{k}"); }
+    for k in ["score", "weak", "reused", "old", "breached", "missingTotp", "expired", "expiringSoon", "checkedAt", "hibpChecked"] { assert!(w.get(k).is_some(), "{k}"); }
 }
 
 #[test]
