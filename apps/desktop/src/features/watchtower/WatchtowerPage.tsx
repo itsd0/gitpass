@@ -193,6 +193,14 @@ export function WatchtowerPage() {
     }
   };
 
+  const changePassword = (id: string) => {
+    const it = titles[id];
+    if (!it) return;
+    api
+      .openChangePassword({ vaultId: it.vaultId, itemId: id })
+      .catch((e) => toast(String((e as Error)?.message ?? e), "danger"));
+  };
+
   const ignoreFinding = async (id: string, kind: string) => {
     const it = titles[id];
     const vaultId = it?.vaultId;
@@ -295,6 +303,8 @@ export function WatchtowerPage() {
           const ids = report ? issueIds(report, key) : [];
           const off = key === "breached" && report && !report.hibpChecked;
           const kind = ISSUE_TO_KIND[key];
+          // Change password is offered for password-related findings only (issue #92).
+          const canChangePassword = key === "weak" || key === "reused" || key === "breached";
           return (
             <section key={key} aria-label={title} className="rounded-xl border border-border bg-panel p-4">
               <div className="flex items-center gap-2">
@@ -339,6 +349,9 @@ export function WatchtowerPage() {
                             title={titles[id]?.title ?? id}
                             onOpen={() => open(id)}
                             onIgnore={() => ignoreFinding(id, "reused")}
+                            onChangePassword={
+                              canChangePassword && titles[id]?.changePasswordUrl ? () => changePassword(id) : undefined
+                            }
                           />
                         ))}
                       </div>
@@ -402,6 +415,16 @@ export function WatchtowerPage() {
                                   {item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : ""}
                                 </div>
                               </div>
+                              {item.changePasswordUrl && (
+                                <button
+                                  type="button"
+                                  onClick={() => changePassword(item.id)}
+                                  aria-label={t("watchtower.changePasswordFor", { title: item.title })}
+                                  className="rounded px-1 py-1 text-muted hover:text-accent focus-visible:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                                >
+                                  <ExternalLink size={12} />
+                                </button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -452,6 +475,17 @@ export function WatchtowerPage() {
                               <span>{t("watchtower.openHttps")}</span>
                             </a>
                           )}
+                          {it?.changePasswordUrl && (
+                            <button
+                              type="button"
+                              onClick={() => changePassword(id)}
+                              className="inline-flex items-center gap-1 rounded bg-hover px-2 py-1 text-[11px] font-medium text-muted hover:bg-hover/80 hover:text-accent focus-visible:text-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                              aria-label={t("watchtower.changePasswordFor", { title: it.title })}
+                            >
+                              <ExternalLink size={12} />
+                              <span>{t("watchtower.changePassword")}</span>
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => openEdit(id)}
@@ -492,6 +526,9 @@ export function WatchtowerPage() {
                       title={titles[id]?.title ?? id}
                       onOpen={() => open(id)}
                       onIgnore={() => ignoreFinding(id, kind)}
+                      onChangePassword={
+                        canChangePassword && titles[id]?.changePasswordUrl ? () => changePassword(id) : undefined
+                      }
                     />
                   ))}
                 </div>
@@ -572,11 +609,13 @@ function FindingChip({
   title,
   onOpen,
   onIgnore,
+  onChangePassword,
 }: {
   id: string;
   title: string;
   onOpen: () => void;
   onIgnore: () => void;
+  onChangePassword?: () => void;
 }) {
   const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -598,6 +637,16 @@ function FindingChip({
       >
         {title}
       </button>
+      {onChangePassword && (
+        <button
+          type="button"
+          onClick={onChangePassword}
+          aria-label={t("watchtower.changePasswordFor", { title })}
+          className="px-1 py-1 text-muted hover:text-accent focus-visible:text-accent focus-visible:outline-none"
+        >
+          <ExternalLink size={12} />
+        </button>
+      )}
       <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
         <DropdownMenuTrigger asChild>
           <button
