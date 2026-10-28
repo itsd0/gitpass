@@ -33,12 +33,13 @@ pub struct Section { pub id: String, pub title: Option<String>, pub fields: Vec<
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Attachment { pub id: String, pub name: String, pub size: u64, pub mime: String }
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemSummary {
     pub id: String, pub vault_id: String, pub category: Category, pub title: String, pub subtitle: String,
     pub favorite: bool, pub archived: bool, pub deleted_at: Option<String>, pub tags: Vec<String>,
     pub updated_at: String, pub created_at: String, pub url: Option<String>,
+    pub expiry: Option<String>,
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -340,12 +341,33 @@ fn to_dto_sections(r: &ItemRecord) -> Vec<Section> {
         value: if f.kind.is_secret() { None } else { f.value.clone() }, id: f.id, label: f.label, kind: f.kind }).collect() }).collect()
 }
 
+pub fn item_expiry(r: &ItemRecord) -> Option<String> {
+    let target = match r.category {
+        Category::CreditCard => "expiry",
+        Category::ApiCredential => "expires",
+        _ => return None,
+    };
+    r.view_sections()
+        .into_iter()
+        .flat_map(|s| s.fields)
+        .find(|f| {
+            !f.removed
+                && (f.id.eq_ignore_ascii_case(target)
+                    || f.label.eq_ignore_ascii_case(target)
+                    || (r.category == Category::CreditCard && f.label.eq_ignore_ascii_case("expiry date")))
+                && f.value.as_deref().map(str::trim).filter(|v| !v.is_empty()).is_some()
+        })
+        .and_then(|f| f.value)
+        .map(|v| v.trim().to_string())
+}
+
 fn summary(vid: &str, iid: &str, r: &ItemRecord) -> ItemSummary {
     ItemSummary {
         id: iid.into(), vault_id: vid.into(), category: r.category, title: r.item.title.clone(), subtitle: subtitle(r),
         favorite: r.favorite, archived: r.archived, deleted_at: r.deleted_at.map(|d| iso8601(d as i64)), tags: r.tags.clone(),
         updated_at: ts(&r.item.updated_at), created_at: r.created_at.map(|c| iso8601(c as i64)).unwrap_or_else(|| ts(&r.item.updated_at)),
         url: r.item.url.clone(),
+        expiry: item_expiry(r),
     }
 }
 
