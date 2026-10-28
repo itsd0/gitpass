@@ -122,6 +122,9 @@ gitpass vault rotate work    # new Vault Key; re-encrypts every item in the vaul
 gitpass migrate              # v1 -> v2 (also offered automatically on unlock; --yes to auto-accept)
 gitpass --accept-rollback unlock   # accept a detected rollback/tamper and re-seal (dangerous)
 ```
+Every subcommand, including `history`, `restore`, `import`/`export`, `ssh`, `identity` and
+`remote`, is listed with a one-line example in [docs/CLI.md](docs/CLI.md).
+
 Options and environment variables:
 - `--path DIR` or `GITPASS_PATH` sets the vault dir (default `~/.gitpass`).
 - The Secret Key is read in this order: `GITPASS_SECRET_KEY`, then `<path>/secret.key` (mode 0600, git-ignored, written by `init --save-secret-key`), then an interactive prompt.
