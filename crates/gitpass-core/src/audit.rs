@@ -23,6 +23,8 @@ pub enum Finding {
     Pwned { count: u64 },
     Expired { on: String },
     ExpiringSoon { on: String, days: u64 },
+    /// Saved with an unencrypted HTTP URL (public host only; no secrets/paths/queries).
+    InsecureUrl { url_host: String },
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,6 +46,7 @@ pub struct AuditReport {
     pub weak: usize, pub reused: usize, pub reused_groups: usize, pub old: usize, pub missing_totp: usize, pub pwned: usize,
     pub totp_available: usize, pub passkey_available: usize,
     pub expired: usize, pub expiring_soon: usize,
+    pub insecure_urls: usize,
     pub per_item: Vec<ItemFindings>,
 }
 
@@ -116,6 +119,51 @@ pub fn lookup_mfa_site<'a>(sites: &'a [(String, SiteSupport)], url: &str) -> Opt
         .filter(|(domain, _)| domain_matches(&host, domain))
         .max_by_key(|(domain, _)| (domain.len(), domain.as_str()))
         .map(|(domain, s)| (domain.as_str(), *s))
+}
+
+/// Extracts the host if `url` uses plain unencrypted HTTP and points to a public host.
+/// Returns None for HTTPS, non-HTTP schemes, localhost, 127.0.0.0/8, ::1, *.local, or RFC1918 private IP ranges.
+/// Strips userinfo/password, port, path, query, and fragment so no secrets can leak into findings.
+pub fn insecure_url_host(url: &str) -> Option<String> {
+    let s = url.trim();
+    if s.is_empty() { return None; }
+    let rest = if s.len() >= 7 && s[..7].eq_ignore_ascii_case("http://") {
+        &s[7..]
+    } else {
+        return None;
+    };
+    let authority = rest.split(['/', '?', '#']).next().unwrap_or("");
+    let host_port = authority.rsplit('@').next().unwrap_or("");
+    let host = if host_port.starts_with('[') {
+        let end = host_port.find(']')?;
+        &host_port[1..end]
+    } else {
+        host_port.split(':').next().unwrap_or("")
+    };
+    let host = host.trim_matches('.').to_ascii_lowercase();
+    if host.is_empty() { return None; }
+
+    if host == "localhost" || host.ends_with(".localhost") || host == "local" || host.ends_with(".local") {
+        return None;
+    }
+
+    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
+        match ip {
+            std::net::IpAddr::V4(v4) => {
+                if v4.is_loopback() { return None; }
+                let octets = v4.octets();
+                let is_rfc1918 = octets[0] == 10
+                    || (octets[0] == 172 && (16..=31).contains(&octets[1]))
+                    || (octets[0] == 192 && octets[1] == 168);
+                if is_rfc1918 { return None; }
+            }
+            std::net::IpAddr::V6(v6) => {
+                if v6.is_loopback() { return None; }
+            }
+        }
+    }
+
+    Some(host)
 }
 
 fn bundled_mfa_sites() -> &'static [(String, SiteSupport)] {
@@ -288,6 +336,12 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
                 f.push(Finding::PasskeyAvailable { site: site.to_string() }); r.passkey_available += 1;
             }
         }
+        if let Some(u) = url {
+            if let Some(url_host) = insecure_url_host(u) {
+                f.push(Finding::InsecureUrl { url_host });
+                r.insecure_urls += 1;
+            }
+        }
 
         // Expiry checks: credit cards have 'expiry', API credentials have 'expires'
         for s in rec.view_sections() {
@@ -349,6 +403,7 @@ impl std::fmt::Display for Finding {
             Finding::Pwned { count } => write!(f, "password appears in {count} known breaches (HIBP)"),
             Finding::Expired { on } => write!(f, "expired on {on}"),
             Finding::ExpiringSoon { on, days } => write!(f, "expires in {days} days (on {on})"),
+            Finding::InsecureUrl { url_host } => write!(f, "saved with unencrypted HTTP URL ({url_host})"),
         }
     }
 }
@@ -431,5 +486,117 @@ mod tests {
         assert_eq!(find("api_soon"), vec![Finding::ExpiringSoon { on: "2026-05-25".into(), days: 10 }]);
         assert!(find("card_bad").is_empty());
         assert!(find("api_bad").is_empty());
+    }
+
+    #[test]
+    fn test_insecure_url_host_matching() {
+        // Public HTTP hosts are flagged
+        assert_eq!(insecure_url_host("http://example.com"), Some("example.com".into()));
+        assert_eq!(insecure_url_host("http://public.example.com/login?foo=bar"), Some("public.example.com".into()));
+        assert_eq!(insecure_url_host("http://example.com:8080/path"), Some("example.com".into()));
+        assert_eq!(insecure_url_host("http://172.32.0.1"), Some("172.32.0.1".into()));
+        assert_eq!(insecure_url_host("http://8.8.8.8:80/dns"), Some("8.8.8.8".into()));
+
+        // User credentials in URL: only host is returned, NO secrets leaked
+        assert_eq!(insecure_url_host("http://admin:secret_pass123@public.site.test:8080/dashboard?token=xyz#hash"), Some("public.site.test".into()));
+
+        // HTTPS is not flagged
+        assert_eq!(insecure_url_host("https://example.com"), None);
+        assert_eq!(insecure_url_host("https://public.example.com/path"), None);
+        assert_eq!(insecure_url_host("https://localhost:8080"), None);
+
+        // localhost and *.localhost are not flagged
+        assert_eq!(insecure_url_host("http://localhost"), None);
+        assert_eq!(insecure_url_host("http://localhost:3000/app"), None);
+        assert_eq!(insecure_url_host("http://dev.localhost:8080"), None);
+
+        // Loopback 127.0.0.0/8 and ::1 are not flagged
+        assert_eq!(insecure_url_host("http://127.0.0.1"), None);
+        assert_eq!(insecure_url_host("http://127.0.0.5:8080/test"), None);
+        assert_eq!(insecure_url_host("http://127.255.255.255"), None);
+        assert_eq!(insecure_url_host("http://[::1]"), None);
+        assert_eq!(insecure_url_host("http://[::1]:8080/"), None);
+
+        // *.local and local are not flagged
+        assert_eq!(insecure_url_host("http://local"), None);
+        assert_eq!(insecure_url_host("http://my-nas.local"), None);
+        assert_eq!(insecure_url_host("http://printer.office.local:9100"), None);
+
+        // RFC1918 private IPv4 ranges are not flagged
+        assert_eq!(insecure_url_host("http://10.0.0.1"), None);
+        assert_eq!(insecure_url_host("http://10.255.1.2:8080"), None);
+        assert_eq!(insecure_url_host("http://172.16.0.1"), None);
+        assert_eq!(insecure_url_host("http://172.24.10.20:8000"), None);
+        assert_eq!(insecure_url_host("http://172.31.255.255"), None);
+        assert_eq!(insecure_url_host("http://192.168.0.1"), None);
+        assert_eq!(insecure_url_host("http://192.168.1.254:8443"), None);
+
+        // Empty, non-http, or malformed
+        assert_eq!(insecure_url_host(""), None);
+        assert_eq!(insecure_url_host("ftp://ftp.example.com"), None);
+        assert_eq!(insecure_url_host("not-a-url"), None);
+    }
+
+    #[test]
+    fn test_audit_insecure_urls() {
+        let mut login1 = Item::default();
+        login1.title = "Public Insecure Login".into();
+        login1.url = Some("http://user:secret@insecure.example.com:8080/login?token=sensitive".into());
+        login1.password = Some("SuperSecurePassword123!".into());
+
+        let mut login2 = Item::default();
+        login2.title = "Secure HTTPS Login".into();
+        login2.url = Some("https://secure.example.com/login".into());
+        login2.password = Some("SuperSecurePassword123!".into());
+
+        let mut login3 = Item::default();
+        login3.title = "Local Router".into();
+        login3.url = Some("http://192.168.1.1/admin".into());
+        login3.password = Some("SuperSecurePassword123!".into());
+
+        let mut login4 = Item::default();
+        login4.title = "Localhost Dev".into();
+        login4.url = Some("http://localhost:3000".into());
+        login4.password = Some("SuperSecurePassword123!".into());
+
+        let mut login5 = Item::default();
+        login5.title = "Local NAS".into();
+        login5.url = Some("http://nas.local:8080".into());
+        login5.password = Some("SuperSecurePassword123!".into());
+
+        let mut login6 = Item::default();
+        login6.title = "Private 10.x".into();
+        login6.url = Some("http://10.1.2.3/".into());
+        login6.password = Some("SuperSecurePassword123!".into());
+
+        let items = vec![
+            ("v".into(), "i1".into(), ItemRecord::new(login1)),
+            ("v".into(), "i2".into(), ItemRecord::new(login2)),
+            ("v".into(), "i3".into(), ItemRecord::new(login3)),
+            ("v".into(), "i4".into(), ItemRecord::new(login4)),
+            ("v".into(), "i5".into(), ItemRecord::new(login5)),
+            ("v".into(), "i6".into(), ItemRecord::new(login6)),
+        ];
+
+        let opts = AuditOpts::default();
+        let report = audit(&items, &opts, None).unwrap();
+        assert_eq!(report.insecure_urls, 1);
+
+        let f1 = report.per_item.iter().find(|i| i.id == "i1").unwrap();
+        let insecure_finding = f1.findings.iter().find(|f| matches!(f, Finding::InsecureUrl { .. })).unwrap();
+        assert_eq!(insecure_finding, &Finding::InsecureUrl { url_host: "insecure.example.com".into() });
+
+        // Ensure display format contains no secrets (no username, password, port, query)
+        let disp = format!("{insecure_finding}");
+        assert_eq!(disp, "saved with unencrypted HTTP URL (insecure.example.com)");
+        assert!(!disp.contains("secret"));
+        assert!(!disp.contains("token"));
+        assert!(!disp.contains("8080"));
+
+        for safe_id in ["i2", "i3", "i4", "i5", "i6"] {
+            if let Some(entry) = report.per_item.iter().find(|i| i.id == safe_id) {
+                assert!(!entry.findings.iter().any(|f| matches!(f, Finding::InsecureUrl { .. })));
+            }
+        }
     }
 }

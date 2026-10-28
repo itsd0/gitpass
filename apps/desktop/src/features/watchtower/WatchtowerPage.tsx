@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Clock, Copy, KeyRound, ShieldAlert, ShieldCheck, Smartphone, RefreshCw, CalendarX, CalendarClock } from 'lucide-react';
+import { AlertTriangle, Clock, Copy, KeyRound, ShieldAlert, ShieldCheck, Smartphone, RefreshCw, CalendarX, CalendarClock, Globe, ExternalLink, Pencil } from 'lucide-react';
 import type { ItemSummary, WatchtowerReport } from '../../api/types';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
@@ -28,8 +28,9 @@ export function WatchtowerPage() {
     { key: 'passkeyAvailable' as const, title: t('watchtower.passkeyAvailable'), desc: t('watchtower.passkeyAvailableDesc'), Icon: KeyRound },
     { key: 'expired' as const, title: t('watchtower.expired'), desc: t('watchtower.expiredDesc'), Icon: CalendarX },
     { key: 'expiringSoon' as const, title: t('watchtower.expiringSoon'), desc: t('watchtower.expiringSoonDesc'), Icon: CalendarClock },
+    { key: 'insecureUrls' as const, title: t('watchtower.insecureUrls'), desc: t('watchtower.insecureUrlsDesc'), Icon: Globe },
   ];
-  const { selectItem, setRoute } = useApp();
+  const { selectItem, setRoute, setEditing } = useApp();
   // Opt-in HIBP lives in Rust-persisted Settings.hibpCheck (default off); Rust also refuses the network
   // check unless that setting is on, so this toggle is the only way to enable it.
   const settings = useSettings((st) => st.settings); const hibp = !!settings?.hibpCheck;
@@ -43,6 +44,7 @@ export function WatchtowerPage() {
   const ready = !!settings;
   useEffect(() => { if (ready) load(hibp); }, [hibp, ready, load]);
   const open = (id: string) => { const it = titles[id]; setRoute({ name: 'items', filter: it ? { kind: 'vault', vaultId: it.vaultId } : { kind: 'all' } }); selectItem(id); }; // setRoute clears selection
+  const openEdit = (id: string) => { const it = titles[id]; setRoute({ name: 'items', filter: it ? { kind: 'vault', vaultId: it.vaultId } : { kind: 'all' } }); selectItem(id); setEditing(true); };
   return (<div className="mx-auto max-w-5xl space-y-6 p-8">
     <div className="flex items-center justify-between"><h1 className="text-2xl font-semibold">Watchtower</h1><Button variant="ghost" size="sm" disabled={busy} onClick={() => load(hibp)}><RefreshCw size={14} /> Re-check</Button></div>
     {err && <p role="alert" className="text-sm text-danger">{err}</p>}
@@ -63,6 +65,56 @@ export function WatchtowerPage() {
         {off ? <p className="mt-3 text-xs text-muted">Enable the breach check above to scan.</p>
           : ids.length === 0 ? (report && <p className="mt-3 flex items-center gap-1 text-xs text-ok"><ShieldCheck size={12} /> No issues</p>)
           : key === 'reused' ? <ul className="mt-3 space-y-2">{report!.reused.map((g, i) => <li key={i} className="rounded bg-bg p-2"><div className="mb-1 text-[11px] text-muted">Group {i + 1} · {g.length} items</div><div className="flex flex-wrap gap-1">{g.map(id => <ItemChip key={id} title={titles[id]?.title ?? id} onClick={() => open(id)} />)}</div></li>)}</ul>
+          : key === 'insecureUrls' ? (
+            <ul className="mt-3 space-y-2" data-testid="insecure-urls-list">
+              {ids.map((id) => {
+                const it = titles[id];
+                const rawUrl = it?.url ?? '';
+                const httpsUrl = rawUrl.replace(/^http:\/\//i, 'https://');
+                return (
+                  <li
+                    key={id}
+                    className="flex flex-col gap-2 rounded-lg bg-bg p-2.5 text-xs sm:flex-row sm:items-center sm:justify-between"
+                    data-testid={`insecure-item-${id}`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <button
+                        type="button"
+                        onClick={() => open(id)}
+                        className="truncate text-left font-medium text-fg hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                      >
+                        {it?.title ?? id}
+                      </button>
+                      {rawUrl && <div className="truncate font-mono text-[11px] text-muted">{rawUrl}</div>}
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1.5">
+                      {httpsUrl && (
+                        <a
+                          href={httpsUrl}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="inline-flex items-center gap-1 rounded bg-hover px-2 py-1 text-[11px] font-medium text-fg hover:bg-hover/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                          aria-label={`${t('watchtower.openHttps')} for ${it?.title ?? id}`}
+                        >
+                          <ExternalLink size={12} className="text-accent" />
+                          <span>{t('watchtower.openHttps')}</span>
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => openEdit(id)}
+                        className="inline-flex items-center gap-1 rounded bg-hover px-2 py-1 text-[11px] font-medium text-fg hover:bg-hover/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                        aria-label={`${t('watchtower.editUrl')} for ${it?.title ?? id}`}
+                      >
+                        <Pencil size={12} className="text-accent" />
+                        <span>{t('watchtower.editUrl')}</span>
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )
           : <div className="mt-3 flex flex-wrap gap-1">{ids.map(id => <ItemChip key={id} title={titles[id]?.title ?? id} onClick={() => open(id)} />)}</div>}
       </section>); })}</div></div>);
 }

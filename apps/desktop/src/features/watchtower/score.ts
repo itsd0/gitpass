@@ -8,7 +8,7 @@ export function scoreBand(score: number) {
 }
 /** Arc geometry for a 270° gauge. Returns stroke-dasharray values. */
 export function gaugeDash(score: number, r = 52) { const c = 2 * Math.PI * r, arc = c * 0.75; return { circumference: c, arc, filled: arc * scoreBand(score).score / 100 }; }
-export type IssueKey = 'weak' | 'reused' | 'old' | 'breached' | 'missingTotp' | 'totpAvailable' | 'passkeyAvailable' | 'expired' | 'expiringSoon';
+export type IssueKey = 'weak' | 'reused' | 'old' | 'breached' | 'missingTotp' | 'totpAvailable' | 'passkeyAvailable' | 'expired' | 'expiringSoon' | 'insecureUrls';
 /** Item ids for a card. Known 2FA sites appear once, as "2FA available", not also as generic "Missing 2FA". */
 export function issueIds(r: WatchtowerReport, k: IssueKey): string[] {
   if (k === 'reused') return [...new Set(r.reused.flat())];
