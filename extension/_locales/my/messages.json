@@ -317,6 +317,10 @@
     "message": "နောက်မှ",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "csNever": {
+    "message": "ဤဆိုက်အတွက် ဘယ်တော့မှမသိမ်းပါနှင့်",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
   "csUpdate": {
     "message": "အပ်ဒိတ်လုပ်ရန်",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
@@ -407,6 +411,30 @@
   },
   "optSaveBody": {
     "message": "ဝင်ရောက်ပြီးနောက် စကားဝှက်ကို သိမ်းရန် သို့မဟုတ် အပ်ဒိတ်လုပ်ရန် မေးပါ။",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optNeverSave": {
+    "message": "ဤဆိုက်များတွင် ဘယ်တော့မှမသိမ်းပါနှင့်",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optNeverSaveBody": {
+    "message": "gitpass သည် ဤဆိုက်များတွင် စကားဝှက်များကို သိမ်းဆည်းရန် သို့မဟုတ် အပ်ဒိတ်လုပ်ရန် ကမ်းလှမ်းမည် မဟုတ်ပါ။",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "optNeverSaveEmpty": {
+    "message": "ချွင်းချက်ဆိုက်များ မရှိပါ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "remove": {
+    "message": "ဖယ်ရှားမည်",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "savingOff": {
+    "message": "ဤဆိုက်အတွက် သိမ်းဆည်းခြင်းကို ပိတ်ထားသည်",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "undo": {
+    "message": "ပြန်ပြင်ရန်",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "optShortcut": {

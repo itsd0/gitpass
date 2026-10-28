@@ -44,7 +44,12 @@
   </header>
   <div class="panes">
     <aside class="left">
-      <div class="filter-wrap"><select id="filter" aria-label="Filter"></select></div>
+      <div class="filter-wrap">
+        <select id="filter" aria-label="Filter"></select>
+        <div id="siteExceptedNote" class="excepted-note hidden">
+          <span data-i18n="savingOff">Saving is off for this site</span> · <button type="button" class="btn-link" id="undoExcepted" data-i18n="undo">Undo</button>
+        </div>
+      </div>
       <div id="list" class="list" tabindex="-1" role="listbox"><div id="listInner"></div></div>
     </aside>
     <main class="right" id="detail"></main>

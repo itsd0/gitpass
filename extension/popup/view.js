@@ -43,13 +43,16 @@
       .sort((a, b) => (b.favorite - a.favorite) || String(a.title).localeCompare(String(b.title)));
   }
 
-  /** Which empty state to show when the list has no rows. ctx: { query, filter, origin, count } */
+  /** Which empty state to show when the list has no rows. ctx: { query, filter, origin, count, excepted } */
   function emptyState(ctx = {}) {
     const q = String(ctx.query || '').trim();
     if (q) return { kind: 'search', query: q };
     if (ctx.filter === 'suggested') {
       const host = hostOfUrl(ctx.origin);
-      return host ? { kind: 'site', host } : { kind: 'nofill' };
+      if (!host) return { kind: 'nofill' };
+      const out = { kind: 'site', host };
+      if (ctx.excepted) out.excepted = true;
+      return out;
     }
     if (ctx.filter === 'all' && !ctx.count) return { kind: 'vault' };
     return { kind: 'none' };

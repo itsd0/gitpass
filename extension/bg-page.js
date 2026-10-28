@@ -14,8 +14,55 @@
   const pendingSaves = new Map(); // tabId -> { origin, kind, username, password, item_id, prompt, ts }
   const lastUsername = new Map(); // tabId -> { origin, username, ts }  (multi-step logins: step 1 value, 5 min TTL)
   const PAGE_LISTABLE = new Set(['credit_card', 'identity']);
+  let neverSaveFallback = [];
 
   function err(code, message) { const e = new Error(message || code); e.code = code; return e; }
+
+  function getNeverSave() {
+    return new Promise((res) => {
+      if (!root.chrome || !chrome.storage || !chrome.storage.local) {
+        return res((api && api._neverSaveFallback) || neverSaveFallback);
+      }
+      chrome.storage.local.get(['neverSave', 'neverSaveSites'], (r) => {
+        const list = (r && (r.neverSave || r.neverSaveSites)) || [];
+        res(Array.isArray(list) ? list : []);
+      });
+    });
+  }
+
+  function setNeverSave(list) {
+    return new Promise((res) => {
+      if (!root.chrome || !chrome.storage || !chrome.storage.local) {
+        if (api) api._neverSaveFallback = list;
+        neverSaveFallback = list;
+        return res(list);
+      }
+      chrome.storage.local.set({ neverSave: list }, () => res(list));
+    });
+  }
+
+  async function addNeverSave(domain) {
+    const dom = (domain || '').trim().toLowerCase();
+    if (!dom) return;
+    const list = await getNeverSave();
+    if (!list.some((d) => (d || '').toLowerCase() === dom)) {
+      list.push(dom);
+      await setNeverSave(list);
+    }
+  }
+
+  async function removeNeverSave(domain) {
+    const dom = (domain || '').trim().toLowerCase();
+    if (!dom) return;
+    const list = await getNeverSave();
+    const next = list.filter((d) => (d || '').toLowerCase() !== dom);
+    await setNeverSave(next);
+  }
+
+  async function isExceptedSite(origin) {
+    const list = await getNeverSave();
+    return GitpassPolicy.isNeverSave(origin, list);
+  }
 
   function senderOrigin(sender) {
     if (!sender || !sender.tab || typeof sender.tab.id !== 'number') throw err('denied', 'page: messages must come from a tab');
@@ -115,6 +162,10 @@
         if (kind === 'username') { if (username) lastUsername.set(tabId, { origin, username, ts: Date.now() }); return { prompt: null }; }
         if (!['login', 'signup', 'change_password'].includes(kind)) throw err('bad_request', 'kind');
         if (typeof a.password !== 'string' || !a.password || a.password.length > 1024) throw err('bad_request', 'password');
+        if (await isExceptedSite(origin)) {
+          pendingSaves.delete(tabId);
+          return { prompt: null };
+        }
         let user = username;
         if (!user) { const lu = fresh(lastUsername, tabId, origin, true); if (lu && lu.username) user = lu.username; }
         else { lastUsername.set(tabId, { origin, username: user, ts: Date.now() }); }
@@ -125,12 +176,22 @@
         return { prompt: d.prompt, username: user, title: d.title || null };
       }
       case 'page:pending': {
+        if (await isExceptedSite(origin)) {
+          pendingSaves.delete(tabId);
+          return { prompt: null };
+        }
         const p = fresh(pendingSaves, tabId, origin, true);
         return p ? { prompt: p.prompt, username: p.username, title: p.title || null } : { prompt: null };
       }
       case 'page:save_decision': {
         const p = fresh(pendingSaves, tabId, origin, true);
         pendingSaves.delete(tabId);
+        if (a.action === 'never') {
+          if (!a.user_click) throw err('denied', 'needs a click');
+          const dom = GitpassPolicy.registrableDomain(origin);
+          if (dom) await addNeverSave(dom);
+          return { done: true, action: 'never' };
+        }
         if (!p) throw err('not_found', 'nothing to save');
         if (a.action === 'dismiss') return { done: false };
         if (!a.user_click) throw err('denied', 'needs a click');
@@ -176,7 +237,18 @@
     return (res || []).reduce((n, x) => n + (Number(x && x.result) || 0), 0);
   }
 
-  const api = { handle, forgetTab, fillPaymentFrames, _pendingSaves: pendingSaves };
+  const api = {
+    handle,
+    forgetTab,
+    fillPaymentFrames,
+    _pendingSaves: pendingSaves,
+    _neverSaveFallback: neverSaveFallback,
+    _getNeverSave: getNeverSave,
+    _setNeverSave: setNeverSave,
+    _addNeverSave: addNeverSave,
+    _removeNeverSave: removeNeverSave,
+    _isExceptedSite: isExceptedSite,
+  };
   root.GitpassPage = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
