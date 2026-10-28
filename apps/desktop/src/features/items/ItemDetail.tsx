@@ -63,6 +63,15 @@ function EmptyState() {
   );
 }
 
+/** True when a native (Tauri, physical-pixel) drop position lands inside `el`. */
+export function dropInsideElement(el: HTMLElement | null, pos?: { x: number; y: number }, scale = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1): boolean {
+  if (!el || !pos) return false;
+  const r = el.getBoundingClientRect();
+  const x = pos.x / scale;
+  const y = pos.y / scale;
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+
 function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultInfo; vaults: VaultInfo[] }) {
   const t = useT();
   const { setEditing, refreshItems, selectItem } = useApp();
@@ -73,6 +82,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
   const [removingAtt, setRemovingAtt] = useState<Detail['attachments'][number] | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropPaneRef = useRef<HTMLDivElement>(null);
 
   const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -129,32 +139,40 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
   };
 
   useEffect(() => {
-    if (!isTauri()) return;
+    if (!isTauri() || deleted) return;
+    let cancelled = false;
     let unlisten: (() => void) | undefined;
+    const inPane = (pos?: { x: number; y: number }) => dropInsideElement(dropPaneRef.current, pos);
     import('@tauri-apps/api/webview')
       .then(({ getCurrentWebview }) => {
-        getCurrentWebview()
+        if (cancelled) return;
+        return getCurrentWebview()
           .onDragDropEvent((event) => {
-            if (event.payload.type === 'over') {
-              setIsDragging(true);
-            } else if (event.payload.type === 'leave') {
+            const pl = event.payload as { type: string; paths?: string[]; position?: { x: number; y: number } };
+            if (pl.type === 'over') {
+              setIsDragging(inPane(pl.position));
+            } else if (pl.type === 'leave') {
               setIsDragging(false);
-            } else if (event.payload.type === 'drop') {
+            } else if (pl.type === 'drop') {
               setIsDragging(false);
-              const p = event.payload.paths[0];
+              if (!inPane(pl.position)) return;
+              const p = pl.paths?.[0];
               if (p) void doAddAttachment(p);
             }
           })
           .then((u) => {
-            unlisten = u;
-          })
-          .catch(() => {});
+            // The effect may have been cleaned up while the subscription was pending.
+            if (cancelled) u();
+            else unlisten = u;
+          });
       })
       .catch(() => {});
     return () => {
+      cancelled = true;
       unlisten?.();
+      setIsDragging(false);
     };
-  }, [detail.id, detail.vaultId]);
+  }, [detail.id, detail.vaultId, deleted]);
 
   const findings = detail.findings ?? [];
   const canChangePassword = !!detail.changePasswordUrl && findings.some((f) => ['weak', 'reused', 'pwned', 'insecure_url'].includes(f.kind));
@@ -197,6 +215,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
       </div>
 
       <div
+        ref={dropPaneRef}
         className="flex-1 overflow-y-auto px-6 py-6"
         onDragOver={(e) => {
           e.preventDefault();

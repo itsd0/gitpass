@@ -515,3 +515,21 @@ fn removed_attachment_stays_removed_after_concurrent_edit() {
     assert!(after.removed_attachments.contains(&drop.id));
     assert_eq!(after.attachments.len(), 1);
 }
+
+#[test]
+fn restore_version_keeps_attachment_tombstones() {
+    let (_d, _sk, s, v) = vault();
+    let id = s.add_record(&v, rec(Category::Login, "restore-tombstone", sample(Category::Login))).unwrap();
+    let att = s.add_attachment(&v, &id, "a.txt", "text/plain", b"fake-a").unwrap();
+    let (_, stale) = s.read_record(&v, &id).unwrap();
+    assert_eq!(stale.attachments.len(), 1);
+    s.remove_attachment(&v, &id, &att.id).unwrap();
+    s.restore_version(&v, &id, 1).unwrap();
+    let (_, restored) = s.read_record(&v, &id).unwrap();
+    assert!(restored.attachments.is_empty());
+    assert!(restored.removed_attachments.contains(&att.id), "restore must keep the tombstone");
+    let (m, _) = merge_records(&restored, &stale);
+    assert!(!m.attachments.iter().any(|a| a.id == att.id), "merge must not resurrect a removed attachment");
+    let (m2, _) = merge_records(&stale, &restored);
+    assert!(!m2.attachments.iter().any(|a| a.id == att.id));
+}

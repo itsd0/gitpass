@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ItemDetailPane } from "./ItemDetail";
+import { ItemDetailPane, dropInsideElement } from "./ItemDetail";
 import { useApp } from "../../lib/store";
 import { useItemsUI } from "./state";
 import { useI18n } from "../../i18n";
@@ -212,5 +212,19 @@ describe("ItemDetail attachments functionality", () => {
     // Backspace also opens it
     fireEvent.keyDown(row, { key: "Backspace" });
     expect(await screen.findByRole("dialog", { name: "Remove attachment?" })).toBeInTheDocument();
+  });
+});
+
+describe('dropInsideElement (native drop scope)', () => {
+  const el = { getBoundingClientRect: () => ({ left: 100, right: 300, top: 50, bottom: 250 }) } as unknown as HTMLElement;
+  it('accepts drops inside the detail pane, scaling physical pixels', () => {
+    expect(dropInsideElement(el, { x: 150, y: 100 }, 1)).toBe(true);
+    expect(dropInsideElement(el, { x: 400, y: 200 }, 2)).toBe(true);
+  });
+  it('rejects drops outside the pane, without a position or without a pane', () => {
+    expect(dropInsideElement(el, { x: 50, y: 100 }, 1)).toBe(false);
+    expect(dropInsideElement(el, { x: 150, y: 600 }, 2)).toBe(false);
+    expect(dropInsideElement(el, undefined, 1)).toBe(false);
+    expect(dropInsideElement(null, { x: 150, y: 100 }, 1)).toBe(false);
   });
 });

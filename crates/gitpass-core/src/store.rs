@@ -1481,6 +1481,8 @@ impl Session {
         new.archived = old.archived;
         new.ignored_findings = old.ignored_findings.clone();
         new.attachments = old.attachments.clone();
+        // Keep attachment tombstones so a merge with a stale copy can't resurrect a removed file.
+        new.removed_attachments = old.removed_attachments.clone();
         new.created_at = old.created_at;
         new.history = old.history.clone();
         new.history.push(crate::item::HistoryEntry {
