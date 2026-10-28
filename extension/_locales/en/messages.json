@@ -661,5 +661,17 @@
   },
   "optFillShortcutBody": {
     "message": "Fills the best-matching login on the current page without opening the popup."
+  },
+  "sortBy": {
+    "message": "Sort by"
+  },
+  "sortUpdated": {
+    "message": "Last edited"
+  },
+  "sortCreated": {
+    "message": "Date created"
+  },
+  "sortTitle": {
+    "message": "Title"
   }
 }

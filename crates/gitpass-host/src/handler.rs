@@ -96,6 +96,13 @@ fn kind_str(cat: Category, f: &Field) -> &'static str {
 }
 fn is_card_number(f: &Field) -> bool { matches!(f.id.as_str(), "number" | "ccnum" | "card_number") }
 
+/// Preview of a long API secret: first 4 and last 4 characters (`abcd••••wxyz`). Secrets shorter than
+/// 12 characters get no preview, so a short token is never mostly revealed.
+fn secret_preview(v: &str) -> Option<String> {
+    let c: Vec<char> = v.chars().collect();
+    (c.len() >= 12).then(|| format!("{}••••{}", c[..4].iter().collect::<String>(), c[c.len() - 4..].iter().collect::<String>()))
+}
+
 fn fields_of(r: &ItemRecord) -> Vec<Field> { r.view_sections().into_iter().flat_map(|s| s.fields).collect() }
 
 fn field_val(r: &ItemRecord, ids: &[&str]) -> Option<String> {
@@ -131,7 +138,7 @@ pub fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         "id": format!("{vid}:{iid}"), "vault_id": vid, "vault_name": vname,
         "category": r.category.as_str(), "title": r.item.title, "subtitle": subtitle(r),
         "url": url, "favicon_host": url.and_then(url_host), "has_totp": has_totp(r),
-        "favorite": r.favorite, "updated_at": r.item.updated_at,
+        "favorite": r.favorite, "updated_at": r.item.updated_at, "created_at": r.created_at,
     })
 }
 
@@ -146,6 +153,9 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         let secret = f.kind.is_secret();
         let mut o = json!({"name": f.id, "label": f.label, "concealed": secret, "kind": kind_str(r.category, &f)});
         if !secret { o["value"] = json!(f.value); }
+        else if r.category == Category::ApiCredential {
+            if let Some(m) = f.value.as_deref().and_then(secret_preview) { o["masked"] = json!(m); }
+        }
         fields.push(o);
     }
     let m = v.as_object_mut().unwrap();
@@ -361,7 +371,8 @@ impl Host {
                 let cat = req.get("category").and_then(Value::as_str);
                 if let Some(c) = cat { c.parse::<Category>().map_err(|e| coded(code::BAD_REQUEST, e.to_string()))?; }
                 let q = req.get("query").and_then(Value::as_str).map(str::to_lowercase).filter(|q| !q.is_empty());
-                let limit = req.get("limit").and_then(Value::as_u64).unwrap_or(500) as usize;
+                // No cap unless the caller asks for one: the popup lists every item (a silent default cap dropped items past the 500th title).
+                let limit = req.get("limit").and_then(Value::as_u64).map(|n| n as usize);
                 let mut out = vec![];
                 for (vid, vname, iid, r) in self.all_records(vault)? {
                     if cat.is_some_and(|c| c != r.category.as_str()) { continue; }
@@ -373,7 +384,7 @@ impl Host {
                     out.push(s);
                 }
                 out.sort_by(|a, b| a["title"].as_str().unwrap_or("").to_lowercase().cmp(&b["title"].as_str().unwrap_or("").to_lowercase()));
-                out.truncate(limit);
+                if let Some(l) = limit { out.truncate(l); }
                 Ok(json!({"items": out}))
             }
             "match" => {
