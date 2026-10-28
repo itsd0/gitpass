@@ -270,4 +270,47 @@ describe('ImportWizard component', () => {
     fireEvent.keyDown(heading, { key: 'Escape', code: 'Escape' });
     expect(onDone).toHaveBeenCalled();
   });
+
+  it('does not intercept Enter when focus is on a button or select', async () => {
+    const importSpy = vi.spyOn(api, 'importFile').mockResolvedValue({
+      parsed: 5,
+      added: 5,
+      duplicates: 0,
+    });
+    importSpy.mockClear();
+    const onBack = vi.fn();
+    render(<ImportWizard onBack={onBack} onDone={() => {}} />);
+
+    await waitFor(() => {
+      expect((screen.getByLabelText('Import into vault') as HTMLSelectElement).value).toBe('v_private');
+    });
+
+    // Enter path
+    fireEvent.change(screen.getByLabelText('Export file path'), {
+      target: { value: '/tmp/1password.1pux' },
+    });
+
+    const backButton = screen.getByRole('button', { name: 'Back' });
+    const btnEvt = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true });
+    backButton.dispatchEvent(btnEvt);
+
+    expect(btnEvt.defaultPrevented).toBe(false);
+    expect(importSpy).not.toHaveBeenCalled();
+
+    const select = screen.getByLabelText('Format');
+    const selectEvt = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true });
+    select.dispatchEvent(selectEvt);
+
+    expect(selectEvt.defaultPrevented).toBe(false);
+    expect(importSpy).not.toHaveBeenCalled();
+
+    // Check child inside button (e.g. svg icon in back button)
+    const icon = backButton.querySelector('svg');
+    if (icon) {
+      const iconEvt = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true });
+      icon.dispatchEvent(iconEvt);
+      expect(iconEvt.defaultPrevented).toBe(false);
+      expect(importSpy).not.toHaveBeenCalled();
+    }
+  });
 });

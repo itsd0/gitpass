@@ -40,6 +40,42 @@ export function ImportWizard({ onBack, onDone }: { onBack: () => void; onDone: (
       .catch((e) => dispatch({ type: 'error', error: String(e) }));
   }, []);
 
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    import('@tauri-apps/api/webview')
+      .then(({ getCurrentWebview }) => {
+        if (cancelled) return;
+        return getCurrentWebview().onDragDropEvent(async (event) => {
+          if (event.payload.type === 'over' || event.payload.type === 'enter') {
+            setIsDragging(true);
+          } else if (event.payload.type === 'drop') {
+            setIsDragging(false);
+            const path = event.payload.paths?.[0];
+            if (path) {
+              await applyFile(path);
+            }
+          } else {
+            setIsDragging(false);
+          }
+        });
+      })
+      .then((fn) => {
+        if (cancelled) {
+          fn?.();
+        } else {
+          unlisten = fn;
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, []);
+
   const run = async (dryRun: boolean) => {
     if (!canPreview(s)) return;
     setBusy(true);
@@ -112,7 +148,8 @@ export function ImportWizard({ onBack, onDone }: { onBack: () => void; onDone: (
       e.preventDefault();
       onDone();
     } else if (e.key === 'Enter') {
-      if ((e.target as HTMLElement).tagName === 'TEXTAREA') return;
+      const target = e.target as HTMLElement | null;
+      if (target?.closest?.('button, a, select, textarea')) return;
       if (s.step === 'file') {
         if (canPreview(s) && !busy) {
           e.preventDefault();
