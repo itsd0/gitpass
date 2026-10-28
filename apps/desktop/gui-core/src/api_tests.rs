@@ -36,7 +36,7 @@ fn env() -> Env {
     let v = vs[0].clone();
     Env { vault: v.id, _vault: d, _cfg: cfg, app, clip, sk }
 }
-fn fld(id: &str, kind: FieldKind, v: Option<&str>) -> Field { Field { id: id.into(), label: id.into(), kind, value: v.map(Into::into), masked: None } }
+fn fld(id: &str, kind: FieldKind, v: Option<&str>) -> Field { Field { id: id.into(), label: id.into(), kind, value: v.map(Into::into), masked: None, diff: None } }
 fn login(e: &Env, title: &str, user: &str, pw: &str) -> ItemSummary {
     e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some("https://example.invalid".into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some(user)), fld("password", FieldKind::Concealed, Some(pw))] }],
@@ -106,6 +106,28 @@ fn items_crud_subtitles_and_no_secret_leak() {
     assert_eq!(d2.history.len(), 1);
     let old = e.app.item_version(&e.vault, &c.id, d2.history[0].version).unwrap();
     assert_eq!(old.summary.title, "Example Bank");
+    assert!(old.sections.iter().flat_map(|s| &s.fields).any(|f| f.id == "pin" && f.diff.as_deref() == Some("added")));
+    // restore version 1
+    let restored = e.app.restore_item_version(&e.vault, &c.id, d2.history[0].version).unwrap();
+    assert_eq!(restored.summary.title, "Example Bank");
+    assert_eq!(restored.history.len(), 2);
+    // verifying get_item matches restored
+    let cur = e.app.get_item(&e.vault, &c.id).unwrap();
+    assert_eq!(cur.summary.title, "Example Bank");
+    assert_eq!(cur.history.len(), 2);
+    // history entry 0 is the pre-restore version (version 2: Example Bank Visa)
+    let pre_restore_snap = e.app.item_version(&e.vault, &c.id, cur.history[0].version).unwrap();
+    assert_eq!(pre_restore_snap.summary.title, "Example Bank Visa");
+    // reveal historical concealed field
+    assert_eq!(&*e.app.reveal_field_version(&e.vault, &c.id, "cvv", Some(1)).unwrap(), "123");
+    // undo restore (restore version 2)
+    let undone = e.app.restore_item_version(&e.vault, &c.id, cur.history[0].version).unwrap();
+    assert_eq!(undone.summary.title, "Example Bank Visa");
+    // test error cases
+    assert!(e.app.restore_item_version(&e.vault, &c.id, 9999).is_err());
+    e.app.delete_item(&e.vault, &c.id).unwrap();
+    assert!(e.app.restore_item_version(&e.vault, &c.id, 1).is_err());
+    e.app.restore_item(&e.vault, &c.id).unwrap();
     assert_eq!(e.app.list_tags().unwrap(), vec!["finance".to_string(), "work".to_string()]);
     // invalid input
     assert!(e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::SecureNote, title: " ".into(), sections: vec![], notes: None, tags: None, favorite: None, url: None }).is_err());
@@ -1006,12 +1028,12 @@ fn card_subtitle_with_cardholder_first_and_imported_labels() {
     let mk = |fields: Vec<Field>| e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "C".into(), url: None,
         sections: vec![Section { id: "main".into(), title: None, fields }], notes: None, tags: None, favorite: None }).unwrap();
     // template order: cardholder name comes before the number
-    let a = mk(vec![Field { id: "cardholder".into(), label: "cardholder name".into(), kind: FieldKind::Text, value: Some("Demo User".into()), masked: None },
-                    Field { id: "type".into(), label: "type".into(), kind: FieldKind::Text, value: Some("Visa".into()), masked: None },
+    let a = mk(vec![Field { id: "cardholder".into(), label: "cardholder name".into(), kind: FieldKind::Text, value: Some("Demo User".into()), masked: None, diff: None },
+                    Field { id: "type".into(), label: "type".into(), kind: FieldKind::Text, value: Some("Visa".into()), masked: None, diff: None },
                     fld("number", FieldKind::Concealed, Some("4000 1234 5678 4432")), fld("cvv", FieldKind::Concealed, Some("999"))]);
     assert_eq!(a.subtitle, "Visa •••• 4432");
     // imported card: random field id, label "Card Number"
-    let b = mk(vec![Field { id: "f_x1".into(), label: "Card Number".into(), kind: FieldKind::Concealed, value: Some("5555555555554444".into()), masked: None }]);
+    let b = mk(vec![Field { id: "f_x1".into(), label: "Card Number".into(), kind: FieldKind::Concealed, value: Some("5555555555554444".into()), masked: None, diff: None }]);
     assert_eq!(b.subtitle, "Mastercard •••• 4444");
     let listed = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap();
     assert!(listed.iter().any(|s| s.subtitle == "Visa •••• 4432"));
@@ -1165,8 +1187,8 @@ fn watchtower_ignore_stop_ignoring_and_score_change() {
             id: "main".into(),
             title: None,
             fields: vec![
-                Field { id: "username".into(), label: "username".into(), kind: FieldKind::Text, value: Some("admin".into()), masked: None },
-                Field { id: "password".into(), label: "password".into(), kind: FieldKind::Concealed, value: Some("123456".into()), masked: None },
+                Field { id: "username".into(), label: "username".into(), kind: FieldKind::Text, value: Some("admin".into()), masked: None, diff: None },
+                Field { id: "password".into(), label: "password".into(), kind: FieldKind::Concealed, value: Some("123456".into()), masked: None, diff: None },
             ],
         }],
         notes: None,
@@ -1229,4 +1251,40 @@ fn watchtower_groups_duplicate_logins() {
     expected.sort();
     assert_eq!(group, expected);
     assert!(!group.contains(&l3.id));
+}
+
+#[test]
+fn watchtower_flags_passwords_containing_personal_info() {
+    let e = env();
+    let item1 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "User Password Test".into(),
+        url: Some("https://gitlab.com".into()),
+        sections: vec![Section {
+            id: "login".into(),
+            title: None,
+            fields: vec![fld("username", FieldKind::Text, Some("alice")), fld("password", FieldKind::Concealed, Some("github-alice-2024!"))],
+        }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+
+    let item2 = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "Site Password Test".into(),
+        url: Some("https://login.github.com".into()),
+        sections: vec![Section {
+            id: "login".into(),
+            title: None,
+            fields: vec![fld("username", FieldKind::Text, Some("charlie")), fld("password", FieldKind::Concealed, Some("G1thub#99-Secure!"))],
+        }],
+        notes: None, tags: None, favorite: None,
+    }).unwrap();
+
+    let rep = e.app.watchtower(false).unwrap();
+    assert!(rep.weak.contains(&item1.id));
+    assert!(rep.weak.contains(&item2.id));
+    assert_eq!(rep.weak_reasons.get(&item1.id).map(String::as_str), Some("contains the username"));
+    assert_eq!(rep.weak_reasons.get(&item2.id).map(String::as_str), Some("contains the site name"));
 }

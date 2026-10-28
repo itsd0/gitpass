@@ -78,12 +78,13 @@ They also cannot edit `.github/workflows` (and must not anyway).
 | `crates/gitpass-core` | Vault format, crypto (`crypto.rs`, `keys.rs`), store/commit (`store.rs`), merge/sync, import, audit (Watchtower/HIBP), passkeys, SSH keys, TOTP |
 | `crates/gitpass-cli` | `gitpass` CLI (`init`, `add`, `get`, `run`/`inject` secret injection, `ssh`, `audit`, `import`/`export`, …) |
 | `crates/gitpass-host` | Native-messaging host for the browser extension |
+| `crates/gitpass-pasteboard` | Concealed/transient pasteboard copies (macOS NSPasteboard / Linux fallback) |
 | `apps/desktop/gui-core` | Rust API behind the desktop app (`api.rs`, browser agent, ssh-agent) |
 | `apps/desktop/src-tauri` | Tauri shell (**excluded from the workspace**, own `Cargo.lock`) |
 | `apps/desktop/src` | React/TypeScript UI (Vite, zustand, vitest). Browser mock in `src/api/mock.ts` |
 | `extension/` | Chromium MV3 extension (plain JS, `node --test`) |
 | `ios/` | SwiftUI app + `ios/rust/gitpass-ios-ffi` (uniffi), XcodeGen `project.yml` |
-| `.github/workflows` | CI on the owner's self-hosted Mac — **owner only, do not edit** |
+| `.github/workflows` | PR CI runs on GitHub-hosted runners; only `release.yml` (v* tags, owner only) uses the self-hosted Mac — **owner only, do not edit unless an issue asks for it** |
 | `docs/RELEASE.md`, `scripts/` | Release notes/process, helper scripts |
 
 ## Setup
@@ -128,8 +129,9 @@ cargo test -p gitpass-ios-ffi --locked
 
 Dev UI without Tauri: `cd apps/desktop && npm run dev` (uses the fake in-browser mock).
 
-CI check names on PRs: **`rust + frontend (self-hosted Mac)`** and **`supply chain (cargo deny + cargo audit)`**
-(workflow `CI`), plus `Rust FFI tests` / `iOS simulator build + test` (workflow `iOS`).
+CI check names on PRs: **`ci-ok`** (required summary check), **`rust (test + clippy)`**, **`desktop UI + extension`**,
+**`desktop app crate (macOS)`**, and **`supply chain (cargo deny + cargo audit)`** (workflow `CI`), plus
+**`Rust FFI tests`** / **`iOS simulator build + test`** (workflow `iOS`).
 GitHub-only agents may not be able to read CI results; ask the owner or Grok Bot.
 
 ## Rules

@@ -524,6 +524,7 @@ export function WatchtowerPage() {
                       key={id}
                       id={id}
                       title={titles[id]?.title ?? id}
+                      reason={key === "weak" ? report?.weakReasons?.[id] : undefined}
                       onOpen={() => open(id)}
                       onIgnore={() => ignoreFinding(id, kind)}
                       onChangePassword={
@@ -604,21 +605,33 @@ export function WatchtowerPage() {
   );
 }
 
+function localizeWeakReason(reason: string | undefined, t: (k: any) => string): string | undefined {
+  if (!reason) return undefined;
+  if (reason === "contains the username") return t("watchtower.weakReason.containsUsername");
+  if (reason === "contains the site name") return t("watchtower.weakReason.containsSite");
+  if (reason === "contains a very common password") return t("watchtower.weakReason.common");
+  if (reason === "too few distinct characters") return t("watchtower.weakReason.fewChars");
+  return reason;
+}
+
 function FindingChip({
   id,
   title,
+  reason,
   onOpen,
   onIgnore,
   onChangePassword,
 }: {
   id: string;
   title: string;
+  reason?: string;
   onOpen: () => void;
   onIgnore: () => void;
   onChangePassword?: () => void;
 }) {
   const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
+  const localizedReason = localizeWeakReason(reason, t);
   return (
     <div
       className="group inline-flex items-center rounded-md bg-hover text-xs focus-within:ring-1 focus-within:ring-accent"
@@ -634,8 +647,14 @@ function FindingChip({
         type="button"
         onClick={onOpen}
         className="rounded-l-md px-2 py-1 text-fg hover:underline focus-visible:outline-none"
+        title={localizedReason ? `${title} (${localizedReason})` : undefined}
       >
-        {title}
+        <span>{title}</span>
+        {localizedReason && (
+          <span className="ml-1 text-[11px] text-muted font-normal" data-testid={`chip-reason-${id}`}>
+            ({localizedReason})
+          </span>
+        )}
       </button>
       {onChangePassword && (
         <button

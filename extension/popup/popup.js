@@ -466,17 +466,58 @@ function applyFilter(selectFirst) {
   select(idx);
 }
 
+function renderHighlight(text, query) {
+  const frag = document.createDocumentFragment();
+  const segs = V.highlightSegments(text, query);
+  for (const s of segs) {
+    if (s.match) {
+      const mark = document.createElement('mark');
+      mark.className = 'hl';
+      mark.textContent = s.text;
+      frag.appendChild(mark);
+    } else {
+      frag.appendChild(document.createTextNode(s.text));
+    }
+  }
+  return frag;
+}
+
+function updateSearchHints() {
+  const hints = $('searchHints');
+  if (!hints) return;
+  const show = Boolean(S.rows.length);
+  hints.classList.toggle('hidden', !show);
+  if (show) {
+    hints.textContent = t('searchHints', '↑↓ navigate · ↵ fill · ⌘C copy password · Esc clear');
+  }
+}
+
 function renderList() {
   const list = $('list'), inner = $('listInner');
   inner.textContent = '';
+  updateSearchHints();
   if (!S.rows.length) { stopListTotp(); renderEmpty(inner); return; }
   const w = V.virtualWindow(list.scrollTop, list.clientHeight || 380, ROW_H, S.rows.length);
   inner.style.paddingTop = w.padTop + 'px'; inner.style.paddingBottom = w.padBottom + 'px';
   for (let i = w.start; i < w.end; i++) {
     const it = S.rows[i];
-    const row = el('div', 'row' + (i === S.sel ? ' sel' : '')); row.setAttribute('role', 'option'); row.dataset.idx = i;
+    const isSel = i === S.sel;
+    const row = el('div', 'row' + (isSel ? ' sel' : ''));
+    row.id = 'row-' + i;
+    row.setAttribute('role', 'option');
+    row.setAttribute('aria-selected', isSel ? 'true' : 'false');
+    row.setAttribute('tabindex', '-1');
+    row.dataset.idx = i;
     const ic = el('span', 'ic'); ic.innerHTML = categoryIcon(it.category, 32);
-    const meta = el('div', 'meta'); meta.append(el('div', 't', it.title), el('div', 'u', it.subtitle || '—'));
+    const meta = el('div', 'meta');
+    const tDiv = el('div', 't');
+    if (S.query) tDiv.append(renderHighlight(it.title, S.query));
+    else tDiv.textContent = it.title;
+    const uDiv = el('div', 'u');
+    const uText = V.rowSubtitle(it, S.query);
+    if (S.query && uText && uText !== '—') uDiv.append(renderHighlight(uText, S.query));
+    else uDiv.textContent = uText || '—';
+    meta.append(tDiv, uDiv);
     row.append(ic, meta);
     if (it.favorite) { const f = el('span', 'fav'); f.innerHTML = UI.star; row.append(f); }
     if (it.has_totp) row.append(totpChip(it));
@@ -639,8 +680,15 @@ $('q').oninput = () => { clearTimeout(qt); qt = setTimeout(() => { S.query = $('
 let detailSeq = 0;
 async function select(idx) {
   S.sel = idx; S.revealed = {}; stopTotp();
-  const list = $('list');
-  if (idx >= 0) list.scrollTop = V.scrollToRow(idx, list.scrollTop, list.clientHeight || 380, ROW_H);
+  const list = $('list'), qInput = $('q');
+  if (idx >= 0) {
+    list.scrollTop = V.scrollToRow(idx, list.scrollTop, list.clientHeight || 380, ROW_H);
+    qInput && qInput.setAttribute('aria-activedescendant', 'row-' + idx);
+    list.setAttribute('aria-activedescendant', 'row-' + idx);
+  } else {
+    qInput && qInput.removeAttribute('aria-activedescendant');
+    list.removeAttribute('aria-activedescendant');
+  }
   renderList();
   const pane = $('detail');
   const it = S.rows[idx];
@@ -1088,11 +1136,17 @@ document.addEventListener('keydown', (e) => {
   const sel = window.getSelection && String(window.getSelection());
   const inputSel = a && a.tagName === 'INPUT' && a.selectionStart !== a.selectionEnd;
   const selected = S.rows[S.sel];
-  const act = V.keyAction(e, { panel: S.panel, inForm, hasSelection: !!sel || inputSel, hasTotp: !!(selected && selected.has_totp) });
+  const act = V.keyAction(e, { panel: S.panel, inForm, hasSelection: !!sel || inputSel, hasTotp: !!(selected && selected.has_totp), query: S.query });
   if (!act) return;
   e.preventDefault();
   if (act === 'close') window.close();
   else if (act === 'closePanel') closePanel();
+  else if (act === 'clearSearch') {
+    S.query = '';
+    const qIn = $('q');
+    if (qIn) qIn.value = '';
+    applyFilter(true);
+  }
   else if (act === 'down' || act === 'up') select(V.moveSel(S.sel, act === 'down' ? 1 : -1, S.rows.length));
   else if (act === 'fill') openAndFill();
   else if (act === 'copyTotp') { if (selected) copyTotp(selected.id).catch(showErr); }

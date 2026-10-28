@@ -37,7 +37,7 @@
 <section id="unlocked" class="view hidden">
   <header class="topbar">
     <div class="acct" id="acct" title=""><img src="../icons/logo64.png" alt="gitpass" class="logo-sm"><span id="acctName">gitpass</span></div>
-    <div class="search"><span class="ic" id="searchIc"></span><input id="q" type="search" data-i18n-ph="searchPh" placeholder="Search vault" autocomplete="off"></div>
+    <div class="search"><span class="ic" id="searchIc"></span><input id="q" type="search" data-i18n-ph="searchPh" placeholder="Search vault" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="true" aria-controls="list" aria-haspopup="listbox"></div>
     <button id="genBtn" class="icon-btn" data-i18n-title="generator" title="Password generator"></button>
     <button id="newBtn" class="icon-btn" data-i18n-title="newItem" title="New item"></button>
     <button id="lock" class="icon-btn" data-i18n-title="lock" title="Lock"></button>
@@ -51,6 +51,7 @@
         </div>
       </div>
       <div id="list" class="list" tabindex="-1" role="listbox"><div id="listInner"></div></div>
+      <div id="searchHints" class="search-hints hidden" aria-live="polite"></div>
     </aside>
     <main class="right" id="detail"></main>
   </div>
