@@ -43,7 +43,9 @@ pub fn parse(s: &str) -> Result<TotpSpec> {
     let mut spec = TotpSpec { secret: Zeroizing::new(vec![]), digits: 6, period: 30, algo: Algo::Sha1 };
     if s.len() >= 10 && s[..10].eq_ignore_ascii_case("otpauth://") {
         let rest = &s[10..];
-        if !rest.to_ascii_lowercase().starts_with("totp/") { bail!("only otpauth://totp URIs are supported"); }
+        // Apple Passwords exports `otpauth://totp?secret=...` with no label, so accept "totp/" and "totp?".
+        let lower = rest.to_ascii_lowercase();
+        if !(lower.starts_with("totp/") || lower.starts_with("totp?")) { bail!("only otpauth://totp URIs are supported"); }
         let q = rest.split_once('?').map(|x| x.1).ok_or_else(|| anyhow!("otpauth URI has no parameters"))?;
         let mut secret = None;
         for kv in q.split('&') {
@@ -94,4 +96,17 @@ pub fn code_at(spec: &TotpSpec, t: u64) -> (String, u64) {
 pub fn code_now(spec: &TotpSpec) -> (String, u64) {
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
     code_at(spec, t)
+}
+
+#[cfg(test)]
+mod label_less_uri_tests {
+    use super::*;
+    #[test]
+    fn parses_otpauth_totp_without_label() {
+        let a = parse("otpauth://totp?secret=JBSWY3DPEHPK3PXP&digits=6").unwrap();
+        let b = parse("otpauth://totp/Example:alice?secret=JBSWY3DPEHPK3PXP").unwrap();
+        assert_eq!(&a.secret[..], &b.secret[..]);
+        assert_eq!(a.digits, 6);
+        assert!(parse("otpauth://hotp?secret=JBSWY3DPEHPK3PXP").is_err());
+    }
 }
