@@ -49,4 +49,10 @@ describe('settings', () => {
     await u.click(screen.getByRole('switch', { name: 'Approve each use' }));
     await waitFor(() => expect(spy.mock.calls[0]![0].settings).toMatchObject({ sshApproveEachUse: true, hibpCheck: false }));
   });
+  it('re-rendering the settings page keeps the active section mounted', async () => {
+    const view = render(<SettingsPage initialTab="ssh" />);
+    const sw = await screen.findByRole('switch', { name: 'Approve each use' });
+    view.rerender(<SettingsPage initialTab="ssh" />);
+    expect(screen.getByRole('switch', { name: 'Approve each use' })).toBe(sw);
+  });
 });
