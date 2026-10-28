@@ -1,3 +1,4 @@
+import { ShortcutRecorder } from './ShortcutRecorder';
 import { Logo } from '../../ui/logo';
 import { EmergencyKitFlow } from '../onboarding/EmergencyKit';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -117,6 +118,21 @@ function General({ highlightedId }: { highlightedId?: string | null }) {
           value={settings.language}
           onChange={(language) => s({ language })}
           options={languages.map((l) => ({ v: l.id, l: l.native }))}
+        />
+      </SettingsRow>
+      <SettingsRow
+        id="setting-quick-access-hotkey"
+        highlighted={highlightedId === 'setting-quick-access-hotkey'}
+        label={t('settings.quickAccessHotkey')}
+        description={t('settings.quickAccessHotkeyHelp')}
+      >
+        <ShortcutRecorder
+          id="setting-quick-access-hotkey"
+          value={settings.quickAccessHotkey}
+          onChange={async (quickAccessHotkey) => {
+            await save({ quickAccessHotkey });
+            toast(t('common.saved'));
+          }}
         />
       </SettingsRow>
     </SettingsSection>

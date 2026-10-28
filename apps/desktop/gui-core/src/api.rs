@@ -164,6 +164,7 @@ pub enum Theme { Dark, Light, System }
 #[serde(rename_all = "lowercase")]
 pub enum Language { En, My, Th }
 fn default_true() -> bool { true }
+fn default_quick_access_hotkey() -> String { "CommandOrControl+Shift+Space".into() }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -177,7 +178,7 @@ pub enum LockTrigger {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub auto_lock_minutes: u64, pub clipboard_clear_secs: u64, pub theme: Theme, pub language: Language,
-    pub biometric_unlock: bool, pub quick_access_hotkey: String,
+    pub biometric_unlock: bool, #[serde(default = "default_quick_access_hotkey")] pub quick_access_hotkey: String,
     /// Opt-in Have I Been Pwned k-anonymity range check in Watchtower. Default off; older settings
     /// files without the field deserialize to off.
     #[serde(default)] pub hibp_check: bool,

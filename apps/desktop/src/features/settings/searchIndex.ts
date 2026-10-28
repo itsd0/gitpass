@@ -26,6 +26,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     descriptionKey: 'settings.languageHelp',
     keywords: ['locale', 'translation', 'burmese', 'thai', 'english'],
   },
+  {
+    id: 'setting-quick-access-hotkey',
+    tab: 'general',
+    labelKey: 'settings.quickAccessHotkey',
+    descriptionKey: 'settings.quickAccessHotkeyHelp',
+    keywords: ['quick access', 'shortcut', 'hotkey', 'global', 'space', 'command'],
+  },
   // Security
   {
     id: 'setting-autolock',
