@@ -575,5 +575,8 @@
   },
   "searchHints": {
     "message": "↑↓ ရွေးချယ်ရန် · ↵ ဖြည့်သွင်းရန် · ⌘C စကားဝှက် ကူးရန် · Esc ရှင်းရန်"
+  },
+  "secretKeyPh": {
+    "message": "Secret Key (A3-XXXXXX-…)"
   }
 }

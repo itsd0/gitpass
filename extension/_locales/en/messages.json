@@ -514,5 +514,8 @@
   },
   "searchHints": {
     "message": "↑↓ navigate · ↵ fill · ⌘C copy password · Esc clear"
+  },
+  "secretKeyPh": {
+    "message": "Secret Key (A3-XXXXXX-…)"
   }
 }

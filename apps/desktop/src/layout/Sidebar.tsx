@@ -143,7 +143,7 @@ function SidebarTagItem({
           }}
           className="min-w-0 flex-1 rounded border border-accent bg-panel px-1.5 py-0.5 text-[14px] text-fg outline-none ring-1 ring-accent"
           autoFocus
-          aria-label={`Rename tag ${tag}`}
+          aria-label={t("tag.renameAria", { tag })}
         />
       </form>
     );
@@ -251,16 +251,16 @@ export function Sidebar() {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
-            <DropdownMenuLabel>Vaults</DropdownMenuLabel>
+            <DropdownMenuLabel>{t("nav.vaults")}</DropdownMenuLabel>
             {(vaults.length ? vaults : [{ id: '', name: accountName, color: null, icon: null }]).map((v) => <DropdownMenuItem key={v.id || 'default'} onSelect={() => v.id && go({ kind: 'vault', vaultId: v.id })}><VaultIcon icon={v.icon} color={v.color} size={18} />{v.name}{v.name === accountName && <Check size={14} className="ml-auto text-accent" />}</DropdownMenuItem>)}
-            <DropdownMenuItem onSelect={() => setNewVault(true)}><Plus size={14} />New vault…</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setNewVault(true)}><Plus size={14} />{t("sidebar.newVaultEllipsis")}</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onSelect={toggleTheme}>{theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}{theme === 'dark' ? 'Light theme' : 'Dark theme'}</DropdownMenuItem>
+            <DropdownMenuItem onSelect={toggleTheme}>{theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}{theme === 'dark' ? t("sidebar.lightTheme") : t("sidebar.darkTheme")}</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setRoute({ name: 'settings' })}><SettingsIcon size={14} />{t('nav.settings')}…</DropdownMenuItem>
             <DropdownMenuItem onSelect={() => { void api.lock().finally(lock); }}><Lock size={14} />{t('cmd.lock')}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Tooltip content="Collapse sidebar"><Button variant="ghost" size="iconSm" aria-label="Collapse sidebar" onClick={toggleSidebar}><PanelLeftClose size={15} /></Button></Tooltip>
+        <Tooltip content={t("sidebar.collapse")}><Button variant="ghost" size="iconSm" aria-label={t("sidebar.collapse")} onClick={toggleSidebar}><PanelLeftClose size={15} /></Button></Tooltip>
       </div>
 
       <nav className="flex-1 overflow-y-auto p-2">
@@ -271,13 +271,13 @@ export function Sidebar() {
         <NavItem active={modal?.id === 'password-generator'} icon={<KeyRound size={15} className="text-muted" />} label={t('generator.title')} onClick={() => openModal('password-generator')} />
         {extraTop.filter((f) => !['home', 'watchtower'].includes(f.id)).map((f) => { const I = f.sidebar!.icon; return <NavItem key={f.id} active={route.name === f.route} icon={<I size={15} />} label={L(f.sidebar!.label)} onClick={() => setRoute({ name: f.route } as Route)} />; })}
 
-        <SectionHeader label={t('nav.vaults').toUpperCase()} action={<Tooltip content="New vault"><button aria-label="New vault" className="rounded p-0.5 hover:bg-hover" onClick={() => setNewVault(true)}><Plus size={14} /></button></Tooltip>} />
+        <SectionHeader label={t('nav.vaults').toUpperCase()} action={<Tooltip content={t("sidebar.newVault")}><button aria-label={t("sidebar.newVault")} className="rounded p-0.5 hover:bg-hover" onClick={() => setNewVault(true)}><Plus size={14} /></button></Tooltip>} />
         {vaults.map((v) => (
           <div key={v.id} className="group/vault relative" data-testid="sidebar-vault" onContextMenu={(e) => { e.preventDefault(); setMenuFor(v.id); }}>
             <NavItem active={same(route, { kind: 'vault', vaultId: v.id })} label={v.name}
               icon={<VaultIcon icon={v.icon} color={v.color} size={16} />}
               onClick={() => go({ kind: 'vault', vaultId: v.id })}
-              right={<span className="flex w-8 justify-end group-hover/vault:invisible">{v.shared ? <Users size={13} className="text-muted" aria-label="Shared vault" /> : <span className="text-xs text-muted">{v.itemCount}</span>}</span>} />
+              right={<span className="flex w-8 justify-end group-hover/vault:invisible">{v.shared ? <Users size={13} className="text-muted" aria-label={t("sidebar.sharedVault")} /> : <span className="text-xs text-muted">{v.itemCount}</span>}</span>} />
             <DropdownMenu open={menuFor === v.id} onOpenChange={(o) => setMenuFor(o ? v.id : null)}>
               <DropdownMenuTrigger asChild><button aria-label={`${t('vault.more')}: ${v.name}`} className={cn('absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:bg-active hover:text-fg', menuFor === v.id ? 'visible' : 'invisible group-hover/vault:visible')}><MoreHorizontal size={14} /></button></DropdownMenuTrigger>
               <DropdownMenuContent align="start">
@@ -332,10 +332,10 @@ export function Sidebar() {
       </div>
 
       <Dialog open={newVault} onOpenChange={setNewVault}>
-        <DialogContent title="New vault" description="Vaults keep items separate and can be shared.">
-          <form onSubmit={(e) => { e.preventDefault(); if (!vName.trim()) return; api.createVault({ name: vName.trim() }).then((v) => { toast(`Created ${v.name}`); setNewVault(false); setVName(''); refreshItems(); go({ kind: 'vault', vaultId: v.id }); }, (er) => toast(String(er), 'danger')); }}>
-            <Input autoFocus placeholder="Vault name" value={vName} onChange={(e) => setVName(e.target.value)} />
-            <div className="mt-4 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setNewVault(false)}>Cancel</Button><Button type="submit">Create</Button></div>
+        <DialogContent title={t("vault.newTitle")} description={t("vault.newDesc")}>
+          <form onSubmit={(e) => { e.preventDefault(); if (!vName.trim()) return; api.createVault({ name: vName.trim() }).then((v) => { toast(t("vault.created", { name: v.name })); setNewVault(false); setVName(''); refreshItems(); go({ kind: 'vault', vaultId: v.id }); }, (er) => toast(String(er), 'danger')); }}>
+            <Input autoFocus placeholder={t("vault.namePlaceholder")} value={vName} onChange={(e) => setVName(e.target.value)} />
+            <div className="mt-4 flex justify-end gap-2"><Button type="button" variant="outline" onClick={() => setNewVault(false)}>{t("common.cancel")}</Button><Button type="submit">{t("vault.create")}</Button></div>
           </form>
         </DialogContent>
       </Dialog>
