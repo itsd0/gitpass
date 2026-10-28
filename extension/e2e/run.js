@@ -760,6 +760,9 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
         custom ? `title=${JSON.stringify(custom.title)} vault=${custom.vault_id}` : 'save_login NOT received');
       const success = await until(async () => { const h = await findInShadow(page, /Open in gitpass/); return h.length && h; }, T(4000));
       rec('save banner: success state offers Open in gitpass', !!success, success ? 'shown' : 'not shown');
+      await page.mouse.move(4, 4); // stop hovering the banner; programmatic focus must not pin it open
+      const autoClosed = await until(async () => !(await findInShadow(page, /Open in gitpass/)).length, T(8000), 300);
+      rec('save banner: success auto-closes after 4 s', !!autoClosed, autoClosed ? 'closed' : 'still open');
 
       // Esc = Not now on a fresh banner; nothing is saved.
       await page.goto(LOGIN); await sleep(1000);

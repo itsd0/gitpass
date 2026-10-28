@@ -149,10 +149,31 @@ test('a second decision while saving is rejected and only one item is written', 
   await B.handle({ type: 'page:capture', kind: 'login', username: 'new@x', password: 'pw1' }, s, h);
   const first = B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h);
   await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h), /already saving/);
+  await assert.rejects(B.handle({ type: 'page:save_decision', action: 'dismiss' }, s, h), /already saving/);
   release();
   assert.deepStrictEqual(await first, { done: true, action: 'save', item_id: 'v:new' });
   assert.strictEqual(calls.filter(([cmd]) => cmd === 'save_login').length, 1);
   await assert.rejects(B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h), /nothing to save/);
+});
+
+test('a capture during an in-flight save neither replaces nor gets dropped', async () => {
+  const s = tab('https://site.example/login', 0, 28);
+  let release;
+  const gate = new Promise((res) => { release = res; });
+  const h = async (cmd, args) => {
+    if (cmd === 'match') return { items: [] };
+    if (cmd === 'list_vaults') return { vaults: VAULTS };
+    if (cmd === 'save_login') { await gate; return { item_id: 'v:new' }; }
+    return {};
+  };
+  await B.handle({ type: 'page:capture', kind: 'login', username: 'first@x', password: 'pw1' }, s, h);
+  const saving = B.handle({ type: 'page:save_decision', action: 'save', user_click: true }, s, h);
+  assert.deepStrictEqual(await B.handle({ type: 'page:capture', kind: 'login', username: 'second@x', password: 'pw2' }, s, h), { prompt: null });
+  assert.deepStrictEqual(await B.handle({ type: 'page:pending' }, s, h), { prompt: null });
+  release();
+  assert.deepStrictEqual(await saving, { done: true, action: 'save', item_id: 'v:new' });
+  // The first capture was consumed; the ignored second capture did not leak into a later save.
+  assert.strictEqual((await B.handle({ type: 'page:capture', kind: 'login', username: 'third@x', password: 'pw3' }, s, h)).prompt, 'save');
 });
 
 test('update prompt: save_new makes a second login; save/update actions are not interchangeable', async () => {

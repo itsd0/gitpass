@@ -203,6 +203,7 @@
         if (kind === 'username') { if (username) lastUsername.set(tabId, { origin, username, ts: Date.now() }); return { prompt: null }; }
         if (!['login', 'signup', 'change_password'].includes(kind)) throw err('bad_request', 'kind');
         if (typeof a.password !== 'string' || !a.password || a.password.length > 1024) throw err('bad_request', 'password');
+        if (inflightDecisions.has(tabId)) return { prompt: null }; // don't replace the capture being written
         if (await isExceptedSite(origin)) {
           pendingSaves.delete(tabId);
           return { prompt: null };
@@ -217,6 +218,7 @@
         return { prompt: d.prompt, username: user, title: d.title || null, vaults: await vaultChoices(host) };
       }
       case 'page:pending': {
+        if (inflightDecisions.has(tabId)) return { prompt: null }; // the banner on screen is still saving
         if (await isExceptedSite(origin)) {
           pendingSaves.delete(tabId);
           return { prompt: null };
@@ -226,6 +228,7 @@
       }
       case 'page:save_decision': {
         const p = fresh(pendingSaves, tabId, origin, true);
+        if (inflightDecisions.has(tabId)) throw err('bad_request', 'already saving'); // no dismiss/never mid-write
         if (a.action === 'never') {
           pendingSaves.delete(tabId);
           if (!a.user_click) throw err('denied', 'needs a click');
@@ -236,7 +239,6 @@
         if (!p) throw err('not_found', 'nothing to save');
         if (a.action === 'dismiss') { pendingSaves.delete(tabId); return { done: false }; }
         if (!a.user_click) throw err('denied', 'needs a click');
-        if (inflightDecisions.has(tabId)) throw err('bad_request', 'already saving');
         inflightDecisions.add(tabId);
         try {
           const user = p.username || '';
@@ -245,7 +247,7 @@
             const upArgs = { item_id: p.item_id, password: p.password }; // never an item id from the content side
             if (user && !p.hasUser) upArgs.username = user;
             await host('update_password', upArgs);
-            pendingSaves.delete(tabId);
+            if (pendingSaves.get(tabId) === p) pendingSaves.delete(tabId); // never drop a newer capture
             rememberSaved(tabId, origin, p.item_id);
             return { done: true, action: 'update' };
           }
@@ -258,7 +260,9 @@
             const args = { origin: p.origin, title, username: user, password: p.password };
             if (vault_id) args.vault_id = vault_id;
             const r = await host('save_login', args);
-            pendingSaves.delete(tabId); // only a completed decision consumes the pending capture; errors keep it for retry
+            // Only a completed decision consumes this capture; errors keep it for retry, and a capture
+            // that replaced it while we were writing is left alone.
+            if (pendingSaves.get(tabId) === p) pendingSaves.delete(tabId);
             rememberSaved(tabId, origin, r && r.item_id);
             return { done: true, action: 'save', item_id: r && r.item_id };
           }

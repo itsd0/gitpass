@@ -448,7 +448,9 @@
       bannerTimer = setTimeout(() => {
         bannerTimer = null;
         if (banner !== me || !me.done) return;
-        if (me.host.matches(':hover') || me.root.activeElement) { armClose(2000); return; }
+        // Programmatic focus on Open in gitpass is not interaction: only hover or focus after a real
+        // click/key press keeps the banner up.
+        if (me.host.matches(':hover') || (me.userActed && me.root.activeElement)) { armClose(2000); return; }
         closeBanner();
       }, ms);
     }
@@ -456,6 +458,8 @@
       if (banner !== me) return; // Esc closed the banner while the request was in flight
       me.busy = false;
       me.done = true;
+      me.userActed = false; // the click/key that saved is over; only new interaction keeps it open
+      b.removeAttribute('aria-busy');
       fields.remove(); acts.remove(); errLine.remove();
       m.firstChild.textContent = action === 'update' ? t('csUpdated', 'Password updated')
         : action === 'save_new' ? t('csSavedNew', 'Saved as a new login') : t('csSaved', 'Saved to gitpass');
@@ -523,6 +527,8 @@
     banner.host.addEventListener('focusin', clearBannerTimer);
     banner.host.addEventListener('mouseleave', () => { if (banner && banner.done) armClose(4000); });
     banner.host.addEventListener('focusout', () => { if (banner && banner.done) armClose(4000); });
+    banner.host.addEventListener('pointerdown', () => { me.userActed = true; }, true);
+    banner.host.addEventListener('keydown', (e) => { if (e.isTrusted) me.userActed = true; }, true);
 
     b.append(row, fields, errLine, acts); banner.root.append(b);
     primary.focus();
