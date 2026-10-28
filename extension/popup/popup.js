@@ -86,7 +86,7 @@ function show(view) {
 }
 
 // ---------- state ----------
-const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpCache: {}, totpFetching: {}, totpTimer: null, listTotpTimer: null, panel: null, view: null };
+const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null };
 
 // ---------- top-level ----------
 async function refresh() {
@@ -255,7 +255,7 @@ const MINI_RING_C = 2 * Math.PI * 5;
 
 function totpRemaining(c) { return Math.max(0, Math.ceil((c.expiresAt - Date.now()) / 1000)); }
 function chipsFor(id) { return [...document.querySelectorAll('#listInner [data-totp-id]')].filter((x) => x.dataset.totpId === id); }
-function clearTotpCache() { S.totpCache = {}; S.totpFetching = {}; }
+function clearTotpCache() { S.totpCache = {}; S.totpFetching = {}; S.totpGen += 1; }
 
 function totpRing() {
   const ns = 'http://www.w3.org/2000/svg';
@@ -299,9 +299,10 @@ function totpChip(it) {
 }
 
 async function fetchTotp(id) {
+  const gen = S.totpGen;
   const r = await send({ type: 'popup:totp', item_id: id });
   const c = { code: r.code, period: r.period || 30, expiresAt: Date.now() + (Number(r.remaining) || 0) * 1000 };
-  S.totpCache[id] = c;
+  if (gen === S.totpGen) S.totpCache[id] = c; // a lock while in flight must not repopulate the cache
   return c;
 }
 
@@ -316,6 +317,7 @@ function startListTotp() { if (!S.listTotpTimer) { S.listTotpTimer = setInterval
 function stopListTotp() { if (S.listTotpTimer) { clearInterval(S.listTotpTimer); S.listTotpTimer = null; } }
 
 async function tickListTotp() {
+  const gen = S.totpGen;
   const chips = [...document.querySelectorAll('#listInner [data-totp-id]')];
   if (!chips.length) return stopListTotp();
   for (const id of new Set(chips.map((x) => x.dataset.totpId))) {
@@ -324,9 +326,15 @@ async function tickListTotp() {
     if (c && totpRemaining(c) > 0) { for (const chip of chipsFor(id)) paintTotpChip(chip, c); continue; }
     if (S.totpFetching[id]) continue;
     S.totpFetching[id] = true;
-    try { const fresh = await fetchTotp(id); for (const chip of chipsFor(id)) paintTotpChip(chip, fresh); }
-    catch (_) { S.totpCache[id] = { error: true }; for (const chip of chipsFor(id)) paintTotpChip(chip, S.totpCache[id]); }
-    finally { delete S.totpFetching[id]; }
+    try {
+      const fresh = await fetchTotp(id);
+      if (gen !== S.totpGen) return stopListTotp();
+      for (const chip of chipsFor(id)) paintTotpChip(chip, fresh);
+    } catch (_) {
+      if (gen !== S.totpGen) return stopListTotp();
+      S.totpCache[id] = { error: true };
+      for (const chip of chipsFor(id)) paintTotpChip(chip, S.totpCache[id]);
+    } finally { delete S.totpFetching[id]; }
   }
 }
 
