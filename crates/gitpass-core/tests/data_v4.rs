@@ -174,8 +174,8 @@ fn export_import_roundtrip_encrypted() {
     assert!(import::export_encrypted(&items, "short", &fast()).is_err());
 }
 
-fn rows(items: Vec<Item>) -> Vec<(String, String, Item)> {
-    items.into_iter().enumerate().map(|(i, it)| ("v".into(), format!("id{i}"), it)).collect()
+fn rows(items: Vec<Item>) -> Vec<(String, String, gitpass_core::merge::ItemRecord)> {
+    items.into_iter().enumerate().map(|(i, it)| ("v".into(), format!("id{i}"), gitpass_core::merge::ItemRecord::new(it))).collect()
 }
 
 #[test]
@@ -250,7 +250,7 @@ fn audit_weakness_edge_cases_unicode_long_and_empty() {
 fn audit_reuse_spans_vaults_and_ignores_empty_passwords() {
     let now = 2_000_000_000u64;
     let shared = "Xq7#vR2!mK9@pL4$wZ";
-    let mk = |title: &str, pw: Option<&str>| { let mut it = item(title, pw, None); it.updated_at = (now - 10 * 86400).to_string(); it };
+    let mk = |title: &str, pw: Option<&str>| { let mut it = item(title, pw, None); it.updated_at = (now - 10 * 86400).to_string(); gitpass_core::merge::ItemRecord::new(it) };
     let rows = vec![
         ("vault-1".to_string(), "a".to_string(), mk("A", Some(shared))),
         ("vault-2".to_string(), "b".to_string(), mk("B", Some(shared))),

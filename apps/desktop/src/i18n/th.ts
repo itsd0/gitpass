@@ -147,6 +147,10 @@ export const th: Partial<Record<Key, string>> = {
   "watchtower.totpAvailableDesc": "เว็บไซต์รองรับรหัสจากแอป authenticator แต่รายการเข้าสู่ระบบนี้ยังไม่ได้บันทึก TOTP",
   "watchtower.passkeyAvailable": "ใช้ passkey ได้",
   "watchtower.passkeyAvailableDesc": "เว็บไซต์รองรับ passkey แต่ยังไม่ได้บันทึก passkey สำหรับเว็บนี้",
+  "watchtower.expired": "รายการหมดอายุ",
+  "watchtower.expiredDesc": "บัตรเครดิตหรือข้อมูลประจำตัวที่หมดอายุแล้ว",
+  "watchtower.expiringSoon": "ใกล้หมดอายุ",
+  "watchtower.expiringSoonDesc": "รายการที่จะหมดอายุภายใน 30 วัน",
   // TODO(i18n-review): native Thai review of the new export.* wording
   "export.titleVault": "ส่งออกห้องนิรภัย",
   "export.titleSelected": "ส่งออกรายการที่เลือก",
