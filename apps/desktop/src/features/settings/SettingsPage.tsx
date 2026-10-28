@@ -1041,15 +1041,14 @@ export function SettingsPage({ initialTab }: { initialTab?: string } = {}) {
   }
 
   const body = {
-    general: () => <General highlightedId={highlightedId} />,
-    security: () => <Security highlightedId={highlightedId} />,
-    vaults: () => <Vaults highlightedId={highlightedId} />,
-    devices: () => <Devices highlightedId={highlightedId} />,
-    sync: () => <Sync highlightedId={highlightedId} />,
-    ssh: () => <SshAgent highlightedId={highlightedId} />,
-    about: () => <About highlightedId={highlightedId} />,
+    general: <General highlightedId={highlightedId} />,
+    security: <Security highlightedId={highlightedId} />,
+    vaults: <Vaults highlightedId={highlightedId} />,
+    devices: <Devices highlightedId={highlightedId} />,
+    sync: <Sync highlightedId={highlightedId} />,
+    ssh: <SshAgent highlightedId={highlightedId} />,
+    about: <About highlightedId={highlightedId} />,
   }[local];
-  const B = body;
 
   return (
     <div className="mx-auto flex max-w-4xl gap-8 p-8">
@@ -1168,7 +1167,7 @@ export function SettingsPage({ initialTab }: { initialTab?: string } = {}) {
             {t('common.error', { msg: error })}
           </p>
         )}
-        {vaultId ? <VaultPanel vaultId={vaultId} /> : <B />}
+        {vaultId ? <VaultPanel vaultId={vaultId} /> : body}
       </section>
     </div>
   );
