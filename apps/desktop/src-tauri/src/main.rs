@@ -2,6 +2,7 @@
 mod agent_ui;
 mod biometric;
 mod commands;
+mod system_events;
 #[cfg(test)]
 mod updater_tests;
 use commands as c;
@@ -28,7 +29,7 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(app)
-        .setup(|h| { c::spawn_idle_watcher(h.handle().clone()); agent_ui::start(h.handle()); Ok(()) })
+        .setup(|h| { c::spawn_idle_watcher(h.handle().clone()); system_events::start(h.handle().clone()); agent_ui::start(h.handle()); Ok(()) })
         .invoke_handler(tauri::generate_handler![
             c::status, c::show_quick_access, c::unlock, c::lock, c::list_vaults, c::create_vault, c::update_vault, c::delete_vault, c::list_items, c::get_item, c::reveal_field,
             c::copy_field, c::totp_now, c::create_item, c::update_item, c::set_favorite, c::archive_item, c::delete_item,

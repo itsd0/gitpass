@@ -178,14 +178,20 @@ pub fn spawn_idle_watcher(app: AppHandle) {
             last_wall = now;
             let screen_locked = is_screen_locked();
             let mut reason = "lock";
-            if (slept || screen_locked) && st.state.is_unlocked() {
-                st.lock();
-                reason = if screen_locked { "screen" } else { "sleep" };
-            } else if st.state.check_idle() {
+            let mut locked_by_system = false;
+            if slept {
+                locked_by_system = crate::system_events::on_system_lock_event(&app, gitpass_gui_core::api::LockTrigger::Sleep);
+                if locked_by_system { reason = "sleep"; }
+            }
+            if !locked_by_system && screen_locked {
+                locked_by_system = crate::system_events::on_system_lock_event(&app, gitpass_gui_core::api::LockTrigger::ScreenLock);
+                if locked_by_system { reason = "screen"; }
+            }
+            if !locked_by_system && st.state.check_idle() {
                 reason = "idle";
             }
             let unlocked = st.state.is_unlocked();
-            if was_unlocked && !unlocked { let _ = app.emit("locked", reason); }
+            if was_unlocked && !unlocked && !locked_by_system { let _ = app.emit("locked", reason); }
             // Unlocked elsewhere (extension Touch ID / request_unlock): the UI refreshes in place.
             if !was_unlocked && unlocked { let _ = app.emit("unlocked", "watcher"); }
             // Live sync: any vault write (this window, the extension via the agent, CLI, git sync) changes the

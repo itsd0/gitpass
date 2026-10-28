@@ -1291,3 +1291,64 @@ fn watchtower_flags_passwords_containing_personal_info() {
     assert_eq!(rep.weak_reasons.get(&item1.id).map(String::as_str), Some("contains the username"));
     assert_eq!(rep.weak_reasons.get(&item2.id).map(String::as_str), Some("contains the site name"));
 }
+
+#[test]
+fn settings_system_lock_toggles_default_on_and_backward_compatibility() {
+    let s = Settings::default();
+    assert!(s.lock_on_sleep);
+    assert!(s.lock_on_screen_lock);
+    assert!(s.lock_on_user_switch);
+
+    // Legacy JSON without sleep/screen/userSwitch fields
+    let legacy_json = r#"{"autoLockMinutes":5,"clipboardClearSecs":90,"theme":"dark","language":"en","biometricUnlock":false,"quickAccessHotkey":"X"}"#;
+    let parsed: Settings = serde_json::from_str(legacy_json).unwrap();
+    assert!(parsed.lock_on_sleep);
+    assert!(parsed.lock_on_screen_lock);
+    assert!(parsed.lock_on_user_switch);
+
+    // Roundtrip with disabled values
+    let mut custom = s;
+    custom.lock_on_sleep = false;
+    custom.lock_on_screen_lock = false;
+    custom.lock_on_user_switch = false;
+    let serialized = serde_json::to_string(&custom).unwrap();
+    let deserialized: Settings = serde_json::from_str(&serialized).unwrap();
+    assert!(!deserialized.lock_on_sleep);
+    assert!(!deserialized.lock_on_screen_lock);
+    assert!(!deserialized.lock_on_user_switch);
+}
+
+#[test]
+fn system_lock_event_dispatch_enabled_and_disabled() {
+    let e = env();
+    let path = e.app.status().unwrap().vault_path;
+
+    // 1. LockTrigger::Sleep
+    assert!(e.app.handle_system_lock_event(LockTrigger::Sleep));
+    assert!(!e.app.status().unwrap().unlocked);
+    // Calling again when already locked returns false
+    assert!(!e.app.handle_system_lock_event(LockTrigger::Sleep));
+
+    // Unlock again and disable lock_on_sleep
+    e.app.unlock(&path, "correct horse", Some(&e.sk)).unwrap();
+    e.app.set_settings(Settings { lock_on_sleep: false, ..e.app.get_settings() }).unwrap();
+    assert!(!e.app.handle_system_lock_event(LockTrigger::Sleep));
+    assert!(e.app.status().unwrap().unlocked);
+
+    // 2. LockTrigger::ScreenLock
+    assert!(e.app.handle_system_lock_event(LockTrigger::ScreenLock));
+    assert!(!e.app.status().unwrap().unlocked);
+    e.app.unlock(&path, "correct horse", Some(&e.sk)).unwrap();
+    e.app.set_settings(Settings { lock_on_screen_lock: false, ..e.app.get_settings() }).unwrap();
+    assert!(!e.app.handle_system_lock_event(LockTrigger::ScreenLock));
+    assert!(e.app.status().unwrap().unlocked);
+
+    // 3. LockTrigger::UserSwitch
+    // Also verify clipboard clear on system lock event
+    let l = login(&e, "TestUserSwitch", "u", "pw-secret-switch");
+    e.app.copy_field(&e.vault, &l.id, "password").unwrap();
+    assert_eq!(e.clip.get_text().as_deref(), Some("pw-secret-switch"));
+    assert!(e.app.handle_system_lock_event(LockTrigger::UserSwitch));
+    assert!(!e.app.status().unwrap().unlocked);
+    assert_eq!(e.clip.get_text().as_deref(), Some(""));
+}

@@ -124,7 +124,7 @@ function show(view) {
 }
 
 // ---------- state ----------
-const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null, neverSave: [] };
+const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null, neverSave: [], edit: null };
 
 async function refreshNeverSave() {
   if (window.__gitpassMockNeverSave) {
@@ -210,7 +210,7 @@ function showNoHost(e) {
 
 function showLocked(view, st) {
   stopTotp(); stopListTotp(); clearTotpCache();
-  S.revealed = {}; $('detail').textContent = '';
+  S.revealed = {}; S.edit = null; $('detail').textContent = '';
   show('locked');
   $('unlockErr').textContent = '';
   $('unlockForm').classList.add('hidden'); $('primaryBox').classList.remove('hidden');
@@ -488,7 +488,7 @@ function updateSearchHints() {
   const show = Boolean(S.rows.length);
   hints.classList.toggle('hidden', !show);
   if (show) {
-    hints.textContent = t('searchHints', '↑↓ navigate · ↵ fill · ⌘C copy password · Esc clear');
+    hints.textContent = t('searchHints', '↑↓ navigate · ↵ fill · ⌘C copy password · ? all shortcuts · Esc clear');
   }
 }
 
@@ -679,6 +679,17 @@ $('q').oninput = () => { clearTimeout(qt); qt = setTimeout(() => { S.query = $('
 // ---------- detail ----------
 let detailSeq = 0;
 async function select(idx) {
+  const target = S.rows[idx];
+  if (S.edit) {
+    if (target && target.id === S.edit.id) return;
+    if (!confirmDiscard()) {
+      const keep = S.rows.findIndex((r) => r.id === S.edit.id);
+      if (keep >= 0) S.sel = keep;
+      renderList();
+      return;
+    }
+    S.edit = null;
+  }
   S.sel = idx; S.revealed = {}; stopTotp();
   const list = $('list'), qInput = $('q');
   if (idx >= 0) {
@@ -751,6 +762,14 @@ function renderDetail(d) {
     };
     acts.append(b);
   }
+  if (d.category === 'login') {
+    const edit = el('button', 'btn', t('edit', 'Edit'));
+    edit.type = 'button';
+    edit.dataset.action = 'edit';
+    edit.title = t('shortcutEdit', 'Edit login') + ' (⌘E)';
+    edit.onclick = () => startEdit();
+    acts.append(edit);
+  }
   if (acts.children.length) pane.append(acts);
   const box = el('div', 'fields');
   for (const f of d.fields || []) box.append(fieldRow(d, f));
@@ -758,6 +777,176 @@ function renderDetail(d) {
   if (d.notes) pane.append(el('div', 'notes', d.notes));
   if (d.tags && d.tags.length) { const tg = el('div', 'tags'); for (const x of d.tags) tg.append(el('span', 'tag', x)); pane.append(tg); }
   if (d.updated_at) pane.append(el('div', 'meta-line', t('lastEdited', 'Last edited') + ' ' + new Date(d.updated_at).toLocaleString()));
+}
+
+// ---------- inline edit (logins) ----------
+function editDirty() { return !!(S.edit && S.edit.dirty); }
+function confirmDiscard() { return !editDirty() || window.confirm(t('discardChanges', 'Discard unsaved changes?')); }
+function isHttpUrl(v) { try { const u = new URL(v); return (u.protocol === 'http:' || u.protocol === 'https:') && !!u.hostname; } catch (_) { return false; } }
+function withScheme(v) { const s = String(v || '').trim(); return s && !/^[a-z][a-z0-9+.-]*:/i.test(s) ? 'https://' + s : s; }
+function focusEditButton() { const b = $('detail') && $('detail').querySelector('[data-action="edit"]'); if (b) b.focus(); }
+
+function startEdit() {
+  if (!S.detail || S.detail.category !== 'login' || S.edit) return;
+  S.edit = { id: S.detail.id, dirty: false, passwordLoaded: false, passwordTouched: false, saving: false };
+  renderEditForm(S.detail);
+}
+
+function renderEditForm(d) {
+  const pane = $('detail'); pane.textContent = '';
+  const head = el('div', 'd-head');
+  const ic = el('span', 'ic'); ic.innerHTML = categoryIcon(d.category, 44);
+  const g = el('div', 'grow');
+  g.append(el('h2', null, t('editLogin', 'Edit login')), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
+  head.append(ic, g);
+  pane.append(head);
+
+  const form = el('form', 'stack inline-edit');
+  form.autocomplete = 'off'; form.noValidate = true;
+  form.style.maxWidth = 'none';
+  form.setAttribute('aria-label', t('editLogin', 'Edit login'));
+  const label = (text, forId, required) => {
+    const l = el('label', null, text + (required ? ' *' : ''));
+    l.htmlFor = forId; form.append(l); return l;
+  };
+  const input = (id, type, value) => {
+    const i = Object.assign(el('input'), { type });
+    i.id = id; i.value = value || ''; i.spellcheck = false; form.append(i); return i;
+  };
+
+  label(t('title', 'Title'), 'edit-title', true);
+  const titleInput = input('edit-title', 'text', d.title);
+  titleInput.setAttribute('aria-required', 'true');
+
+  label(t('username', 'Username'), 'edit-username');
+  const userField = (d.fields || []).find((f) => f.name === 'username');
+  const userInput = input('edit-username', 'text', userField ? userField.value : '');
+
+  label(t('password', 'Password'), 'edit-password');
+  const pwRow = el('div', 'edit-pw');
+  const pwInput = Object.assign(el('input'), { type: 'password' });
+  pwInput.id = 'edit-password'; pwInput.autocomplete = 'new-password'; pwInput.spellcheck = false;
+  const eye = el('button', 'icon-btn'); eye.type = 'button'; eye.innerHTML = UI.eye; eye.title = t('reveal', 'Reveal');
+  eye.onclick = () => { const on = pwInput.type === 'password'; pwInput.type = on ? 'text' : 'password'; eye.innerHTML = on ? UI.eyeOff : UI.eye; };
+  const gen = el('button', 'icon-btn'); gen.type = 'button'; gen.innerHTML = UI.key; gen.title = t('generate', 'Generate');
+  gen.onclick = () => openGenerator((pw) => {
+    pwInput.value = pw;
+    pwInput.dispatchEvent(new Event('input', { bubbles: true }));
+    pwInput.focus();
+  });
+  pwRow.append(pwInput, eye, gen);
+  form.append(pwRow);
+  pwInput.addEventListener('input', () => { if (S.edit) S.edit.passwordTouched = true; });
+
+  label(t('website', 'Website'), 'edit-url-0');
+  const urlsWrap = el('div', 'edit-urls');
+  form.append(urlsWrap);
+  const urlInputs = [];
+  let urlSeq = 0;
+  const addUrlRow = (value) => {
+    const row = el('div', 'edit-url');
+    const i = Object.assign(el('input'), { type: 'url' });
+    i.id = 'edit-url-' + (urlSeq++);
+    i.value = value || ''; i.spellcheck = false;
+    i.setAttribute('aria-label', t('website', 'Website'));
+    const rm = el('button', 'icon-btn'); rm.type = 'button'; rm.innerHTML = UI.close; rm.title = t('removeWebsite', 'Remove website');
+    rm.onclick = () => {
+      if (urlInputs.length === 1) { i.value = ''; i.focus(); }
+      else { urlInputs.splice(urlInputs.indexOf(i), 1); row.remove(); }
+      if (S.edit) S.edit.dirty = true;
+    };
+    urlInputs.push(i);
+    row.append(i, rm);
+    urlsWrap.append(row);
+    return i;
+  };
+  const initialUrls = [];
+  if (d.url) initialUrls.push(d.url);
+  for (const f of d.fields || []) if (f.kind === 'url' && f.name !== 'url' && f.value && !initialUrls.includes(f.value)) initialUrls.push(f.value);
+  if (!initialUrls.length) addUrlRow('');
+  for (const u of initialUrls) addUrlRow(u);
+  const addUrl = el('button', 'btn btn-link add-url', t('addWebsite', 'Add website'));
+  addUrl.type = 'button';
+  addUrl.onclick = () => { if (S.edit) S.edit.dirty = true; addUrlRow('').focus(); };
+  form.append(addUrl);
+
+  label(t('notes', 'Notes'), 'edit-notes');
+  const notesInput = el('textarea');
+  notesInput.id = 'edit-notes'; notesInput.rows = 3; notesInput.value = d.notes || ''; notesInput.spellcheck = false;
+  form.append(notesInput);
+
+  const errEl = el('p', 'err'); errEl.setAttribute('role', 'alert'); form.append(errEl);
+
+  const acts = el('div', 'edit-acts');
+  const save = el('button', 'btn btn-primary', t('save', 'Save')); save.type = 'submit';
+  const cancel = el('button', 'btn btn-link', t('cancel', 'Cancel')); cancel.type = 'button'; cancel.onclick = () => cancelEdit();
+  acts.append(save, cancel); form.append(acts);
+
+  form.addEventListener('input', (e) => {
+    if (S.edit) S.edit.dirty = true;
+    if (e.target && e.target.classList) e.target.classList.remove('bad');
+  });
+  form.onsubmit = (e) => { e.preventDefault(); void saveEdit(d, { titleInput, userInput, pwInput, urlInputs, notesInput, errEl, save }); };
+  pane.append(form);
+  titleInput.focus();
+
+  // The host never returns secrets in item details; fetch the current password for the field.
+  const edit = S.edit;
+  send({ type: 'popup:reveal', item_id: d.id, field: 'password' })
+    .then((r) => {
+      if (S.edit !== edit || edit.passwordTouched || pwInput.value) return;
+      pwInput.value = r.value || '';
+      edit.passwordLoaded = true;
+    })
+    .catch(() => {});
+}
+
+async function saveEdit(d, ui) {
+  if (!S.edit || S.edit.saving) return;
+  const { titleInput, userInput, pwInput, urlInputs, notesInput, errEl, save } = ui;
+  errEl.textContent = '';
+  titleInput.classList.remove('bad');
+  for (const i of urlInputs) i.classList.remove('bad');
+  const title = titleInput.value.trim();
+  if (!title) { errEl.textContent = t('titleRequired', 'Title is required'); titleInput.classList.add('bad'); titleInput.focus(); return; }
+  const urls = [];
+  for (const i of urlInputs) {
+    const raw = i.value.trim();
+    if (!raw) continue;
+    const u = withScheme(raw);
+    if (!isHttpUrl(u)) { errEl.textContent = t('websiteInvalid', 'Website must be an http(s) URL'); i.classList.add('bad'); i.focus(); return; }
+    if (!urls.includes(u)) urls.push(u);
+  }
+  const msg = { type: 'popup:update_login', item_id: d.id, title, username: userInput.value.trim(), urls, notes: notesInput.value };
+  if (S.edit.passwordLoaded || S.edit.passwordTouched) msg.password = pwInput.value;
+
+  S.edit.saving = true;
+  save.disabled = true;
+  const prevHtml = save.innerHTML;
+  save.innerHTML = '<span class="spinner"></span> <span>' + t('save', 'Save') + '</span>';
+  try {
+    await send(msg);
+    S.edit = null; livePending = false;
+    toast(t('saved', 'Saved'));
+    await loadData();
+    if (S.sel >= 0) await select(S.sel); // loadData's selection is async; wait for the detail to render
+    focusEditButton();
+  } catch (e) {
+    if (S.edit) S.edit.saving = false;
+    save.disabled = false;
+    save.innerHTML = prevHtml;
+    if (e.code === 'locked') { S.edit = null; refresh(); return; }
+    errEl.textContent = errText(e);
+  }
+}
+
+function cancelEdit() {
+  if (!S.edit) return;
+  if (!confirmDiscard()) return;
+  S.edit = null;
+  if (S.detail) renderDetail(S.detail); else select(S.sel);
+  focusEditButton();
+  if (livePending) { livePending = false; liveReload(); }
 }
 
 async function secretValue(d, f) {
@@ -870,9 +1059,104 @@ async function copyPrimary() {
   await copy(await secretValue(d, f), f.kind === 'password' ? t('passwordCopied', 'Password copied') : t('copied', 'Copied'));
 }
 
-// ---------- panels: generator / new login ----------
-function closePanel() { const p = $('panel'); p.classList.add('hidden'); p.textContent = ''; S.panel = null; $('q').focus(); if (livePending) { livePending = false; liveReload(); } }
+async function copyUsername() {
+  const selected = S.rows[S.sel];
+  if (!selected) return;
+  const user = V.itemUsername(S.detail, selected);
+  if (user) {
+    await copy(user, t('usernameCopied', 'Username copied'));
+  } else {
+    toast(t('noUsername', 'No username'));
+  }
+}
+
+function openWebsite() {
+  const selected = S.rows[S.sel];
+  if (!selected) return;
+  const url = (S.detail && S.detail.url) || selected.url || '';
+  if (url && V.isAllowedUrl(url)) {
+    if (typeof chrome !== 'undefined' && chrome.tabs && typeof chrome.tabs.create === 'function') {
+      chrome.tabs.create({ url, active: true });
+    } else {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }
+}
+
+// ---------- panels: generator / new login / shortcuts ----------
+let prevFocus = null;
+
+function closePanel() {
+  const p = $('panel');
+  p.classList.add('hidden');
+  p.classList.remove('shortcuts-panel');
+  p.textContent = '';
+  p.removeAttribute('aria-modal');
+  p.removeAttribute('aria-label');
+  const wasShortcuts = S.panel === 'shortcuts';
+  S.panel = null;
+  if (wasShortcuts && prevFocus && typeof prevFocus.focus === 'function' && prevFocus.isConnected) {
+    prevFocus.focus();
+  } else {
+    $('q').focus();
+  }
+  prevFocus = null;
+  if (livePending) { livePending = false; liveReload(); }
+}
+
 function panelHead(title) { const h = el('h3', null, title); h.append(iconBtn(UI.close, t('close', 'Close'), closePanel)); return h; }
+
+function openShortcuts() {
+  prevFocus = document.activeElement;
+  const p = $('panel');
+  p.textContent = '';
+  p.classList.remove('hidden');
+  p.classList.add('shortcuts-panel');
+  p.setAttribute('role', 'dialog');
+  p.setAttribute('aria-modal', 'true');
+  p.setAttribute('aria-label', t('keyboardShortcuts', 'Keyboard shortcuts'));
+  S.panel = 'shortcuts';
+
+  p.append(panelHead(t('keyboardShortcuts', 'Keyboard shortcuts')));
+
+  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
+  const cmd = isMac ? '⌘' : 'Ctrl+';
+  const shift = isMac ? '⇧' : 'Shift+';
+
+  const list = el('div', 'shortcuts-list');
+  list.setAttribute('role', 'list');
+
+  const shortcuts = [
+    { keys: ['↑', '↓'], label: t('shortcutNav', 'Navigate list') },
+    { keys: [isMac ? '↵' : 'Enter'], label: t('shortcutFill', 'Fill item') },
+    { keys: [`${cmd}C`], label: t('shortcutCopyPw', 'Copy password') },
+    { keys: [`${cmd}${shift}C`], label: t('shortcutCopyTotp', 'Copy one-time code (TOTP)') },
+    { keys: [`${cmd}${shift}U`], label: t('shortcutCopyUser', 'Copy username') },
+    { keys: [`${cmd}O`], label: t('shortcutOpenUrl', 'Open website') },
+    { keys: [`${cmd}E`], label: t('shortcutEdit', 'Edit login') },
+    { keys: [`${cmd}${shift}G`], label: t('shortcutGen', 'Password generator') },
+    { keys: ['Esc'], label: t('shortcutClose', 'Close or clear search') },
+  ];
+
+  for (const s of shortcuts) {
+    const row = el('div', 'shortcut-row');
+    row.setAttribute('role', 'listitem');
+    const lbl = el('span', 'shortcut-label', s.label);
+    const keysWrap = el('span', 'shortcut-keys');
+    for (const k of s.keys) {
+      const kbd = document.createElement('kbd');
+      kbd.textContent = k;
+      keysWrap.append(kbd);
+    }
+    row.append(lbl, keysWrap);
+    list.append(row);
+  }
+
+  p.append(list);
+
+  const closeBtn = p.querySelector('button');
+  if (closeBtn) closeBtn.focus();
+}
 
 async function generate(len, digits, symbols, extra) {
   const msg = { type: 'popup:generate', len, digits, symbols };
@@ -883,7 +1167,7 @@ async function generate(len, digits, symbols, extra) {
 
 let genSeq = 0;
 const GEN_LABELS = { random: ['genModeRandom', 'Random'], memorable: ['genModeMemorable', 'Memorable'], pin: ['genModePin', 'PIN'] };
-async function openGenerator() {
+async function openGenerator(onUse) {
   const p = $('panel'); p.textContent = ''; p.classList.remove('hidden'); S.panel = 'gen';
   const saved = await generatorSettings();
   if (S.panel !== 'gen') return; // closed while settings loaded
@@ -940,8 +1224,15 @@ async function openGenerator() {
   const acts = el('div', 'gen-acts');
   const fillBtn = el('button', 'btn hidden', t('fillTitle', 'Fill on this page')); fillBtn.type = 'button';
   const saveBtn = el('button', 'btn btn-link', t('genSaveAsLogin', 'Save as new Login…')); saveBtn.type = 'button';
+  let useBtn = null;
+  if (onUse) {
+    useBtn = el('button', 'btn', t('useGenerated', 'Use password')); useBtn.type = 'button';
+    useBtn.onclick = () => { if (!pw) return; const v = pw; closePanel(); onUse(v); };
+  }
   const copyBtn = el('button', 'btn btn-primary', t('copy', 'Copy')); copyBtn.type = 'button';
-  acts.append(fillBtn, saveBtn, copyBtn); p.append(acts);
+  acts.append(fillBtn, saveBtn);
+  if (useBtn) acts.append(useBtn);
+  acts.append(copyBtn); p.append(acts);
 
   const persist = () => saveGeneratorSettings(st).catch(() => {});
   let persistT = null;
@@ -977,7 +1268,7 @@ async function openGenerator() {
     meterLab.textContent = text;
     meter.setAttribute('aria-valuenow', String(score));
     meter.setAttribute('aria-valuetext', text);
-    for (const b of [fillBtn, saveBtn, copyBtn]) b.disabled = !pw;
+    for (const b of [fillBtn, saveBtn, copyBtn, useBtn].filter(Boolean)) b.disabled = !pw;
   }
 
   async function run() {
@@ -1115,11 +1406,45 @@ function openNewItem(typeId, prefill) {
 $('genBtn').innerHTML = UI.key; $('genBtn').onclick = () => (S.panel === 'gen' ? closePanel() : openGenerator());
 $('newBtn').innerHTML = UI.plus; $('newBtn').onclick = () => (S.panel === 'new' ? closePanel() : openNewItem());
 $('lock').innerHTML = UI.lock; $('searchIc').innerHTML = UI.search;
+if ($('searchHints')) $('searchHints').onclick = () => (S.panel === 'shortcuts' ? closePanel() : openShortcuts());
 
 // ---------- keyboard ----------
 document.addEventListener('keydown', (e) => {
   if ($('unlocked').classList.contains('hidden')) { if (e.key === 'Escape') window.close(); return; }
   const a = document.activeElement;
+  // Inline edit owns the keyboard: Esc cancels, ⌘↩ saves, everything else is typing.
+  if (S.edit && !S.panel) {
+    if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); return; }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+      e.preventDefault();
+      const f = $('detail') && $('detail').querySelector('form.inline-edit');
+      if (f) f.requestSubmit();
+      return;
+    }
+    return;
+  }
+  // Focus trap for shortcuts modal
+  if (e.key === 'Tab' && S.panel === 'shortcuts') {
+    const p = $('panel');
+    const focusable = Array.from(p.querySelectorAll('button:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+    if (focusable.length) {
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey) {
+        if (document.activeElement === first || !p.contains(document.activeElement)) {
+          e.preventDefault();
+          last.focus();
+          return;
+        }
+      } else {
+        if (document.activeElement === last || !p.contains(document.activeElement)) {
+          e.preventDefault();
+          first.focus();
+          return;
+        }
+      }
+    }
+  }
   // ⌘⇧G / Ctrl+Shift+G opens the generator from anywhere in the popup.
   if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'g') {
     e.preventDefault();
@@ -1133,14 +1458,22 @@ document.addEventListener('keydown', (e) => {
     if (S.query && !S.rows.length) { e.preventDefault(); openNewItem('login', { title: S.query }); return; }
   }
   const inForm = !!(a && a.closest && a.closest('#panel, select, .menu, button'));
+  const inEditable = !!(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable));
+  // ⌘E edits the selected login inline.
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'e' || e.key === 'E') && !inForm && S.detail && S.detail.category === 'login') {
+    e.preventDefault(); startEdit(); return;
+  }
   const sel = window.getSelection && String(window.getSelection());
   const inputSel = a && a.tagName === 'INPUT' && a.selectionStart !== a.selectionEnd;
   const selected = S.rows[S.sel];
-  const act = V.keyAction(e, { panel: S.panel, inForm, hasSelection: !!sel || inputSel, hasTotp: !!(selected && selected.has_totp), query: S.query });
+  const act = V.keyAction(e, { panel: S.panel, inForm, inEditable, hasSelection: !!sel || inputSel, hasTotp: !!(selected && selected.has_totp), query: S.query });
   if (!act) return;
   e.preventDefault();
   if (act === 'close') window.close();
   else if (act === 'closePanel') closePanel();
+  else if (act === 'toggleShortcuts' || act === 'shortcuts') {
+    if (S.panel === 'shortcuts') closePanel(); else openShortcuts();
+  }
   else if (act === 'clearSearch') {
     S.query = '';
     const qIn = $('q');
@@ -1151,6 +1484,9 @@ document.addEventListener('keydown', (e) => {
   else if (act === 'fill') openAndFill();
   else if (act === 'copyTotp') { if (selected) copyTotp(selected.id).catch(showErr); }
   else if (act === 'copyPassword') copyPrimary().catch(showErr);
+  else if (act === 'copyUsername') copyUsername().catch(showErr);
+  else if (act === 'openWebsite') openWebsite();
+  else if (act === 'generator') { if (S.panel === 'gen') closePanel(); else openGenerator(); }
 });
 
 // ---------- user settings (options page) ----------
@@ -1167,7 +1503,7 @@ function popupSettings() {
 let liveT = null, livePending = false;
 function liveReload() {
   if (S.view !== 'unlocked-loaded') return;
-  if (S.panel === 'new') { livePending = true; return; }
+  if (S.panel === 'new' || S.edit) { livePending = true; return; }
   clearTimeout(liveT);
   liveT = setTimeout(async () => {
     const [all, match] = await Promise.all([

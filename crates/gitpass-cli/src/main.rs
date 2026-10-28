@@ -251,14 +251,22 @@ enum Cmd {
     },
     /// SSH keys: generate / import / list / public key, `~/.ssh/config` line, and a standalone agent
     Ssh { #[command(subcommand)] cmd: SshCmd },
-    /// Security audit: weak / reused / old passwords, missing TOTP, offline 2FA/passkey availability, optional HIBP check
+    /// Security audit: weak / reused / old / pwned passwords, duplicates, expired or expiring items, insecure URLs, missing TOTP, offline 2FA/passkey availability
+    ///
+    /// Finding kinds: weak (incl. passwords containing the username or site name), reused, old,
+    /// pwned (only with --hibp), duplicate, expired, expiring_soon, insecure_url, missing_totp,
+    /// totp_available, passkey_available. Findings you ignored in the app are counted but only
+    /// listed with --include-ignored. See docs/WATCHTOWER.md.
     Audit {
         /// Vault (default: all vaults)
         vault: Option<String>,
         /// Check passwords against Have I Been Pwned (k-anonymity; only 5 hex chars of SHA-1 are sent)
         #[arg(long)] hibp: bool,
+        /// Flag passwords not changed for more than this many days as old
         #[arg(long, default_value_t = 365)] max_age_days: u64,
+        /// Flag cards, API credentials and other expiry fields that expire within this many days
         #[arg(long, default_value_t = 30)] expiring_days: u64,
+        /// Print the report as JSON (counts, per_item and ignored_per_item findings, change_password_url)
         #[arg(long)] json: bool,
         /// Show findings that were ignored by the user
         #[arg(long)] include_ignored: bool,
@@ -693,11 +701,11 @@ fn pick_record(s: &Session, vid: &str, query: &str, pick: Option<usize>, include
     if !include_archived {
         recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
     }
-    let mut ranked: Vec<(i64, String, ItemRecord)> = recs
-        .into_iter()
-        .filter_map(|(id, _, rec)| gitpass_core::search::score_item(query, &id, &rec.item).map(|sc| (sc, id, rec)))
-        .collect();
-    ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+    let ranked = gitpass_core::search::rank_by(
+        query,
+        recs.into_iter().map(|(id, _, rec)| (id, rec)),
+        |r| &r.item,
+    );
 
     if ranked.is_empty() {
         bail!("no item matches '{query}'");
@@ -1005,11 +1013,11 @@ fn run() -> Result<()> {
             if !include_archived {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
-            let mut ranked: Vec<(i64, String, ItemRecord)> = recs
-                .into_iter()
-                .filter_map(|(id, _, rec)| gitpass_core::search::score_item(query, &id, &rec.item).map(|sc| (sc, id, rec)))
-                .collect();
-            ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
+            let ranked = gitpass_core::search::rank_by(
+                query,
+                recs.into_iter().map(|(id, _, rec)| (id, rec)),
+                |r| &r.item,
+            );
             if *json {
                 let summaries: Vec<CliItemSummary> = ranked.iter().map(|(_, id, rec)| item_summary(id, rec)).collect();
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
@@ -1027,14 +1035,14 @@ fn run() -> Result<()> {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
             let items: Vec<(String, ItemRecord)> = match query {
-                Some(q) => {
-                    let mut ranked: Vec<(i64, String, ItemRecord)> = recs
-                        .into_iter()
-                        .filter_map(|(id, _, rec)| gitpass_core::search::score_item(q, &id, &rec.item).map(|sc| (sc, id, rec)))
-                        .collect();
-                    ranked.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase())));
-                    ranked.into_iter().map(|(_, id, rec)| (id, rec)).collect()
-                }
+                Some(q) => gitpass_core::search::rank_by(
+                    q,
+                    recs.into_iter().map(|(id, _, rec)| (id, rec)),
+                    |r| &r.item,
+                )
+                .into_iter()
+                .map(|(_, id, rec)| (id, rec))
+                .collect(),
                 None => {
                     recs.sort_by(|a, b| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()));
                     recs.into_iter().map(|(id, _, rec)| (id, rec)).collect()
