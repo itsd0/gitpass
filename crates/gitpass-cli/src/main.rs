@@ -133,6 +133,28 @@ enum Cmd {
     },
     /// Remove an item
     Rm { vault: String, id: String },
+    /// Version history of an item (no secrets)
+    History {
+        /// Item query (id, title, or <vault>/<item>)
+        item: String,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Restore an item to a previous version
+    Restore {
+        /// Item query (id, title, or <vault>/<item>)
+        item: String,
+        /// Prior version number to restore
+        #[arg(long)]
+        version: u64,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+    },
     /// Generate a random password, a memorable passphrase or a PIN
     Gen {
         /// Length of the random password (default 24)
@@ -519,6 +541,39 @@ fn ts(s: &str) -> String {
     s.trim().parse::<i64>().map(gitpass_core::device::iso8601).unwrap_or_else(|_| s.to_string())
 }
 
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliHistoryEntry {
+    version: u64,
+    updated_at: String,
+    current: bool,
+}
+
+fn resolve_item_across_vaults(s: &Session, vault: Option<&str>, item: &str) -> Result<(String, String)> {
+    if let Some(v) = vault {
+        let vid = s.resolve_vault(v)?;
+        let iid = s.resolve_item(&vid, item)?;
+        return Ok((vid, iid));
+    }
+    if let Some((v, q)) = item.split_once('/') {
+        let vid = s.resolve_vault(v)?;
+        let iid = s.resolve_item(&vid, q)?;
+        return Ok((vid, iid));
+    }
+    let mut matches = Vec::new();
+    for (vid, _) in s.list_vaults()? {
+        if let Ok(m) = s.find_items(&vid, item) {
+            for (iid, it) in m {
+                matches.push((vid.clone(), iid, it.title.clone()));
+            }
+        }
+    }
+    match matches.len() {
+        0 => bail!("no item matches '{item}'"),
+        1 => Ok((matches[0].0.clone(), matches[0].1.clone())),
+        _ => bail!("multiple items match '{item}'; specify --vault or <vault>/<item>"),
+    }
+}
+
 fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
     CliItemSummary {
         id: id.to_string(),
@@ -883,6 +938,41 @@ fn run() -> Result<()> {
             let iid = s.resolve_item(&vid, id)?;
             s.remove_item(&vid, &iid)?;
             println!("removed {iid}");
+        }
+        Cmd::History { item, vault, json } => {
+            let s = unlock(&cli, &root)?;
+            let (vid, iid) = resolve_item_across_vaults(&s, vault.as_deref(), item)?;
+            let (cur_v, r) = s.read_record(&vid, &iid)?;
+            let mut entries = Vec::new();
+            entries.push(CliHistoryEntry {
+                version: cur_v,
+                updated_at: ts(&r.item.updated_at),
+                current: true,
+            });
+            for h in r.history.iter().rev() {
+                entries.push(CliHistoryEntry {
+                    version: h.version,
+                    updated_at: ts(&h.updated_at),
+                    current: false,
+                });
+            }
+            if *json {
+                println!("{}", serde_json::to_string_pretty(&entries)?);
+            } else {
+                for e in &entries {
+                    if e.current {
+                        println!("version {} (current)  {}", e.version, e.updated_at);
+                    } else {
+                        println!("version {}            {}", e.version, e.updated_at);
+                    }
+                }
+            }
+        }
+        Cmd::Restore { item, version, vault } => {
+            let s = unlock(&cli, &root)?;
+            let (vid, iid) = resolve_item_across_vaults(&s, vault.as_deref(), item)?;
+            let new_v = s.restore_version(&vid, &iid, *version)?;
+            println!("restored {iid} to version {version} (now version {new_v})");
         }
         Cmd::Gen { len, words, pin, separator, capitalize, no_symbols, no_digits, copy, clear_secs } => {
             let args = gitpass_cli::gen::Args { len: *len, words: *words, pin: *pin, separator: *separator,
