@@ -341,7 +341,8 @@ gitpass list Personal --json | jq -r '.[] | select(.category == "login") | "\(.t
 ## Security audit (Watchtower)
 
 `gitpass audit [VAULT] [--max-age-days N] [--hibp]` checks live login items for weak, reused and old
-passwords, missing TOTP, and suggests TOTP/passkeys from a bundled offline site list. `--hibp` opts in
+passwords, missing TOTP, passwords containing the item's username or site name, and suggests TOTP/passkeys
+from a bundled offline site list. `--hibp` opts in
 to a k-anonymity breach check (only 5 hex characters of a SHA-1 leave the machine). The desktop app's
 Watchtower shows the same findings plus a 0–100 score.
 
