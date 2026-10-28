@@ -62,6 +62,29 @@ describe('detectImportFormat pure function', () => {
     expect(detectImportFormat('export.json', encrypted)).toBe('gitpass-json');
   });
 
+  it('detects Apple Passwords CSV from fixture header and distinguishes it from 1Password 8', () => {
+    const content = fs.readFileSync(path.join(FIXTURES_DIR, 'apple-passwords.csv'), 'utf8');
+    expect(detectImportFormat('export.csv', content)).toBe('apple-passwords-csv');
+    expect(detectImportFormat('export.csv', 'Title,URL,Username,Password,Notes,OTPAuth\n')).toBe('apple-passwords-csv');
+    expect(
+      detectImportFormat('export.csv', 'Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes\n')
+    ).toBe('1password-csv');
+    expect(detectImportFormat('export.csv', 'name,url,username,password,note\n')).toBe('chrome-csv');
+  });
+
+  it('falls back to Apple Passwords for Passwords.csv / Safari filenames', () => {
+    expect(detectImportFormat('/Users/demo/Downloads/Passwords.csv')).toBe('apple-passwords-csv');
+    expect(detectImportFormat('Safari Passwords.csv')).toBe('apple-passwords-csv');
+  });
+
+  it('ignores apple/safari in parent folders when guessing from the path', () => {
+    expect(
+      detectImportFormat('/Users/demo/Library/Mobile Documents/com~apple~CloudDocs/export.csv')
+    ).toBe('1password-csv');
+    expect(detectImportFormat('/Users/demo/Safari/export.csv')).toBe('1password-csv');
+    expect(detectImportFormat('/Users/demo/Safari/my-bitwarden.csv')).toBe('bitwarden-csv');
+  });
+
   it('falls back to filename cues when content is missing', () => {
     expect(detectImportFormat('my-bitwarden-export.csv')).toBe('bitwarden-csv');
     expect(detectImportFormat('keepass-passwords.csv')).toBe('keepass-csv');
@@ -101,8 +124,9 @@ describe('import wizard reducer', () => {
     expect(s.step).toBe('done');
   });
 
-  it('offers all required formats', () => {
+  it('offers all required formats including Apple Passwords / Safari', () => {
     expect(IMPORT_FORMATS.map((f) => f.id)).toEqual([
+      'apple-passwords-csv',
       'bitwarden-json',
       'bitwarden-csv',
       '1password-csv',
@@ -312,5 +336,35 @@ describe('ImportWizard component', () => {
       expect(iconEvt.defaultPrevented).toBe(false);
       expect(importSpy).not.toHaveBeenCalled();
     }
+  });
+
+  it('imports Apple Passwords / Safari with auto-detect and the macOS export hint', async () => {
+    const spy = vi.spyOn(api, 'importFile').mockImplementation(async (a: any) => ({
+      parsed: 4,
+      added: a.dryRun ? 0 : 3,
+      duplicates: 1,
+    }));
+    render(<ImportWizard onBack={() => {}} onDone={() => {}} />);
+    await waitFor(() => {
+      expect((screen.getByLabelText('Import into vault') as HTMLSelectElement).value).toBe('v_private');
+    });
+    expect(screen.getByRole('option', { name: 'Apple Passwords / Safari (.csv)' })).toBeTruthy();
+    expect(screen.queryByTestId('format-hint')).toBeNull();
+
+    const file = new File(['Title,URL,Username,Password,Notes,OTPAuth\nMail,https://a.example,u,p,,'], 'Passwords.csv', {
+      type: 'text/csv',
+    });
+    fireEvent.drop(screen.getByTestId('drop-zone'), { dataTransfer: { files: [file] } });
+    await waitFor(() => {
+      expect((screen.getByLabelText('Format') as HTMLSelectElement).value).toBe('apple-passwords-csv');
+    });
+    expect(screen.getByText('Auto-detected')).toBeTruthy();
+    expect(screen.getByTestId('format-hint').textContent).toMatch(
+      /Passwords app \(File → Export All Passwords…\) or Safari \(File → Export → Passwords…\)/
+    );
+
+    fireEvent.click(screen.getByText('Preview import'));
+    expect(await screen.findByTestId('preview-Parsed')).toHaveProperty('textContent', '4');
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ format: 'apple-passwords-csv', dryRun: true }));
   });
 });
