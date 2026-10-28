@@ -399,7 +399,9 @@ impl Agent {
             "generate" => {
                 let len = q.get("len").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
                 let b = |k: &str| q.get(k).and_then(|v| v.as_bool()).unwrap_or(true);
-                Ok(json!({"password": api::generate(len, b("symbols"), b("digits"), false)}))
+                let pin = q.get("pin").and_then(|v| v.as_bool()).unwrap_or(false);
+                let words = q.get("words").and_then(|v| v.as_bool()).unwrap_or(false);
+                Ok(json!({"password": api::generate(len, b("symbols"), b("digits"), words, pin)}))
             }
             "passkey_query" => {
                 self.app.state.with(|x| {

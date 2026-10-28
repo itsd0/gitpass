@@ -1,6 +1,6 @@
 import type * as React from "react";
 import { useState } from 'react';
-import { Archive, Check, ChevronDown, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
+import { Archive, Check, ChevronDown, KeyRound, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
 import { VaultIcon } from '../features/home/vaultIcons';
 import { DeleteVaultDialog, EditVaultDialog } from '../features/home/VaultDialogs';
 import type { VaultInfo } from '../api/types';
@@ -29,7 +29,7 @@ function SectionHeader({ label, action }: { label: string; action?: React.ReactN
 }
 
 export function Sidebar() {
-  const { route, setRoute, account, lock, theme, setTheme, toggleSidebar, refreshItems } = useApp();
+  const { route, setRoute, account, lock, theme, setTheme, toggleSidebar, refreshItems, openModal, modal } = useApp();
   const { vaults, tags } = useVaultsAndTags();
   const t = useT(); const L = (label: string) => t(label as Key); // feature sidebar labels are i18n keys
   const toggleTheme = () => { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); if (useSettings.getState().settings) void useSettings.getState().save({ theme: next }).catch(() => {}); };
@@ -72,6 +72,7 @@ export function Sidebar() {
         <NavItem active={same(route, { kind: 'all' })} icon={<LayoutGrid size={15} className="text-accent" />} label={t('nav.allItems')} onClick={() => go({ kind: 'all' })} />
         <NavItem active={same(route, { kind: 'favorites' })} icon={<Star size={15} className="fill-warn text-warn" />} label={t('nav.favorites')} onClick={() => go({ kind: 'favorites' })} />
         <NavItem active={route.name === 'watchtower'} icon={<ShieldCheck size={15} className="text-ok" />} label={t('nav.watchtower')} onClick={() => setRoute({ name: 'watchtower' })} />
+        <NavItem active={modal?.id === 'password-generator'} icon={<KeyRound size={15} className="text-muted" />} label={t('generator.title')} onClick={() => openModal('password-generator')} />
         {extraTop.filter((f) => !['home', 'watchtower'].includes(f.id)).map((f) => { const I = f.sidebar!.icon; return <NavItem key={f.id} active={route.name === f.route} icon={<I size={15} />} label={L(f.sidebar!.label)} onClick={() => setRoute({ name: f.route } as Route)} />; })}
 
         <SectionHeader label={t('nav.vaults').toUpperCase()} action={<Tooltip content="New vault"><button aria-label="New vault" className="rounded p-0.5 hover:bg-hover" onClick={() => setNewVault(true)}><Plus size={14} /></button></Tooltip>} />
