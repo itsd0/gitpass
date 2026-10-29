@@ -27,6 +27,8 @@
   .hd{display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--gp-border);font-size:11px;font-weight:600;letter-spacing:.5px;text-transform:uppercase;color:var(--gp-muted)}
   .hd img{width:16px;height:16px;border-radius:4px}
   .it{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;cursor:pointer;border:0;background:none;color:inherit;font:inherit;text-align:left}
+  .site-icon-img{width:20px;height:20px;border-radius:4px;object-fit:contain;display:block;flex-shrink:0}
+  .monogram{width:20px;height:20px;border-radius:50%;background:rgba(242,140,40,.16);border:1px solid rgba(242,140,40,.3);color:var(--gp-accent-text,#F28C28);font-weight:600;font-size:11px;line-height:1;display:inline-flex;align-items:center;justify-content:center;user-select:none;flex-shrink:0}
   .it:hover{background:var(--gp-hover)}
   .it.active,.it.active:hover{background:var(--gp-active);box-shadow:inset 3px 0 0 var(--gp-accent)}
   .it.primary .ti{color:var(--gp-accent-text)}
@@ -342,10 +344,82 @@
     else if (e.key === 'Escape') { e.preventDefault(); closeDropdown(); }
     else if (e.key === 'Tab') closeDropdown();
   }
+  const siteIconCache = new Map();
+  const siteIconPending = new Set();
+
+  function createMonogramEl(title) {
+    const span = el('span', 'monogram');
+    span.setAttribute('aria-hidden', 'true');
+    const mono = (typeof GitpassIcons !== 'undefined' && GitpassIcons.getMonogram)
+      ? GitpassIcons.getMonogram(title)
+      : (String(title || '').trim().charAt(0).toUpperCase() || '?');
+    span.textContent = mono;
+    return span;
+  }
+
+  function itemIcon(it) {
+    if (!it || (it.category && it.category !== 'login')) {
+      return catIcon(it && it.category);
+    }
+    const host = (it.favicon_host || (it.url && GitpassPolicy.originOf(it.url) && new URL(it.url).hostname) || '').toLowerCase();
+    const title = it.title || host || '';
+
+    if (host && siteIconCache.has(host)) {
+      const cached = siteIconCache.get(host);
+      if (cached) {
+        const img = el('img', 'site-icon-img');
+        img.src = cached;
+        img.alt = '';
+        img.setAttribute('aria-hidden', 'true');
+        img.width = 20;
+        img.height = 20;
+        img.onerror = () => {
+          siteIconCache.set(host, null);
+          img.replaceWith(createMonogramEl(title));
+        };
+        return { dom: img };
+      }
+    }
+
+    const span = createMonogramEl(title);
+    if (host && !siteIconCache.has(host) && !siteIconPending.has(host)) {
+      siteIconPending.add(host);
+      send('page:site_icon', { host })
+        .then((res) => {
+          siteIconPending.delete(host);
+          if (res && res.data_url) {
+            siteIconCache.set(host, res.data_url);
+            if (span.isConnected) {
+              const img = el('img', 'site-icon-img');
+              img.src = res.data_url;
+              img.alt = '';
+              img.setAttribute('aria-hidden', 'true');
+              img.width = 20;
+              img.height = 20;
+              img.onerror = () => {
+                siteIconCache.set(host, null);
+                img.replaceWith(createMonogramEl(title));
+              };
+              span.replaceWith(img);
+            }
+          } else {
+            siteIconCache.set(host, null);
+          }
+        })
+        .catch(() => {
+          siteIconPending.delete(host);
+          siteIconCache.set(host, null);
+        });
+    }
+    return { dom: span };
+  }
+
   function addRow(icon, title, sub, run, opts) {
     const b = el('button', 'it' + (opts && opts.primary ? ' primary' : '')); b.type = 'button'; b.tabIndex = -1;
     const ic = el('span', 'ic');
-    if (icon.svg) ic.innerHTML = icon.svg; else ic.textContent = icon.text; // static SVG only, never page data
+    if (icon && icon.dom) ic.appendChild(icon.dom);
+    else if (icon && icon.svg) ic.innerHTML = icon.svg;
+    else if (icon && icon.text) ic.textContent = icon.text;
     const m = el('span', 'm'); m.append(el('div', 'ti', title)); if (sub) m.append(el('div', 'u' + (opts && opts.mono ? ' mono' : ''), sub));
     b.append(ic, m);
     b.addEventListener('mousedown', (e) => e.preventDefault());
@@ -425,7 +499,7 @@
         }
       }
       if (role === 'totp') items = items.filter((i) => i.has_totp);
-      for (const it of items) addRow(catIcon(it.category), it.title || '(untitled)', it.subtitle || '', () => selectItem(ctx, it));
+      for (const it of items) addRow(itemIcon(it), it.title || '(untitled)', it.subtitle || '', () => selectItem(ctx, it));
       if (!items.length) {
         dd.box.append(el('div', 'msg', GitpassForms.CARD_ROLES.has(role) ? t('csNoCards', 'No cards in gitpass') : form.kind === 'identity' ? t('csNoIdentities', 'No identities in gitpass') : t('csNoLogins', 'No gitpass logins for this site')));
       }
@@ -558,7 +632,7 @@
     });
     list.sort((a, b) => (Number(b.favorite || 0) - Number(a.favorite || 0)) || String(a.title || '').localeCompare(String(b.title || '')));
     for (const it of list) {
-      addRow(catIcon(it.category), it.title || '(untitled)', it.subtitle || it.url || '', () => selectItem(ctx, it));
+      addRow(itemIcon(it), it.title || '(untitled)', it.subtitle || it.url || '', () => selectItem(ctx, it));
     }
     if (!list.length) {
       dd.box.append(el('div', 'msg', t('csNoMatchingLogins', 'No matching logins')));
@@ -1049,6 +1123,10 @@
       if (!pkPrompt || pkPrompt.reqId !== msg.reqId) { sendResponse({ action: 'close' }); return; }
       pkPrompt.showResult(msg, sendResponse);
       return true;
+    }
+    if (msg.event === 'lock') {
+      siteIconCache.clear();
+      siteIconPending.clear();
     }
     if (msg.origin !== location.origin) return; // page navigated meanwhile: drop
     if (msg.type === 'gitpass-can-fill-generated') { sendResponse({ canFill: !!focusedPasswordField() }); return; }

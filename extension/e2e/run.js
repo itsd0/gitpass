@@ -455,6 +455,20 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
           rec('popup watchtower findings e2e', false, e.message);
         }
 
+        // --- Website icons and monograms (#201): popup shows site icon or monogram on logins
+        try {
+          const iconStatus = await until(async () => {
+            return pop.eval(`(() => {
+              const rows = [...document.querySelectorAll('#listInner .row')];
+              const loginRow = rows.find((r) => /Localhost Test Login|GitHub/.test(r.innerText));
+              return Boolean(loginRow && (loginRow.querySelector('.site-icon-img') || loginRow.querySelector('.monogram')));
+            })()`);
+          }, T(4000));
+          rec('popup list shows site icon / monogram on logins and category glyph on non-logins', !!iconStatus);
+        } catch (e) {
+          rec('popup watchtower findings e2e', false, e.message);
+        }
+
         // --- New item (#41): the popup's New item form sends exactly one create_item per item, with the
         // desktop New Item template's category/section/field ids and kinds.
         const panel = () => pop.eval(`(() => {
@@ -685,10 +699,20 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       badgeInfo = `; badge found=${badge.length}`;
       if (badge.length) { await page.mouse.click(badge[0].x, badge[0].y); await sleep(800); badgeInfo += '; menu text=' + JSON.stringify((await findInShadow(page, /\S/)).map((h) => h.text).slice(0, 6)); hitsUsed = await until(async () => { const h = await findInShadow(page, /Localhost Test Login|alice@example\.com/); return h.length && h; }, T(4000)); }
     }
+    // In-page dropdown shows site icon or monogram on logins (#201)
+    const inpageIcon = await until(async () => {
+      const img = await shadowNode(page, '.site-icon-img');
+      const mono = await shadowNode(page, '.monogram');
+      return (img != null || mono != null);
+    }, T(3000));
+    rec('in-page dropdown shows site icon or monogram on login rows', !!inpageIcon);
+
     if (hitsUsed) await page.mouse.click(hitsUsed[0].x, hitsUsed[0].y);
     const hits2 = hitsUsed;
     const inpage = await until(isFilled, T(3000));
     rec('fill via in-page dropdown', !!inpage, (hits2 ? `clicked ${hits2[0].tag} "${hits2[0].text}"` : 'no dropdown entry found in shadow DOM') + badgeInfo + `; u=${JSON.stringify(await page.inputValue('#u'))}`);
+
+
     // Keyboard regression (#74): the theme work is CSS-only; the menu still opens with Alt+ArrowDown
     // and closes with Escape, leaving the field value untouched.
     await page.focus('#u');
