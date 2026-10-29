@@ -95,6 +95,18 @@
   "copyPassword": {
     "message": "စကားဝှက် ကူးယူရန်"
   },
+  "copyUsername": {
+    "message": "အသုံးပြုသူအမည် ကူးယူရန်"
+  },
+  "copyNumber": {
+    "message": "ကတ်နံပါတ် ကူးယူရန်"
+  },
+  "copyCredential": {
+    "message": "အထောက်အထား ကူးယူရန်"
+  },
+  "openWebsite": {
+    "message": "ဝဘ်ဆိုဒ်ကို ဖွင့်ရန်"
+  },
   "passwordCopied": {
     "message": "စကားဝှက် ကူးယူပြီးပါပြီ"
   },
