@@ -91,6 +91,18 @@
       </div>
       <div class="setting-row">
         <div class="setting-meta">
+          <label for="autoSubmitAfterFill" class="setting-label" data-i18n="optAutoSubmit">Submit the form after filling a login</label>
+          <span class="setting-desc" data-i18n="optAutoSubmitBody">Only for logins you explicitly fill, and only when the form has exactly one submit button. Off unless you turn it on.</span>
+        </div>
+        <div class="setting-control">
+          <label class="switch">
+            <input type="checkbox" id="autoSubmitAfterFill">
+            <span class="slider" aria-hidden="true"></span>
+          </label>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-meta">
           <label for="showBadge" class="setting-label" data-i18n="optBadge">Show match count on the toolbar icon</label>
           <span class="setting-desc" data-i18n="optBadgeBody">Show how many logins match the current site. Only the number is shown.</span>
         </div>
@@ -116,6 +128,25 @@
       <div id="never-save-list" class="never-save-list"></div>
       <div id="never-save-empty" class="empty-state" data-i18n="optNeverSaveEmpty" style="display:none">No sites excluded</div>
       <p id="never-save-empty-desc" class="empty-desc hidden" data-i18n="optNeverSaveEmptyBody">Sites where you choose 'Never save' will appear here.</p>
+    </section>
+
+    <!-- Section: Never auto-submit sites -->
+    <section class="card section-card" id="never-auto-submit-section" aria-labelledby="sec-never-auto-submit-title">
+      <h2 id="sec-never-auto-submit-title" class="section-title" data-i18n="optNeverAutoSubmit">Never auto-submit on these sites</h2>
+      <p class="section-desc" data-i18n="optNeverAutoSubmitBody">gitpass will fill logins on these sites but will never submit the form for you.</p>
+
+      <div id="never-auto-submit-list" class="never-save-list"></div>
+      <div id="never-auto-submit-empty" class="empty-state" data-i18n="optNeverAutoSubmitEmpty" style="display:none">No sites excluded from auto-submit</div>
+      <p id="never-auto-submit-empty-desc" class="empty-desc hidden" data-i18n="optNeverAutoSubmitEmptyBody">Sites you add here will appear in this list.</p>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <label for="never-auto-submit-add" class="setting-label" data-i18n="optNeverAutoSubmitAdd">Add a site</label>
+        </div>
+        <div class="setting-control">
+          <input id="never-auto-submit-add" class="text-input" type="text" placeholder="example.com" autocomplete="off" spellcheck="false">
+          <button id="never-auto-submit-add-btn" class="btn btn-sec" type="button" data-i18n="optNeverAutoSubmitAdd">Add a site</button>
+        </div>
+      </div>
     </section>
 
     <!-- Section: Keyboard shortcut -->

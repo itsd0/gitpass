@@ -117,11 +117,31 @@
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
   // ---------- user settings (options page: chrome.storage.local.settings) ----------
-  const SETTINGS = { autofill: true, savePrompts: true, autolockFollowsApp: true, autoFillTotp: false };
+  const SETTINGS = { autofill: true, savePrompts: true, autolockFollowsApp: true, autoFillTotp: false, autoSubmitAfterFill: false };
+  let neverAutoSubmit = [];
+  const isNeverAutoSubmit = () => neverAutoSubmit.includes(location.hostname.replace(/^www\./, '').toLowerCase());
   try {
     chrome.storage.local.get('settings', (r) => { Object.assign(SETTINGS, (r && r.settings) || {}); rescan(); });
-    chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.settings) { Object.assign(SETTINGS, ch.settings.newValue || {}); if (!SETTINGS.savePrompts) closeBanner(); rescan(); } });
+    chrome.storage.local.get('neverAutoSubmit', (r) => { neverAutoSubmit = Array.isArray(r && r.neverAutoSubmit) ? r.neverAutoSubmit : []; });
+    chrome.storage.onChanged.addListener((ch, area) => {
+      if (area === 'local' && ch.settings) { Object.assign(SETTINGS, ch.settings.newValue || {}); if (!SETTINGS.savePrompts) closeBanner(); rescan(); }
+      if (area === 'local' && ch.neverAutoSubmit) neverAutoSubmit = Array.isArray(ch.neverAutoSubmit.newValue) ? ch.neverAutoSubmit.newValue : [];
+    });
   } catch (_) { /* storage unavailable: keep defaults */ }
+
+  // Opt-in "submit after fill" (#231). Called only from an explicit login fill, after that
+  // fill's origin check already passed. Uses form.requestSubmit() so page validation runs;
+  // never synthesizes keystrokes, never submits cards/identities/TOTP/passkeys (those
+  // branches never call this), and never submits on page load. Returns whether it submitted.
+  function maybeAutoSubmit(form, fillOrigin) {
+    if (!SETTINGS.autoSubmitAfterFill || isNeverAutoSubmit()) return false;
+    const F = form.fields || {};
+    const pwEl = F.password || F.current;
+    const filled = { username: !!(F.username && F.username.value), password: !!(pwEl && pwEl.value) };
+    if (!GitpassForms.shouldAutoSubmit(form, filled, { pageOrigin: location.origin, fillOrigin })) return false;
+    if (typeof form.scope.requestSubmit !== 'function') return false;
+    try { form.scope.requestSubmit(); return true; } catch (_) { return false; }
+  }
 
   // ---------- detection state ----------
   let forms = [];
@@ -609,7 +629,7 @@
       if (originOk(r)) {
         const f = freshForm(form);
         if (f.kind === 'change_password' && !f.fields.password) GitpassForms.fillLogin({ fields: { ...f.fields, password: f.fields.current, totp: null } }, { username: r.username, password: r.password });
-        else GitpassForms.fillLogin(f, r);
+        else { GitpassForms.fillLogin(f, r); maybeAutoSubmit(f, r.origin); }
       }
       r = null; // drop secrets
     }
@@ -1068,7 +1088,7 @@
     const list = GitpassForms.detectForms(document);
     if (msg.type === 'gitpass-fill') {
       const f = list.find((x) => ['login', 'login_username', 'change_password'].includes(x.kind));
-      if (f) GitpassForms.fillLogin(f, msg);
+      if (f) { GitpassForms.fillLogin(f, msg); if (f.kind !== 'change_password') maybeAutoSubmit(f, msg.origin); }
       else if (msg.via === 'command') showNotice('no_form');
     } else if (msg.type === 'gitpass-fill-fields' && (msg.kind === 'card' || msg.kind === 'identity')) {
       // fields = host fill_card/fill_identity map (gitpass-core field id -> value); lib/forms.js maps ids to form roles.
