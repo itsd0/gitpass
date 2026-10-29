@@ -742,5 +742,17 @@
   },
   "updatePassword": {
     "message": "Update password"
+    },
+  "sortBy": {
+    "message": "Sort by"
+  },
+  "sortUpdated": {
+    "message": "Last edited"
+  },
+  "sortCreated": {
+    "message": "Date created"
+  },
+  "sortTitle": {
+    "message": "Title"
   }
 }

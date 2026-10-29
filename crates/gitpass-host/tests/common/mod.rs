@@ -12,8 +12,8 @@ pub const PW: &str = "correct horse battery";
 
 pub struct V5 { pub dir: tempfile::TempDir, pub host: Host, pub vid: String, pub vid2: String, pub login: String, pub card: String, pub ident: String, pub note: String }
 
-fn f(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), label: id.into(), kind, value: Some(v.into()), removed: false } }
-fn rec(cat: Category, title: &str, fields: Vec<Field>) -> ItemRecord {
+pub fn f(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), label: id.into(), kind, value: Some(v.into()), removed: false } }
+pub fn rec(cat: Category, title: &str, fields: Vec<Field>) -> ItemRecord {
     let mut it = Item::default(); it.title = title.into();
     let mut r = ItemRecord::new(it);
     r.category = cat;
@@ -22,7 +22,10 @@ fn rec(cat: Category, title: &str, fields: Vec<Field>) -> ItemRecord {
 }
 
 /// Temp v5 vault (FAKE data) with a login, a card, an identity and a secure note.
-pub fn v5_vault() -> V5 {
+pub fn v5_vault() -> V5 { v5_vault_with(|_, _| {}) }
+
+/// Like `v5_vault`, then lets `extra(session, personal_vault_id)` add more FAKE records before the host starts.
+pub fn v5_vault_with(extra: impl FnOnce(&Session, &str)) -> V5 {
     let d = tempfile::tempdir().unwrap();
     let root = d.path().join("vault");
     std::fs::create_dir_all(&root).unwrap();
@@ -41,6 +44,7 @@ pub fn v5_vault() -> V5 {
     let ident = format!("{vid}:{}", s.add_record(&vid, rec(Category::Identity, "Me", vec![
         f("name", FieldKind::Text, "Test Person"), f("email", FieldKind::Email, "t@example.invalid"), f("phone", FieldKind::Phone, "+1 555 0100")])).unwrap());
     let note = format!("{vid}:{}", s.add_record(&vid, rec(Category::SecureNote, "Wifi notes", vec![f("body", FieldKind::Multiline, "hello")])).unwrap());
+    extra(&s, &vid);
     drop(s);
     let host = Host::new(HostConfig { vault_path: root, secret_key_path: skf, idle_timeout: Duration::from_secs(300), target_kdf: fast() });
     V5 { dir: d, host, vid, vid2, login, card, ident, note }

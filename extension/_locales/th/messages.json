@@ -815,5 +815,17 @@
   },
   "updatePassword": {
     "message": "อัปเดตรหัสผ่าน"
+    },
+  "sortBy": {
+    "message": "เรียงตาม"
+  },
+  "sortUpdated": {
+    "message": "แก้ไขล่าสุด"
+  },
+  "sortCreated": {
+    "message": "วันที่สร้าง"
+  },
+  "sortTitle": {
+    "message": "ชื่อ"
   }
 }

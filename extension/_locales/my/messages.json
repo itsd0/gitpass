@@ -815,5 +815,17 @@
   },
   "updatePassword": {
     "message": "စကားဝှက် အသစ်ပြင်ဆင်ရန်"
+    },
+  "sortBy": {
+    "message": "စီရန်"
+  },
+  "sortUpdated": {
+    "message": "နောက်ဆုံးပြင်ဆင်သည့်အချိန်"
+  },
+  "sortCreated": {
+    "message": "ဖန်တီးသည့်ရက်စွဲ"
+  },
+  "sortTitle": {
+    "message": "ခေါင်းစဉ်"
   }
 }
