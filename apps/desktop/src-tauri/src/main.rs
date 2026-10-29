@@ -4,6 +4,7 @@ mod biometric;
 mod commands;
 mod hotkey;
 mod system_events;
+mod tray;
 #[cfg(test)]
 mod updater_tests;
 use commands as c;
@@ -39,6 +40,21 @@ fn main() {
                 })
                 .build(),
         )
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    let handle = window.app_handle();
+                    let show_tray = handle
+                        .try_state::<Arc<gitpass_gui_core::api::App>>()
+                        .map(|s| s.get_settings().show_menu_bar_icon)
+                        .unwrap_or(true);
+                    if show_tray {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                }
+            }
+        })
         .manage(app)
         .setup(|h| {
             c::spawn_idle_watcher(h.handle().clone());
@@ -46,6 +62,7 @@ fn main() {
             agent_ui::start(h.handle());
             hotkey::register_startup_hotkey(h.handle());
             c::setup_menu(h)?;
+            tray::setup(h.handle())?;
             // Windows are created content-protected by tauri.conf.json; re-apply the saved
             // setting at startup so a user who turned it off is not protected by default.
             {
