@@ -95,6 +95,18 @@
   "copyPassword": {
     "message": "Copy password"
   },
+  "copyUsername": {
+    "message": "Copy username"
+  },
+  "copyNumber": {
+    "message": "Copy number"
+  },
+  "copyCredential": {
+    "message": "Copy credential"
+  },
+  "openWebsite": {
+    "message": "Open website"
+  },
   "passwordCopied": {
     "message": "Password copied"
   },

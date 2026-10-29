@@ -258,6 +258,26 @@
     return fs.find((f) => f.kind === 'password') || fs.find((f) => f.kind === 'card_number') || fs.find((f) => f.concealed) || null;
   }
 
+  /**
+   * Quick actions for a list row (issue #255), by category. The popup renders
+   * these as icon buttons; copy actions reuse the existing copy paths, so no
+   * secret is ever preloaded into the list — the value is fetched on click.
+   * Login rows get Copy username, Copy password and (only with an http(s) URL)
+   * Open website; card rows get Copy number; API credential rows get Copy
+   * credential; every other category gets none.
+   */
+  function quickActions(item) {
+    if (!item) return [];
+    if (item.category === 'login') {
+      const acts = ['copyUsername', 'copyPassword'];
+      if (isAllowedUrl(item.url)) acts.push('openWebsite');
+      return acts;
+    }
+    if (item.category === 'credit_card') return ['copyNumber'];
+    if (item.category === 'api_credential') return ['copyCredential'];
+    return [];
+  }
+
   /** Decide the top-level view from a status result or error. */
   function viewFor(status, err) {
     if (err) {
@@ -442,7 +462,7 @@
     return Boolean(res && Array.isArray(res.kinds));
   }
 
-  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache };
+  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, quickActions, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
