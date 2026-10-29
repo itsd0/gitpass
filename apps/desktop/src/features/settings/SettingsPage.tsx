@@ -24,6 +24,7 @@ import { Badge, Button, Modal, Input, Skeleton, toast } from '../../ui';
 import { languages, useT, type Lang } from '../../i18n';
 import { useApp } from '../../lib/store';
 import { useSettings } from './useSettings';
+import { useOnboarding } from '../onboarding/useOnboarding';
 import { SyncPanel } from './SyncPanel';
 import { UpdateRow } from './UpdateRow';
 import { getAppVersion } from '../../lib/updater';
@@ -83,6 +84,7 @@ const Seg = <V extends string>({
 function General({ highlightedId }: { highlightedId?: string | null }) {
   const t = useT();
   const { settings, save } = useSettings();
+  const { onboarding, patch } = useOnboarding();
   if (!settings) return <Skeleton className="h-24" />;
   const s = (p: Parameters<typeof save>[0]) =>
     save(p)
@@ -118,6 +120,40 @@ function General({ highlightedId }: { highlightedId?: string | null }) {
           onChange={(language) => s({ language })}
           options={languages.map((l) => ({ v: l.id, l: l.native }))}
         />
+      </SettingsRow>
+      <SettingsRow
+        id="setting-setup-guide"
+        highlighted={highlightedId === 'setting-setup-guide'}
+        label={t('settings.showSetupGuide')}
+        description={t('settings.showSetupGuideHelp')}
+      >
+        <button
+          type="button"
+          role="switch"
+          aria-checked={!onboarding?.dismissed}
+          aria-label={t('settings.showSetupGuide')}
+          data-testid="setup-guide-switch"
+          onClick={async () => {
+            const nextDismissed = !onboarding?.dismissed;
+            try {
+              await patch({ dismissed: nextDismissed });
+              toast(t(nextDismissed ? 'onboarding.dismissedToast' : 'onboarding.restoredToast'));
+            } catch (e) {
+              toast(String((e as Error)?.message ?? e), 'danger');
+            }
+          }}
+          className={cn(
+            'relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            !onboarding?.dismissed ? 'bg-accent' : 'bg-border'
+          )}
+        >
+          <span
+            className={cn(
+              'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+              !onboarding?.dismissed ? 'translate-x-5' : 'translate-x-0.5'
+            )}
+          />
+        </button>
       </SettingsRow>
     </SettingsSection>
   );

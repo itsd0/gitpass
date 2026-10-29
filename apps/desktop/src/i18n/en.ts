@@ -536,5 +536,16 @@ export const en = {
   "import.doneSummary": "Imported {added} of {parsed} items ({duplicates} duplicates skipped).",
   "import.doneTip": "Delete the unencrypted export file from your disk.",
   "import.viewItems": "View imported items",
+  "onboarding.title": "Let’s get started",
+  "onboarding.subtitle": "We’ll walk you through the most important steps to set up gitpass and keep your vault safe and synced.",
+  "onboarding.dismiss": "Dismiss",
+  "onboarding.dismissedToast": "Setup guide hidden",
+  "onboarding.restoredToast": "Setup guide restored",
+  "onboarding.extTitle": "Get the gitpass browser extension",
+  "onboarding.extDesc": "You’ll need it to fill, save and update passwords as you browse.",
+  "onboarding.extInstalled": "Installed",
+  "onboarding.extGet": "Get it now",
+  "settings.showSetupGuide": "Show setup guide",
+  "settings.showSetupGuideHelp": "Display the setup checklist on the Home page",
 } as const;
 export type Key = keyof typeof en;
