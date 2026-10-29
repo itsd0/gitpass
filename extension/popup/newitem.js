@@ -25,6 +25,20 @@
       f('ssid', 'network name', 'text', 'text', { required: true }), f('password', 'wireless password', 'concealed', 'password'), f('security', 'security', 'text')] },
     { id: 'ssh_key', label: 'SSH Key', titleLabel: 'Title', section: 'main', fields: [
       f('private_key', 'private key', 'concealed', 'multiline', { required: true, secret: true }), f('public_key', 'public key', 'multiline', 'multiline'), f('fingerprint', 'fingerprint', 'text')] },
+    { id: 'bank_account', label: 'Bank Account', titleLabel: 'Title', section: 'main', fields: [
+      f('bank_name', 'bank name', 'text'),
+      f('account_holder', 'account holder', 'text'),
+      f('account_type', 'account type', 'text'),
+      f('account_number', 'account number', 'concealed', 'secret'),
+      f('routing_number', 'routing / SWIFT / IBAN', 'text'),
+      f('pin', 'PIN', 'concealed', 'secret', { inputmode: 'numeric' }),
+      f('branch_phone', 'branch phone', 'phone', 'phone'),
+      f('branch_address', 'branch address', 'multiline', 'multiline')] },
+    { id: 'server', label: 'Server', titleLabel: 'Title', section: 'main', url: true, fields: [
+      f('username', 'username', 'text'),
+      f('password', 'password', 'concealed', 'password'),
+      f('admin_console_url', 'admin console URL', 'url', 'url'),
+      f('hosting_provider', 'hosting provider', 'text')] },
   ];
   function sectionsOf(type) { return type.sections || [{ id: type.section, title: null, fields: type.fields }]; }
   function typeById(id) { return TYPES.find((x) => x.id === id) || TYPES[0]; }

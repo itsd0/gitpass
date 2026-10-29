@@ -99,7 +99,10 @@
     throw new DOMException(res.error || 'The operation either timed out or was not allowed.', name);
   }
 
-  function def(o, props) { for (const [k, v] of Object.entries(props)) Object.defineProperty(o, k, { value: v, enumerable: true }); }
+  // Writable + configurable like a real credential's members: relying-party libraries assign onto the
+  // returned object (e.g. @github/webauthn-json's ponyfill does `credential.toJSON = ...`), and in strict
+  // mode a read-only own property makes that assignment throw, failing registration after the save.
+  function def(o, props) { for (const [k, v] of Object.entries(props)) Object.defineProperty(o, k, { value: v, enumerable: true, writable: true, configurable: true }); }
   const api = { b64u, unb64u, createArgs, getArgs, errorName, credential, run, promptNativeFallback, TAG };
   if (typeof module === 'object' && module.exports) { module.exports = api; return; }
   if (!root.navigator || !root.navigator.credentials || root[TAG]) return;

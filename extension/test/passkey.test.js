@@ -51,3 +51,23 @@ test('real ES256: create -> credential object -> get verifies with webcrypto, si
   assert.throws(() => authn.create(store, { origin, rp_id: 'example.com', challenge: ch, user_id: 'dXNlcg', exclude_credentials: [r.credential_id] }), (e) => e.code === 'exists');
   void enc;
 });
+test('create credential tolerates RP libraries assigning onto it (strict mode, e.g. webauthn-json toJSON)', () => {
+  'use strict';
+  const store = mem(); const ch = P.b64u(webcrypto.getRandomValues(new Uint8Array(32)));
+  const r = authn.create(store, { origin: 'https://github.com', rp_id: 'github.com', challenge: ch, user_id: 'dXNlcg', user_name: 'u', algorithms: [-7] });
+  const cred = P.credential('create', r);
+  // @github/webauthn-json browser-ponyfill: `credential.toJSON = () => createResponseToJSON(credential)`
+  assert.doesNotThrow(() => { cred.toJSON = () => ({ patched: true }); });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(cred)), { patched: true });
+  assert.doesNotThrow(() => { cred.response.getTransports = () => ['internal']; });
+  // ArrayBuffers, ids and attestation shape a relying party verifies
+  assert.ok(cred.rawId instanceof ArrayBuffer && cred.response.clientDataJSON instanceof ArrayBuffer && cred.response.attestationObject instanceof ArrayBuffer);
+  assert.strictEqual(P.b64u(cred.rawId), cred.id);
+  const att = new Uint8Array(cred.response.attestationObject);
+  assert.strictEqual(att[0], 0xa3); assert.ok(Buffer.from(att).includes(Buffer.from('none')));
+  const cd = JSON.parse(Buffer.from(cred.response.clientDataJSON).toString());
+  assert.deepStrictEqual(cd, { type: 'webauthn.create', challenge: ch, origin: 'https://github.com', crossOrigin: false });
+  const ad = new Uint8Array(cred.response.getAuthenticatorData());
+  assert.deepStrictEqual(Buffer.from(ad.slice(0, 32)), authn.sha256('github.com'));
+  assert.strictEqual(ad[32] & 0x45, 0x45);
+});
