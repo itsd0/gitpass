@@ -87,6 +87,14 @@ export const my: Partial<Record<Key, string>> = {
   'ssh.activityUnknownKey': 'မသိသော သော့', 'ssh.activityUnknownClient': 'မသိသော အက်ပ်',
   'ssh.timeNow': 'ယခုလေးတင်', 'ssh.timeMin': 'လွန်ခဲ့သော {n} မိနစ်', 'ssh.timeHour': 'လွန်ခဲ့သော {n} နာရီ', 'ssh.timeDay': 'လွန်ခဲ့သော {n} ရက်',
   'ssh.resultSigned': 'လက်မှတ်ထိုးပြီး', 'ssh.resultDenied': 'အသုံးပြုသူ ငြင်းပယ်သည်', 'ssh.resultRefused': 'ငြင်းပယ်ခဲ့သည်',
+  'passkey.detail.site': 'ဆိုက်', 'passkey.detail.account': 'အကောင့်', 'passkey.detail.created': 'ဖန်တီးခဲ့သည့်ရက်',
+  'passkey.detail.lastUsed': 'နောက်ဆုံးအသုံးပြုခဲ့ချိန်', 'passkey.detail.neverUsed': 'တစ်ခါမျှအသုံးမပြုရသေး',
+  'passkey.detail.credentialId': 'အထောက်အထားနံပါတ်', 'passkey.detail.signCount': 'လက်မှတ်ထိုးအရေအတွက်',
+  'passkey.detail.copyAccount': 'အကောင့်ကို ကူးယူရန်', 'passkey.detail.copyCredentialId': 'အထောက်အထားနံပါတ်ကို ကူးယူရန်',
+  'passkey.detail.openSite': 'ဆိုက်ကိုဖွင့်ရန်', 'passkey.detail.alsoSavedAsLogin': 'လော့ဂအင်အဖြစ်လည်းသိမ်းထားသည်:',
+  'passkey.detail.ageToday': 'ယနေ့', 'passkey.detail.ageDayOne': '၁ ရက်အလိုက', 'passkey.detail.ageDays': '{n} ရက်အလိုက',
+  'passkey.detail.ageMonthOne': '၁ လအလိုက', 'passkey.detail.ageMonths': '{n} လအလိုက',
+  'passkey.detail.ageYearOne': '၁ နှစ်အလိုက', 'passkey.detail.ageYears': '{n} နှစ်အလိုက',
   'share.title': '“{vault}” ကို မျှဝေရန်', 'share.desc': 'လက်ခံသူ၏ public key ကို ကူးထည့်ပါ။ ၎င်းတို့သည် ဤသော့ခတ်သေတ္တာရှိ အရာအားလုံးကို ဖတ်ပြီး ပြင်ဆင်နိုင်ပါမည်။',
   'share.key': 'လက်ခံသူ၏ public key', 'share.label': 'အမည်တံဆိပ် (မထည့်လည်းရ)',
   'share.verify': 'အခြားနည်းလမ်းဖြင့် အတည်ပြုပါ', 'share.verifyHelp': 'ဤကုဒ်ကို ဖုန်းဖြင့် သို့မဟုတ် လူချင်းတွေ့၍ လက်ခံသူအား ဖတ်ပြပါ။ ၎င်းတို့၏ gitpass တွင် ပြသော ကုဒ်နှင့် တူရမည်။',
@@ -131,6 +139,8 @@ export const my: Partial<Record<Key, string>> = {
   'qa.usernameCopied': 'အသုံးပြုသူအမည် ကူးယူပြီး', 'qa.noResults': 'ကိုက်ညီသော အရာ မရှိပါ', 'qa.totp': 'တစ်ကြိမ်သုံး စကားဝှက်',
   'share.labelPlaceholder': 'ဥပမာ- Alex ၏ laptop', 'sync.ahead': '{n} ခု ရှေ့ရောက်နေသည်', 'sync.behind': '{n} ခု နောက်ကျနေသည်', 'sync.dirty': 'commit မလုပ်ရသေးသော ပြောင်းလဲမှုများ',
   'palette.label': 'Command palette', 'cmd.watchtower': 'Watchtower သို့', 'shortcuts.palette': 'Command palette ဖွင့်ရန်', 'shortcuts.help': 'ဤအကူအညီကို ပြရန်',
+  // TODO(i18n-review): native Burmese review of the palette actions wording
+  'palette.actions': 'လုပ်ဆောင်ချက်များ', 'palette.actionsFor': '{title} အတွက် လုပ်ဆောင်ချက်များ', 'palette.openItem': 'အရာကို ဖွင့်ရန်', 'palette.run': 'လုပ်ဆောင်ရန်', 'palette.back': 'နောက်သို့',
   'shortcuts.newItem': 'အရာအသစ်', 'shortcuts.lock': 'သော့ခတ်ရန်', 'qa.label': 'အမြန်ဝင်ရောက်ရန်', 'qa.hint': 'သော့ခတ်သေတ္တာများတွင် ရှာရန် စာရိုက်ပါ',
   // TODO(i18n-review): drafted by agy; needs native Burmese speaker sign-off:
   'settings.rotateKeyHelp': 'Secret Key အသစ်တစ်ခု ထုတ်ပေးမည်။ အခြားစက်များ ဝင်ရောက်ရန် Emergency Kit အသစ် လိုအပ်ပါမည်။',

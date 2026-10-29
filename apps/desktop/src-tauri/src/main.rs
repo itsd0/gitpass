@@ -79,7 +79,7 @@ fn main() {
             c::save_attachment, c::remove_attachment, c::list_tags, c::rename_tag, c::delete_tag, c::generate_password, c::get_generator_history, c::delete_generator_history_entry, c::clear_generator_history, c::record_generated_password, c::copy_password, c::password_strength, c::watchtower, c::import_file, c::export_items,
             c::identity, c::fingerprint_of, c::list_members, c::share_vault, c::unshare_vault, c::accept_share, c::list_devices,
             c::revoke_device, c::get_settings, c::set_settings, c::change_password, c::rotate_secret_key, c::sync_status,
-            c::sync, c::remote_connect, c::remote_disconnect, c::open_new_repo_page, c::open_change_password, c::onboarding, c::set_onboarding, c::emergency_kit, c::emergency_kit_data, c::favicon_url, c::touch, c::create_account, c::unlock_biometric, c::ssh_generate, c::ssh_import, c::ssh_agent_info, c::ssh_agent_activity, c::clear_ssh_agent_activity,
+            c::sync, c::remote_connect, c::remote_disconnect, c::open_new_repo_page, c::open_change_password, c::open_passkey_site, c::onboarding, c::set_onboarding, c::emergency_kit, c::emergency_kit_data, c::favicon_url, c::touch, c::create_account, c::unlock_biometric, c::ssh_generate, c::ssh_import, c::ssh_agent_info, c::ssh_agent_activity, c::clear_ssh_agent_activity,
         ])
         .run(tauri::generate_context!())
         .expect("error while running gitpass desktop");
