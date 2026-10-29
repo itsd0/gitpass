@@ -1903,3 +1903,61 @@ fn bank_account_and_server_crud_masking_and_subtitles() {
     let srv_detail = e.app.get_item(&e.vault, &srv_item.id).unwrap();
     assert!(srv_detail.password_strength.is_some());
 }
+
+#[test]
+fn test_list_items_with_search_query_operators() {
+    let e = env();
+    e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "Work GitHub".into(),
+        url: Some("https://github.com/myorg".into()),
+        sections: vec![],
+        notes: None,
+        tags: Some(vec!["work".into(), "code".into()]),
+        favorite: Some(true),
+    }).unwrap();
+
+    e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::CreditCard,
+        title: "Personal Visa".into(),
+        url: None,
+        sections: vec![],
+        notes: None,
+        tags: Some(vec!["finance".into()]),
+        favorite: Some(false),
+    }).unwrap();
+
+    let f = |q: &str| Filter {
+        kind: FilterKind::All,
+        vault_id: None,
+        tag: None,
+        category: None,
+        query: Some(q.into()),
+        sort: None,
+    };
+
+    let all = e.app.list_items(&f("")).unwrap();
+    assert_eq!(all.len(), 2);
+
+    let tag_work = e.app.list_items(&f("tag:work")).unwrap();
+    assert_eq!(tag_work.len(), 1);
+    assert_eq!(tag_work[0].title, "Work GitHub");
+
+    let type_card = e.app.list_items(&f("type:card")).unwrap();
+    assert_eq!(type_card.len(), 1);
+    assert_eq!(type_card[0].title, "Personal Visa");
+
+    let is_fav = e.app.list_items(&f("is:favorite")).unwrap();
+    assert_eq!(is_fav.len(), 1);
+    assert_eq!(is_fav[0].title, "Work GitHub");
+
+    let neg_tag = e.app.list_items(&f("-tag:work")).unwrap();
+    assert_eq!(neg_tag.len(), 1);
+    assert_eq!(neg_tag[0].title, "Personal Visa");
+
+    let url_host = e.app.list_items(&f("url:github.com")).unwrap();
+    assert_eq!(url_host.len(), 1);
+    assert_eq!(url_host[0].title, "Work GitHub");
+}

@@ -803,7 +803,9 @@ impl App {
     pub fn list_items(&self, filter: &Filter) -> Result<Vec<ItemSummary>> {
         self.with(|u| {
             let all = Self::all_records(&u.session)?;
-            let q = filter.query.as_deref().unwrap_or("").trim().to_lowercase();
+            let q_str = filter.query.as_deref().unwrap_or("").trim();
+            let parsed_q = (!q_str.is_empty()).then(|| gitpass_core::search::parse_query(q_str));
+            let vnames: BTreeMap<String, String> = u.session.list_vaults()?.into_iter().map(|(id, m)| (id, m.name.clone())).collect();
             let usage = u.session.all_last_used();
             let mut v: Vec<(ItemSummary, u64)> = all.iter().filter(|(vid, _, r)| {
                 let live = r.deleted_at.is_none();
@@ -816,10 +818,24 @@ impl App {
                     FilterKind::Tag => live && !r.archived && filter.tag.as_ref().is_some_and(|t| r.tags.contains(t)),
                     FilterKind::Category => live && !r.archived && Some(r.category) == filter.category,
                 };
-                keep
+                if !keep { return false; }
+                if let Some(pq) = &parsed_q {
+                    let vn = vnames.get(vid.as_str()).map(|s| s.as_str());
+                    let cand = gitpass_core::search::CandidateInfo::from_record(r, vn);
+                    if !pq.matches(&cand) { return false; }
+                }
+                true
             }).map(|(vid, iid, r)| (summary(vid, iid, r, usage.get(iid).copied()), r.created_at.unwrap_or(0)))
-              .filter(|(s, _)| q.is_empty() || [s.title.as_str(), s.subtitle.as_str(), s.url.as_deref().unwrap_or("")].iter().any(|x| x.to_lowercase().contains(&q))
-                    || s.tags.iter().any(|t| t.to_lowercase().contains(&q)))
+              .filter(|(s, _)| {
+                  if let Some(pq) = &parsed_q {
+                      if pq.terms.is_empty() { return true; }
+                      let q = pq.terms.to_lowercase();
+                      [s.title.as_str(), s.subtitle.as_str(), s.url.as_deref().unwrap_or("")].iter().any(|x| x.to_lowercase().contains(&q))
+                          || s.tags.iter().any(|t| t.to_lowercase().contains(&q))
+                  } else {
+                      true
+                  }
+              })
               .collect();
             match filter.sort.unwrap_or(Sort::Updated) {
                 Sort::Title => v.sort_by(|a, b| a.0.title.to_lowercase().cmp(&b.0.title.to_lowercase())),

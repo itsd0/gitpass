@@ -633,6 +633,17 @@ export const th: Partial<Record<Key, string>> = {
   "toolbar.search": "ค้นหา",
   "toolbar.searchPlaceholder": "ค้นหาใน gitpass",
   "toolbar.help": "ความช่วยเหลือ",
+  "search.hint.tag": "กรองตามแท็ก",
+  "search.hint.type": "กรองตามประเภทรายการ",
+  "search.hint.is": "กรองตามสถานะ",
+  "search.hint.has": "กรองตามคุณสมบัติ",
+  "search.hint.vault": "กรองตามห้องนิรภัย",
+  "search.val.favorite": "รายการโปรด",
+  "search.val.archived": "รายการที่เก็บถาวร",
+  "search.val.otp": "รหัสผ่านแบบใช้ครั้งเดียว (TOTP)",
+  "search.val.passkey": "ข้อมูลประจำตัว Passkey",
+  "search.val.attachment": "ไฟล์และไฟล์แนบ",
+  "search.val.url": "URL เว็บไซต์",
 
   // import wizard
   "import.title": "นำเข้าข้อมูลไปยัง gitpass",

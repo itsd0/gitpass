@@ -630,6 +630,17 @@ export const en = {
   "toolbar.search": "Search",
   "toolbar.searchPlaceholder": "Search in gitpass",
   "toolbar.help": "Help",
+  "search.hint.tag": "Filter by tag",
+  "search.hint.type": "Filter by item type",
+  "search.hint.is": "Filter by state",
+  "search.hint.has": "Filter by feature",
+  "search.hint.vault": "Filter by vault",
+  "search.val.favorite": "Favorite items",
+  "search.val.archived": "Archived items",
+  "search.val.otp": "One-time password (TOTP)",
+  "search.val.passkey": "Passkey credentials",
+  "search.val.attachment": "Files and attachments",
+  "search.val.url": "Website URL",
 
   // import wizard
   "import.title": "Migrate data into gitpass",

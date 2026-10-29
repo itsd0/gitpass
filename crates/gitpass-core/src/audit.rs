@@ -129,7 +129,7 @@ pub fn parse_mfa_site_list(src: &str) -> Vec<(String, SiteSupport)> {
 
 /// Lowercased host of a URL (or bare host): scheme, userinfo, port, path and a leading `www.` are
 /// dropped. Returns `None` for empty input or IPv6 literals, which the list does not carry.
-fn host_of(input: &str) -> Option<String> {
+pub(crate) fn host_of(input: &str) -> Option<String> {
     let s = input.trim();
     if s.is_empty() { return None; }
     let rest = s.split_once("://").map_or(s, |(_, r)| r);
