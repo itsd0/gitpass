@@ -460,6 +460,38 @@
     return n;
   }
 
+  /** Luhn check on a digits-only card number (mirrors lib/banner.js cardLuhn). */
+  function luhnCard(n) {
+    if (!/^\d{12,19}$/.test(n || '')) return false;
+    let sum = 0, alt = false;
+    for (let i = n.length - 1; i >= 0; i--) { let d = n.charCodeAt(i) - 48; if (alt) { d *= 2; if (d > 9) d -= 9; } sum += d; alt = !alt; }
+    return sum % 10 === 0;
+  }
+
+  /** 'MM/YY', 'MM/YYYY', 'MMYY', 'MM-YY' -> 'MM/YY'; anything else -> ''. */
+  function normCardExpiry(v) {
+    const m = /^\s*(\d{1,2})\s*[/\-. ]?\s*(\d{2}|\d{4})\s*$/.exec(String(v == null ? '' : v));
+    if (!m) return '';
+    const mm = Number(m[1]);
+    if (mm < 1 || mm > 12) return '';
+    return String(mm).padStart(2, '0') + '/' + m[2].slice(-2);
+  }
+
+  /** Separate month/year fields -> 'MM/YY'; '' when unusable. Month names accepted. */
+  function normCardExpiryParts(month, year) {
+    const months = { jan: 1, january: 1, feb: 2, february: 2, mar: 3, march: 3, apr: 4, april: 4,
+      may: 5, jun: 6, june: 6, jul: 7, july: 7, aug: 8, august: 8, sep: 9, sept: 9, september: 9,
+      oct: 10, october: 10, nov: 11, november: 11, dec: 12, december: 12 };
+    const ms = String(month == null ? '' : month).trim().toLowerCase();
+    let mm = null;
+    if (/^\d{1,2}$/.test(ms)) { const n = Number(ms); if (n >= 1 && n <= 12) mm = n; }
+    else if (months[ms]) mm = months[ms];
+    if (mm == null) return '';
+    const ys = String(year == null ? '' : year).trim();
+    if (!/^\d{2}$/.test(ys) && !/^\d{4}$/.test(ys)) return '';
+    return String(mm).padStart(2, '0') + '/' + ys.slice(-2);
+  }
+
   /** Read what the user typed, for the save/update banner. Returns null if nothing worth saving. */
   function captureCredentials(form) {
     const F = form.fields;
@@ -475,10 +507,22 @@
     if (form.kind === 'signup') { const p = raw(F.newPassword); if (!p || (F.confirm && raw(F.confirm) !== p)) return null; return { kind: 'signup', username: u, password: p }; }
     if (form.kind === 'change_password') { const p = raw(F.newPassword); if (!p || (F.confirm && raw(F.confirm) !== p)) return null; return { kind: 'change_password', username: u, password: p }; }
     if (form.kind === 'login_username') { return u ? { kind: 'username', username: u } : null; }
+    if (form.kind === 'card') {
+      // Card capture (#196): number + name on card + expiry only. The CVV field
+      // (cc_csc) is never read, so it cannot leak into the capture message. The
+      // background re-validates (Luhn + sanitise) before anything is stored.
+      const C = F.card || {};
+      const num = val(C.cc_number).replace(/[\s-]/g, '');
+      if (!luhnCard(num)) return null;
+      let exp = '';
+      if (C.cc_exp) exp = normCardExpiry(val(C.cc_exp));
+      else if (C.cc_exp_month || C.cc_exp_year) exp = normCardExpiryParts(val(C.cc_exp_month), val(C.cc_exp_year));
+      return { kind: 'card', number: num, name: val(C.cc_name), expiry: exp };
+    }
     return null;
   }
 
-  const api = { RX, classifyField, detectForms, locate, anchorFields, isVisible, hints, setValue, fillLogin, fillNewPassword, fillTotp, fillCard, fillCardDocument, paymentFrames, fillIdentity, cardValues, identityValues, captureCredentials, findHiddenUsername, CARD_ROLES, ID_ROLES };
+  const api = { RX, classifyField, detectForms, locate, anchorFields, isVisible, hints, setValue, fillLogin, fillNewPassword, fillTotp, fillCard, fillCardDocument, paymentFrames, fillIdentity, cardValues, identityValues, captureCredentials, findHiddenUsername, CARD_ROLES, ID_ROLES, luhnCard, normCardExpiry, normCardExpiryParts };
   root.GitpassForms = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

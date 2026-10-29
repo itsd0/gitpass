@@ -348,6 +348,10 @@
     "message": "บันทึกข้อมูลเข้าสู่ระบบลงใน gitpass ไหม",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "csSaveCardQ": {
+    "message": "บันทึกบัตรลงใน gitpass ไหม",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
   "csNoUser": {
     "message": "(ไม่มีชื่อผู้ใช้)",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
@@ -374,6 +378,10 @@
   },
   "csSaved": {
     "message": "บันทึกลงใน gitpass แล้ว",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csSavedCard": {
+    "message": "บันทึกบัตรแล้ว",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csLockedShort": {
