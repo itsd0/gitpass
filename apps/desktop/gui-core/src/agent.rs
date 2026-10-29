@@ -704,6 +704,7 @@ fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
                 }
             }
         }
+        else if r.category == Category::ApiCredential { if let Some(val) = &f.value { x["masked"] = json!(gitpass_core::mask::secret_hint(val)); } }
         fields.push(x);
     }
     v["fields"] = json!(fields);

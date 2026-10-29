@@ -80,7 +80,7 @@ fn add_api_credential_hidden_prompt_and_secrecy() {
     let add_msg = String::from_utf8_lossy(&out_add.stdout);
     assert!(add_msg.contains("added "), "expected added message: {add_msg}");
 
-    // 2. gitpass list --json reports right category and username
+    // 2. gitpass list --json reports right category and username, plus hint/subtitle
     let out_list = gp(&v.root, &["list", "Personal", "--json"], None);
     assert!(out_list.status.success());
     let list_json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_list.stdout)).unwrap();
@@ -88,7 +88,16 @@ fn add_api_credential_hidden_prompt_and_secrecy() {
     assert_eq!(item["category"], "api_credential");
     assert_eq!(item["username"], "org-acme");
     assert_eq!(item["url"], "https://api.openai.com");
+    assert_eq!(item["hint"], "FAKE••••••••7654");
+    assert_eq!(item["subtitle"], "FAKE••••••••7654");
     assert!(!String::from_utf8_lossy(&out_list.stdout).contains(SECRET_KEY));
+
+    // 2b. gitpass list (text) shows the masked hint in column 3
+    let out_list_text = gp(&v.root, &["list", "Personal"], None);
+    assert!(out_list_text.status.success());
+    let list_text = String::from_utf8_lossy(&out_list_text.stdout);
+    assert!(list_text.contains("OpenAI API  FAKE••••••••7654"), "list text:\n{list_text}");
+    assert!(!list_text.contains(SECRET_KEY));
 
     // 3. gitpass get shows it with secret masked unless --reveal
     let out_get_masked = gp(&v.root, &["get", "Personal", "OpenAI API"], None);
@@ -116,6 +125,8 @@ fn add_api_credential_hidden_prompt_and_secrecy() {
     let cred_field = fields.iter().find(|f| f["label"] == "credential").expect("credential field");
     assert_eq!(cred_field["kind"], "concealed");
     assert_eq!(cred_field["value"], serde_json::Value::Null);
+    assert_eq!(cred_field["masked"], "FAKE••••••••7654");
+    assert!(!json_masked.to_string().contains("api-key-xyz"), "secret leaked in JSON: {json_masked}");
 
     let out_json_revealed = gp(&v.root, &["get", "Personal", "OpenAI API", "--json", "--reveal"], None);
     assert!(out_json_revealed.status.success());

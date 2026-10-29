@@ -9,6 +9,7 @@ import { cn, fmtBytes, fmtDateLong } from '../../lib/utils';
 import { Badge, Button, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, Skeleton, Tooltip, toast } from '../../ui';
 import { ItemIcon } from './categories';
 import { FieldRow } from './FieldView';
+import { groupCardNumber } from '../../lib/cardMask';
 import { PasskeyDetail, isPasskeyDetailField } from './PasskeyDetail';
 import { ItemEditor } from './ItemEditor';
 import { SafeMarkdown } from './SafeMarkdown';
@@ -708,8 +709,10 @@ function History({ detail }: { detail: Detail }) {
                 {view.sections.flatMap((s) => s.fields).map((f) => {
                   const isConcealed = f.kind === 'concealed' || f.kind === 'totp';
                   const isRevealed = revealed[f.id] !== undefined;
+                  const isApi = view.category === 'api_credential';
+                  const shouldGroup = !isApi && Boolean(f.masked);
                   const displayValue = isConcealed
-                    ? (isRevealed ? revealed[f.id] : (f.masked || '••••••••••'))
+                    ? (isRevealed ? (shouldGroup ? groupCardNumber(revealed[f.id]) : revealed[f.id]) : (f.masked || '••••••••••'))
                     : (f.value ?? '');
                   return (
                     <div key={f.id} className="flex items-center justify-between border-b border-border px-3 py-2 last:border-0">

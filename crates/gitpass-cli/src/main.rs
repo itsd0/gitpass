@@ -1120,6 +1120,10 @@ struct CliItemSummary {
     updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     last_used: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    subtitle: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -1127,6 +1131,8 @@ struct CliField {
     label: String,
     kind: FieldKind,
     value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    masked: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -1221,6 +1227,11 @@ fn resolve_item_across_vaults(s: &Session, vault: Option<&str>, item: &str) -> R
 }
 
 fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
+    let hint = if r.category == Category::ApiCredential {
+        gitpass_core::mask::api_credential_secret(r).map(gitpass_core::mask::secret_hint)
+    } else {
+        None
+    };
     CliItemSummary {
         id: id.to_string(),
         title: r.item.title.clone(),
@@ -1245,6 +1256,8 @@ fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
         favorite: r.favorite,
         updated_at: ts(&r.item.updated_at),
         last_used: None,
+        subtitle: hint.clone(),
+        hint,
     }
 }
 
@@ -1252,15 +1265,22 @@ fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<Stri
     let mut fields = Vec::new();
     for section in r.view_sections() {
         for f in section.fields {
-            let val = if f.kind.is_secret() {
-                if reveal { f.value } else { None }
+            let (val, masked) = if f.kind.is_secret() {
+                if reveal {
+                    (f.value, None)
+                } else if r.category == Category::ApiCredential {
+                    (None, f.value.as_deref().map(gitpass_core::mask::secret_hint))
+                } else {
+                    (None, None)
+                }
             } else {
-                f.value
+                (f.value, None)
             };
             fields.push(CliField {
                 label: f.label,
                 kind: f.kind,
                 value: val,
+                masked,
             });
         }
     }
@@ -2073,7 +2093,15 @@ fn run() -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
             } else {
                 for (sc, id, rec) in ranked {
-                    println!("{id}  {}  {}  {}  (score {sc})", rec.item.title, rec.item.username.clone().unwrap_or_default(), rec.item.url.clone().unwrap_or_default());
+                    let col = if rec.category == Category::ApiCredential {
+                        gitpass_core::mask::api_credential_secret(&rec)
+                            .map(gitpass_core::mask::secret_hint)
+                            .or_else(|| rec.item.username.clone())
+                            .unwrap_or_default()
+                    } else {
+                        rec.item.username.clone().unwrap_or_default()
+                    };
+                    println!("{id}  {}  {}  {}  (score {sc})", rec.item.title, col, rec.item.url.clone().unwrap_or_default());
                 }
             }
         }
@@ -2120,7 +2148,15 @@ fn run() -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
             } else {
                 for (id, rec) in items {
-                    println!("{id}  {}  {}", rec.item.title, rec.item.username.clone().unwrap_or_default());
+                    let col = if rec.category == Category::ApiCredential {
+                        gitpass_core::mask::api_credential_secret(&rec)
+                            .map(gitpass_core::mask::secret_hint)
+                            .or_else(|| rec.item.username.clone())
+                            .unwrap_or_default()
+                    } else {
+                        rec.item.username.clone().unwrap_or_default()
+                    };
+                    println!("{id}  {}  {col}", rec.item.title);
                 }
             }
         }
