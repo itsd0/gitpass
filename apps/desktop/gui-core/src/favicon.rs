@@ -7,6 +7,11 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub const MAX_FAVICON_SIZE: usize = 100 * 1024; // 100 KB
+/// The favicon cache directory and file format are shared with `crates/gitpass-host/src/handler.rs`:
+/// - Cache directory: `dirs::cache_dir()/gitpass/favicons` (or tempdir fallback).
+/// - Cache filename: `<hex sha256 of trimmed, lowercased host>.json`
+/// - Cache JSON structure: `{"ts": <unix seconds>, "data_url": <string or null>}`
+/// - TTL: 30 days (`30 * 24 * 60 * 60` seconds = 2,592,000 s).
 pub const FAVICON_TTL_SECS: u64 = 30 * 24 * 60 * 60; // 30 days
 
 #[derive(Serialize, Deserialize, Debug)]

@@ -252,9 +252,11 @@ fn site_icon_contract_and_security() {
     // 2. Refused when the setting is off (default)
     assert!(err(&mut f.host, json!({"cmd": "site_icon", "host": "github.com"})).contains("denied"));
 
-    // Enable setting via .gitpass-settings.json
+    // Enable setting via .gitpass-settings.json using the real desktop LocalFile structure
     let settings_path = f.host.cfg.vault_path.join(".gitpass-settings.json");
-    std::fs::write(&settings_path, serde_json::to_string(&json!({"show_website_icons": true})).unwrap()).unwrap();
+    std::fs::write(&settings_path, serde_json::to_string(&json!({
+        "settings": { "showWebsiteIcons": true }
+    })).unwrap()).unwrap();
 
     // 3. Refused for a host not in any item
     assert!(err(&mut f.host, json!({"cmd": "site_icon", "host": "evil.invalid"})).contains("denied"));
@@ -287,4 +289,12 @@ fn site_icon_contract_and_security() {
     // Case insensitive host check
     let res_caps = ok(&mut f.host, json!({"cmd": "site_icon", "host": "GitHub.com"}));
     assert_eq!(res_caps["data_url"], fake_data_url);
+
+    // Also allowed when allowFavicons is true even if showWebsiteIcons is false
+    std::fs::write(&settings_path, serde_json::to_string(&json!({
+        "settings": { "showWebsiteIcons": false },
+        "allowFavicons": true
+    })).unwrap()).unwrap();
+    let res_dev = ok(&mut f.host, json!({"cmd": "site_icon", "host": "github.com"}));
+    assert_eq!(res_dev["data_url"], fake_data_url);
 }

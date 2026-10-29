@@ -732,7 +732,23 @@ impl Host {
                 let show_icons = std::fs::read_to_string(&settings_path)
                     .ok()
                     .and_then(|str| serde_json::from_str::<serde_json::Value>(&str).ok())
-                    .and_then(|v| v.get("show_website_icons").and_then(serde_json::Value::as_bool))
+                    .map(|v| {
+                        // Desktop gui-core serializes LocalFile as camelCase:
+                        // `settings.showWebsiteIcons` (user setting) and top-level `allowFavicons` (dev flag).
+                        let nested = v.get("settings")
+                            .and_then(|s| s.get("showWebsiteIcons").or_else(|| s.get("show_website_icons")))
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false);
+                        let allow_favicons = v.get("allowFavicons")
+                            .or_else(|| v.get("allow_favicons"))
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false);
+                        let top_level = v.get("showWebsiteIcons")
+                            .or_else(|| v.get("show_website_icons"))
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false);
+                        nested || allow_favicons || top_level
+                    })
                     .unwrap_or(false);
                 if !show_icons {
                     return Err(coded(code::DENIED, "website icons are disabled"));
@@ -769,14 +785,17 @@ impl Host {
                         .join("gitpass")
                         .join("favicons")
                 });
+                // Cache file schema and 30-day TTL are shared with `apps/desktop/gui-core/src/favicon.rs`.
+                // Cache file name: <sha256(host)>.json; entry: {"ts": <unix_secs>, "data_url": <string or null>}.
+                const FAVICON_TTL_SECS: u64 = 30 * 24 * 60 * 60;
                 let host_hash = gitpass_core::store::hash_bytes(host_arg.as_bytes());
                 let p = cache_dir.join(format!("{host_hash}.json"));
                 if let Ok(bytes) = std::fs::read(&p) {
                     #[derive(serde::Deserialize)]
-                    struct Entry { ts: u64, data_url: Option<String> }
-                    if let Ok(entry) = serde_json::from_slice::<Entry>(&bytes) {
+                    struct CachedFaviconEntry { ts: u64, data_url: Option<String> }
+                    if let Ok(entry) = serde_json::from_slice::<CachedFaviconEntry>(&bytes) {
                         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
-                        if now.saturating_sub(entry.ts) <= 30 * 24 * 60 * 60 {
+                        if now.saturating_sub(entry.ts) <= FAVICON_TTL_SECS {
                             if let Some(data_url) = entry.data_url {
                                 return Ok(json!({ "data_url": data_url }));
                             }

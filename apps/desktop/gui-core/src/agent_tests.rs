@@ -479,7 +479,37 @@ fn site_icon_agent_contract_and_security() {
     let res_caps = c.ok("site_icon", json!({"host": "GitHub.com"}));
     assert_eq!(res_caps["data_url"], fake_data_url);
 
+    // Also allowed when allow_favicons is true even if show_website_icons is false
+    let mut s_off = e.app.get_settings();
+    s_off.show_website_icons = false;
+    e.app.set_settings(s_off).unwrap();
+    assert_eq!(c.err("site_icon", json!({"host": "github.com"})), "denied");
+    e.app.update_local(|l| l.allow_favicons = true).unwrap();
+    // Toggling show_website_icons off cleared cache; re-save cached icon
+    crate::favicon::save_cached(cache_dir.path(), "github.com", Some(fake_data_url.to_string())).unwrap();
+    let res_dev = c.ok("site_icon", json!({"host": "github.com"}));
+    assert_eq!(res_dev["data_url"], fake_data_url);
+
     // 5. Refused when locked
     e.app.lock();
     assert_eq!(c.err("site_icon", json!({"host": "github.com"})), "locked");
+}
+
+#[test]
+fn shared_favicon_cache_file_format_pinned_for_gitpass_host() {
+    let cache_dir = tempfile::tempdir().unwrap();
+    let host = "github.com";
+    let fake_data_url = "data:image/png;base64,PINNED_ICON";
+
+    // 1. Write via gui-core
+    crate::favicon::save_cached(cache_dir.path(), host, Some(fake_data_url.to_string())).unwrap();
+
+    // 2. Read raw JSON and verify schema pinned with crates/gitpass-host/src/handler.rs
+    let host_hash = gitpass_core::store::hash_bytes(host.as_bytes());
+    let file_path = cache_dir.path().join(format!("{host_hash}.json"));
+    let bytes = std::fs::read(&file_path).expect("cache file must exist with <sha256(host)>.json filename");
+    let json_val: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
+
+    assert!(json_val.get("ts").and_then(|v| v.as_u64()).is_some(), "must have numeric ts timestamp");
+    assert_eq!(json_val.get("data_url").and_then(|v| v.as_str()), Some(fake_data_url), "must have data_url string");
 }
