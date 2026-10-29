@@ -45,6 +45,16 @@ Open it from the toolbar icon, or with the keyboard command below.
   10 generated passwords (masked until you reveal one; copy, reveal, and
   fill when it was generated on the current site). It is hidden while locked
   and shows "Generator history is off" when the desktop setting is off.
+  Passwords generated in the extension
+  are saved to the vault's encrypted generator history (the same history
+  the desktop app and `gitpass gen history` show), so a password lost to
+  a form that swallowed it can be recovered from there instead of from
+  the extension. To stop recording, turn off desktop Settings
+  "Remember generated passwords" (on by default); to clear what is
+  already recorded, use `gitpass gen history clear` (or clear it from the
+  desktop app). `gitpass gen --no-history` skips recording for a single
+  CLI generation only. Note: when the desktop app is closed, the
+  standalone host currently ignores that setting — see issue #225.
 
 When the vault is locked, the popup shows the unlock screen instead of
 your items.
@@ -131,6 +141,9 @@ passes straight through to the browser's native flow.
 - Page data in page storage: the extension keeps its working state in
   its own memory, never in a page's `sessionStorage`/`localStorage`,
   which the page could read.
+- Generated-password history: the extension keeps no history of its own.
+  History lives in the vault's encrypted generator history (see
+  Generator above), not in extension storage.
 
 ## Source map (keep this table in sync with the code)
 
@@ -142,4 +155,5 @@ passes straight through to the browser's native flow.
 | Save / update banner, "Never for this site" | `extension/content.js` (save/update banner), `extension/options/options.html` |
 | Passkey prompt and native fallback | `extension/bg-passkey.js` |
 | Popup search, copy, TOTP, New item, generator | `extension/popup/popup.js`, `extension/popup/generator.js`, `extension/popup/newitem.js` |
+| Generator history recording | `extension/background.js`, `extension/bg-page.js` (`record_generated_password`), `crates/gitpass-host/src/handler.rs`, `apps/desktop/gui-core/src/api.rs` (`record_generated_password`, `rememberGeneratedPasswords`) |
 | Unlocking and Secret Key handling | README "Browser extension" section, `crates/gitpass-host/README.md` |
