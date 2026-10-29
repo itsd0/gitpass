@@ -13,6 +13,7 @@
 - Website icons for logins with a monogram fallback (#164).
 - Global hotkey registration and a settings recorder for Quick Access (#178).
 - Lock the vault on Mac sleep, screen lock and user switch (#156).
+- Encrypted password generator history (core, CLI, desktop, extension) (#198).
 - Large type view for passwords and concealed secrets (#69).
 - Restore a previous item version with a diff view (core, CLI, desktop) (#109).
 - Add and remove attachments on any item (core, CLI, desktop) (#139).
@@ -48,6 +49,8 @@
 - Polished options page, theme and desktop status card (#103).
 - Highlighted search matches, keyboard hint footer and row aria attributes (#121); loading skeletons, request
   timeouts and inline error/retry states (#100).
+- Right-click gitpass context menu (#215).
+- Toolbar icon shows a locked state and a match-count badge (#221).
 - Popup lists every item, with API secret preview and a sort menu (#174).
 
 ### Security
@@ -56,6 +59,7 @@
 - Use the full card number in fallback leak checks (#208).
 
 ### Tests / repo
+- Extension user guide (docs/EXTENSION.md) (#223).
 - Unit tests for fsutil crash safety, backup exclusions and locking (#151); e2e test for cancelling the in-page
   passkey prompt (#122); flaky test fixes (#113, #185).
 - Removed unused locale keys with a locale parity test (#157), unused ScrollArea wrapper (#173) and unused
