@@ -211,7 +211,15 @@
         return { origin, fields };
       }
       case 'page:generate': {
-        const r = await host('generate', { len: 20, digits: true, symbols: true });
+        // Optional site rules (#188): parsed constraints only, validated and clamped here before the host sees them.
+        const PR = root.GitpassPasswordRules || (typeof require === 'function' ? require('./lib/password-rules.js') : null);
+        if (a.rules == null || !PR) {
+          const r = await host('generate', { len: 20, digits: true, symbols: true });
+          return { origin, password: r.password };
+        }
+        const s = PR.sanitize(a.rules);
+        if (!s.ok) throw err('bad_request', 'password rules ' + s.reason);
+        const r = await host('generate', { len: s.len, rules: { classes: s.classes } });
         return { origin, password: r.password };
       }
       case 'page:request_unlock': return host('request_unlock', { reason: 'Fill on ' + new URL(origin).host });
