@@ -63,6 +63,7 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn restore_item_version(s: State<App>, vault_id: String, item_id: String, version: u64) -> R<a::ItemDetail> { s.restore_item_version(&vault_id, &item_id, version).map_err(e) }
 #[tauri::command(async)] pub fn add_attachment(s: State<'_, App>, vault_id: String, item_id: String, path: String) -> R<a::Attachment> { s.add_attachment(&vault_id, &item_id, &path).map_err(e) }
 #[tauri::command(async)] pub fn save_attachment(s: State<'_, App>, vault_id: String, item_id: String, attachment_id: String, dest_path: String) -> R<()> { s.save_attachment(&vault_id, &item_id, &attachment_id, &dest_path).map_err(e) }
+#[tauri::command(async)] pub fn remove_attachment(s: State<'_, App>, vault_id: String, item_id: String, attachment_id: String) -> R<()> { s.remove_attachment(&vault_id, &item_id, &attachment_id).map_err(e) }
 #[tauri::command] pub fn list_tags(s: State<App>) -> R<Vec<String>> { s.list_tags().map_err(e) }
 #[tauri::command] pub fn rename_tag(s: State<App>, old: String, new: String) -> R<a::BulkResult> { s.rename_tag(&old, &new).map_err(e) }
 #[tauri::command] pub fn delete_tag(s: State<App>, name: String) -> R<a::BulkResult> { s.delete_tag(&name).map_err(e) }
@@ -202,11 +203,105 @@ pub fn spawn_idle_watcher(app: AppHandle) {
     });
 }
 
-/// Show + focus the (pre-declared, hidden) quick-access window. No global hotkey yet: needs tauri-plugin-global-shortcut.
+/// Show + focus the (pre-declared, hidden) quick-access window.
 #[tauri::command] pub fn show_quick_access(app: tauri::AppHandle) -> R<()> {
     use tauri::Manager;
     let w = app.get_webview_window("quick-access").ok_or_else(|| "quick-access window missing".to_string())?;
     w.show().map_err(|x| x.to_string())?; w.set_focus().map_err(|x| x.to_string())
+}
+
+/// Toggle visibility and focus of the quick-access window.
+/// If currently visible and focused, hides it. Otherwise, shows and focuses it.
+pub fn toggle_quick_access(app: &tauri::AppHandle) -> R<()> {
+    use tauri::Manager;
+    let w = app.get_webview_window("quick-access").ok_or_else(|| "quick-access window missing".to_string())?;
+    let visible = w.is_visible().unwrap_or(false);
+    let focused = w.is_focused().unwrap_or(false);
+    if visible && focused {
+        w.hide().map_err(|x| x.to_string())?;
+    } else {
+        w.show().map_err(|x| x.to_string())?;
+        w.set_focus().map_err(|x| x.to_string())?;
+    }
+    Ok(())
+}
+
+/// Build the native application menu including a menu-bar item for Quick Access.
+pub fn setup_menu(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
+    let handle = app.handle();
+    let qa_item = MenuItem::with_id(handle, "quick_access", "Quick Access", true, None::<&str>)?;
+
+    let file_menu = Submenu::with_items(
+        handle,
+        "File",
+        true,
+        &[
+            &qa_item,
+            &PredefinedMenuItem::separator(handle)?,
+            &PredefinedMenuItem::close_window(handle, None)?,
+        ],
+    )?;
+
+    let edit_menu = Submenu::with_items(
+        handle,
+        "Edit",
+        true,
+        &[
+            &PredefinedMenuItem::undo(handle, None)?,
+            &PredefinedMenuItem::redo(handle, None)?,
+            &PredefinedMenuItem::separator(handle)?,
+            &PredefinedMenuItem::cut(handle, None)?,
+            &PredefinedMenuItem::copy(handle, None)?,
+            &PredefinedMenuItem::paste(handle, None)?,
+            &PredefinedMenuItem::select_all(handle, None)?,
+        ],
+    )?;
+
+    let window_menu = Submenu::with_items(
+        handle,
+        "Window",
+        true,
+        &[
+            &PredefinedMenuItem::minimize(handle, None)?,
+            &PredefinedMenuItem::maximize(handle, None)?,
+            &PredefinedMenuItem::separator(handle)?,
+            &PredefinedMenuItem::close_window(handle, None)?,
+        ],
+    )?;
+
+    #[cfg(target_os = "macos")]
+    let app_menu = Submenu::with_items(
+        handle,
+        "gitpass",
+        true,
+        &[
+            &PredefinedMenuItem::about(handle, None, None)?,
+            &PredefinedMenuItem::separator(handle)?,
+            &PredefinedMenuItem::services(handle, None)?,
+            &PredefinedMenuItem::separator(handle)?,
+            &PredefinedMenuItem::hide(handle, None)?,
+            &PredefinedMenuItem::hide_others(handle, None)?,
+            &PredefinedMenuItem::show_all(handle, None)?,
+            &PredefinedMenuItem::separator(handle)?,
+            &PredefinedMenuItem::quit(handle, None)?,
+        ],
+    )?;
+
+    #[cfg(target_os = "macos")]
+    let menu = Menu::with_items(handle, &[&app_menu, &file_menu, &edit_menu, &window_menu])?;
+    #[cfg(not(target_os = "macos"))]
+    let menu = Menu::with_items(handle, &[&file_menu, &edit_menu, &window_menu])?;
+
+    app.set_menu(menu)?;
+
+    app.on_menu_event(move |app_handle, event| {
+        if event.id() == "quick_access" {
+            let _ = show_quick_access(app_handle.clone());
+        }
+    });
+
+    Ok(())
 }
 
 // ---- v0.7 SSH keys
