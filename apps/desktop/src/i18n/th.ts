@@ -338,6 +338,15 @@ export const th: Partial<Record<Key, string>> = {
   "bulk.toast.remove_tag": "ลบแท็กแล้ว",
   "bulk.toast.move": "ย้ายแล้ว",
   "bulk.toast.copy": "คัดลอกแล้ว",
+  // drag and drop & selection actions
+  "drag.nItems": "{n} รายการ",
+  "drag.oneItem": "1 รายการ",
+  "cmd.moveToVault": "ย้ายไปยังห้องนิรภัย…",
+  "cmd.addTag": "เพิ่มแท็ก…",
+  "moveToVault.title": "ย้ายไปยังห้องนิรภัย",
+  "moveToVault.select": "เลือกห้องนิรภัยปลายทาง",
+  "addTag.title": "เพิ่มแท็ก",
+  "addTag.placeholder": "ชื่อแท็ก",
   // Recently Deleted
   "trash.count": "{n} รายการ",
   "trash.countOne": "1 รายการ",

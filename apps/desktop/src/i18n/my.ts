@@ -345,6 +345,15 @@ export const my: Partial<Record<Key, string>> = {
   "bulk.toast.remove_tag": "တဂ် ဖယ်ရှားပြီးပါပြီ",
   "bulk.toast.move": "ရွှေ့ပြီးပါပြီ",
   "bulk.toast.copy": "ကူးယူပြီးပါပြီ",
+  // drag and drop & selection actions
+  "drag.nItems": "{n} ခု",
+  "drag.oneItem": "၁ ခု",
+  "cmd.moveToVault": "အခြား သော့ခတ်သေတ္တာသို့ ရွှေ့ရန်…",
+  "cmd.addTag": "တဂ် ထည့်ရန်…",
+  "moveToVault.title": "အခြား သော့ခတ်သေတ္တာသို့ ရွှေ့ရန်",
+  "moveToVault.select": "သွားမည့် သော့ခတ်သေတ္တာကို ရွေးပါ",
+  "addTag.title": "တဂ် ထည့်ရန်",
+  "addTag.placeholder": "တဂ် အမည်",
   // Recently Deleted
   "trash.count": "Item {n} ခု",
   "trash.countOne": "Item ၁ ခု",
