@@ -174,6 +174,22 @@ function annotateMockDiff(snap: T.ItemDetail, cur: T.ItemDetail) {
 const subtitleFor = (input: T.ItemInput): string => {
   const flds = input.sections.flatMap((s) => s.fields);
   if (input.category === 'credit_card') { const n = flds.find((x) => x.id === 'number' || x.label === 'number'); return n?.value ? cardLabel(n.value) : ''; }
+  if (input.category === 'bank_account') {
+    const num = flds.find((x) => x.id === 'account_number' || x.label === 'account number');
+    const b = flds.find((x) => x.id === 'bank_name' || x.label === 'bank name');
+    const t = flds.find((x) => x.id === 'account_type' || x.label === 'account type');
+    const l4 = num?.value ? `•••• ${num.value.slice(-4)}` : '';
+    if (t?.value && l4) return `${t.value} ${l4}`;
+    if (b?.value && l4) return `${b.value} ${l4}`;
+    if (l4) return l4;
+    return b?.value ?? '';
+  }
+  if (input.category === 'server') {
+    const u = flds.find((x) => x.id === 'username' || x.label === 'username')?.value;
+    const h = (flds.find((x) => x.id === 'url' || x.label.toLowerCase().includes('url') || x.label === 'hostname')?.value) || input.url;
+    if (u && h) return `${u}@${h}`;
+    return u || h || '';
+  }
   const u = flds.find((x) => x.kind === 'text' || x.kind === 'email');
   return u?.value ?? '';
 };

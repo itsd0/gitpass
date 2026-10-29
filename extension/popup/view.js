@@ -35,14 +35,14 @@
     });
   }
 
-  const CATEGORIES = ['login', 'secure_note', 'credit_card', 'identity', 'api_credential', 'document', 'ssh_key', 'wifi', 'passkey'];
+  const CATEGORIES = ['login', 'secure_note', 'credit_card', 'identity', 'api_credential', 'document', 'ssh_key', 'wifi', 'passkey', 'bank_account', 'server'];
   const CAT_LABEL = {
     login: 'Logins', secure_note: 'Secure Notes', credit_card: 'Credit Cards', identity: 'Identities',
-    api_credential: 'API Credentials', document: 'Documents', ssh_key: 'SSH Keys', wifi: 'Wi-Fi', passkey: 'Passkeys',
+    api_credential: 'API Credentials', document: 'Documents', ssh_key: 'SSH Keys', wifi: 'Wi-Fi', passkey: 'Passkeys', bank_account: 'Bank Accounts', server: 'Servers',
   };
   const CAT_KEY = {
     login: 'catLogin', secure_note: 'catNote', credit_card: 'catCard', identity: 'catIdentity',
-    api_credential: 'catApi', document: 'catDocument', ssh_key: 'catSsh', wifi: 'catWifi', passkey: 'catPasskey',
+    api_credential: 'catApi', document: 'catDocument', ssh_key: 'catSsh', wifi: 'catWifi', passkey: 'catPasskey', bank_account: 'catBankAccount', server: 'catServer',
   };
 
   /** Filter dropdown entries: suggestions, all, favorites, one per category, one per vault. */

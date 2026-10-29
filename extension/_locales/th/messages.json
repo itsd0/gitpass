@@ -935,5 +935,11 @@
   },
   "badgeAppNotRunning": {
     "message": "แอป gitpass ไม่ได้ทำงานอยู่"
+  },
+  "catBankAccount": {
+    "message": "บัญชีธนาคาร"
+  },
+  "catServer": {
+    "message": "เซิร์ฟเวอร์"
   }
 }

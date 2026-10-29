@@ -577,10 +577,61 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
     if o.min_length == 0 { bail!("min_length must be > 0"); }
     let passkey_domains: BTreeSet<String> = passkey_sites.iter().filter_map(|s| host_of(s)).collect();
     let mut r = AuditReport { items_checked: items.len(), ..Default::default() };
+fn auditable_password(rec: &ItemRecord) -> Option<&str> {
+    if rec.category != crate::item::Category::Login && rec.category != crate::item::Category::Server {
+        return None;
+    }
+    if let Some(p) = rec.item.password.as_deref().filter(|p| !p.is_empty()) {
+        return Some(p);
+    }
+    for s in &rec.sections {
+        for f in &s.fields {
+            if !f.removed && f.kind == crate::item::FieldKind::Concealed && (f.id == "password" || f.label.eq_ignore_ascii_case("password")) {
+                if let Some(p) = f.value.as_deref().filter(|p| !p.is_empty()) {
+                    return Some(p);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn auditable_username(rec: &ItemRecord) -> Option<&str> {
+    if let Some(u) = rec.item.username.as_deref().filter(|u| !u.is_empty()) {
+        return Some(u);
+    }
+    for s in &rec.sections {
+        for f in &s.fields {
+            if !f.removed && (f.id == "username" || f.label.eq_ignore_ascii_case("username")) {
+                if let Some(u) = f.value.as_deref().filter(|u| !u.is_empty()) {
+                    return Some(u);
+                }
+            }
+        }
+    }
+    None
+}
+
+fn auditable_url(rec: &ItemRecord) -> Option<&str> {
+    if let Some(u) = rec.item.url.as_deref().filter(|u| !u.trim().is_empty()) {
+        return Some(u);
+    }
+    for s in &rec.sections {
+        for f in &s.fields {
+            if !f.removed && (f.id == "url" || f.id == "website" || f.id == "hostname" || f.label.eq_ignore_ascii_case("url") || f.label.eq_ignore_ascii_case("hostname")) {
+                if let Some(u) = f.value.as_deref().filter(|u| !u.trim().is_empty()) {
+                    return Some(u);
+                }
+            }
+        }
+    }
+    None
+}
+
     // reuse groups: keyed by blake3(password); hashes live in memory only and are never printed.
     let mut groups: BTreeMap<[u8; 32], Vec<usize>> = BTreeMap::new();
     for (i, (_, _, rec)) in items.iter().enumerate() {
-        if let Some(p) = rec.item.password.as_deref().filter(|p| !p.is_empty()) { groups.entry(*blake3::hash(p.as_bytes()).as_bytes()).or_default().push(i); }
+        if let Some(p) = auditable_password(rec) { groups.entry(*blake3::hash(p.as_bytes()).as_bytes()).or_default().push(i); }
     }
     let mut reuse: HashMap<usize, (usize, usize)> = HashMap::new();
     for (g, idxs) in groups.values().filter(|v| v.len() > 1).enumerate() {
@@ -627,9 +678,10 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
         if let Some(group) = dup_findings.get(&i) {
             record_finding(Finding::Duplicate { group: group.clone() }, &mut r.duplicates);
         }
-        let url = it.url.as_deref().filter(|u| !u.trim().is_empty());
-        if let Some(p) = it.password.as_deref().filter(|p| !p.is_empty()) {
-            let weak_reason = contains_personal_info(p, it.username.as_deref(), url)
+        let url = auditable_url(rec);
+        if let Some(p) = auditable_password(rec) {
+            let user = auditable_username(rec);
+            let weak_reason = contains_personal_info(p, user, url)
                 .or_else(|| weakness(p, o));
             if let Some(reason) = weak_reason { record_finding(Finding::Weak { reason }, &mut r.weak); }
             if let Some(&(group, others)) = reuse.get(&i) { record_finding(Finding::Reused { group, others }, &mut r.reused); }
@@ -642,7 +694,7 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
         let no_totp = it.totp.as_deref().is_none_or(|t| t.trim().is_empty());
         let host = url.and_then(host_of);
         let support = host.as_deref().and_then(|h| lookup_mfa_site(sites, h));
-        if url.is_some() && no_totp {
+        if rec.category == crate::item::Category::Login && url.is_some() && no_totp {
             let mut advised_totp = false;
             if let Some((site, s)) = support {
                 if s.totp {
@@ -654,9 +706,11 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
                 record_finding(Finding::MissingTotp, &mut r.missing_totp);
             }
         }
-        if let (Some(host), Some((site, s))) = (host.as_deref(), support) {
-            if s.passkey && !has_passkey_for(&passkey_domains, host, site) {
-                record_finding(Finding::PasskeyAvailable { site: site.to_string() }, &mut r.passkey_available);
+        if rec.category == crate::item::Category::Login {
+            if let (Some(host), Some((site, s))) = (host.as_deref(), support) {
+                if s.passkey && !has_passkey_for(&passkey_domains, host, site) {
+                    record_finding(Finding::PasskeyAvailable { site: site.to_string() }, &mut r.passkey_available);
+                }
             }
         }
         if let Some(u) = url {
@@ -1506,5 +1560,133 @@ mod tests {
             snapshot: Snapshot { item: fresh.item.clone(), category: fresh.category, sections: vec![], tags: vec![] },
         });
         assert_eq!(fresh.password_changed_at(), Some(created));
+    }
+
+    #[test]
+    fn test_watchtower_server_passwords_and_bank_account_exclusion() {
+        let now_secs = 1700000000;
+        let day = 86400;
+
+        // 1. Server item with weak password
+        let mut srv_weak = ItemRecord::new(Item {
+            title: "Weak Srv".into(),
+            username: Some("root".into()),
+            password: None,
+            url: Some("https://srv1.example.invalid".into()),
+            notes: None,
+            totp: None,
+            updated_at: now_secs.to_string(),
+        });
+        srv_weak.category = Category::Server;
+        srv_weak.sections = vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                Field { id: "password".into(), label: "password".into(), kind: FieldKind::Concealed, value: Some("123456".into()), removed: false },
+            ],
+        }];
+
+        // 2. Server item sharing password with Login item
+        let shared_pw = "SharedComplexPass123!@#";
+        let mut srv_reused = ItemRecord::new(Item {
+            title: "Reused Srv".into(),
+            username: Some("admin".into()),
+            password: None,
+            url: Some("https://srv2.example.invalid".into()),
+            notes: None,
+            totp: None,
+            updated_at: now_secs.to_string(),
+        });
+        srv_reused.category = Category::Server;
+        srv_reused.sections = vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                Field { id: "password".into(), label: "password".into(), kind: FieldKind::Concealed, value: Some(shared_pw.into()), removed: false },
+            ],
+        }];
+
+        let login_reused = ItemRecord::new(Item {
+            title: "Login Site".into(),
+            username: Some("user".into()),
+            password: Some(shared_pw.into()),
+            url: Some("https://login.example.invalid".into()),
+            notes: None,
+            totp: Some("JBSWY3DPEHPK3PXP".into()),
+            updated_at: now_secs.to_string(),
+        });
+
+        // 3. Server item with old password
+        let mut srv_old = ItemRecord::new(Item {
+            title: "Old Srv".into(),
+            username: Some("ubuntu".into()),
+            password: None,
+            url: Some("https://srv3.example.invalid".into()),
+            notes: None,
+            totp: None,
+            updated_at: (now_secs - 400 * day).to_string(),
+        });
+        srv_old.category = Category::Server;
+        srv_old.created_at = Some(now_secs - 400 * day);
+        srv_old.sections = vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                Field { id: "password".into(), label: "password".into(), kind: FieldKind::Concealed, value: Some("UniqueOldPass987$%^".into()), removed: false },
+            ],
+        }];
+
+        // 4. Bank account with account number and PIN (even if PIN is "1234" which would be weak if checked as a password)
+        let mut bank_item = ItemRecord::new(Item {
+            title: "Bank Account".into(),
+            username: None,
+            password: None,
+            url: None,
+            notes: None,
+            totp: None,
+            updated_at: (now_secs - 400 * day).to_string(),
+        });
+        bank_item.category = Category::BankAccount;
+        bank_item.created_at = Some(now_secs - 400 * day);
+        bank_item.sections = vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                Field { id: "bank_name".into(), label: "bank name".into(), kind: FieldKind::Text, value: Some("Chase".into()), removed: false },
+                Field { id: "account_number".into(), label: "account number".into(), kind: FieldKind::Concealed, value: Some("1234567890".into()), removed: false },
+                Field { id: "pin".into(), label: "PIN".into(), kind: FieldKind::Concealed, value: Some("1234".into()), removed: false },
+            ],
+        }];
+
+        let items = vec![
+            ("v".into(), "srv_weak".into(), srv_weak),
+            ("v".into(), "srv_reused".into(), srv_reused),
+            ("v".into(), "login_reused".into(), login_reused),
+            ("v".into(), "srv_old".into(), srv_old),
+            ("v".into(), "bank_item".into(), bank_item),
+        ];
+
+        let opts = AuditOpts { now_secs, max_age_days: 365, ..Default::default() };
+        let report = audit(&items, &opts, None).unwrap();
+
+        // Server weak password detected
+        assert_eq!(report.weak, 1);
+        let weak_item = report.per_item.iter().find(|i| i.id == "srv_weak").unwrap();
+        assert!(weak_item.findings.iter().any(|f| matches!(f, Finding::Weak { .. })));
+
+        // Server and Login password reuse detected
+        assert_eq!(report.reused, 2);
+        let srv_reused_f = report.per_item.iter().find(|i| i.id == "srv_reused").unwrap();
+        assert!(srv_reused_f.findings.iter().any(|f| matches!(f, Finding::Reused { .. })));
+        let login_reused_f = report.per_item.iter().find(|i| i.id == "login_reused").unwrap();
+        assert!(login_reused_f.findings.iter().any(|f| matches!(f, Finding::Reused { .. })));
+
+        // Server old password detected
+        assert_eq!(report.old, 1);
+        let srv_old_f = report.per_item.iter().find(|i| i.id == "srv_old").unwrap();
+        assert!(srv_old_f.findings.iter().any(|f| matches!(f, Finding::Old { .. })));
+
+        // Bank account has NO findings: PIN and account number are never treated as passwords
+        assert!(!report.per_item.iter().any(|i| i.id == "bank_item"), "Bank account number and PIN must never produce findings");
     }
 }

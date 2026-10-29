@@ -856,5 +856,11 @@
   },
   "badgeAppNotRunning": {
     "message": "gitpass app not running"
+  },
+  "catBankAccount": {
+    "message": "Bank Accounts"
+  },
+  "catServer": {
+    "message": "Servers"
   }
 }

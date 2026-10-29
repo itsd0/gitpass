@@ -1786,3 +1786,101 @@ fn settings_render_notes_markdown_roundtrip_and_defaults() {
     assert!(!updated.render_notes_markdown);
     assert!(!e.app.get_settings().render_notes_markdown);
 }
+
+#[test]
+fn bank_account_and_server_crud_masking_and_subtitles() {
+    let e = env();
+
+    // 1. Bank Account creation and masking
+    let bank_item = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::BankAccount,
+        title: "Personal Checking".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                fld("bank_name", FieldKind::Text, Some("Chase")),
+                fld("account_holder", FieldKind::Text, Some("Alice Doe")),
+                fld("account_type", FieldKind::Text, Some("Checking")),
+                fld("account_number", FieldKind::Concealed, Some("123456789012")),
+                fld("routing_number", FieldKind::Text, Some("021000021")),
+                fld("pin", FieldKind::Concealed, Some("4321")),
+            ],
+        }],
+        notes: Some("Checking account".into()),
+        tags: Some(vec!["finance".into()]),
+        favorite: Some(true),
+    }).unwrap();
+
+    assert_eq!(bank_item.category, Category::BankAccount);
+    assert_eq!(bank_item.subtitle, "Checking •••• 9012");
+
+    let detail = e.app.get_item(&e.vault, &bank_item.id).unwrap();
+    let fields = detail.sections[0].fields.clone();
+    let acct_f = fields.iter().find(|f| f.id == "account_number").unwrap();
+    assert_eq!(acct_f.kind, FieldKind::Concealed);
+    assert_eq!(acct_f.value, None);
+    assert_eq!(acct_f.masked.as_deref(), Some("•••• •••• •••• 9012"));
+
+    let pin_f = fields.iter().find(|f| f.id == "pin").unwrap();
+    assert_eq!(pin_f.kind, FieldKind::Concealed);
+    assert_eq!(pin_f.value, None);
+    assert!(pin_f.masked.is_none());
+
+    // Reveal field
+    let revealed_acct = e.app.reveal_field(&e.vault, &bank_item.id, "account_number").unwrap();
+    assert_eq!(&*revealed_acct, "123456789012");
+
+    // Copy field secrecy
+    assert!(is_secret_copy(Category::BankAccount, &gitpass_core::item::Field {
+        id: "account_number".into(),
+        label: "account number".into(),
+        kind: FieldKind::Concealed,
+        value: Some("123456789012".into()),
+        removed: false,
+    }));
+    assert!(is_secret_copy(Category::BankAccount, &gitpass_core::item::Field {
+        id: "pin".into(),
+        label: "PIN".into(),
+        kind: FieldKind::Concealed,
+        value: Some("4321".into()),
+        removed: false,
+    }));
+    assert!(!is_secret_copy(Category::BankAccount, &gitpass_core::item::Field {
+        id: "bank_name".into(),
+        label: "bank name".into(),
+        kind: FieldKind::Text,
+        value: Some("Chase".into()),
+        removed: false,
+    }));
+
+    // 2. Server creation and subtitle
+    let srv_item = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Server,
+        title: "Web Node 1".into(),
+        url: Some("10.0.0.50".into()),
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                fld("url", FieldKind::Url, Some("10.0.0.50")),
+                fld("username", FieldKind::Text, Some("ubuntu")),
+                fld("password", FieldKind::Concealed, Some("ServerPassword123!")),
+                fld("admin_console_url", FieldKind::Url, Some("https://aws.amazon.com")),
+                fld("hosting_provider", FieldKind::Text, Some("AWS")),
+            ],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+
+    assert_eq!(srv_item.category, Category::Server);
+    assert_eq!(srv_item.subtitle, "ubuntu@10.0.0.50");
+
+    let srv_detail = e.app.get_item(&e.vault, &srv_item.id).unwrap();
+    assert!(srv_detail.password_strength.is_some());
+}

@@ -935,5 +935,11 @@
   },
   "badgeAppNotRunning": {
     "message": "gitpass အက်ပ် မလုပ်ဆောင်နေပါ"
+  },
+  "catBankAccount": {
+    "message": "ဘဏ်အကောင့်များ"
+  },
+  "catServer": {
+    "message": "ဆာဗာများ"
   }
 }
