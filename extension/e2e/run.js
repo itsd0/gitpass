@@ -46,6 +46,7 @@ const MULTISTEP_PW_HTML = `<!doctype html><html><head><meta charset="utf-8"><tit
 <button id="go" type="submit">Log in</button></form>
 <script>document.getElementById('f').addEventListener('submit',e=>{e.preventDefault();document.getElementById('msg').textContent='signed in';});</script></body></html>`;
 
+const SIGNUP_RULES_HTML = fs.readFileSync(path.join(ROOT, 'test', 'pages', 'signup-rules.html'), 'utf8');
 const CARD_HTML = fs.readFileSync(path.join(ROOT, 'test', 'pages', 'card.html'), 'utf8');
 
 // Find visible elements by text, piercing CLOSED shadow roots via CDP (DOM.getDocument pierce:true).
@@ -241,7 +242,7 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
   // Linux Chromium reads the per-profile dir too; also set via env for safety on Linux CI.
   console.log(`tmp: ${tmp}\nextension id (expected): ${id}`);
 
-  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/2fa') ? OTP_HTML : req.url.startsWith('/multistep/password') ? MULTISTEP_PW_HTML : req.url.startsWith('/multistep') ? MULTISTEP_USER_HTML : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
+  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/2fa') ? OTP_HTML : req.url.startsWith('/multistep/password') ? MULTISTEP_PW_HTML : req.url.startsWith('/multistep') ? MULTISTEP_USER_HTML : req.url.startsWith('/signup-rules') ? SIGNUP_RULES_HTML : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const LOGIN = `http://localhost:${server.address().port}/login`;
   if (realSetup) realSetup(server.address().port); // real host matches loopback origins incl. port
@@ -829,6 +830,24 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
         : 'save_login NOT received');
     rec('multi-step login saves exactly once', REAL || msSavedAll.length === 1, REAL ? 'real host (not logged)' : `save_login count=${msSavedAll.length}`);
     await ms.close();
+
+    // --- Site password rules (#188): maxlength + passwordrules shape the suggested password
+    try {
+      const rulesPage = await ctx.newPage();
+      await rulesPage.goto(LOGIN.replace(/\/login$/, '/signup-rules')); await sleep(1000); await rulesPage.bringToFront();
+      await rulesPage.click('input[name=username]'); await sleep(800); // sign-up forms anchor the menu on the username field
+      const sug = await until(async () => { const x = await findInShadow(rulesPage, /Suggest strong password/); return x.length && x; }, T(5000));
+      const sub = sug ? await findInShadow(rulesPage, /characters|gitpass will save/) : [];
+      if (sug) await rulesPage.mouse.click(sug[0].x, sug[0].y);
+      const gen = await until(async () => (await rulesPage.inputValue('#np')) || false, T(3000));
+      const pw = gen || '';
+      const sent = REAL ? null : cmdsIn(mockDir).filter((m) => m.cmd === 'generate' && m.rules).pop();
+      // Never print the password itself: report which rules held.
+      rec('signup with maxlength + passwordrules gets a compliant suggested password',
+        pw.length === 16 && /^[A-Za-z0-9_-]+$/.test(pw) && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw),
+        `row=${!!sug}; subtitle=${sub.length ? JSON.stringify(sub[0].text) : 'missing'}; length=${pw.length}; charset ok=${/^[A-Za-z0-9_-]*$/.test(pw)}; host rules=${sent ? sent.rules.classes.length + ' classes, len ' + sent.len : '(real host)'}`);
+      await rulesPage.close();
+    } catch (e) { rec('signup password rules (#188)', false, e.message); }
 
     // --- Card + identity (test/pages/card.html): in-page click and popup Fill
     const CARD = LOGIN.replace(/\/login$/, '/card');

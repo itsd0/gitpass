@@ -179,6 +179,42 @@ pub fn generate(len: usize, digits: bool, symbols: bool, words: bool, pin: bool)
     })
 }
 
+/// Site password rules sent by the extension (already parsed from `passwordrules` / `maxlength`):
+/// `{"classes": [{"kind": "lower|upper|digit|special", "required": bool, "chars": "-_"}]}`. `chars` only
+/// narrows a `special` class and must be printable ASCII symbols. Fails with `bad_request` on anything else
+/// or when the rules cannot be met, so the extension never gets a password the site would reject.
+pub fn generate_for_rules(len: usize, rules: &Value) -> Result<String> {
+    use gitpass_core::generate::{generate_with_classes, CharClass, DEFAULT_DIGITS, DEFAULT_SYMBOLS, LOWER, UPPER};
+    let list = rules.get("classes").and_then(Value::as_array)
+        .filter(|l| !l.is_empty() && l.len() <= 8)
+        .ok_or_else(|| coded(code::BAD_REQUEST, "rules.classes must hold 1..=8 entries"))?;
+    let mut classes = Vec::with_capacity(list.len());
+    for c in list {
+        let required = c.get("required").and_then(Value::as_bool).unwrap_or(false);
+        let kind = c.get("kind").and_then(Value::as_str).unwrap_or("");
+        let chars: Vec<u8> = match kind {
+            "lower" => LOWER.to_vec(),
+            "upper" => UPPER.to_vec(),
+            "digit" => DEFAULT_DIGITS.to_vec(),
+            "special" => match c.get("chars").and_then(Value::as_str) {
+                None => DEFAULT_SYMBOLS.to_vec(),
+                Some(s) => {
+                    let mut v: Vec<u8> = s.bytes().collect();
+                    if v.is_empty() || v.len() > 32 || !v.iter().all(|b| b.is_ascii_graphic() && !b.is_ascii_alphanumeric()) {
+                        return Err(coded(code::BAD_REQUEST, "rules special chars must be 1..=32 printable ASCII symbols"));
+                    }
+                    v.sort_unstable();
+                    v.dedup();
+                    v
+                }
+            },
+            _ => return Err(coded(code::BAD_REQUEST, "unknown rules class")),
+        };
+        classes.push(CharClass { chars, required });
+    }
+    generate_with_classes(len, &classes).ok_or_else(|| coded(code::BAD_REQUEST, "password rules cannot be satisfied"))
+}
+
 /// Apply an `update_login` request to a login record. Absent keys keep their stored value; an empty
 /// username/password/notes clears it. `urls` replaces the websites: the first becomes the item URL and
 /// the rest go to the importers' `urls` section (fields `url1`, `url2`, …).
@@ -566,6 +602,10 @@ impl Host {
                 if !(min..=max).contains(&len) { return Err(coded(code::BAD_REQUEST, format!("len must be {min}..={max}"))); }
                 let digits = req.get("digits").and_then(Value::as_bool).unwrap_or(true);
                 let symbols = req.get("symbols").and_then(Value::as_bool).unwrap_or(true);
+                if let Some(rules) = req.get("rules").filter(|r| !r.is_null()) {
+                    if words || pin { return Err(coded(code::BAD_REQUEST, "rules apply to random passwords only")); }
+                    return Ok(json!({"password": generate_for_rules(len, rules)?}));
+                }
                 Ok(json!({"password": generate(len, digits, symbols, words, pin)}))
             }
             "list_vaults" => {
