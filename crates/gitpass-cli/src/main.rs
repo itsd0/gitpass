@@ -36,11 +36,13 @@ enum AddCategory {
     ApiCredential,
     SecureNote,
     CreditCard,
+    BankAccount,
+    Server,
 }
 
 impl clap::ValueEnum for AddCategory {
     fn value_variants<'a>() -> &'a [Self] {
-        &[Self::Login, Self::ApiCredential, Self::SecureNote, Self::CreditCard]
+        &[Self::Login, Self::ApiCredential, Self::SecureNote, Self::CreditCard, Self::BankAccount, Self::Server]
     }
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         Some(match self {
@@ -48,11 +50,80 @@ impl clap::ValueEnum for AddCategory {
             Self::ApiCredential => clap::builder::PossibleValue::new("api-credential").alias("api_credential"),
             Self::SecureNote => clap::builder::PossibleValue::new("secure-note").alias("secure_note"),
             Self::CreditCard => clap::builder::PossibleValue::new("credit-card").alias("credit_card"),
+            Self::BankAccount => clap::builder::PossibleValue::new("bank-account").alias("bank_account"),
+            Self::Server => clap::builder::PossibleValue::new("server"),
         })
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CliCategory {
+    Login,
+    CreditCard,
+    SecureNote,
+    Identity,
+    ApiCredential,
+    Document,
+    SshKey,
+    Wifi,
+    Passkey,
+    BankAccount,
+    Server,
+}
+
+impl clap::ValueEnum for CliCategory {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[
+            Self::Login,
+            Self::CreditCard,
+            Self::SecureNote,
+            Self::Identity,
+            Self::ApiCredential,
+            Self::Document,
+            Self::SshKey,
+            Self::Wifi,
+            Self::Passkey,
+            Self::BankAccount,
+            Self::Server,
+        ]
+    }
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(match self {
+            Self::Login => clap::builder::PossibleValue::new("login"),
+            Self::CreditCard => clap::builder::PossibleValue::new("credit-card").alias("credit_card"),
+            Self::SecureNote => clap::builder::PossibleValue::new("secure-note").alias("secure_note"),
+            Self::Identity => clap::builder::PossibleValue::new("identity"),
+            Self::ApiCredential => clap::builder::PossibleValue::new("api-credential").alias("api_credential"),
+            Self::Document => clap::builder::PossibleValue::new("document"),
+            Self::SshKey => clap::builder::PossibleValue::new("ssh-key").alias("ssh_key"),
+            Self::Wifi => clap::builder::PossibleValue::new("wifi"),
+            Self::Passkey => clap::builder::PossibleValue::new("passkey"),
+            Self::BankAccount => clap::builder::PossibleValue::new("bank-account").alias("bank_account"),
+            Self::Server => clap::builder::PossibleValue::new("server"),
+        })
+    }
+}
+
+impl From<CliCategory> for Category {
+    fn from(c: CliCategory) -> Self {
+        match c {
+            CliCategory::Login => Category::Login,
+            CliCategory::CreditCard => Category::CreditCard,
+            CliCategory::SecureNote => Category::SecureNote,
+            CliCategory::Identity => Category::Identity,
+            CliCategory::ApiCredential => Category::ApiCredential,
+            CliCategory::Document => Category::Document,
+            CliCategory::SshKey => Category::SshKey,
+            CliCategory::Wifi => Category::Wifi,
+            CliCategory::Passkey => Category::Passkey,
+            CliCategory::BankAccount => Category::BankAccount,
+            CliCategory::Server => Category::Server,
+        }
+    }
+}
+
 #[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
 enum Cmd {
     /// Create a new account: master password + generated Secret Key
     Init {
@@ -66,10 +137,10 @@ enum Cmd {
     Vault { #[command(subcommand)] cmd: VaultCmd },
     /// Manage attachments on an item
     Attach { #[command(subcommand)] cmd: AttachCmd },
-    /// Add an item (login, API credential, secure note, or credit card)
+    /// Add an item (login, API credential, secure note, credit card, bank account, or server)
     Add {
         vault: String,
-        /// Item category / type: login (default), api-credential, secure-note, credit-card
+        /// Item category / type: login (default), api-credential, secure-note, credit-card, bank-account, server
         #[arg(long, alias = "type", default_value = "login")]
         category: AddCategory,
         /// Item title
@@ -121,6 +192,37 @@ enum Cmd {
         /// Card expiration date (MM/YY)
         #[arg(long)]
         expiry: Option<String>,
+
+        // Bank Account specific fields
+        /// Bank name for bank-account items
+        #[arg(long)]
+        bank: Option<String>,
+        /// Account type for bank-account items (e.g. checking, savings)
+        #[arg(long)]
+        account_type: Option<String>,
+        /// Routing / SWIFT / IBAN code for bank-account items
+        #[arg(long)]
+        routing: Option<String>,
+        /// Branch phone for bank-account items
+        #[arg(long)]
+        branch_phone: Option<String>,
+        /// Branch address for bank-account items
+        #[arg(long)]
+        branch_address: Option<String>,
+        /// Read account number from stdin for bank-account items
+        #[arg(long)]
+        account_number_stdin: bool,
+        /// Read PIN from stdin for bank-account items
+        #[arg(long)]
+        pin_stdin: bool,
+
+        // Server specific fields
+        /// Admin console URL for server items
+        #[arg(long)]
+        admin_url: Option<String>,
+        /// Hosting provider name for server items
+        #[arg(long)]
+        provider: Option<String>,
     },
     /// Decrypt and print an item (query = id, id prefix, or fuzzy match on title/username/url)
     Get {
@@ -181,6 +283,9 @@ enum Cmd {
         /// Fuzzy filter (ranked)
         #[arg(long, short = 'q')]
         query: Option<String>,
+        /// Filter by category
+        #[arg(long, value_enum, value_name = "CATEGORY")]
+        category: Option<CliCategory>,
         /// Sort order: `title` (default) or `recent` (most recently used on this device first).
         /// Ignored when `-q/--query` is given: results are then ranked by match quality.
         #[arg(long, value_enum, value_name = "ORDER")]
@@ -263,15 +368,19 @@ enum Cmd {
         #[arg(long, default_value_t = gitpass_cli::gen::DEFAULT_CLEAR_SECS, requires = "copy")]
         clear_secs: u64,
     },
-    /// Run a command with secrets from gp://<vault>/<item>/<field> references injected into its
-    /// environment only (never written to disk); resolved values are masked in its stdout/stderr
+    /// Run a command with secrets from gp://<vault>/<item>/<field> references in inherited environment
+    /// variables and/or --env-file injected into its environment only (never written to disk);
+    /// resolved values are masked in its stdout/stderr
     Run {
-        /// dotenv-style file whose values are (or contain) gp:// references; repeatable
-        #[arg(long = "env-file", required = true)] env_file: Vec<PathBuf>,
+        /// dotenv-style file whose values are (or contain) gp:// references; repeatable (optional; overrides inherited environment variables)
+        #[arg(long = "env-file")]
+        env_file: Vec<PathBuf>,
         /// Do not mask secrets in the child's output (child then writes straight to the terminal)
-        #[arg(long)] no_masking: bool,
+        #[arg(long)]
+        no_masking: bool,
         /// Command and arguments (after --)
-        #[arg(last = true, required = true)] cmd: Vec<String>,
+        #[arg(last = true, required = true)]
+        cmd: Vec<String>,
     },
     /// Render a template, replacing {{ gp://<vault>/<item>/<field> }} placeholders (stdout by default)
     Inject {
@@ -478,6 +587,35 @@ enum SshCmd {
     Config { #[arg(long)] socket: Option<PathBuf> },
     /// Run a foreground SSH agent serving this vault's keys (until Ctrl-C). The desktop app runs its own.
     Agent { #[arg(long)] socket: Option<PathBuf> },
+    /// Configure Git commit and tag signing with an SSH key
+    GitSigning {
+        vault: String,
+        query: String,
+        /// Path to gitpass SSH agent socket (defaults to standard agent socket)
+        #[arg(long)]
+        socket: Option<PathBuf>,
+        /// Scope configuration to ~/.gitconfig (default)
+        #[arg(long, conflicts_with = "local")]
+        global: bool,
+        /// Scope configuration to the local Git repository
+        #[arg(long, conflicts_with = "global")]
+        local: bool,
+        /// Only print git configuration without modifying files (default)
+        #[arg(long)]
+        print: bool,
+        /// Write configuration to git config and allowed_signers
+        #[arg(long, alias = "write")]
+        apply: bool,
+        /// Skip confirmation prompt when applying configuration
+        #[arg(short = 'y', long)]
+        yes: bool,
+        /// Committer email for allowed_signers (defaults to git user.email or key comment)
+        #[arg(long)]
+        email: Option<String>,
+        /// Path to allowed_signers file (defaults to ~/.ssh/allowed_signers)
+        #[arg(long)]
+        allowed_signers: Option<PathBuf>,
+    },
 }
 
 #[derive(Subcommand)]
@@ -683,6 +821,15 @@ struct AddFlags<'a> {
     notes_stdin: bool,
     holder: &'a Option<String>,
     expiry: &'a Option<String>,
+    bank: &'a Option<String>,
+    account_type: &'a Option<String>,
+    routing: &'a Option<String>,
+    branch_phone: &'a Option<String>,
+    branch_address: &'a Option<String>,
+    account_number_stdin: bool,
+    pin_stdin: bool,
+    admin_url: &'a Option<String>,
+    provider: &'a Option<String>,
 }
 
 fn validate_add_flags(flags: &AddFlags) -> Result<()> {
@@ -706,16 +853,24 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.expiry.is_some() {
                 bail!("--expiry is only valid for credit-card items");
             }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
+            }
         }
         AddCategory::ApiCredential => {
             if flags.totp.is_some() {
                 bail!("--totp is only valid for login items");
             }
             if flags.generate.is_some() {
-                bail!("--generate is only valid for login items");
+                bail!("--generate is only valid for login and server items");
             }
             if flags.password_stdin {
-                bail!("--password-stdin is only valid for login items (use --credential-stdin for API credentials)");
+                bail!("--password-stdin is only valid for login and server items (use --credential-stdin for API credentials)");
             }
             if flags.notes_stdin {
                 bail!("--notes-stdin is only valid for secure-note items");
@@ -725,6 +880,14 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             }
             if flags.expiry.is_some() {
                 bail!("--expiry is only valid for credit-card items (use --expires for API credentials)");
+            }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
             }
             if let Some(exp) = flags.expires {
                 validate_date_iso(exp)?;
@@ -758,6 +921,14 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.expiry.is_some() {
                 bail!("--expiry is not supported for secure-note items");
             }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
+            }
             if flags.notes.is_some() && flags.notes_stdin {
                 bail!("cannot combine --notes and --notes-stdin");
             }
@@ -787,8 +958,76 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.expires.is_some() {
                 bail!("--expires is only valid for api-credential items (use --expiry for credit cards)");
             }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
+            }
             if let Some(exp) = flags.expiry {
                 validate_card_expiry(exp)?;
+            }
+        }
+        AddCategory::BankAccount => {
+            if flags.username.is_some() {
+                bail!("--username is not supported for bank-account items (use --holder for account holder)");
+            }
+            if flags.url.is_some() {
+                bail!("--url/--host is not supported for bank-account items");
+            }
+            if flags.totp.is_some() {
+                bail!("--totp is not supported for bank-account items");
+            }
+            if flags.generate.is_some() {
+                bail!("--generate is not supported for bank-account items");
+            }
+            if flags.password_stdin {
+                bail!("--password-stdin is not supported for bank-account items (use --account-number-stdin or --pin-stdin)");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is not supported for bank-account items");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is not supported for bank-account items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is not supported for bank-account items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is not supported for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
+            }
+        }
+        AddCategory::Server => {
+            if flags.password_stdin && flags.generate.is_some() {
+                bail!("cannot combine --generate and --password-stdin");
+            }
+            if flags.totp.is_some() {
+                bail!("--totp is not supported for server items");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is only valid for api-credential items");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is only valid for secure-note items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is only valid for api-credential items");
+            }
+            if flags.holder.is_some() {
+                bail!("--holder is not supported for server items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is not supported for server items");
+            }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
             }
         }
     }
@@ -1029,8 +1268,22 @@ fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<Stri
         id: id.to_string(),
         title: r.item.title.clone(),
         category: r.category,
-        username: r.item.username.clone().filter(|u| !u.trim().is_empty()),
-        url: r.item.url.clone().filter(|u| !u.trim().is_empty()),
+        username: r.item.username.clone().filter(|u| !u.trim().is_empty()).or_else(|| {
+            r.view_sections()
+                .into_iter()
+                .flat_map(|s| s.fields)
+                .find(|f| f.id == "username" && f.kind == FieldKind::Text)
+                .and_then(|f| f.value)
+                .filter(|u| !u.trim().is_empty())
+        }),
+        url: r.item.url.clone().filter(|u| !u.trim().is_empty()).or_else(|| {
+            r.view_sections()
+                .into_iter()
+                .flat_map(|s| s.fields)
+                .find(|f| (f.id == "hostname" || f.id == "url") && f.kind == FieldKind::Url)
+                .and_then(|f| f.value)
+                .filter(|u| !u.trim().is_empty())
+        }),
         tags: r.tags.clone(),
         favorite: r.favorite,
         archived: r.archived,
@@ -1320,6 +1573,15 @@ fn run() -> Result<()> {
             notes_stdin,
             holder,
             expiry,
+            bank,
+            account_type,
+            routing,
+            branch_phone,
+            branch_address,
+            account_number_stdin,
+            pin_stdin,
+            admin_url,
+            provider,
             credential: _,
         } => {
             if title.trim().is_empty() {
@@ -1338,6 +1600,15 @@ fn run() -> Result<()> {
                 notes_stdin: *notes_stdin,
                 holder,
                 expiry,
+                bank,
+                account_type,
+                routing,
+                branch_phone,
+                branch_address,
+                account_number_stdin: *account_number_stdin,
+                pin_stdin: *pin_stdin,
+                admin_url,
+                provider,
             })?;
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
@@ -1538,6 +1809,192 @@ fn run() -> Result<()> {
                     }];
                     r
                 }
+                AddCategory::BankAccount => {
+                    let acct_num = if *account_number_stdin {
+                        let mut a = String::new();
+                        std::io::stdin().read_line(&mut a)?;
+                        let a = a.trim_end_matches(['\r', '\n']).to_string();
+                        if a.trim().is_empty() { bail!("account number from stdin cannot be empty"); }
+                        a
+                    } else {
+                        let a = prompt_secret("GITPASS_BANK_ACCOUNT_NUMBER", "Account number: ")?;
+                        if a.trim().is_empty() { bail!("account number cannot be empty"); }
+                        a.to_string()
+                    };
+                    let pin_val = if *pin_stdin {
+                        let mut p = String::new();
+                        std::io::stdin().read_line(&mut p)?;
+                        let p = p.trim_end_matches(['\r', '\n']).to_string();
+                        if p.trim().is_empty() { None } else { Some(p) }
+                    } else {
+                        let p = prompt_secret("GITPASS_BANK_PIN", "PIN (empty for none): ")?;
+                        if p.trim().is_empty() { None } else { Some(p.to_string()) }
+                    };
+                    let it = Item {
+                        title: title.clone(),
+                        username: None,
+                        password: None,
+                        url: None,
+                        notes: notes.clone(),
+                        totp: None,
+                        updated_at: store::now(),
+                    };
+                    let mut fields = Vec::new();
+                    if let Some(b) = bank.as_ref().filter(|b| !b.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "bank_name".into(),
+                            label: "bank name".into(),
+                            kind: FieldKind::Text,
+                            value: Some(b.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(h) = holder.as_ref().filter(|h| !h.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "account_holder".into(),
+                            label: "account holder".into(),
+                            kind: FieldKind::Text,
+                            value: Some(h.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(t) = account_type.as_ref().filter(|t| !t.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "account_type".into(),
+                            label: "account type".into(),
+                            kind: FieldKind::Text,
+                            value: Some(t.clone()),
+                            removed: false,
+                        });
+                    }
+                    fields.push(gitpass_core::item::Field {
+                        id: "account_number".into(),
+                        label: "account number".into(),
+                        kind: FieldKind::Concealed,
+                        value: Some(acct_num),
+                        removed: false,
+                    });
+                    if let Some(r) = routing.as_ref().filter(|r| !r.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "routing_number".into(),
+                            label: "routing / SWIFT / IBAN".into(),
+                            kind: FieldKind::Text,
+                            value: Some(r.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(p) = pin_val {
+                        fields.push(gitpass_core::item::Field {
+                            id: "pin".into(),
+                            label: "PIN".into(),
+                            kind: FieldKind::Concealed,
+                            value: Some(p),
+                            removed: false,
+                        });
+                    }
+                    if let Some(p) = branch_phone.as_ref().filter(|p| !p.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "branch_phone".into(),
+                            label: "branch phone".into(),
+                            kind: FieldKind::Phone,
+                            value: Some(p.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(a) = branch_address.as_ref().filter(|a| !a.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "branch_address".into(),
+                            label: "branch address".into(),
+                            kind: FieldKind::Multiline,
+                            value: Some(a.clone()),
+                            removed: false,
+                        });
+                    }
+                    let mut r = ItemRecord::new(it);
+                    r.category = Category::BankAccount;
+                    r.sections = vec![Section {
+                        id: "main".into(),
+                        title: None,
+                        fields,
+                    }];
+                    r
+                }
+                AddCategory::Server => {
+                    let password = if *password_stdin {
+                        let mut p = String::new();
+                        std::io::stdin().read_line(&mut p)?;
+                        let p = p.trim_end_matches(['\r', '\n']).to_string();
+                        if p.is_empty() { None } else { Some(p) }
+                    } else if let Some(n) = generate {
+                        Some(generate_password(*n))
+                    } else {
+                        let p = prompt_secret("GITPASS_ITEM_PASSWORD", "Server password (empty for none): ")?;
+                        if p.is_empty() { None } else { Some(p.to_string()) }
+                    };
+                    let it = Item {
+                        title: title.clone(),
+                        username: username.clone(),
+                        password: password.clone(),
+                        url: url.clone(),
+                        notes: notes.clone(),
+                        totp: None,
+                        updated_at: store::now(),
+                    };
+                    let mut fields = Vec::new();
+                    if let Some(u) = url.as_ref().filter(|u| !u.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "url".into(),
+                            label: "URL or hostname".into(),
+                            kind: FieldKind::Url,
+                            value: Some(u.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(u) = username.as_ref().filter(|u| !u.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "username".into(),
+                            label: "username".into(),
+                            kind: FieldKind::Text,
+                            value: Some(u.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(p) = password {
+                        fields.push(gitpass_core::item::Field {
+                            id: "password".into(),
+                            label: "password".into(),
+                            kind: FieldKind::Concealed,
+                            value: Some(p),
+                            removed: false,
+                        });
+                    }
+                    if let Some(a) = admin_url.as_ref().filter(|a| !a.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "admin_console_url".into(),
+                            label: "admin console URL".into(),
+                            kind: FieldKind::Url,
+                            value: Some(a.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(p) = provider.as_ref().filter(|p| !p.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "hosting_provider".into(),
+                            label: "hosting provider".into(),
+                            kind: FieldKind::Text,
+                            value: Some(p.clone()),
+                            removed: false,
+                        });
+                    }
+                    let mut r = ItemRecord::new(it);
+                    r.category = Category::Server;
+                    r.sections = vec![Section {
+                        id: "main".into(),
+                        title: None,
+                        fields,
+                    }];
+                    r
+                }
             };
             println!("added {}", s.add_record(&vid, rec)?);
         }
@@ -1620,12 +2077,16 @@ fn run() -> Result<()> {
                 }
             }
         }
-        Cmd::List { vault, query, sort, json, include_archived } => {
+        Cmd::List { vault, query, category, sort, json, include_archived } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
             let mut recs = s.list_records(&vid)?;
             if !include_archived {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
+            }
+            if let Some(cat) = category {
+                let want = Category::from(*cat);
+                recs.retain(|(_, _, r)| r.category == want);
             }
             let usage = s.all_last_used();
             let items: Vec<(String, ItemRecord)> = match query {
@@ -1773,14 +2234,23 @@ fn run() -> Result<()> {
         }
         Cmd::Run { env_file, no_masking, cmd } => {
             use gitpass_cli::inject;
+
+            if env_file.is_empty() && !std::env::vars().any(|(_, v)| v.contains("gp://")) {
+                bail!("no gp:// references found: no --env-file was given and no inherited environment variables contain gp:// references (usage: gitpass run [--env-file F] -- <cmd>)");
+            }
+
+            let mut file_texts = Vec::with_capacity(env_file.len());
+            for f in env_file {
+                let text = Zeroizing::new(std::fs::read_to_string(f).with_context(|| format!("reading {}", f.display()))?);
+                file_texts.push(text);
+            }
+            let file_slices: Vec<&str> = file_texts.iter().map(|s| s.as_str()).collect();
+
             let s = unlock(&cli, &root)?;
             let sr = SessionResolver(&s);
             let mut res = inject::Resolved::new(&sr);
-            let mut env = vec![];
-            for f in env_file {
-                let text = Zeroizing::new(std::fs::read_to_string(f).with_context(|| format!("reading {}", f.display()))?);
-                env.extend(inject::parse_env_file(&text, &mut res)?);
-            }
+            let env = inject::resolve_run_env(std::env::vars(), &file_slices, &mut res)?;
+            drop(file_texts);
             let secrets = std::mem::take(&mut res.secrets);
             drop(s);
             let code = inject::run_child(cmd, &env, &secrets, !*no_masking)?;
@@ -2010,10 +2480,7 @@ fn run() -> Result<()> {
 
 /// Default agent socket (same path the desktop app uses).
 fn default_ssh_socket() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    { dirs::home_dir().unwrap_or_default().join("Library/Application Support/gitpass/ssh-agent.sock") }
-    #[cfg(not(target_os = "macos"))]
-    { std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("gitpass/ssh-agent.sock") }
+    gitpass_core::ssh::default_ssh_agent_socket_path()
 }
 
 fn ssh_cmd(cli: &Cli, root: &Path, cmd: &SshCmd) -> Result<()> {
@@ -2086,6 +2553,53 @@ fn ssh_cmd(cli: &Cli, root: &Path, cmd: &SshCmd) -> Result<()> {
                 std::thread::spawn(move || { let _ = ssh::serve_stream(&mut c, &*k); });
             }
             }
+        }
+        SshCmd::GitSigning { vault, query, socket, global: _, local, print: _, apply, yes, email, allowed_signers } => {
+            let s = unlock(cli, root)?;
+            let vid = s.resolve_vault(vault)?;
+            let iid = s.resolve_item(&vid, query)?;
+            let (_, r) = s.read_record(&vid, &iid)?;
+            let k = SshKey::from_record(&r)?;
+            ssh::check_git_signing_support(&k)?;
+
+            let socket_path = socket.clone().unwrap_or_else(ssh::default_ssh_agent_socket_path);
+            let allowed_signers_path = allowed_signers.clone().unwrap_or_else(ssh::default_allowed_signers_path);
+            let email_val = ssh::resolve_signing_email(email.as_deref(), &k);
+
+            let cfg = ssh::build_git_signing_config(&k, &email_val, &allowed_signers_path, &socket_path)?;
+
+            let should_apply = *apply;
+            if !should_apply {
+                println!("{}", cfg.export_auth_sock);
+                println!();
+                println!("{}", cfg.config_lines);
+                return Ok(());
+            }
+
+            let is_global = !*local;
+            let target_desc = if is_global { "global git config (~/.gitconfig)" } else { "local repository git config" };
+            let signers_disp = ssh::display_path(&allowed_signers_path);
+
+            if !*yes && !cli.yes {
+                let prompt_msg = format!("Apply Git signing configuration to {target_desc} and update {signers_disp}?");
+                if !confirm(&prompt_msg)? {
+                    bail!("aborted (pass --yes to confirm)");
+                }
+            }
+
+            ssh::apply_git_signing(&k, &email_val, &allowed_signers_path, &socket_path, is_global)?;
+            eprintln!("Applied Git commit signing configuration to {target_desc}.");
+            eprintln!("Updated allowed signers: {signers_disp}");
+            if !cfg.auth_sock_active {
+                eprintln!();
+                eprintln!("Warning: SSH_AUTH_SOCK does not point to the gitpass SSH agent.");
+                eprintln!("Git uses ssh-keygen to sign commits, which talks to $SSH_AUTH_SOCK.");
+                eprintln!("Add this line to your shell profile (~/.zshrc or ~/.bashrc):");
+                eprintln!("  {}", cfg.export_auth_sock);
+            }
+            println!("{}", cfg.export_auth_sock);
+            println!();
+            println!("{}", cfg.config_lines);
         }
     }
     Ok(())
