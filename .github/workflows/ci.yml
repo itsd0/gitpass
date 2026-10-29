@@ -97,6 +97,8 @@ jobs:
           node-version: 22
       - name: isolated HOME
         run: T="$RUNNER_TEMP/home"; mkdir -p "$T"; echo "TEST_HOME=$T" >> "$GITHUB_ENV"
+      - name: Tauri npm/Rust version alignment
+        run: node scripts/check-tauri-versions.mjs
       - name: desktop UI tests + build
         working-directory: apps/desktop
         run: |
