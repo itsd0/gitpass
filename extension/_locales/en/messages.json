@@ -880,5 +880,11 @@
   },
   "watchtowerWeakSshKey": {
     "message": "Weak SSH key"
+  },
+  "pkChooseAccount": {
+    "message": "Choose an account"
+  },
+  "pkPasskeysCount": {
+    "message": "{n} passkeys for this site"
   }
 }

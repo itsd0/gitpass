@@ -959,5 +959,11 @@
   },
   "watchtowerWeakSshKey": {
     "message": "คีย์ SSH ที่ไม่ปลอดภัย"
+  },
+  "pkChooseAccount": {
+    "message": "เลือกบัญชี"
+  },
+  "pkPasskeysCount": {
+    "message": "พาสคีย์ {n} รายการสำหรับไซต์นี้"
   }
 }
