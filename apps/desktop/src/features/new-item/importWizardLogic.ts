@@ -41,13 +41,18 @@ export interface ImportState {
   result: ImportResult | null;
   error: string | null;
   autoDetected?: boolean;
+  /** The file is a Bitwarden export that needs its export password. */
+  needsPassword?: boolean;
+  password: string;
 }
 
 export type ImportAction =
-  | { type: 'file'; path: string; format?: string | null; autoDetected?: boolean }
+  | { type: 'file'; path: string; format?: string | null; autoDetected?: boolean; needsPassword?: boolean }
   | { type: 'format'; format: string; autoDetected?: boolean }
   | { type: 'path'; path: string }
   | { type: 'vault'; vaultId: string }
+  | { type: 'password'; password: string }
+  | { type: 'needsPassword' }
   | { type: 'preview'; preview: ImportResult }
   | { type: 'done'; result: ImportResult }
   | { type: 'error'; error: string }
@@ -62,7 +67,19 @@ export const initialImport = (vaultId: string | null = null): ImportState => ({
   result: null,
   error: null,
   autoDetected: false,
+  needsPassword: false,
+  password: '',
 });
+
+/** True when the JSON snippet is a Bitwarden export protected by a user-chosen password. */
+export function isPasswordProtectedBitwarden(content: string): boolean {
+  try {
+    const parsed = JSON.parse(content.trim());
+    return parsed?.encrypted === true && parsed?.passwordProtected === true;
+  } catch {
+    return false;
+  }
+}
 
 /** Pure function to detect the import format from filename and optional content/header. */
 export function detectImportFormat(filename: string, contentOrHeader?: string): ImportFormatId | null {
@@ -181,6 +198,7 @@ export function importReducer(s: ImportState, a: ImportAction): ImportState {
         path: a.path,
         format: a.format !== undefined ? a.format : s.format,
         autoDetected: a.autoDetected ?? false,
+        needsPassword: a.needsPassword ?? false,
         error: null,
       };
     case 'format':
@@ -197,6 +215,10 @@ export function importReducer(s: ImportState, a: ImportAction): ImportState {
     }
     case 'vault':
       return { ...s, vaultId: a.vaultId };
+    case 'password':
+      return { ...s, password: a.password, error: null };
+    case 'needsPassword':
+      return { ...s, needsPassword: true };
     case 'preview':
       return { ...s, preview: a.preview, step: 'preview', error: null };
     case 'done':

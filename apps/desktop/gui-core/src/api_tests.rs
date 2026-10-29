@@ -535,7 +535,7 @@ fn watchtower_score_without_passwords_and_with_an_old_password() {
     let dir = tempfile::tempdir().unwrap();
     let f = dir.path().join("old-fake.json");
     std::fs::write(&f, r#"{"encrypted":false,"items":[{"id":"1","type":1,"name":"Old fake","revisionDate":"2020-01-02T03:04:05.000Z","login":{"username":"old@example.invalid","password":"Xq7#vR2!mK9@pL4$wZ","uris":[{"uri":"https://example.invalid"}]}}]}"#).unwrap();
-    e.app.import_file(&e.vault, "bitwarden-json", &f.display().to_string(), false).unwrap();
+    e.app.import_file(&e.vault, "bitwarden-json", &f.display().to_string(), false, None).unwrap();
     let r = e.app.watchtower(false).unwrap();
     assert_eq!((r.old.len(), r.missing_totp.len(), r.score), (1, 2, 80));
 }
@@ -546,15 +546,38 @@ fn import_file_dry_run_and_real() {
     let dir = tempfile::tempdir().unwrap();
     let f = dir.path().join("chrome.csv");
     std::fs::write(&f, "name,url,username,password\nExample,https://a.example.invalid,alice,FAKE1\nOther,https://b.example.invalid,bob,FAKE2\n").unwrap();
-    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), true).unwrap();
+    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), true, None).unwrap();
     assert_eq!((r.parsed, r.added, r.duplicates), (2, 2, 0));
     assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 0);
-    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), false).unwrap();
+    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), false, None).unwrap();
     assert_eq!(r.added, 2);
     assert!(e.app.onboarding().imported);
-    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), false).unwrap();
+    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), false, None).unwrap();
     assert_eq!((r.added, r.duplicates), (0, 2));
-    assert!(e.app.import_file(&e.vault, "nope", &f.display().to_string(), true).is_err());
+    assert!(e.app.import_file(&e.vault, "nope", &f.display().to_string(), true, None).is_err());
+}
+
+#[test]
+fn import_file_password_protected_bitwarden_json() {
+    let e = env();
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("bitwarden-password-protected.json");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../crates/gitpass-core/tests/fixtures/import/bitwarden-password-protected.json");
+    std::fs::copy(fixture, &f).unwrap();
+    let path = f.display().to_string();
+    // Missing and wrong passwords fail with the core errors; nothing is written.
+    let err = e.app.import_file(&e.vault, "bitwarden-json", &path, true, None).unwrap_err().to_string();
+    assert!(err.contains("export password is required"), "{err}");
+    let err = e.app.import_file(&e.vault, "bitwarden-json", &path, true, Some("wrong")).unwrap_err().to_string();
+    assert!(err.contains("wrong export password"), "{err}");
+    assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 0);
+    // The export password decrypts the preview, and the real import stores the items.
+    let r = e.app.import_file(&e.vault, "bitwarden-json", &path, true, Some("fake-export-password")).unwrap();
+    assert_eq!((r.parsed, r.added, r.duplicates), (2, 2, 0));
+    assert_eq!(r.categories.get("login"), Some(&1));
+    let r = e.app.import_file(&e.vault, "bitwarden-json", &path, false, Some("fake-export-password")).unwrap();
+    assert_eq!(r.added, 2);
 }
 
 #[test]
@@ -563,10 +586,10 @@ fn import_file_apple_passwords_csv() {
     let dir = tempfile::tempdir().unwrap();
     let f = dir.path().join("apple.csv");
     std::fs::write(&f, "Title,URL,Username,Password,Notes,OTPAuth\nApple Service,https://apple.example.invalid,alice,FAKE1,Notes line,otpauth://totp/Apple:alice?secret=JBSWY3DPEHPK3PXP\n").unwrap();
-    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), true).unwrap();
+    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), true, None).unwrap();
     assert_eq!((r.parsed, r.added, r.duplicates), (1, 1, 0));
     assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 0);
-    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), false).unwrap();
+    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), false, None).unwrap();
     assert_eq!(r.added, 1);
     let items = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: Some(e.vault.clone()), tag: None, category: None, query: None, sort: None }).unwrap();
     let it = items.iter().find(|i| i.title == "Apple Service").unwrap();
@@ -590,7 +613,7 @@ fn export_vault_round_trip_and_errors() {
     #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; assert_eq!(std::fs::metadata(&plain).unwrap().permissions().mode() & 0o777, 0o600); }
     // round-trip export -> GUI import into a fresh vault
     let v2 = e.app.create_vault("Imported", None, None, None).unwrap();
-    let ir = e.app.import_file(&v2.id, "gitpass-json", &plain.display().to_string(), false).unwrap();
+    let ir = e.app.import_file(&v2.id, "gitpass-json", &plain.display().to_string(), false, None).unwrap();
     assert_eq!(ir.added, 2);
     let titles: Vec<String> = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: Some(v2.id.clone()), tag: None, category: None, query: None, sort: None }).unwrap().into_iter().map(|i| i.title).collect();
     assert!(titles.contains(&"Export Login".to_string()) && titles.contains(&"Example Bank".to_string()));

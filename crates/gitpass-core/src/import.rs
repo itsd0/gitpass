@@ -10,12 +10,17 @@ use crate::crypto::{open, random_bytes, seal, Envelope, KdfParams, Key32};
 use crate::item::{Category, Field, FieldKind, Section};
 use crate::merge::ItemRecord;
 use crate::store::{now, Item, Session};
+use aes::Aes256;
 use anyhow::{anyhow, bail, Context, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
+use cbc::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::Sha256;
 use std::collections::{BTreeMap, HashSet};
+use zeroize::Zeroizing;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ImportFormat { BitwardenJson, BitwardenCsv, OnePasswordCsv, OnePassword1pux, KeepassCsv, ChromeCsv, ApplePasswordsCsv, GitpassJson, LastpassCsv, ProtonPassCsv }
@@ -43,12 +48,13 @@ impl std::str::FromStr for ImportFormat {
 #[derive(Default)]
 pub struct Parsed { pub items: Vec<ItemRecord>, pub warnings: Vec<String> }
 
-/// Parse text `data` in `format`. `passphrase` is only needed for encrypted gitpass-json exports.
+/// Parse text `data` in `format`. `passphrase` is needed for encrypted gitpass-json exports and for
+/// password-protected Bitwarden JSON exports (it is the export password there).
 /// (.1pux is a zip archive: use [`parse_bytes`].)
 pub fn parse(format: ImportFormat, data: &str, passphrase: Option<&str>) -> Result<Parsed> {
     let data = data.strip_prefix('\u{feff}').unwrap_or(data); // tolerate UTF-8 BOM (Excel / 1Password)
     match format {
-        ImportFormat::BitwardenJson => parse_bitwarden_json(data),
+        ImportFormat::BitwardenJson => parse_bitwarden_json(data, passphrase),
         ImportFormat::GitpassJson => parse_gitpass_json(data, passphrase),
         ImportFormat::BitwardenCsv => parse_csv(data, &BITWARDEN_CSV),
         ImportFormat::OnePasswordCsv => parse_csv(data, &ONEPASSWORD_CSV),
@@ -322,10 +328,11 @@ fn month_year(m: Option<String>, y: Option<String>) -> Option<String> {
 
 // ---------------------------------------------------------------- Bitwarden JSON
 
-fn parse_bitwarden_json(data: &str) -> Result<Parsed> {
+fn parse_bitwarden_json(data: &str, export_password: Option<&str>) -> Result<Parsed> {
     let v: Value = serde_json::from_str(data).context("bitwarden-json: invalid JSON")?;
     if v.get("encrypted").and_then(Value::as_bool) == Some(true) {
-        bail!("bitwarden-json: this is an ENCRYPTED Bitwarden export; re-export as unencrypted JSON (or CSV)");
+        let clear = decrypt_bitwarden_export(&v, export_password)?;
+        return parse_bitwarden_json(&clear, None);
     }
     let folders: BTreeMap<String, String> = v.get("folders").and_then(Value::as_array).into_iter().flatten()
         .filter_map(|f| Some((f.get("id")?.as_str()?.to_string(), f.get("name")?.as_str()?.to_string()))).collect();
@@ -401,6 +408,121 @@ fn parse_bitwarden_json(data: &str) -> Result<Parsed> {
         out.items.push(r);
     }
     Ok(out)
+}
+
+// ------------------------------------------------ Bitwarden password-protected JSON
+
+/// True when `data` is a Bitwarden JSON export protected by a user-chosen password
+/// (`encrypted` + `passwordProtected`). Account-key-encrypted exports return false.
+pub fn bitwarden_json_needs_password(data: &str) -> bool {
+    serde_json::from_str::<Value>(data).is_ok_and(|v| is_password_protected(&v))
+}
+
+fn is_password_protected(v: &Value) -> bool {
+    v.get("encrypted").and_then(Value::as_bool) == Some(true)
+        && v.get("passwordProtected").and_then(Value::as_bool) == Some(true)
+}
+
+// Bounds Bitwarden clients accept for import KDF parameters. An import file is attacker controlled
+// and Argon2 allocates `kdfMemory` MiB up front, so reject out-of-range values before deriving.
+const BW_PBKDF2_ITER_MIN: u64 = 5_000;
+const BW_PBKDF2_ITER_MAX: u64 = 2_000_000;
+const BW_ARGON2_ITER_MIN: u64 = 2;
+const BW_ARGON2_ITER_MAX: u64 = 10;
+const BW_ARGON2_MEMORY_MIN: u64 = 16; // MiB
+const BW_ARGON2_MEMORY_MAX: u64 = 1024;
+const BW_ARGON2_PARALLELISM_MIN: u64 = 1;
+const BW_ARGON2_PARALLELISM_MAX: u64 = 16;
+
+fn within(v: u64, lo: u64, hi: u64) -> bool { (lo..=hi).contains(&v) }
+
+/// Decrypt a password-protected Bitwarden JSON export: derive the key from the export password with
+/// the file's KDF settings, HKDF-Expand it into the AES-256-CBC and HMAC-SHA256 keys, verify
+/// `encKeyValidation_DO_NOT_EDIT`, then MAC-verify and decrypt `data`.
+fn decrypt_bitwarden_export(v: &Value, export_password: Option<&str>) -> Result<Zeroizing<String>> {
+    if !is_password_protected(v) {
+        bail!("bitwarden-json: this export is encrypted with your Bitwarden account key, not an export password; in Bitwarden choose “Password protected” or an unencrypted export");
+    }
+    let password = export_password
+        .filter(|p| !p.is_empty())
+        .ok_or_else(|| anyhow!("bitwarden-json: this export is password-protected; the export password is required"))?;
+    let field = |k: &str| {
+        v.get(k).and_then(Value::as_str).filter(|s| !s.is_empty())
+            .ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing or has an empty \"{k}\""))
+    };
+    let master = bitwarden_export_key(password, field("salt")?, v)?;
+    let mut enc_key = Zeroizing::new([0u8; 32]);
+    let mut mac_key = Zeroizing::new([0u8; 32]);
+    let hk = hkdf::Hkdf::<Sha256>::from_prk(master.as_slice())
+        .map_err(|_| anyhow!("bitwarden-json: invalid export key material"))?;
+    hk.expand(b"enc", enc_key.as_mut_slice()).map_err(|_| anyhow!("bitwarden-json: cannot stretch the export key"))?;
+    hk.expand(b"mac", mac_key.as_mut_slice()).map_err(|_| anyhow!("bitwarden-json: cannot stretch the export key"))?;
+    // A MAC failure on the validation blob means the password is wrong; on the payload it means tampering.
+    bitwarden_decrypt(field("encKeyValidation_DO_NOT_EDIT")?, enc_key.as_slice(), mac_key.as_slice())
+        .map_err(|_| anyhow!("bitwarden-json: wrong export password (or the file is corrupted)"))?;
+    let plain = bitwarden_decrypt(field("data")?, enc_key.as_slice(), mac_key.as_slice())
+        .map_err(|_| anyhow!("bitwarden-json: encrypted contents failed the integrity check (tampered file or wrong password)"))?;
+    let text = std::str::from_utf8(plain.as_slice()).context("bitwarden-json: decrypted export is not UTF-8")?;
+    Ok(Zeroizing::new(text.to_string()))
+}
+
+/// Derive the 32-byte export key from the password and the file's KDF settings. Bitwarden feeds the
+/// salt text itself (a base64 string) to the KDF as UTF-8, not the decoded bytes.
+fn bitwarden_export_key(password: &str, salt: &str, v: &Value) -> Result<Zeroizing<[u8; 32]>> {
+    let num = |k: &str| v.get(k).and_then(Value::as_u64);
+    let kdf = num("kdfType").ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing \"kdfType\""))?;
+    let mut key = Zeroizing::new([0u8; 32]);
+    match kdf {
+        0 => {
+            let iterations = num("kdfIterations").ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing \"kdfIterations\""))?;
+            if !within(iterations, BW_PBKDF2_ITER_MIN, BW_PBKDF2_ITER_MAX) {
+                bail!("bitwarden-json: unsupported PBKDF2 iteration count {iterations} (expected {BW_PBKDF2_ITER_MIN}–{BW_PBKDF2_ITER_MAX})");
+            }
+            pbkdf2::pbkdf2_hmac::<Sha256>(password.as_bytes(), salt.as_bytes(), iterations as u32, key.as_mut_slice());
+        }
+        1 => {
+            let iterations = num("kdfIterations").ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing \"kdfIterations\""))?;
+            let memory = num("kdfMemory").ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing \"kdfMemory\""))?;
+            let parallelism = num("kdfParallelism").ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing \"kdfParallelism\""))?;
+            if !within(iterations, BW_ARGON2_ITER_MIN, BW_ARGON2_ITER_MAX)
+                || !within(memory, BW_ARGON2_MEMORY_MIN, BW_ARGON2_MEMORY_MAX)
+                || !within(parallelism, BW_ARGON2_PARALLELISM_MIN, BW_ARGON2_PARALLELISM_MAX)
+            {
+                bail!("bitwarden-json: unsupported Argon2id settings (iterations {iterations}, memory {memory} MiB, parallelism {parallelism})");
+            }
+            let params = Params::new((memory * 1024) as u32, iterations as u32, parallelism as u32, Some(32))
+                .map_err(|e| anyhow!("bitwarden-json: unsupported Argon2id settings: {e}"))?;
+            Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+                .hash_password_into(password.as_bytes(), salt.as_bytes(), key.as_mut_slice())
+                .map_err(|_| anyhow!("bitwarden-json: cannot derive the export key"))?;
+        }
+        other => bail!("bitwarden-json: unsupported KDF type {other} (expected 0 = PBKDF2-SHA256 or 1 = Argon2id)"),
+    }
+    Ok(key)
+}
+
+/// Decrypt one Bitwarden `EncString` of type 2 (`2.<iv>|<ciphertext>|<mac>`, AesCbc256_HmacSha256).
+/// The MAC covers IV ‖ ciphertext and is checked before AES-CBC/PKCS7 decryption.
+fn bitwarden_decrypt(field: &str, enc_key: &[u8], mac_key: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+    let Some(rest) = field.strip_prefix("2.") else {
+        bail!("bitwarden-json: encrypted field is not AesCbc256_HmacSha256");
+    };
+    let mut parts = rest.split('|');
+    let (Some(iv), Some(ct), Some(mac), None) = (parts.next(), parts.next(), parts.next(), parts.next()) else {
+        bail!("bitwarden-json: malformed encrypted field");
+    };
+    let bad = || anyhow!("bitwarden-json: malformed encrypted field");
+    let iv = B64.decode(iv).map_err(|_| bad())?;
+    let mut ct = B64.decode(ct).map_err(|_| bad())?;
+    let mac = B64.decode(mac).map_err(|_| bad())?;
+    let mut h = Hmac::<Sha256>::new_from_slice(mac_key).map_err(|_| anyhow!("bitwarden-json: invalid MAC key"))?;
+    h.update(&iv);
+    h.update(&ct);
+    h.verify_slice(&mac).map_err(|_| anyhow!("bitwarden-json: MAC check failed"))?;
+    let dec = cbc::Decryptor::<Aes256>::new_from_slices(enc_key, &iv)
+        .map_err(|_| anyhow!("bitwarden-json: invalid AES key or IV"))?;
+    let pt = dec.decrypt_padded_mut::<Pkcs7>(&mut ct).map_err(|_| anyhow!("bitwarden-json: invalid encrypted payload"))?;
+    Ok(Zeroizing::new(pt.to_vec()))
 }
 
 // ---------------------------------------------------------------- 1Password .1pux
@@ -724,7 +846,9 @@ pub fn detect_format(data: &str) -> Option<ImportFormat> {
             if v.get("gitpass_export").is_some() || v.get("gitpass_encrypted_export").is_some() {
                 return Some(ImportFormat::GitpassJson);
             }
-            if v.get("items").is_some() || v.get("folders").is_some() || v.get("collections").is_some() {
+            if v.get("items").is_some() || v.get("folders").is_some() || v.get("collections").is_some()
+                || v.get("encKeyValidation_DO_NOT_EDIT").is_some()
+                || (v.get("encrypted").and_then(Value::as_bool) == Some(true) && v.get("data").is_some()) {
                 return Some(ImportFormat::BitwardenJson);
             }
         }

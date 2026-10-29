@@ -62,7 +62,7 @@ export const api = {
   watchtower: (a:{hibp:boolean}) => call<T.WatchtowerReport>('watchtower', a),
   ignoreFinding: (a:{vaultId:string; itemId:string; kind:string}) => call<void>('ignore_finding', a),
   unignoreFinding: (a:{vaultId:string; itemId:string; kind:string}) => call<void>('unignore_finding', a),
-  importFile: (a:{vaultId:string; format:string; path:string; dryRun:boolean}) => call<T.ImportResult>('import_file', a),
+  importFile: (a:{vaultId:string; format:string; path:string; dryRun:boolean; password?:string|null}) => call<T.ImportResult>('import_file', a),
   exportItems: (a:{req:T.ExportRequest}) => call<T.ExportResult>('export_items', a),
   identity: () => call<T.Identity>('identity'),
   /** v0.7: new Ed25519 key in a new SSH Key item (private key never reaches the webview) */

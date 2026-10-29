@@ -601,6 +601,8 @@ export const th: Partial<Record<Key, string>> = {
   "import.selectedFile": "ไฟล์ที่เลือก",
   "import.manualPath": "เส้นทางไฟล์ส่งออก",
   "import.manualPathPlaceholder": "/path/to/export.csv, .json, หรือ .1pux",
+  "import.exportPassword": "รหัสผ่านส่งออก",
+  "import.exportPasswordHint": "ไฟล์ส่งออก Bitwarden นี้ได้รับการป้องกันด้วยรหัสผ่าน รหัสผ่านใช้เพื่อถอดรหัสไฟล์เท่านั้นและจะไม่ถูกบันทึก",
   "import.format": "รูปแบบ",
   "import.selectFormat": "เลือกรูปแบบ",
   "import.formatLastpass": "LastPass (.csv)",

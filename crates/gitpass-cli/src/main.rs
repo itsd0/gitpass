@@ -307,7 +307,8 @@ enum Cmd {
     Device { #[command(subcommand)] cmd: DeviceCmd },
     /// Account identity (X25519) used for vault sharing
     Identity { #[command(subcommand)] cmd: IdentityCmd },
-    /// Import items from another password manager's export file
+    /// Import items from another password manager's export file (a password-protected Bitwarden
+    /// JSON asks for the export password: $GITPASS_IMPORT_PASSWORD or a prompt)
     Import {
         vault: String,
         /// bitwarden-json | bitwarden-csv | 1password-csv | 1password-1pux | keepass-csv | chrome-csv | apple-passwords-csv | lastpass-csv | protonpass-csv | gitpass-json
@@ -1912,8 +1913,14 @@ fn run() -> Result<()> {
             use gitpass_core::import;
             let fmt: import::ImportFormat = from.parse()?;
             let data = Zeroizing::new(std::fs::read(file).with_context(|| format!("reading {}", file.display()))?);
-            let pass = if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&String::from_utf8_lossy(&data)) {
-                Some(prompt_secret("GITPASS_EXPORT_PASSPHRASE", "Export passphrase: ")?) } else { None };
+            let text = String::from_utf8_lossy(&data);
+            let pass = match fmt {
+                import::ImportFormat::GitpassJson if import::is_encrypted_export(&text) =>
+                    Some(prompt_secret("GITPASS_EXPORT_PASSPHRASE", "Export passphrase: ")?),
+                import::ImportFormat::BitwardenJson if import::bitwarden_json_needs_password(&text) =>
+                    Some(prompt_secret("GITPASS_IMPORT_PASSWORD", "Export password: ")?),
+                _ => None,
+            };
             let parsed = import::parse_bytes(fmt, &data, pass.as_deref().map(|s| s.as_str()))?;
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
