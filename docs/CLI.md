@@ -129,6 +129,11 @@ gitpass attach rm Personal github recovery-codes.pdf
 gitpass totp Personal github
 gitpass totp Personal github --copy --clear-secs 30
 gitpass gen 32
+gitpass gen 32 --no-history
+gitpass gen history
+gitpass gen history --reveal
+gitpass gen history --json
+gitpass gen history clear
 gitpass gen --words 5 --separator . --capitalize
 gitpass gen --pin 6
 gitpass gen --copy 32 --clear-secs 30
@@ -137,6 +142,10 @@ gitpass gen --copy 32 --clear-secs 30
 `gen` defaults to a 24-character random password. `--words N` makes a passphrase from the
 128-word list (3-20 words), `--pin N` a digits-only PIN (4-16 digits); `--no-symbols` and
 `--no-digits` apply to random passwords. `--clear-secs` requires `--copy`.
+
+`gitpass gen` automatically records generated passwords to an encrypted vault history
+unless `--no-history` is provided. `gitpass gen history` lists recently generated passwords
+(masked by default; use `--reveal` or `--json` to view), and `gitpass gen history clear` clears it.
 
 ## Secrets in commands and templates
 

@@ -15,7 +15,7 @@ import App from '../../App';
 import { defaultRoute, useApp } from '../../lib/store';
 import { api } from '../../api/client';
 import { useSettings } from '../settings/useSettings';
-import type { Settings, VaultInfo } from '../../api/types';
+import type { GeneratorHistoryEntry, Settings, VaultInfo } from '../../api/types';
 import { PasswordGenerator } from '../new-item/PasswordGenerator';
 import { TooltipProvider } from '../../ui';
 
@@ -307,5 +307,143 @@ describe('Standalone Password Generator', () => {
 
     fireEvent.change(numInput, { target: { value: '4' } });
     expect(slider.value).toBe('4');
+  });
+});
+
+
+describe('Password Generator History', () => {
+  const mockHistoryItems: GeneratorHistoryEntry[] = [
+    { id: 'gh-1', value: 'FAKE-pwd-first-123', createdAt: Math.floor(Date.now() / 1000) - 60, source: 'desktop', host: null },
+    { id: 'gh-2', value: 'FAKE-pwd-second-456', createdAt: Math.floor(Date.now() / 1000) - 3600, source: 'extension', host: 'github.com' },
+  ];
+
+  beforeEach(() => {
+    vi.spyOn(api, 'generatePassword').mockResolvedValue('current-pwd');
+    vi.spyOn(api, 'getGeneratorHistory').mockResolvedValue([...mockHistoryItems]);
+    vi.spyOn(api, 'deleteGeneratorHistoryEntry').mockResolvedValue(true);
+    vi.spyOn(api, 'clearGeneratorHistory').mockResolvedValue(undefined);
+    vi.spyOn(api, 'copyPassword').mockResolvedValue(undefined);
+  });
+
+  it('renders history items with values masked by default, sources and hosts', async () => {
+    renderWithTooltip(<PasswordGenerator standalone />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('generator-history')).toBeTruthy();
+      expect(screen.getAllByTestId('generator-history-item').length).toBe(2);
+    });
+
+    const items = screen.getAllByTestId('generator-history-item');
+    expect(within(items[0]).getByText('desktop')).toBeTruthy();
+    expect(within(items[0]).getByTestId('history-entry-value').textContent).toBe('••••••••••••••••••••');
+    expect(within(items[1]).getByText('extension')).toBeTruthy();
+    expect(within(items[1]).getByTestId('history-entry-host').textContent).toBe('github.com');
+    expect(within(items[1]).getByTestId('history-entry-value').textContent).toBe('••••••••••••••••••••');
+  });
+
+  it('reveals plaintext password on reveal click and re-masks on click', async () => {
+    renderWithTooltip(<PasswordGenerator standalone />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('generator-history-item').length).toBe(2);
+    });
+
+    const items = screen.getAllByTestId('generator-history-item');
+    const revealBtn = within(items[0]).getByTestId('history-reveal-btn');
+
+    fireEvent.click(revealBtn);
+    await waitFor(() => {
+      expect(within(items[0]).getByTestId('history-entry-value').textContent).toBe('FAKE-pwd-first-123');
+    });
+
+    fireEvent.click(revealBtn);
+    await waitFor(() => {
+      expect(within(items[0]).getByTestId('history-entry-value').textContent).toBe('••••••••••••••••••••');
+    });
+  });
+
+  it('copies entry password using concealed pasteboard path', async () => {
+    const copySpy = vi.spyOn(api, 'copyPassword');
+    renderWithTooltip(<PasswordGenerator standalone />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('generator-history-item').length).toBe(2);
+    });
+
+    const items = screen.getAllByTestId('generator-history-item');
+    const copyBtn = within(items[1]).getByTestId('history-copy-btn');
+
+    fireEvent.click(copyBtn);
+    await waitFor(() => {
+      expect(copySpy).toHaveBeenCalledWith({ password: 'FAKE-pwd-second-456' });
+    });
+  });
+
+  it('deletes an individual history entry', async () => {
+    const deleteSpy = vi.spyOn(api, 'deleteGeneratorHistoryEntry');
+    renderWithTooltip(<PasswordGenerator standalone />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('generator-history-item').length).toBe(2);
+    });
+
+    const items = screen.getAllByTestId('generator-history-item');
+    const deleteBtn = within(items[0]).getByTestId('history-delete-btn');
+
+    fireEvent.click(deleteBtn);
+    await waitFor(() => {
+      expect(deleteSpy).toHaveBeenCalledWith({ id: 'gh-1' });
+      expect(screen.getAllByTestId('generator-history-item').length).toBe(1);
+    });
+  });
+
+  it('clears history with confirmation modal and shows empty state', async () => {
+    const clearSpy = vi.spyOn(api, 'clearGeneratorHistory');
+    renderWithTooltip(<PasswordGenerator standalone />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('generator-history-item').length).toBe(2);
+    });
+
+    const clearBtn = screen.getByTestId('clear-history-btn');
+    fireEvent.click(clearBtn);
+
+    await waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /Clear generator history\?/i })).toBeTruthy();
+    });
+
+    const confirmBtn = screen.getByTestId('confirm-clear-history-btn');
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(clearSpy).toHaveBeenCalled();
+      expect(screen.getByTestId('generator-history-empty')).toBeTruthy();
+      expect(screen.queryByTestId('generator-history-item')).toBeNull();
+    });
+  });
+
+  it('renders empty state when history has no entries', async () => {
+    vi.spyOn(api, 'getGeneratorHistory').mockResolvedValue([]);
+    renderWithTooltip(<PasswordGenerator standalone />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('generator-history-empty')).toBeTruthy();
+    });
+    expect(screen.queryByTestId('clear-history-btn')).toBeNull();
+  });
+
+  it('Save as new Login from history item pre-fills password and host', async () => {
+    const saveLoginSpy = vi.fn();
+    renderWithTooltip(<PasswordGenerator standalone onSaveAsLogin={saveLoginSpy} />);
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId('generator-history-item').length).toBe(2);
+    });
+
+    const items = screen.getAllByTestId('generator-history-item');
+    const saveLoginBtn = within(items[1]).getByTestId('history-save-login-btn');
+
+    fireEvent.click(saveLoginBtn);
+    expect(saveLoginSpy).toHaveBeenCalledWith('FAKE-pwd-second-456', 'github.com');
   });
 });

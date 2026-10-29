@@ -14,12 +14,20 @@ export interface Member { fingerprint: string; label: string|null; isSelf: boole
 export interface Filter { kind: 'all'|'favorites'|'archive'|'deleted'|'vault'|'tag'|'category'; vaultId?: string; tag?: string; category?: ItemCategory; query?: string; sort?: 'updated'|'title'|'created'; }
 export interface WatchtowerReport { score: number; weak: string[]; reused: string[][]; old: string[]; breached: string[]; missingTotp: string[]; totpAvailable: string[]; passkeyAvailable: string[]; expired: string[]; expiringSoon: string[]; insecureUrls: string[]; duplicates: string[][]; weakReasons?: Record<string, string>; ignored: IgnoredFinding[]; checkedAt: string; hibpChecked: boolean; }
 export interface DeviceInfo { id: string; name: string; lastSeen: string; revoked: boolean; current: boolean; }
-export interface Settings { autoLockMinutes: number; clipboardClearSecs: number; theme: 'dark'|'light'|'system'; language: 'en'|'my'|'th'; biometricUnlock: boolean; quickAccessHotkey: string; /** opt-in HIBP k-anonymity check in Watchtower; default false */ hibpCheck: boolean; /** ask before every SSH agent signature (v0.7) */ sshApproveEachUse?: boolean; lockOnSleep?: boolean; lockOnScreenLock?: boolean; lockOnUserSwitch?: boolean; generatorMode?: 'random' | 'memorable' | 'pin'; generatorLength?: number; generatorDigits?: boolean; generatorSymbols?: boolean; showWebsiteIcons?: boolean; }
+export interface Settings { autoLockMinutes: number; clipboardClearSecs: number; theme: 'dark'|'light'|'system'; language: 'en'|'my'|'th'; biometricUnlock: boolean; quickAccessHotkey: string; /** opt-in HIBP k-anonymity check in Watchtower; default false */ hibpCheck: boolean; /** ask before every SSH agent signature (v0.7) */ sshApproveEachUse?: boolean; lockOnSleep?: boolean; lockOnScreenLock?: boolean; lockOnUserSwitch?: boolean; generatorMode?: 'random' | 'memorable' | 'pin'; generatorLength?: number; generatorDigits?: boolean; generatorSymbols?: boolean; showWebsiteIcons?: boolean; rememberGeneratedPasswords?: boolean; }
 export interface SyncStatus { remote: string|null; lastSync: string|null; ahead: number; behind: number; dirty: boolean; }
 export interface Identity { publicKey: string; fingerprint: string; }
 export interface Onboarding { extensionInstalled: boolean; emergencyKitSaved: boolean; repoConnected: boolean; imported: boolean; dismissed: boolean; }
 export interface UnlockState { unlocked: boolean; vaultPath: string; account: string|null; vaultExists?: boolean; biometricAvailable?: boolean; }
 export interface CreateAccountResult { vaultPath: string; secretKey: string; }
+export interface GeneratorHistoryEntry {
+  id: string;
+  value: string;
+  createdAt: number;
+  source: string;
+  host?: string | null;
+}
+
 export interface EmergencyKitData { accountId: string; vaultPath: string; remote: string | null; deviceName: string | null; createdAt: string; secretKeyAvailable: boolean; secretKey: string | null; }
 export interface ImportPreviewItem { title: string; category: string; username: string | null; url: string | null; hasPassword: boolean; hasTotp: boolean; tags: string[]; fields: number; archived: boolean; }
 export interface ImportResult { parsed: number; added: number; duplicates: number; duplicateTitles?: string[]; warnings?: string[]; categories?: Record<string, number>; preview?: ImportPreviewItem[]; }

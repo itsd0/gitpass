@@ -77,6 +77,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['fast user switching', 'switch user', 'account', 'session'],
   },
   {
+    id: 'setting-remember-generated-passwords',
+    tab: 'security',
+    labelKey: 'settings.rememberGeneratedPasswords',
+    descriptionKey: 'settings.rememberGeneratedPasswordsHelp',
+    keywords: ['password generator', 'generator history', 'history', 'passwords', 'generated', 'remember'],
+  },
+  {
     id: 'setting-clipboard',
     tab: 'security',
     labelKey: 'settings.clipboard',

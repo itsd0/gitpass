@@ -61,17 +61,20 @@ pub fn options(a: &Args) -> Result<Options> {
     })
 }
 
-/// Generate and either print the secret or copy it as concealed/transient — never both.
-///
-/// `open_clipboard` is called only with `--copy`; the pasteboard is cleared after `clear_secs`
-/// unless the user copied something else in the meantime.
-pub fn run(
+/// Generate the password string according to the given options.
+pub fn generate_pw(a: &Args) -> Result<String> {
+    Ok(generate(&options(a)?))
+}
+
+/// Output the generated password: write to stdout or copy to the clipboard.
+pub fn output_pw(
     a: &Args,
+    pw: &str,
     open_clipboard: impl FnOnce() -> Result<Box<dyn Clipboard>>,
     out: &mut dyn Write,
     sleep: impl FnOnce(Duration),
 ) -> Result<()> {
-    let pw = Zeroizing::new(generate(&options(a)?));
+    let pw = Zeroizing::new(pw.to_string());
     if !a.copy {
         writeln!(out, "{}", pw.as_str())?;
         return Ok(());
@@ -90,4 +93,18 @@ pub fn run(
         }
     }
     Ok(())
+}
+
+/// Generate and either print the secret or copy it as concealed/transient — never both.
+///
+/// `open_clipboard` is called only with `--copy`; the pasteboard is cleared after `clear_secs`
+/// unless the user copied something else in the meantime.
+pub fn run(
+    a: &Args,
+    open_clipboard: impl FnOnce() -> Result<Box<dyn Clipboard>>,
+    out: &mut dyn Write,
+    sleep: impl FnOnce(Duration),
+) -> Result<()> {
+    let pw = generate_pw(a)?;
+    output_pw(a, &pw, open_clipboard, out, sleep)
 }

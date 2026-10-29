@@ -212,6 +212,9 @@
       }
       case 'page:generate': {
         const r = await host('generate', { len: 20, digits: true, symbols: true });
+        if (r && r.password) {
+          await host('record_generated_password', { password: r.password, origin, source: 'extension' }).catch(() => {});
+        }
         return { origin, password: r.password };
       }
       case 'page:request_unlock': return host('request_unlock', { reason: 'Fill on ' + new URL(origin).host });

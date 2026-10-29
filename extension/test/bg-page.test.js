@@ -256,3 +256,34 @@ test('sameSite', () => {
   assert.ok(!GitpassPolicy.sameSite('https://a.com', 'http://a.com'));
   assert.ok(!GitpassPolicy.sameSite('https://a.com', 'https://b.com'));
 });
+
+
+test('page:generate derives origin strictly from sender, not from message, and records to host', async () => {
+  const calls = [];
+  const h = async (cmd, args) => {
+    calls.push([cmd, args]);
+    if (cmd === 'generate') return { password: 'FAKE-generated-pw-123' };
+    if (cmd === 'record_generated_password') return { ok: true };
+    return {};
+  };
+  h.calls = calls;
+
+  const s = tab('https://real-site.example/signup', 0, 42);
+  const msg = {
+    type: 'page:generate',
+    origin: 'https://attacker.example', // message attempts to forge origin
+  };
+
+  const r = await B.handle(msg, s, h);
+  assert.strictEqual(r.origin, 'https://real-site.example');
+  assert.strictEqual(r.password, 'FAKE-generated-pw-123');
+
+  const genCall = calls.find(([cmd]) => cmd === 'generate');
+  assert.ok(genCall, 'generate must be called');
+
+  const recCall = calls.find(([cmd]) => cmd === 'record_generated_password');
+  assert.ok(recCall, 'record_generated_password must be called');
+  assert.strictEqual(recCall[1].password, 'FAKE-generated-pw-123');
+  assert.strictEqual(recCall[1].origin, 'https://real-site.example', 'origin must be taken from sender tab, never message');
+  assert.strictEqual(recCall[1].source, 'extension');
+});

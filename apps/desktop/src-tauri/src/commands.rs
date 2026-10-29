@@ -68,6 +68,10 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn rename_tag(s: State<App>, old: String, new: String) -> R<a::BulkResult> { s.rename_tag(&old, &new).map_err(e) }
 #[tauri::command] pub fn delete_tag(s: State<App>, name: String) -> R<a::BulkResult> { s.delete_tag(&name).map_err(e) }
 #[tauri::command] pub fn generate_password(s: State<App>, length: usize, symbols: bool, digits: bool, words: Option<bool>, pin: Option<bool>) -> String { s.generate_password(length, symbols, digits, words.unwrap_or(false), pin.unwrap_or(false)) }
+#[tauri::command] pub fn get_generator_history(s: State<App>) -> R<Vec<a::GeneratorHistoryEntryDto>> { s.get_generator_history().map_err(e) }
+#[tauri::command] pub fn delete_generator_history_entry(s: State<App>, id: String) -> R<bool> { s.delete_generator_history_entry(&id).map_err(e) }
+#[tauri::command] pub fn clear_generator_history(s: State<App>) -> R<()> { s.clear_generator_history().map_err(e) }
+#[tauri::command] pub fn record_generated_password(s: State<App>, password: String, source: String, host: Option<String>) -> R<Option<a::GeneratorHistoryEntryDto>> { s.record_generated_password(&password, &source, host).map_err(e) }
 #[tauri::command] pub fn copy_password(s: State<App>, password: String) -> R<()> { s.copy_password(&password).map_err(e) }
 #[tauri::command] pub fn password_strength(s: State<App>, password: String) -> u8 { s.password_strength(&Zeroizing::new(password)) }
 #[tauri::command(async)] pub fn watchtower(s: State<'_, App>, hibp: bool) -> R<a::WatchtowerReport> { s.watchtower(hibp).map_err(e) }

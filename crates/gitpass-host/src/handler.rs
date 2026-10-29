@@ -16,6 +16,14 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 use zeroize::Zeroizing;
 
+fn clean_host(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() { return None; }
+    let u = if s.contains("://") { url::Url::parse(s).ok()? } else { url::Url::parse(&format!("https://{s}")).ok()? };
+    u.host_str().map(|h| h.trim_start_matches("www.").to_string()).filter(|h| !h.is_empty())
+}
+
+
 /// Contract error codes.
 pub mod code {
     pub const LOCKED: &str = "locked";
@@ -567,6 +575,14 @@ impl Host {
                 let digits = req.get("digits").and_then(Value::as_bool).unwrap_or(true);
                 let symbols = req.get("symbols").and_then(Value::as_bool).unwrap_or(true);
                 Ok(json!({"password": generate(len, digits, symbols, words, pin)}))
+            }
+            "record_generated_password" => {
+                let pw = arg_str(req, "password")?;
+                let source = req.get("source").and_then(Value::as_str).unwrap_or("extension");
+                let origin_or_host = req.get("origin").or_else(|| req.get("host")).and_then(Value::as_str);
+                let host = origin_or_host.and_then(clean_host);
+                self.sess()?.record_generated_password(pw, source, host)?;
+                Ok(json!({"ok": true}))
             }
             "list_vaults" => {
                 let s = self.sess()?;

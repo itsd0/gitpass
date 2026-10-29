@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Copy, Plus, RefreshCw, Wand2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, Plus, RefreshCw, Trash2, Wand2 } from 'lucide-react';
+import type { GeneratorHistoryEntry } from '../../api/types';
 import { api } from '../../api/client';
 import { Button, Input, Modal, Tooltip, toast } from '../../ui';
 import { useT, type Key } from '../../i18n';
@@ -82,7 +83,7 @@ export interface PasswordGeneratorProps {
   onUse?: (pw: string) => void;
   standalone?: boolean;
   onClose?: () => void;
-  onSaveAsLogin?: (pw: string) => void;
+  onSaveAsLogin?: (pw: string, host?: string) => void;
 }
 
 export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }: PasswordGeneratorProps) {
@@ -105,6 +106,74 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
 
   const [pw, setPw] = useState<string>('');
   const [err, setErr] = useState<string | null>(null);
+  const [history, setHistory] = useState<GeneratorHistoryEntry[]>([]);
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
+  const [confirmClearOpen, setConfirmClearOpen] = useState(false);
+
+  const loadHistory = useCallback(async () => {
+    if (!standalone) return;
+    try {
+      const list = await api.getGeneratorHistory();
+      setHistory(list);
+    } catch {
+      // Ignored if locked or error
+    }
+  }, [standalone]);
+
+  const toggleReveal = (id: string) => {
+    setRevealedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const copyEntry = async (value: string) => {
+    try {
+      await api.copyPassword({ password: value });
+      toast(t('generator.copied'));
+    } catch (e) {
+      toast(String((e as Error)?.message ?? e), 'danger');
+    }
+  };
+
+  const handleSaveEntryAsLogin = (entry: GeneratorHistoryEntry) => {
+    if (onSaveAsLogin) {
+      onSaveAsLogin(entry.value, entry.host ?? undefined);
+    } else {
+      if (onClose) onClose();
+      useApp.getState().openModal('new-item', {
+        category: 'login',
+        initial: {
+          password: entry.value,
+          url: entry.host ? (entry.host.startsWith('http') ? entry.host : `https://${entry.host}`) : undefined,
+          title: entry.host ?? undefined,
+        },
+      });
+    }
+  };
+
+  const deleteEntry = async (id: string) => {
+    try {
+      await api.deleteGeneratorHistoryEntry({ id });
+      setHistory((prev) => prev.filter((e) => e.id !== id));
+      toast(t('generator.entryDeleted'));
+    } catch (e) {
+      toast(String((e as Error)?.message ?? e), 'danger');
+    }
+  };
+
+  const confirmClearHistory = async () => {
+    try {
+      await api.clearGeneratorHistory();
+      setHistory([]);
+      setConfirmClearOpen(false);
+      toast(t('generator.historyCleared'));
+    } catch (e) {
+      toast(String((e as Error)?.message ?? e), 'danger');
+    }
+  };
 
   // Keep a ref to save timer to debounce settings persistence
   const saveTimeout = useRef<ReturnType<typeof setTimeout>>();
@@ -135,6 +204,9 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
       .then((p) => {
         setPw(p);
         setErr(null);
+        if (standalone) {
+          void loadHistory();
+        }
       })
       .catch((e) => setErr(String((e as Error)?.message ?? e)));
   }, [mode, length, symbols, digits]);
@@ -142,8 +214,11 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
   useEffect(() => {
     if (isOpen) {
       void gen();
+      if (standalone) {
+        void loadHistory();
+      }
     }
-  }, [isOpen, gen]);
+  }, [isOpen, standalone, gen, loadHistory]);
 
   // Keyboard shortcut inside dialog: ⌘R to regenerate
   useEffect(() => {
@@ -304,34 +379,192 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
 
       {/* Action buttons */}
       {standalone ? (
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={handleSaveAsLogin}
-            disabled={!pw}
-            className="gap-1.5"
-          >
-            <Plus size={14} />
-            {t('generator.saveAsLogin')}
-          </Button>
-          <div className="flex items-center gap-2">
-            {onClose && (
-              <Button type="button" variant="ghost" onClick={onClose}>
-                {t('common.cancel')}
-              </Button>
-            )}
+        <>
+          <div className="mt-6 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-4">
             <Button
               type="button"
-              onClick={handleCopy}
+              variant="outline"
+              onClick={handleSaveAsLogin}
               disabled={!pw}
-              className="bg-[#f97316] hover:bg-[#ea580c] text-white gap-1.5 shadow-sm focus-visible:ring-[#f97316]/50"
+              className="gap-1.5"
             >
-              <Copy size={14} />
-              {t('common.copy')}
+              <Plus size={14} />
+              {t('generator.saveAsLogin')}
             </Button>
+            <div className="flex items-center gap-2">
+              {onClose && (
+                <Button type="button" variant="ghost" onClick={onClose}>
+                  {t('common.cancel')}
+                </Button>
+              )}
+              <Button
+                type="button"
+                onClick={handleCopy}
+                disabled={!pw}
+                className="bg-[#f97316] hover:bg-[#ea580c] text-white gap-1.5 shadow-sm focus-visible:ring-[#f97316]/50"
+              >
+                <Copy size={14} />
+                {t('common.copy')}
+              </Button>
+            </div>
           </div>
-        </div>
+
+          {/* History section */}
+          <div className="mt-6 border-t border-border pt-4 space-y-3" data-testid="generator-history">
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted">
+                {t('generator.historyTitle')}
+              </h3>
+              {history.length > 0 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  data-testid="clear-history-btn"
+                  onClick={() => setConfirmClearOpen(true)}
+                  className="h-7 text-xs text-muted hover:text-danger gap-1"
+                >
+                  <Trash2 size={12} />
+                  {t('generator.clearHistory')}
+                </Button>
+              )}
+            </div>
+
+            {history.length === 0 ? (
+              <div
+                data-testid="generator-history-empty"
+                className="rounded-lg border border-dashed border-border p-6 text-center text-xs text-muted"
+              >
+                {t('generator.historyEmpty')}
+              </div>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1" data-testid="generator-history-list">
+                {history.map((entry) => {
+                  const isRevealed = revealedIds.has(entry.id);
+                  return (
+                    <div
+                      key={entry.id}
+                      data-testid="generator-history-item"
+                      className="group rounded-lg border border-border bg-panel p-2.5 transition-colors hover:border-accent/40 space-y-1.5"
+                    >
+                      <div className="flex items-center justify-between text-[11px] text-muted">
+                        <div className="flex items-center gap-2">
+                          <span className="rounded bg-hover px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted">
+                            {entry.source}
+                          </span>
+                          {entry.host && (
+                            <span data-testid="history-entry-host" className="font-medium text-accent">
+                              {entry.host}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Tooltip content={isRevealed ? t('common.hide') : t('common.show')}>
+                            <Button
+                              type="button"
+                              size="iconSm"
+                              variant="ghost"
+                              data-testid="history-reveal-btn"
+                              aria-label={isRevealed ? t('common.hide') : t('common.show')}
+                              onClick={() => toggleReveal(entry.id)}
+                              className="h-6 w-6 text-muted hover:text-fg"
+                            >
+                              {isRevealed ? <EyeOff size={12} /> : <Eye size={12} />}
+                            </Button>
+                          </Tooltip>
+                          <Tooltip content={t('common.copy')}>
+                            <Button
+                              type="button"
+                              size="iconSm"
+                              variant="ghost"
+                              data-testid="history-copy-btn"
+                              aria-label={t('common.copy')}
+                              onClick={() => void copyEntry(entry.value)}
+                              className="h-6 w-6 text-muted hover:text-fg hover:text-accent"
+                            >
+                              <Copy size={12} />
+                            </Button>
+                          </Tooltip>
+                          <Tooltip content={t('generator.saveAsLogin')}>
+                            <Button
+                              type="button"
+                              size="iconSm"
+                              variant="ghost"
+                              data-testid="history-save-login-btn"
+                              aria-label={t('generator.saveAsLogin')}
+                              onClick={() => handleSaveEntryAsLogin(entry)}
+                              className="h-6 w-6 text-muted hover:text-fg hover:text-accent"
+                            >
+                              <Plus size={12} />
+                            </Button>
+                          </Tooltip>
+                          <Tooltip content={t('generator.deleteEntry')}>
+                            <Button
+                              type="button"
+                              size="iconSm"
+                              variant="ghost"
+                              data-testid="history-delete-btn"
+                              aria-label={t('generator.deleteEntry')}
+                              onClick={() => void deleteEntry(entry.id)}
+                              className="h-6 w-6 text-muted hover:text-danger"
+                            >
+                              <Trash2 size={12} />
+                            </Button>
+                          </Tooltip>
+                        </div>
+                      </div>
+                      <div className="flex items-center">
+                        <span
+                          data-testid="history-entry-value"
+                          className={cn(
+                            "font-mono text-xs select-all break-all tracking-wider",
+                            isRevealed ? "text-fg font-medium" : "text-muted"
+                          )}
+                        >
+                          {isRevealed ? entry.value : "••••••••••••••••••••"}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {confirmClearOpen && (
+              <Modal
+                open
+                onOpenChange={(o) => !o && setConfirmClearOpen(false)}
+                title={t('generator.clearHistoryConfirmTitle')}
+                className="w-96"
+              >
+                <div className="space-y-4">
+                  <p className="text-xs text-muted">
+                    {t('generator.clearHistoryConfirmBody')}
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setConfirmClearOpen(false)}
+                    >
+                      {t('common.cancel')}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="danger"
+                      data-testid="confirm-clear-history-btn"
+                      onClick={() => void confirmClearHistory()}
+                    >
+                      {t('generator.clearHistory')}
+                    </Button>
+                  </div>
+                </div>
+              </Modal>
+            )}
+          </div>
+        </>
       ) : (
         <div className="mt-4 flex justify-end gap-2">
           <Button type="button" size="sm" variant="ghost" onClick={() => setPopoverOpen(false)}>
@@ -392,13 +625,20 @@ export function PasswordGeneratorModalHost() {
       open
       onOpenChange={(o) => !o && closeModal()}
       title={t('generator.title')}
-      className="w-[480px]"
+      className="w-[500px] max-w-full max-h-[85vh] overflow-y-auto"
     >
       <PasswordGenerator
         standalone
         onClose={closeModal}
-        onSaveAsLogin={(pw) => {
-          openModal('new-item', { category: 'login', initial: { password: pw } });
+        onSaveAsLogin={(pw, host) => {
+          openModal('new-item', {
+            category: 'login',
+            initial: {
+              password: pw,
+              url: host ? (host.startsWith('http') ? host : `https://${host}`) : undefined,
+              title: host ?? undefined,
+            },
+          });
         }}
       />
     </Modal>

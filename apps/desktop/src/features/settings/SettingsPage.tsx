@@ -516,6 +516,31 @@ function Security({ highlightedId }: { highlightedId?: string | null }) {
             />
           </button>
         </SettingsRow>
+        <SettingsRow
+          id="setting-remember-generated-passwords"
+          highlighted={highlightedId === 'setting-remember-generated-passwords'}
+          label={t('settings.rememberGeneratedPasswords')}
+          description={t('settings.rememberGeneratedPasswordsHelp')}
+        >
+          <button
+            role="switch"
+            aria-checked={settings.rememberGeneratedPasswords ?? true}
+            aria-label={t('settings.rememberGeneratedPasswords')}
+            data-testid="remember-generated-passwords-switch"
+            onClick={() => s({ rememberGeneratedPasswords: !(settings.rememberGeneratedPasswords ?? true) })}
+            className={cn(
+              'relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              (settings.rememberGeneratedPasswords ?? true) ? 'bg-accent' : 'bg-border'
+            )}
+          >
+            <span
+              className={cn(
+                'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+                (settings.rememberGeneratedPasswords ?? true) ? 'translate-x-5' : 'translate-x-0.5'
+              )}
+            />
+          </button>
+        </SettingsRow>
         <NumberSetting
           id="setting-clipboard"
           highlighted={highlightedId === 'setting-clipboard'}

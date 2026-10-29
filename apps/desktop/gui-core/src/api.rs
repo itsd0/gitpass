@@ -196,6 +196,8 @@ pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_symbols: Option<bool>,
     /// Privacy: Settings → Appearance gets a toggle, "Show website icons" (off by default, because fetching tells each site you have a login there).
     #[serde(default)] pub show_website_icons: bool,
+    /// Remember generated passwords in an encrypted vault history (default on).
+    #[serde(default = "default_true")] pub remember_generated_passwords: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -203,9 +205,21 @@ impl Default for Settings {
             biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false, ssh_approve_each_use: false,
             lock_on_sleep: true, lock_on_screen_lock: true, lock_on_user_switch: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
-            show_website_icons: false }
+            show_website_icons: false, remember_generated_passwords: true }
     }
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GeneratorHistoryEntryDto {
+    pub id: String,
+    pub value: String,
+    pub created_at: u64,
+    pub source: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+}
+
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncStatus { pub remote: Option<String>, pub last_sync: Option<String>, pub ahead: u64, pub behind: u64, pub dirty: bool }
@@ -1073,7 +1087,57 @@ impl App {
     }
 
     // ---------------- tools
-    pub fn generate_password(&self, length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String { generate(length, symbols, digits, words, pin) }
+    pub fn generate_password(&self, length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String {
+        let pw = generate(length, symbols, digits, words, pin);
+        let _ = self.record_generated_password(&pw, "desktop", None);
+        pw
+    }
+
+    pub fn get_generator_history(&self) -> Result<Vec<GeneratorHistoryEntryDto>> {
+        self.with(|u| {
+            let gh = u.session.read_generator_history()?;
+            Ok(gh.entries.iter().map(|e| GeneratorHistoryEntryDto {
+                id: e.id.clone(),
+                value: e.value.clone(),
+                created_at: e.created_at,
+                source: e.source.clone(),
+                host: e.host.clone(),
+            }).collect())
+        })
+    }
+
+    pub fn delete_generator_history_entry(&self, id: &str) -> Result<bool> {
+        self.with(|u| {
+            crate::GuiState::writable(u)?;
+            u.session.delete_generator_history_entry(id)
+        })
+    }
+
+    pub fn clear_generator_history(&self) -> Result<()> {
+        self.with(|u| {
+            crate::GuiState::writable(u)?;
+            u.session.clear_generator_history()
+        })
+    }
+
+    pub fn record_generated_password(&self, value: &str, source: &str, host: Option<String>) -> Result<Option<GeneratorHistoryEntryDto>> {
+        let remember = self.get_settings().remember_generated_passwords;
+        if !remember {
+            return Ok(None);
+        }
+        self.with(|u| {
+            crate::GuiState::writable(u)?;
+            let e = u.session.record_generated_password(value, source, host)?;
+            Ok(Some(GeneratorHistoryEntryDto {
+                id: e.id.clone(),
+                value: e.value.clone(),
+                created_at: e.created_at,
+                source: e.source.clone(),
+                host: e.host.clone(),
+            }))
+        })
+    }
+
     pub fn password_strength(&self, password: &str) -> u8 { strength(password) }
 
     /// The site's standard change-password URL for an item. Derived in Rust so the webview never
