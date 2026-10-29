@@ -133,7 +133,7 @@ async function popupRoute(msg) {
     case 'match_active': {
       const { origin } = await activeOrigin();
       if (!origin) return { items: [], origin: null };
-      return { ...(await host('match', { origin })), origin };
+      return { ...(await host('match', { origin, include_passkeys: true })), origin };
     }
     case 'get_item': return host('get_item', { item_id: msg.item_id });
     case 'item_findings': return host('item_findings', { item_id: msg.item_id });
