@@ -64,7 +64,17 @@
   }
 
   /** Apply filter + query. `suggested` is the list returned by match for the active tab. */
-  function filterItems(all, suggested, filter, query) {
+  const SORTS = ['updated', 'created', 'title'];
+  function timeOf(v) { if (typeof v === 'number') return v; const n = Date.parse(v); return Number.isNaN(n) ? 0 : n; }
+  /** Comparator for the sort menu: favorites first, then newest edit / newest creation / title A-Z. */
+  function compareBy(sort) {
+    const byTitle = (a, b) => String(a.title).localeCompare(String(b.title));
+    const key = sort === 'created' ? 'created_at' : sort === 'updated' ? 'updated_at' : null;
+    return (a, b) => (b.favorite - a.favorite) || (key ? (timeOf(b[key]) - timeOf(a[key])) : 0) || byTitle(a, b);
+  }
+
+  /** Apply filter + query, then sort (`sort`: updated | created | title; default title). `suggested` is the list returned by match for the active tab. */
+  function filterItems(all, suggested, filter, query, sort = 'title') {
     let base;
     if (filter === 'suggested') base = suggested || [];
     else if (filter === 'favorites') base = all.filter((i) => i.favorite);
@@ -74,7 +84,7 @@
     // Searching from Suggestions searches everything, like 1Password.
     if (query && filter === 'suggested') base = all;
     return base.filter((i) => matchesQuery(i, query))
-      .sort((a, b) => (b.favorite - a.favorite) || String(a.title).localeCompare(String(b.title)));
+      .sort(compareBy(SORTS.includes(sort) ? sort : 'title'));
   }
 
   /** Which empty state to show when the list has no rows. ctx: { query, filter, origin, count, excepted } */
@@ -197,8 +207,8 @@
     return v;
   }
 
-  /** Card numbers show the last 4 the host computed after decryption (f.masked); everything else is fully masked. */
-  function mask(kind, masked) { return kind === 'card_number' ? (masked || '•••• •••• •••• ••••') : '••••••••••'; }
+  /** Fields show the preview the host computed after decryption (f.masked: card last 4, API secret first4••••last4); otherwise fully masked. */
+  function mask(kind, masked) { return masked || (kind === 'card_number' ? '•••• •••• •••• ••••' : '••••••••••'); }
 
   /** Which fill command applies to a category (or null if not fillable). */
   function fillKind(category) {
@@ -266,7 +276,7 @@
     return it.subtitle || host || '—';
   }
 
-  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle };
+  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

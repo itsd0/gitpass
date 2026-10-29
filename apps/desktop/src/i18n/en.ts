@@ -373,6 +373,7 @@ export const en = {
   "items.sortTitle": "Title",
   "items.ariaLabel": "Items",
   "items.selectItem": "Select {title}",
+  "items.deselectItem": "Deselect {title}",
   "items.search.resultCount": "{count} results",
   "items.search.resultOne": "1 result",
   // category labels
