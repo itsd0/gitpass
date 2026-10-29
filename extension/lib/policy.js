@@ -112,7 +112,62 @@
   function isPaymentFrameOrigin(origin) {
     try { const u = new URL(origin); return u.protocol === 'https:' && !u.port && PAYMENT_FRAME_HOSTS.includes(u.hostname); } catch (_) { return false; }
   }
-  const api = { isFillableOrigin, originOf, findLoginFields, isVisible, sameSite, registrableDomain, isNeverSave, isPaymentFrameOrigin, PAYMENT_FRAME_HOSTS };
+
+  const PUBLIC_SUFFIXES = new Set([
+    'github.io', 'gitlab.io', 'pages.dev', 'vercel.app', 'netlify.app', 'herokuapp.com',
+  ]);
+
+  /** True if an item's URL is for a different site/origin than the given page origin.
+   *  Requires matching scheme (http vs https), matching loopback port, and matching registrable domain
+   *  (or matching exact host for multi-tenant public suffixes like github.io). */
+  function isCrossSite(itemUrl, origin) {
+    if (!itemUrl || !origin) return true;
+    let u, o;
+    try {
+      u = new URL(itemUrl.includes('://') ? itemUrl : 'https://' + itemUrl);
+      o = new URL(origin);
+    } catch (_) {
+      return true;
+    }
+    if (u.protocol !== o.protocol) return true;
+
+    const uHost = (u.hostname || '').toLowerCase();
+    const oHost = (o.hostname || '').toLowerCase();
+    if (!uHost || !oHost) return true;
+
+    if (uHost === oHost) {
+      if (LOOPBACK.has(uHost) || uHost.endsWith('.localhost')) {
+        const uPort = u.port || (u.protocol === 'https:' ? '443' : '80');
+        const oPort = o.port || (o.protocol === 'https:' ? '443' : '80');
+        return uPort !== oPort;
+      }
+      return false;
+    }
+
+    if (LOOPBACK.has(uHost) || LOOPBACK.has(oHost)) return true;
+
+    const itemDom = registrableDomain(uHost);
+    const pageDom = registrableDomain(oHost);
+    if (!itemDom || !pageDom) return true;
+
+    if (PUBLIC_SUFFIXES.has(itemDom) || PUBLIC_SUFFIXES.has(pageDom)) {
+      return uHost !== oHost;
+    }
+
+    return itemDom !== pageDom;
+  }
+
+  /** Filter and rank logins by search query: fuzzy (title, subtitle/username, url), favorites first, then by title. */
+  function filterLogins(items, query) {
+    const q = (query || '').trim().toLowerCase();
+    const list = (items || []).filter((i) => {
+      if (!q) return true;
+      return [i.title, i.subtitle, i.url].some((x) => x && String(x).toLowerCase().includes(q));
+    });
+    return list.sort((a, b) => (Number(b.favorite || 0) - Number(a.favorite || 0)) || String(a.title || '').localeCompare(String(b.title || '')));
+  }
+
+  const api = { isFillableOrigin, originOf, findLoginFields, isVisible, sameSite, registrableDomain, isNeverSave, isPaymentFrameOrigin, isCrossSite, filterLogins, PAYMENT_FRAME_HOSTS };
   root.GitpassPolicy = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>gitpass</title>
+  <link rel="stylesheet" href="popup.css">
+  <style>
+    body {
+      width: auto;
+      min-height: 0;
+      padding: 16px;
+      margin: 0;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+    .confirm-card {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .confirm-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .confirm-header h1 {
+      font-size: 15px;
+      margin: 0;
+      font-weight: 600;
+    }
+    .confirm-msg {
+      font-size: 13px;
+      line-height: 1.4;
+      opacity: 0.9;
+      word-break: break-word;
+    }
+    .confirm-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+  </style>
+</head>
+<body class="confirm-body">
+  <div class="confirm-card">
+    <div class="confirm-header">
+      <img src="../icons/logo64.png" alt="" width="28" height="28">
+      <h1 id="title">gitpass</h1>
+    </div>
+    <div id="msg" class="confirm-msg" role="status"></div>
+    <div class="confirm-actions">
+      <button id="cancelBtn" class="btn" type="button" data-i18n="csCancel">Cancel</button>
+      <button id="fillBtn" class="btn btn-primary" type="button" data-i18n="csConfirmFill">Fill</button>
+    </div>
+  </div>
+  <script src="../lib/i18n.js"></script>
+  <script src="confirm.js"></script>
+</body>
+</html>

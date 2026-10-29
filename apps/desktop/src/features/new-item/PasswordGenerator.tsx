@@ -15,6 +15,9 @@ const MODE_LIMITS: Record<GeneratorMode, { min: number; max: number; def: number
   pin: { min: 4, max: 12, def: 6 },
 };
 
+/** Word-passphrase separators offered in Memorable mode; ' ' renders as ␣. */
+const WORD_SEPARATORS = ['-', '.', '_', ' '] as const;
+
 function clamp(val: number, min: number, max: number): number {
   if (isNaN(val)) return min;
   return Math.max(min, Math.min(max, val));
@@ -155,6 +158,12 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin, o
   const [length, setLength] = useState<number>(initialLength);
   const [symbols, setSymbols] = useState<boolean>(savedSettings?.generatorSymbols ?? true);
   const [digits, setDigits] = useState<boolean>(savedSettings?.generatorDigits ?? true);
+  // Words-mode options. `separator === null` means "never chosen": the
+  // historical default applies ('-' with symbols, '.' without), so existing
+  // users see no change until they pick a separator.
+  const [separator, setSeparator] = useState<string | null>(savedSettings?.generatorSeparator ?? null);
+  const [capitalize, setCapitalize] = useState<boolean>(savedSettings?.generatorCapitalize ?? false);
+  const effectiveSeparator = separator ?? (symbols ? '-' : '.');
 
   const [pw, setPw] = useState<string>('');
   const [err, setErr] = useState<string | null>(null);
@@ -162,7 +171,7 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin, o
   // Keep a ref to save timer to debounce settings persistence
   const saveTimeout = useRef<ReturnType<typeof setTimeout>>();
 
-  const persistSettings = useCallback((m: GeneratorMode, l: number, d: boolean, s: boolean) => {
+  const persistSettings = useCallback((m: GeneratorMode, l: number, d: boolean, s: boolean, sep: string | null, cap: boolean) => {
     clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
       void useSettings.getState().save({
@@ -170,6 +179,8 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin, o
         generatorLength: l,
         generatorDigits: d,
         generatorSymbols: s,
+        generatorSeparator: sep ?? undefined,
+        generatorCapitalize: cap,
       }).catch(() => {});
     }, 250);
   }, []);
@@ -184,13 +195,14 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin, o
         digits: isPin ? true : digits,
         words: isWords,
         pin: isPin,
+        ...(isWords ? { separator: effectiveSeparator, capitalize } : {}),
       })
       .then((p) => {
         setPw(p);
         setErr(null);
       })
       .catch((e) => setErr(String((e as Error)?.message ?? e)));
-  }, [mode, length, symbols, digits]);
+  }, [mode, length, symbols, digits, effectiveSeparator, capitalize]);
 
   useEffect(() => {
     if (isOpen) {
@@ -216,23 +228,46 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin, o
     const lim = MODE_LIMITS[m];
     const newLen = clamp(length, lim.min, lim.max);
     setLength(newLen);
-    persistSettings(m, newLen, digits, symbols);
+    persistSettings(m, newLen, digits, symbols, separator, capitalize);
   };
 
   const updateLength = (val: number) => {
     const clamped = clamp(val, limits.min, limits.max);
     setLength(clamped);
-    persistSettings(mode, clamped, digits, symbols);
+    persistSettings(mode, clamped, digits, symbols, separator, capitalize);
   };
 
   const updateDigits = (val: boolean) => {
     setDigits(val);
-    persistSettings(mode, length, val, symbols);
+    persistSettings(mode, length, val, symbols, separator, capitalize);
   };
 
   const updateSymbols = (val: boolean) => {
     setSymbols(val);
-    persistSettings(mode, length, digits, val);
+    persistSettings(mode, length, digits, val, separator, capitalize);
+  };
+
+  const updateSeparator = (val: string) => {
+    setSeparator(val);
+    persistSettings(mode, length, digits, symbols, val, capitalize);
+  };
+
+  const updateCapitalize = (val: boolean) => {
+    setCapitalize(val);
+    persistSettings(mode, length, digits, symbols, separator, val);
+  };
+
+  // Arrow-key navigation inside the separator segmented control: moving
+  // focus also selects, so the preview regenerates immediately.
+  const onSeparatorKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+    const idx = WORD_SEPARATORS.indexOf(effectiveSeparator as (typeof WORD_SEPARATORS)[number]);
+    const next = WORD_SEPARATORS[(idx + dir + WORD_SEPARATORS.length) % WORD_SEPARATORS.length];
+    updateSeparator(next);
+    const group = e.currentTarget;
+    (group.querySelector(`[data-sep="${next}"]`) as HTMLElement | null)?.focus();
   };
 
   const handleCopy = async () => {
@@ -351,6 +386,50 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin, o
               className="h-4 w-4 rounded border-border accent-[#f97316]"
             />
             <span>{mode === 'memorable' ? t('generator.includeSymbols') : t('generator.symbols')}</span>
+          </label>
+        </div>
+      )}
+
+      {/* Words-mode options: separator + capitalize, hidden in Random/PIN modes */}
+      {mode === 'memorable' && (
+        <div className="rounded-lg border border-border bg-panel p-3 space-y-3">
+          <div>
+            <span id="gen-separator-label" className="text-xs font-medium text-muted">
+              {t('generator.separator')}
+            </span>
+            <div
+              role="radiogroup"
+              aria-labelledby="gen-separator-label"
+              onKeyDown={onSeparatorKeyDown}
+              className="mt-1.5 flex rounded-lg border border-border bg-bg p-1"
+            >
+              {WORD_SEPARATORS.map((sep) => (
+                <button
+                  key={sep === ' ' ? 'space' : sep}
+                  data-sep={sep}
+                  type="button"
+                  role="radio"
+                  aria-checked={effectiveSeparator === sep}
+                  aria-label={sep === ' ' ? t('generator.separatorSpace') : sep}
+                  onClick={() => updateSeparator(sep)}
+                  className={cn(
+                    'flex-1 rounded-md py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                    effectiveSeparator === sep ? 'bg-[#f97316] text-white shadow-sm font-semibold' : 'text-muted hover:text-fg'
+                  )}
+                >
+                  {sep === ' ' ? '␣' : sep}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer text-xs text-fg">
+            <input
+              type="checkbox"
+              checked={capitalize}
+              onChange={(e) => updateCapitalize(e.target.checked)}
+              className="h-4 w-4 rounded border-border accent-[#f97316]"
+            />
+            <span>{t('generator.capitalize')}</span>
           </label>
         </div>
       )}
