@@ -185,10 +185,23 @@ site you have an account there; turning it off clears the icon cache.
 ## Passkeys
 
 When a site asks for a passkey and gitpass has one for that site, an
-in-page prompt lets you pick it. If you instead want the browser's own
-passkey flow, choose the native/device option in that prompt. If gitpass
-has no passkey for the site, no prompt appears at all and the request
-passes straight through to the browser's native flow.
+in-page prompt lets you pick it. When a site has more than one passkey
+saved in gitpass (for example multiple accounts on GitHub), the prompt
+shows an account list with usernames, vault names (if items belong to
+differing vaults), and website icons or monograms. The most recently used
+passkey is preselected and listed first.
+
+The account list supports keyboard navigation (`role="listbox"` with
+Up/Down, Home/End, Enter to sign in, and Esc to cancel). Focus starts on
+the preselected row, and the 600 ms anti-clickjacking arming window
+applies to both the Sign in button and Enter key. The chosen credential ID
+is strictly validated by the background against authoritative query matches
+before invoking `passkey_get`. The popup-window fallback (`popup/passkey.html`)
+provides the same account choice.
+
+If you instead want the browser's own passkey flow, choose the native/device
+option in that prompt. If gitpass has no passkey for the site, no prompt
+appears at all and the request passes straight through to the browser's native flow.
 
 ## What the extension never stores
 

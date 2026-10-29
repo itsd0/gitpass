@@ -103,6 +103,8 @@ equal its host or be a registrable suffix (public suffixes refused). ES256 only.
 
 - `passkey_create {origin, rp_id?, rp_name?, challenge, user_id, user_name, user_display_name?, exclude_credentials?, algorithms?, vault_id?}`
   → `{item_id, rp_id, credential_id, client_data_json, attestation_object, authenticator_data, public_key (SPKI), public_key_algorithm:-7, transports}`
+- `passkey_query {origin, rp_id?, allow_credentials?}`
+  → `{rp_id, matching: [{credential_id, user_name, user_handle, vault_name, last_used}]}`
 - `passkey_get {origin, rp_id?, challenge, allow_credentials?, credential_id?}`
   → `{item_id, credential_id, client_data_json, authenticator_data, signature (DER), user_handle, sign_count}`
 
