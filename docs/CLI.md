@@ -130,6 +130,11 @@ gitpass attach rm Personal github recovery-codes.pdf
 gitpass totp Personal github
 gitpass totp Personal github --copy --clear-secs 30
 gitpass gen 32
+gitpass gen 32 --no-history
+gitpass gen history
+gitpass gen history --reveal
+gitpass gen history --json
+gitpass gen history clear
 gitpass gen --words 5 --separator . --capitalize
 gitpass gen --pin 6
 gitpass gen --copy 32 --clear-secs 30
@@ -140,6 +145,10 @@ passphrase from the 128-word list (3-20 words, joined with `-`, or `.` with `--n
 `--pin N` a digits-only PIN (4-16 digits); `--no-symbols` and `--no-digits` apply to random
 passwords. A length outside these ranges is an error (the desktop app and the browser host
 use the same limits and defaults). `--clear-secs` requires `--copy`.
+
+`gitpass gen` automatically records generated passwords to an encrypted vault history
+unless `--no-history` is provided. `gitpass gen history` lists recently generated passwords
+(masked by default; use `--reveal` or `--json` to view), and `gitpass gen history clear` clears it.
 
 ## Secrets in commands and templates
 
@@ -180,9 +189,13 @@ gitpass export Personal --format gitpass-json --out backup.json --encrypted
 gitpass export Personal --format csv --out backup.csv --yes
 ```
 
-`--from` accepts `bitwarden-json`, `bitwarden-csv`, `1password-csv`, `1password-1pux`
-(alias `1pux`), `keepass-csv` (alias `keepassxc-csv`), `chrome-csv`, `lastpass-csv`
-(alias `lastpass`), `protonpass-csv` (alias `protonpass`) and `gitpass-json`.
+`--from` accepts every format and alias in `crates/gitpass-core/src/import.rs`
+(`ImportFormat`): `bitwarden-json`, `bitwarden-csv`, `1password-csv`,
+`1password-1pux` (alias `1pux`), `keepass-csv` (alias `keepassxc-csv`),
+`chrome-csv`, `apple-passwords-csv` (aliases `apple-passwords`, `apple-csv`,
+`apple`, `safari-csv`, `safari`), `lastpass-csv` (alias `lastpass`),
+`protonpass-csv` (aliases `proton-pass-csv`, `protonpass`, `proton-pass`) and
+`gitpass-json`.
 Duplicates (same title+username+url) are skipped unless `--allow-duplicates` is given;
 `--dry-run` writes nothing. An encrypted `gitpass-json` export prompts for the passphrase
 (or reads `GITPASS_EXPORT_PASSPHRASE`).

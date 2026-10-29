@@ -73,6 +73,7 @@ pub fn sync_merge(dir: &Path, password: &str, secret: &crate::crypto::SecretKey,
     if !dir.join(".git").exists() { bail!("{} is not a git repository", dir.display()); }
     let s = Session::unlock_with(dir, password, secret, opts)?;
     let mut snap = vec![];
+    let local_gen_hist = s.read_generator_history().unwrap_or_default();
     let lm = s.load_manifest()?;
     for (vid, ve) in &lm.vaults {
         for iid in ve.items.keys() { snap.push((vid.clone(), iid.clone(), s.read_record(vid, iid)?.1)); }
@@ -133,6 +134,11 @@ pub fn sync_merge(dir: &Path, password: &str, secret: &crate::crypto::SecretKey,
                 s.put_record(vid, iid, local)?;
                 rep.reapplied.push((vid.clone(), iid.clone()));
             }
+        }
+        let remote_gen_hist = s.read_generator_history().unwrap_or_default();
+        let merged_gen_hist = local_gen_hist.merge(&remote_gen_hist, crate::store::now_secs());
+        if merged_gen_hist != remote_gen_hist {
+            s.write_generator_history(&merged_gen_hist)?;
         }
         let _g = fsutil::lock(dir)?;
         commit_all(dir, "sync --merge: field-level merge")?;

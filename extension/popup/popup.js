@@ -1512,6 +1512,7 @@ async function openGenerator(opts) {
     copyBtn.innerHTML = '<span class="spinner"></span> <span>' + t('copy', 'Copy') + '</span>';
     try {
       await copy(code.textContent, t('passwordCopied', 'Password copied'));
+      void send({ type: 'popup:record_generated', password: code.textContent }).catch(() => {});
     } catch (err) {
       toast(errText(err));
     } finally {

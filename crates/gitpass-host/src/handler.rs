@@ -16,6 +16,30 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 use zeroize::Zeroizing;
 
+fn clean_host(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() { return None; }
+    let u = if s.contains("://") { url::Url::parse(s).ok()? } else { url::Url::parse(&format!("https://{s}")).ok()? };
+    u.host_str().map(|h| h.trim_start_matches("www.").to_string()).filter(|h| !h.is_empty())
+}
+
+/// Read the `rememberGeneratedPasswords` preference from `.gitpass-settings.json`.
+/// Defaults to `true` when missing, matching desktop settings.
+fn remember_generated_passwords(vault_path: &std::path::Path) -> bool {
+    let settings_path = vault_path.join(".gitpass-settings.json");
+    std::fs::read_to_string(&settings_path)
+        .ok()
+        .and_then(|str| serde_json::from_str::<Value>(&str).ok())
+        .map(|v| {
+            v.get("settings")
+                .and_then(|s| s.get("rememberGeneratedPasswords").or_else(|| s.get("remember_generated_passwords")))
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+        })
+        .unwrap_or(true)
+}
+
+
 /// Contract error codes.
 pub mod code {
     pub const LOCKED: &str = "locked";
@@ -661,6 +685,17 @@ impl Host {
                     return Ok(json!({"password": generate_for_rules(len, rules)?}));
                 }
                 Ok(json!({"password": generate(&r)?}))
+            }
+            "record_generated_password" => {
+                let pw = arg_str(req, "password")?;
+                let source = req.get("source").and_then(Value::as_str).unwrap_or("extension");
+                let origin_or_host = req.get("origin").or_else(|| req.get("host")).and_then(Value::as_str);
+                let host = origin_or_host.and_then(clean_host);
+                if !remember_generated_passwords(&self.cfg.vault_path) {
+                    return Ok(json!({"ok": true, "recorded": false}));
+                }
+                self.sess()?.record_generated_password(pw, source, host)?;
+                Ok(json!({"ok": true, "recorded": true}))
             }
             "list_vaults" => {
                 let s = self.sess()?;

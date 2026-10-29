@@ -450,6 +450,55 @@ test('sameSite', () => {
   assert.ok(!GitpassPolicy.sameSite('https://a.com', 'https://b.com'));
 });
 
+test('page:generate derives origin strictly from sender, not from message, and records to host', async () => {
+  const calls = [];
+  const h = async (cmd, args) => {
+    calls.push([cmd, args]);
+    if (cmd === 'generate') return { password: 'FAKE-generated-pw-123' };
+    if (cmd === 'record_generated_password') return { ok: true };
+    return {};
+  };
+  h.calls = calls;
+
+  const s = tab('https://real-site.example/signup', 0, 42);
+  const msg = {
+    type: 'page:generate',
+    origin: 'https://attacker.example',
+  };
+
+  const r = await B.handle(msg, s, h);
+  assert.strictEqual(r.origin, 'https://real-site.example');
+  assert.strictEqual(r.password, 'FAKE-generated-pw-123');
+
+  const genCall = calls.find(([cmd]) => cmd === 'generate');
+  assert.ok(genCall, 'generate must be called');
+
+  const recCall = calls.find(([cmd]) => cmd === 'record_generated_password');
+  assert.ok(recCall, 'record_generated_password must be called');
+  assert.strictEqual(recCall[1].password, 'FAKE-generated-pw-123');
+  assert.strictEqual(recCall[1].origin, 'https://real-site.example');
+  assert.strictEqual(recCall[1].source, 'extension');
+});
+
+test('page:generate with site rules records generated password to host with sender origin', async () => {
+  const calls = [];
+  const h = async (cmd, args) => {
+    calls.push([cmd, args]);
+    if (cmd === 'generate') return { password: 'FAKE-rules-pw-456' };
+    if (cmd === 'record_generated_password') return { ok: true };
+    return {};
+  };
+  h.calls = calls;
+  const s = tab('https://real-site.example/signup');
+  const r = await B.handle({ type: 'page:generate', rules: { maxlength: 16 } }, s, h);
+  assert.strictEqual(r.password, 'FAKE-rules-pw-456');
+  const recCall = calls.find(([cmd]) => cmd === 'record_generated_password');
+  assert.ok(recCall, 'record_generated_password must be called with site rules');
+  assert.strictEqual(recCall[1].password, 'FAKE-rules-pw-456');
+  assert.strictEqual(recCall[1].origin, 'https://real-site.example');
+  assert.strictEqual(recCall[1].source, 'extension');
+});
+
 test('page:generate without rules keeps the 20-character default', async () => {
   const h = fakeHost([]);
   const r = await B.handle({ type: 'page:generate' }, tab('https://site.example/signup'), h);
