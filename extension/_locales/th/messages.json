@@ -954,7 +954,6 @@
   "badgeAppNotRunning": {
     "message": "แอป gitpass ไม่ได้ทำงานอยู่"
   },
-
   "optAutoSubmit": {
     "message": "ส่งแบบฟอร์มหลังจากกรอกข้อมูลเข้าสู่ระบบ"
   },
@@ -1032,6 +1031,38 @@
         "content": "$1"
       }
     }
+  },
+  "largeType": {
+    "message": "ตัวอักษรขนาดใหญ่"
+  },
+  "largeTypeView": {
+    "message": "มุมมองตัวอักษรขนาดใหญ่"
+  },
+  "largeTypeField": {
+    "message": "แสดง $1 ด้วยตัวอักษรขนาดใหญ่",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "largeTypeEmpty": {
+    "message": "ไม่มีข้อมูลให้แสดงด้วยตัวอักษรขนาดใหญ่"
+  },
+  "largeTypeNone": {
+    "message": "ไม่มีรหัสผ่านหรือรหัสแบบใช้ครั้งเดียวให้แสดง"
+  },
+  "shortcutLargeType": {
+    "message": "แสดงด้วยตัวอักษรขนาดใหญ่"
+  },
+  "moveToTrash": {
+    "message": "ย้ายไปที่รายการที่เพิ่งลบ"
+  },
+  "movedToTrash": {
+    "message": "ย้ายไปที่รายการที่เพิ่งลบแล้ว"
+  },
+  "itemRestored": {
+    "message": "กู้คืนรายการแล้ว"
   },
   "attachments": {
     "message": "ไฟล์แนบ"

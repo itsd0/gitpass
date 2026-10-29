@@ -875,7 +875,6 @@
   "badgeAppNotRunning": {
     "message": "gitpass app not running"
   },
-
   "optAutoSubmit": {
     "message": "Submit the form after filling a login"
   },
@@ -953,6 +952,38 @@
         "content": "$1"
       }
     }
+  },
+  "largeType": {
+    "message": "Large type"
+  },
+  "largeTypeView": {
+    "message": "Large type view"
+  },
+  "largeTypeField": {
+    "message": "Show $1 in large type",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "largeTypeEmpty": {
+    "message": "Nothing to show in large type"
+  },
+  "largeTypeNone": {
+    "message": "No password or one-time code to show"
+  },
+  "shortcutLargeType": {
+    "message": "Show in large type"
+  },
+  "moveToTrash": {
+    "message": "Move to Recently Deleted"
+  },
+  "movedToTrash": {
+    "message": "Moved to Recently Deleted"
+  },
+  "itemRestored": {
+    "message": "Item restored"
   },
   "attachments": {
     "message": "Attachments"

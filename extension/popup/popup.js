@@ -58,7 +58,32 @@ function iconBtn(svg, title, onclick) {
   b.onclick = (e) => { e.stopPropagation(); Promise.resolve(onclick(b)).catch(showErr); }; return b;
 }
 let toastT = null;
-function toast(msg) { const e = $('toast'); if (!e) return; e.textContent = msg; e.classList.remove('hidden'); clearTimeout(toastT); toastT = setTimeout(() => e.classList.add('hidden'), 1600); }
+function toast(msg, ms = 1600) {
+  const e = $('toast'); if (!e) return;
+  clearTimeout(toastT);
+  e.textContent = msg;
+  e.classList.remove('hidden');
+  toastT = setTimeout(() => { e.classList.add('hidden'); e.textContent = ''; }, ms);
+}
+/** Toast with one action button (Undo after moving an item to Recently Deleted). */
+function toastAction(message, label, onAction, ms = 6000) {
+  const e = $('toast'); if (!e) return;
+  clearTimeout(toastT);
+  e.textContent = '';
+  const b = el('button', 'toast-action', label);
+  b.type = 'button';
+  b.onclick = async () => {
+    if (b.disabled) return;
+    b.disabled = true;
+    clearTimeout(toastT);
+    e.classList.add('hidden');
+    e.textContent = '';
+    try { await onAction(); } catch (err) { showErr(err); }
+  };
+  e.append(el('span', 'toast-msg', message), document.createTextNode(' · '), b);
+  e.classList.remove('hidden');
+  toastT = setTimeout(() => { e.classList.add('hidden'); e.textContent = ''; }, ms);
+}
 // Host errors carry a contract code (locked/denied/not_found/origin_mismatch/bad_request/app_not_running/internal).
 function errText(e) {
   const c = e && e.code;
@@ -203,6 +228,7 @@ async function refresh() {
 
 function showNoHost(e) {
   stopListTotp(); clearTotpCache();
+  closeLargeType(false);
   $('hostErr').textContent = String((e && e.message) || '');
   $('hostCmd').textContent = 'cd ~/gitpass && cargo build --release -p gitpass-host\n"$HOME/Library/Application Support/gitpass/bin/gitpass-host" install --browser chrome --extension-id ' + ((globalThis.chrome && chrome.runtime && chrome.runtime.id) || '<id>');
   show('nohost');
@@ -210,6 +236,7 @@ function showNoHost(e) {
 
 function showLocked(view, st) {
   stopTotp(); stopListTotp(); clearTotpCache();
+  closeLargeType(false);
   if (S.iconCache) S.iconCache.clear();
   if (S.iconPending) S.iconPending.clear();
   S.revealed = {}; S.edit = null; S.findingsCache = {}; $('detail').textContent = '';
@@ -1384,6 +1411,14 @@ function fieldRow(d, f) {
   } else if (f.kind === 'url' && f.value) {
     const a = el('a', null, f.value); a.href = f.value; a.target = '_blank'; a.rel = 'noopener'; val.append(a); val.classList.add('plain');
   } else { val.textContent = V.formatValue(f.kind, f.value); if (!/password|card_number/.test(f.kind)) val.classList.add('plain'); }
+  if (f.concealed) {
+    const label = t('largeTypeField', 'Show $1 in large type', [f.label || f.name]);
+    const lt = iconBtn(UI.type, label, (b) => openLargeType(d, f, b));
+    lt.dataset.action = 'large-type';
+    lt.dataset.field = f.name;
+    lt.setAttribute('aria-label', label);
+    acts.append(lt);
+  }
   acts.append(iconBtn(UI.copy, t('copy', 'Copy'), async (b) => {
     if (b.disabled) return;
     b.disabled = true;
@@ -1432,18 +1467,174 @@ function renderTotp(d, val) {
 }
 function stopTotp() { if (S.totpTimer) { clearInterval(S.totpTimer); S.totpTimer = null; } }
 
+// ---------- Large type (issue #278) ----------
+// Desktop parity: one character per cell with its position under it; digits use the orange accent,
+// symbols are blue and a space shows as ␣. The value comes from secretValue() (reveal/totp path),
+// is never stored, and is removed from the DOM when the view closes or the popup locks.
+const LARGE_TYPE_GROUP = 8;
+let largeTypeTrigger = null;
+
+function charKind(ch) {
+  if (/\d/.test(ch)) return 'digit';
+  if (/[a-zA-Z]/.test(ch)) return 'letter';
+  if (/\s/.test(ch)) return 'space';
+  return 'symbol';
+}
+
+function closeLargeType(restoreFocus = true) {
+  const box = $('largetype');
+  if (!box) return;
+  const trigger = largeTypeTrigger;
+  largeTypeTrigger = null;
+  const wasOpen = !box.classList.contains('hidden');
+  box.classList.add('hidden');
+  box.removeAttribute('aria-label');
+  box.textContent = ''; // never leave the secret in the DOM
+  if (!restoreFocus || !wasOpen) return;
+  if (trigger && trigger.isConnected && typeof trigger.focus === 'function') trigger.focus();
+  else {
+    const q = $('q');
+    if (q && !$('unlocked').classList.contains('hidden')) q.focus();
+  }
+}
+
+function largeTypeCells(value) {
+  const chars = Array.from(String(value || ''));
+  const grid = el('div', 'largetype-grid');
+  grid.setAttribute('data-large-grid', '');
+  for (let i = 0; i < chars.length; i += LARGE_TYPE_GROUP) {
+    const group = el('div', 'largetype-group');
+    group.setAttribute('data-large-group', '');
+    chars.slice(i, i + LARGE_TYPE_GROUP).forEach((ch, offset) => {
+      const pos = i + offset + 1;
+      const cell = el('div', 'largetype-char');
+      cell.setAttribute('data-large-char', '');
+      cell.dataset.kind = charKind(ch);
+      cell.dataset.position = String(pos);
+      cell.append(el('span', 'largetype-glyph', ch === ' ' ? '␣' : ch), el('span', 'largetype-pos', String(pos)));
+      group.append(cell);
+    });
+    grid.append(group);
+  }
+  return grid;
+}
+
+async function openLargeType(d, f, trigger) {
+  if (!d || !f) return;
+  const box = $('largetype');
+  if (!box) return;
+  let value;
+  try { value = await secretValue(d, f); } catch (e) { toast(errText(e)); return; }
+  if (!value) { toast(t('largeTypeEmpty', 'Nothing to show in large type')); return; }
+  closeLargeType(false);
+  largeTypeTrigger = trigger || null;
+  box.textContent = '';
+  box.setAttribute('aria-label', t('largeTypeView', 'Large type view'));
+
+  const card = el('div', 'largetype-card');
+  const head = el('div', 'largetype-head');
+  const close = el('button', 'icon-btn');
+  close.type = 'button';
+  close.dataset.action = 'largetype-close';
+  close.innerHTML = UI.close;
+  close.setAttribute('aria-label', t('close', 'Close'));
+  close.title = t('close', 'Close');
+  close.onclick = () => closeLargeType();
+  head.append(el('h3', null, f.label || t('largeType', 'Large type')), close);
+  card.append(head, largeTypeCells(value));
+  box.append(card);
+  box.onclick = (e) => { if (e.target === box) closeLargeType(); };
+  box.classList.remove('hidden');
+  close.focus();
+}
+
+/** ⌘⌥L / Ctrl+Alt+L on the selected item (same shortcut as the desktop): its primary secret field. */
+function openLargeTypeForSelected() {
+  const d = S.detail;
+  const f = d && V.primarySecretField(d);
+  if (!f) { toast(t('largeTypeNone', 'No password or one-time code to show')); return; }
+  let trigger = null;
+  try {
+    const name = globalThis.CSS && CSS.escape ? CSS.escape(f.name) : f.name;
+    trigger = document.querySelector('#detail [data-action="large-type"][data-field="' + name + '"]');
+  } catch (_) {}
+  return openLargeType(d, f, trigger);
+}
+
+async function trashItem(d) {
+  const idx = Math.max(0, S.sel);
+  await send({ type: 'popup:trash_item', item_id: d.id });
+  S.all = (S.all || []).filter((x) => x.id !== d.id);
+  S.suggested = (S.suggested || []).filter((x) => x.id !== d.id);
+  delete S.findingsCache[d.id];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  applyFilter(false);
+  if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('movedToTrash', 'Moved to Recently Deleted'), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:restore_item', item_id: d.id });
+    toast(t('itemRestored', 'Item restored'));
+    S.findingsCache = {};
+    await loadData();
+    const i = S.rows.findIndex((r) => r.id === d.id);
+    if (i >= 0) await select(i);
+  });
+}
+
 function moreMenu(d) {
   const w = el('div', 'menu-wrap');
   const m = el('div', 'menu hidden');
-  const item = (svg, label, fn) => { const b = el('button'); b.type = 'button'; b.innerHTML = svg; b.append(document.createTextNode(label)); b.onclick = (e) => { e.stopPropagation(); m.classList.add('hidden'); Promise.resolve(fn()).catch(showErr); }; m.append(b); };
+  m.setAttribute('role', 'menu');
+  function closeMenu(restoreFocus = false) {
+    m.classList.add('hidden');
+    trigger.setAttribute('aria-expanded', 'false');
+    if (restoreFocus && trigger.isConnected) trigger.focus();
+  }
+  function openMenu() {
+    m.classList.remove('hidden');
+    trigger.setAttribute('aria-expanded', 'true');
+    const first = m.querySelector('button');
+    if (first) first.focus();
+  }
+  const item = (svg, label, fn, opts) => {
+    const b = el('button');
+    b.type = 'button';
+    b.setAttribute('role', 'menuitem');
+    if (opts && opts.danger) b.classList.add('danger');
+    b.innerHTML = svg;
+    b.append(document.createTextNode(label));
+    b.onclick = (e) => { e.stopPropagation(); closeMenu(true); Promise.resolve(fn()).catch(showErr); };
+    m.append(b);
+  };
   item(UI.external, t('openInApp', 'Open in gitpass'), () => send({ type: 'popup:open_in_app', item_id: d.id }));
   item(UI.link, t('copyLink', 'Copy link'), () => copy('gitpass://item/' + encodeURIComponent(d.id), t('linkCopied', 'Link copied')));
   item(UI.star, d.favorite ? t('unfavorite', 'Remove from Favorites') : t('favorite', 'Add to Favorites'), async () => {
     await send({ type: 'popup:set_favorite', item_id: d.id, favorite: !d.favorite });
     d.favorite = !d.favorite; const s = S.all.find((x) => x.id === d.id); if (s) s.favorite = d.favorite; applyFilter(false);
   });
-  w.append(iconBtn(UI.more, t('more', 'More'), () => m.classList.toggle('hidden')), m);
-  document.addEventListener('click', () => m.classList.add('hidden'));
+  const sep = el('div', 'menu-sep');
+  sep.setAttribute('role', 'separator');
+  m.append(sep);
+  item(UI.trash, t('moveToTrash', 'Move to Recently Deleted'), () => trashItem(d), { danger: true });
+  const trigger = iconBtn(UI.more, t('more', 'More'), () => (m.classList.contains('hidden') ? openMenu() : closeMenu()));
+  trigger.setAttribute('aria-haspopup', 'menu');
+  trigger.setAttribute('aria-expanded', 'false');
+  m.onkeydown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(true); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      const items = [...m.querySelectorAll('button')];
+      const i = items.indexOf(document.activeElement);
+      const n = e.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+      if (items[n]) items[n].focus();
+    } else if (e.key === 'Tab') closeMenu();
+  };
+  document.addEventListener('click', (e) => { if (!w.contains(e.target)) closeMenu(); });
+  w.append(trigger, m);
   return w;
 }
 
@@ -1575,6 +1766,7 @@ function openShortcuts() {
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent);
   const cmd = isMac ? '⌘' : 'Ctrl+';
   const shift = isMac ? '⇧' : 'Shift+';
+  const alt = isMac ? '⌥' : 'Alt+';
 
   const list = el('div', 'shortcuts-list');
   list.setAttribute('role', 'list');
@@ -1584,6 +1776,7 @@ function openShortcuts() {
     { keys: ['←', '→'], label: t('shortcutFilterChips', 'Move between filter chips') },
     { keys: [isMac ? '↵' : 'Enter'], label: t('shortcutFill', 'Fill item') },
     { keys: [`${cmd}C`], label: t('shortcutCopyPw', 'Copy password') },
+    { keys: [`${cmd}${alt}L`], label: t('shortcutLargeType', 'Show in large type') },
     { keys: [`${cmd}${shift}C`], label: t('shortcutCopyTotp', 'Copy one-time code (TOTP)') },
     { keys: [`${cmd}${shift}U`], label: t('shortcutCopyUser', 'Copy username') },
     { keys: [`${cmd}O`], label: t('shortcutOpenUrl', 'Open website') },
@@ -1987,7 +2180,24 @@ if ($('searchHints')) $('searchHints').onclick = () => (S.panel === 'shortcuts' 
 // ---------- keyboard ----------
 document.addEventListener('keydown', (e) => {
   if ($('unlocked').classList.contains('hidden')) { if (e.key === 'Escape') window.close(); return; }
+  // Large type is modal: Esc closes, Tab stays inside, and list shortcuts pause while it is open.
+  const lt = $('largetype');
+  if (lt && !lt.classList.contains('hidden')) {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeLargeType(); return; }
+    if (e.key === 'Tab') {
+      const focusable = Array.from(lt.querySelectorAll('button:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+      if (focusable.length) {
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first || !lt.contains(document.activeElement)) { e.preventDefault(); last.focus(); }
+        } else if (document.activeElement === last || !lt.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      }
+    }
+    return;
+  }
   const a = document.activeElement;
+  // The detail item menu owns its own keys (arrows, Escape) while it is open; do not also move the list.
+  if (a && a.closest && a.closest('.menu') && !a.closest('.menu').classList.contains('hidden')) return;
   // Inline edit owns the keyboard: Esc cancels, ⌘↩ saves, everything else is typing.
   if (S.edit && !S.panel) {
     if (e.key === 'Escape') { e.preventDefault(); cancelEdit(); return; }
@@ -2061,6 +2271,7 @@ document.addEventListener('keydown', (e) => {
   else if (act === 'copyTotp') { if (selected) copyTotp(selected.id).catch(showErr); }
   else if (act === 'copyPassword') copyPrimary().catch(showErr);
   else if (act === 'copyUsername') copyUsername().catch(showErr);
+  else if (act === 'largeType') openLargeTypeForSelected();
   else if (act === 'openWebsite') openWebsite();
   else if (act === 'generator') { if (S.panel === 'gen') closePanel(); else openGenerator(); }
 });
@@ -2104,6 +2315,7 @@ if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
     else if (msg.event === 'lock') {
       if (S.iconCache) S.iconCache.clear();
       if (S.iconPending) S.iconPending.clear();
+      closeLargeType(false);
       clearClipboardIfOurs();
       popupSettings().then((st) => { if (st.autolockFollowsApp !== false) refresh(); });
     }
@@ -2111,7 +2323,7 @@ if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
 }
 
 if (typeof document !== 'undefined') {
-  document.addEventListener('pagehide', () => { stopListTotp(); stopTotp(); });
+  document.addEventListener('pagehide', () => { stopListTotp(); stopTotp(); closeLargeType(false); });
   GitpassI18n.apply(document);
   refresh();
 }
