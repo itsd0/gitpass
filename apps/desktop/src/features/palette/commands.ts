@@ -1,4 +1,4 @@
-import { FolderInput, Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard } from 'lucide-react';
+import { FolderInput, Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap } from 'lucide-react';
 import { api } from '../../api/client';
 import { translate, useI18n, type Key } from '../../i18n';
 import type { PaletteCommand } from '../registry';
@@ -12,6 +12,7 @@ export const openShortcutsHelp = () => useApp.getState().openModal('shortcuts-he
 export function builtinCommands(): PaletteCommand[] {
   const app = useApp.getState(); const lang = useI18n.getState().lang;
   const cmds: (Omit<PaletteCommand, 'label'> & { labelKey: Key })[] = [
+    { id: 'open-quick-access', labelKey: 'cmd.openQuickAccess', icon: Zap, keywords: ['quick', 'access', 'spotlight', 'floating', 'hotkey'], run: () => { if ((window as any).__TAURI_INTERNALS__) void api.showQuickAccess(); else useApp.getState().setRoute({ name: 'quick-access' }); } },
     { id: 'new-item', labelKey: 'cmd.newItem', icon: Plus, keywords: ['create', 'add'], shortcut: 'mod+n', run: () => app.openModal('new-item') },
     { id: 'generate-password', labelKey: 'cmd.generatePassword', icon: KeyRound, keywords: ['generator', 'pin', 'words', 'random'], shortcut: 'mod+shift+g', run: () => app.openModal('password-generator') },
     { id: 'lock', labelKey: 'cmd.lock', icon: Lock, shortcut: 'mod+shift+l', run: async () => { await api.lock().catch(() => {}); app.lock(); } },
