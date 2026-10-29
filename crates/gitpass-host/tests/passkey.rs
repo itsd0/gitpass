@@ -162,3 +162,33 @@ fn multiple_passkeys_query_choice_and_last_used() {
     }));
     assert_eq!(err_code, "not_found");
 }
+
+#[test]
+fn saved_passkey_shows_in_site_match_only_when_requested() {
+    let mut f = v5_vault();
+    ok(&mut f.host, json!({"cmd":"unlock","password":PW}));
+    let c = create(&mut f.host, json!({}));
+    let id = c["item_id"].as_str().unwrap().to_string();
+    let has = |v: &Value| v["items"].as_array().unwrap().iter().any(|i| i["id"] == id.as_str() && i["category"] == "passkey");
+    // Popup site list (include_passkeys): the rp's own host, subdomains of the rpId, not other sites.
+    for o in ["https://example.com", ORIGIN, "https://www.example.com"] {
+        assert!(has(&ok(&mut f.host, json!({"cmd":"match","origin":o,"include_passkeys":true}))), "{o}");
+    }
+    assert!(!has(&ok(&mut f.host, json!({"cmd":"match","origin":"https://other.example","include_passkeys":true}))));
+    assert!(!has(&ok(&mut f.host, json!({"cmd":"match","origin":"https://notexample.com","include_passkeys":true}))));
+    // Fill flows (no flag) keep getting logins only.
+    assert!(!has(&ok(&mut f.host, json!({"cmd":"match","origin":ORIGIN}))));
+}
+
+#[test]
+fn rp_matches_origin_rules() {
+    use gitpass_host::passkey::rp_matches_origin as m;
+    assert!(m("github.com", "https://github.com"));
+    assert!(m("github.com", "https://www.github.com"));
+    assert!(m("GitHub.com.", "https://github.com"));
+    assert!(!m("www.github.com", "https://github.com"));
+    assert!(!m("github.com", "https://evilgithub.com"));
+    assert!(!m("com", "https://github.com"));
+    assert!(!m("", "https://github.com"));
+    assert!(!m("github.com", "http://github.com"));
+}
