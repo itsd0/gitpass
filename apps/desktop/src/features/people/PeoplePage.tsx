@@ -6,6 +6,8 @@ import type { Identity, Member, VaultInfo } from '../../api/types';
 import { Avatar, Badge, Button, Modal, Input, Separator, Skeleton, toast } from '../../ui';
 import { useT } from '../../i18n';
 import { useApp } from '../../lib/store';
+import { isTauri } from '../../lib/agentEvents';
+import { pickShareFile } from '../../lib/saveDialog';
 
 const errMsg = (e: unknown) => String((e as Error)?.message ?? e);
 
@@ -69,9 +71,13 @@ function VaultMembers({ vault, onChange }: { vault: VaultInfo; onChange: () => v
 export function AcceptShare({ onAccepted }: { onAccepted?: (v: VaultInfo) => void }) {
   const t = useT(); const [path, setPath] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
   const pick = async () => {
-    // Native picker requires @tauri-apps/plugin-dialog (not in contract deps). Fallback: manual path entry.
-    try { const mod = '@tauri-apps/plugin-dialog'; const d: any = await import(/* @vite-ignore */ mod); const p = await d.open({ multiple: false }); if (typeof p === 'string') setPath(p); }
-    catch { document.getElementById('share-path')?.focus(); }
+    // Native picker via the shared helper (a normal dependency, see src/lib/saveDialog.ts).
+    // Outside Tauri there is no dialog, so fall back to focusing the manual path input.
+    try {
+      const p = await pickShareFile();
+      if (typeof p === 'string') setPath(p);
+      else if (!isTauri()) document.getElementById('share-path')?.focus();
+    } catch { document.getElementById('share-path')?.focus(); }
   };
   return (
     <section className="rounded-xl border border-border bg-card p-5">
