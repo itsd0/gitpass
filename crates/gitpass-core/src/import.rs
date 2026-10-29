@@ -18,7 +18,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ImportFormat { BitwardenJson, BitwardenCsv, OnePasswordCsv, OnePassword1pux, KeepassCsv, ChromeCsv, ApplePasswordsCsv, GitpassJson }
+pub enum ImportFormat { BitwardenJson, BitwardenCsv, OnePasswordCsv, OnePassword1pux, KeepassCsv, ChromeCsv, ApplePasswordsCsv, GitpassJson, LastpassCsv, ProtonPassCsv }
 
 impl std::str::FromStr for ImportFormat {
     type Err = anyhow::Error;
@@ -32,7 +32,9 @@ impl std::str::FromStr for ImportFormat {
             "chrome-csv" => Self::ChromeCsv,
             "apple-passwords-csv" | "apple-passwords" | "apple-csv" | "apple" | "safari-csv" | "safari" => Self::ApplePasswordsCsv,
             "gitpass-json" => Self::GitpassJson,
-            o => bail!("unknown import format '{o}' (bitwarden-json, bitwarden-csv, 1password-csv, 1password-1pux, keepass-csv, chrome-csv, apple-passwords-csv, gitpass-json)"),
+            "lastpass-csv" | "lastpass" => Self::LastpassCsv,
+            "protonpass-csv" | "proton-pass-csv" | "protonpass" | "proton-pass" => Self::ProtonPassCsv,
+            o => bail!("unknown import format '{o}' (bitwarden-json, bitwarden-csv, 1password-csv, 1password-1pux, keepass-csv, chrome-csv, apple-passwords-csv, gitpass-json, lastpass-csv, protonpass-csv)"),
         })
     }
 }
@@ -54,6 +56,8 @@ pub fn parse(format: ImportFormat, data: &str, passphrase: Option<&str>) -> Resu
         ImportFormat::ChromeCsv => parse_csv(data, &CHROME_CSV),
         ImportFormat::ApplePasswordsCsv => parse_csv(data, &APPLE_PASSWORDS_CSV),
         ImportFormat::OnePassword1pux => parse_1pux_json(data),
+        ImportFormat::LastpassCsv => parse_csv(data, &LASTPASS_CSV),
+        ImportFormat::ProtonPassCsv => parse_csv(data, &PROTONPASS_CSV),
     }
 }
 
@@ -110,10 +114,12 @@ struct CsvSpec {
     name: &'static str,
     title: &'static [&'static str],
     username: &'static [&'static str],
+    email: &'static [&'static str],
     password: &'static [&'static str],
     url: &'static [&'static str],
     notes: &'static [&'static str],
     totp: &'static [&'static str],
+    created: &'static [&'static str],
     modified: &'static [&'static str],
     /// Folder / group / tags columns -> tags (split on `tag_sep` when non-empty).
     tags: &'static [&'static str],
@@ -128,8 +134,8 @@ struct CsvSpec {
 // Bitwarden: folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp
 const BITWARDEN_CSV: CsvSpec = CsvSpec {
     name: "bitwarden-csv",
-    title: &["name"], username: &["login_username"], password: &["login_password"],
-    url: &["login_uri"], notes: &["notes"], totp: &["login_totp"], modified: &[],
+    title: &["name"], username: &["login_username"], email: &[], password: &["login_password"],
+    url: &["login_uri"], notes: &["notes"], totp: &["login_totp"], created: &[], modified: &[],
     tags: &["folder"], tag_sep: &[], favorite: &["favorite"], archived: &[],
     ignore: &["reprompt", "type"], note_type: Some(("type", "note")),
 };
@@ -137,9 +143,9 @@ const BITWARDEN_CSV: CsvSpec = CsvSpec {
 // (older 1Password 7 exports used "URL"/"Website", "One-time password", "notesPlain").
 const ONEPASSWORD_CSV: CsvSpec = CsvSpec {
     name: "1password-csv",
-    title: &["title", "name"], username: &["username", "user name", "login"], password: &["password"],
+    title: &["title", "name"], username: &["username", "user name", "login"], email: &[], password: &["password"],
     url: &["url", "website", "urls", "location"], notes: &["notes", "notesplain", "note"],
-    totp: &["otpauth", "one-time password", "totp", "otp"], modified: &[],
+    totp: &["otpauth", "one-time password", "totp", "otp"], created: &[], modified: &[],
     tags: &["tags"], tag_sep: &[',', ';'], favorite: &["favorite"], archived: &["archived"],
     ignore: &[], note_type: None,
 };
@@ -147,30 +153,52 @@ const ONEPASSWORD_CSV: CsvSpec = CsvSpec {
 // KeePass 2 (generic CSV): "Account","Login Name","Password","Web Site","Comments"
 const KEEPASS_CSV: CsvSpec = CsvSpec {
     name: "keepass-csv",
-    title: &["title", "account"], username: &["username", "login name", "user name"], password: &["password"],
+    title: &["title", "account"], username: &["username", "login name", "user name"], email: &[], password: &["password"],
     url: &["url", "web site"], notes: &["notes", "comments"], totp: &["totp", "otp"],
-    modified: &["last modified"], tags: &["group"], tag_sep: &[], favorite: &[], archived: &[],
+    created: &[], modified: &["last modified"], tags: &["group"], tag_sep: &[], favorite: &[], archived: &[],
     ignore: &["icon", "created"], note_type: None,
 };
 // Chrome / Edge / Brave: name,url,username,password[,note]
 const CHROME_CSV: CsvSpec = CsvSpec {
     name: "chrome-csv",
-    title: &["name", "origin"], username: &["username"], password: &["password"],
-    url: &["url", "origin_url"], notes: &["note", "notes"], totp: &[], modified: &[],
+    title: &["name", "origin"], username: &["username"], email: &[], password: &["password"],
+    url: &["url", "origin_url"], notes: &["note", "notes"], totp: &[], created: &[], modified: &[],
     tags: &[], tag_sep: &[], favorite: &[], archived: &[], ignore: &[], note_type: None,
+};
+// LastPass: url,username,password,totp,extra,name,grouping,fav
+const LASTPASS_CSV: CsvSpec = CsvSpec {
+    name: "lastpass-csv",
+    title: &["name"], username: &["username"], email: &[], password: &["password"],
+    url: &["url"], notes: &["extra", "notes", "note"], totp: &["totp"], created: &[], modified: &[],
+    tags: &["grouping"], tag_sep: &[], favorite: &["fav", "favorite"], archived: &[],
+    ignore: &[], note_type: None,
+};
+// Proton Pass: type,name,url,email,username,password,note,totp,createTime,modifyTime,vault
+const PROTONPASS_CSV: CsvSpec = CsvSpec {
+    name: "protonpass-csv",
+    title: &["name", "title"], username: &["username"], email: &["email"], password: &["password"],
+    url: &["url"], notes: &["note", "notes"], totp: &["totp"],
+    created: &["createtime", "create_time"], modified: &["modifytime", "modify_time"],
+    tags: &["vault"], tag_sep: &[], favorite: &[], archived: &[],
+    ignore: &["type"], note_type: Some(("type", "note")),
 };
 // Apple Passwords / Safari CSV (macOS 15 Passwords app / Safari export): Title,URL,Username,Password,Notes,OTPAuth
 const APPLE_PASSWORDS_CSV: CsvSpec = CsvSpec {
     name: "apple-passwords-csv",
-    title: &["title"], username: &["username", "user name"], password: &["password"],
+    title: &["title"], username: &["username", "user name"], email: &[], password: &["password"],
     url: &["url", "website"], notes: &["notes", "note"],
-    totp: &["otpauth", "totp", "otp"], modified: &[],
+    totp: &["otpauth", "totp", "otp"], created: &[], modified: &[],
     tags: &[], tag_sep: &[], favorite: &[], archived: &[],
     ignore: &[], note_type: None,
 };
 
 /// KeePass group path "Root/Work/Mail" -> tag "Work/Mail" (the root group alone gives no tag).
 fn group_tag(spec: &CsvSpec, v: &str) -> String {
+    if spec.name == "lastpass-csv" {
+        let v = v.trim();
+        if v.eq_ignore_ascii_case("(none)") { return String::new(); }
+        return v.to_string();
+    }
     if spec.name != "keepass-csv" { return v.to_string(); }
     let v = v.trim().trim_matches('/');
     match v.split_once('/') { Some((root, rest)) if ["root", "database", "passwords"].contains(&root.to_ascii_lowercase().as_str()) => rest.to_string(),
@@ -183,28 +211,53 @@ fn parse_csv(data: &str, spec: &CsvSpec) -> Result<Parsed> {
         .iter().map(|h| h.trim().to_string()).collect();
     let lower: Vec<String> = headers.iter().map(|h| h.to_ascii_lowercase()).collect();
     let find = |aliases: &[&str]| aliases.iter().find_map(|a| lower.iter().position(|h| h == a));
+    let email_col = find(spec.email);
+    let create_col = find(spec.created);
     let cols = [find(spec.title), find(spec.username), find(spec.password), find(spec.url), find(spec.notes), find(spec.totp), find(spec.modified),
         find(spec.tags), find(spec.favorite), find(spec.archived)];
     let mut out = Parsed::default();
     if cols[0].is_none() && cols[3].is_none() {
         bail!("{}: no title/name or url column found in header {:?}", spec.name, headers);
     }
-    let used: HashSet<usize> = cols.iter().flatten().copied().collect();
+    let mut used: HashSet<usize> = cols.iter().flatten().copied().collect();
+    if let Some(ec) = email_col { used.insert(ec); }
+    if let Some(cc) = create_col { used.insert(cc); }
     let type_col = spec.note_type.and_then(|(c, _)| lower.iter().position(|h| h == c));
     for (row, rec) in rdr.records().enumerate() {
         let rec = rec.with_context(|| format!("{}: row {}", spec.name, row + 2))?;
         let get = |i: Option<usize>| i.and_then(|i| rec.get(i)).and_then(|v| opt(Some(v)));
-        let url = get(cols[3]);
-        let title = get(cols[0]).or_else(|| url.clone());
+        let raw_url = get(cols[3]);
+        // LastPass folder placeholder rows (`http://group`) carry no secret: skip them.
+        if spec.name == "lastpass-csv" && raw_url.as_deref() == Some("http://group") { continue; }
+        let is_lastpass_sn = spec.name == "lastpass-csv" && raw_url.as_deref() == Some("http://sn");
+        // Proton Pass joins several websites into one cell with ", ".
+        let mut urls: Vec<String> = match (&raw_url, spec.name) {
+            (Some(u), "protonpass-csv") => u.split(", ").map(str::trim).filter(|x| !x.is_empty()).map(String::from).collect(),
+            (Some(u), _) => vec![u.clone()],
+            (None, _) => Vec::new(),
+        };
+        let extra_urls: Vec<String> = if urls.len() > 1 { urls.split_off(1) } else { Vec::new() };
+        let raw_url = urls.into_iter().next();
+        let url = if is_lastpass_sn { None } else { raw_url.clone() };
+        let title = get(cols[0]).or(if is_lastpass_sn { None } else { raw_url });
         let Some(title) = title else { out.warnings.push(format!("row {}: no title or url, skipped", row + 2)); continue };
         let mut notes = get(cols[4]);
         for (i, h) in headers.iter().enumerate() {
             if used.contains(&i) || spec.ignore.contains(&lower[i].as_str()) { continue; }
             if let Some(v) = rec.get(i).and_then(|v| opt(Some(v))) { append_note(&mut notes, format!("{h}: {v}")); }
         }
-        let is_note = matches!((spec.note_type, type_col), (Some((_, want)), Some(tc)) if rec.get(tc).map(|v| v.trim().eq_ignore_ascii_case(want)).unwrap_or(false));
+        let is_note = is_lastpass_sn || matches!((spec.note_type, type_col), (Some((_, want)), Some(tc)) if rec.get(tc).map(|v| v.trim().eq_ignore_ascii_case(want)).unwrap_or(false));
         let mut r = record(title, if is_note { Category::SecureNote } else { Category::Login });
-        r.item.username = get(cols[1]); r.item.password = get(cols[2]); r.item.url = url; r.item.notes = notes; r.item.totp = get(cols[5]);
+        let email = get(email_col);
+        let username = get(cols[1]);
+        let extra_email = match (&username, &email) { (Some(u), Some(e)) if !u.eq_ignore_ascii_case(e) => Some(e.clone()), _ => None };
+        r.item.username = username.or(email); r.item.password = get(cols[2]); r.item.url = url; r.item.notes = notes; r.item.totp = get(cols[5]);
+        if !is_lastpass_sn {
+            let extra: Vec<Option<Field>> = extra_urls.iter().enumerate().map(|(n, u)| fld(&format!("url{}", n + 2), "website", FieldKind::Url, Some(u.clone()))).collect();
+            push_section(&mut r, "urls", Some("Websites"), extra);
+        }
+        // Keep a distinct email (e.g. Proton Pass `email` next to `username`) instead of dropping it.
+        push_section(&mut r, "imported", Some("Imported"), vec![fld("email", "email", FieldKind::Text, extra_email)]);
         if is_note && (r.item.username.is_some() || r.item.password.is_some() || r.item.totp.is_some()) {
             // secure notes have no login fields: keep the values visible instead of dropping them
             let fs = vec![
@@ -213,7 +266,8 @@ fn parse_csv(data: &str, spec: &CsvSpec) -> Result<Parsed> {
                 fld("otp", "one-time password", FieldKind::Totp, r.item.totp.take())];
             push_section(&mut r, "imported", Some("Imported"), fs);
         }
-        if let Some(t) = get(cols[6]).and_then(|v| iso_to_epoch(&v)) { r.item.updated_at = t.to_string(); }
+        if let Some(t) = get(create_col).and_then(|v| parse_time(&v)) { r.created_at = Some(t); }
+        if let Some(t) = get(cols[6]).and_then(|v| parse_time(&v)) { r.item.updated_at = t.to_string(); }
         if let Some(t) = get(cols[7]) {
             if spec.tag_sep.is_empty() { add_tag(&mut r, &group_tag(spec, &t)); } else { for x in t.split(spec.tag_sep) { add_tag(&mut r, x); } }
         }
@@ -222,6 +276,20 @@ fn parse_csv(data: &str, spec: &CsvSpec) -> Result<Parsed> {
         out.items.push(r);
     }
     Ok(out)
+}
+
+/// Parse ISO 8601 strings or unix timestamps (seconds or milliseconds).
+pub fn parse_time(s: &str) -> Option<u64> {
+    let s = s.trim();
+    if let Ok(epoch) = s.parse::<u64>() {
+        if epoch >= 100_000_000_000 {
+            return Some(epoch / 1000);
+        }
+        if epoch > 0 {
+            return Some(epoch);
+        }
+    }
+    iso_to_epoch(s)
 }
 
 /// Parse `YYYY-MM-DD[T ]HH:MM:SS[.fff][Z]` (UTC assumed) to unix seconds. Returns None otherwise.
@@ -668,12 +736,25 @@ pub fn detect_format(data: &str) -> Option<ImportFormat> {
     if headers.is_empty() { return None; }
 
     // Bitwarden CSV distinctive headers
-    if headers.iter().any(|h| ["login_username", "login_uri", "login_password", "login_totp"].contains(&h.as_str())) {
+    if headers.iter().any(|h| ["login_username", "login_uri", "login_password", "login_totp", "reprompt"].contains(&h.as_str())) {
         return Some(ImportFormat::BitwardenCsv);
     }
 
+    // LastPass CSV: url,username,password,totp,extra,name,grouping,fav
+    if headers.contains(&"grouping".to_string()) || (headers.contains(&"extra".to_string()) && headers.contains(&"fav".to_string())) {
+        return Some(ImportFormat::LastpassCsv);
+    }
+
+    // Proton Pass CSV: type,name,url,email,username,password,note,totp,createTime,modifyTime,vault
+    if (headers.contains(&"createtime".to_string()) && headers.contains(&"modifytime".to_string()))
+        || (headers.contains(&"vault".to_string()) && headers.contains(&"email".to_string()))
+        || (headers.contains(&"type".to_string()) && headers.contains(&"email".to_string()) && headers.contains(&"username".to_string()))
+    {
+        return Some(ImportFormat::ProtonPassCsv);
+    }
+
     // KeePass CSV distinctive headers
-    if headers.iter().any(|h| ["group", "login name", "web site", "comments"].contains(&h.as_str())) {
+    if headers.iter().any(|h| ["group", "account", "login name", "web site", "comments", "icon", "last modified"].contains(&h.as_str())) {
         return Some(ImportFormat::KeepassCsv);
     }
 

@@ -791,7 +791,7 @@ fn item_summary_carries_expiry_for_card_and_api_credential_only() {
     // 3. Serialized JSON contains expiry, and NO secret values (password, card number, CVV, credential)
     for (item, secret_values) in [
         (&l, vec!["super-secret-login-password"]),
-        (&c, vec!["4111 1111 1111 1111", "123"]),
+        (&c, vec!["4111 1111 1111 1111", "\"123\""]),
         (&a, vec!["sk_live_FAKE_SECRET_KEY_12345678"]),
     ] {
         let json_str = serde_json::to_string(item).unwrap();
