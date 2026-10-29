@@ -348,6 +348,10 @@
     "message": "လော့ဂ်အင်ကို gitpass တွင် သိမ်းမလား?",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "csSaveCardQ": {
+    "message": "ကတ်ကို gitpass တွင် သိမ်းမလား?",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
   "csNoUser": {
     "message": "(အသုံးပြုသူအမည် မရှိ)",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
@@ -374,6 +378,10 @@
   },
   "csSaved": {
     "message": "gitpass တွင် သိမ်းပြီးပါပြီ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csSavedCard": {
+    "message": "ကတ်သိမ်းပြီးပါပြီ",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csLockedShort": {

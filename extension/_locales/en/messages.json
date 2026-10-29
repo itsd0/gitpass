@@ -339,6 +339,9 @@
   "csSaveQ": {
     "message": "Save login to gitpass?"
   },
+  "csSaveCardQ": {
+    "message": "Save card to gitpass?"
+  },
   "csNoUser": {
     "message": "(no username)"
   },
@@ -359,6 +362,9 @@
   },
   "csSaved": {
     "message": "Saved to gitpass"
+  },
+  "csSavedCard": {
+    "message": "Card saved"
   },
   "csLockedShort": {
     "message": "Unlock gitpass first, then try again"
