@@ -46,6 +46,8 @@ export const en = {
   'generator.includeDigits': 'Digits (0-9)',
   'generator.includeSymbols': 'Symbols (!@#$)',
   'generator.regenerate': 'Regenerate',
+  'generator.usePassword': 'Use password',
+  'generator.generatePassword': 'Generate password',
   'generator.saveAsLogin': 'Save as new Login…',
   'generator.copied': 'Copied password to clipboard',
   'cmd.generatePassword': 'Generate password',
