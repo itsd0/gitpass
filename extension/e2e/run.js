@@ -892,7 +892,7 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       await sleep(300); // the mock host polls control.json every 100 ms
       const emptyPop = await openRealPopup(ctx, sw, page, EXT);
       const loaded = await until(async () => /Localhost Test Login/.test(await emptyPop.text()), T(8000));
-      await emptyPop.eval(`(() => { const s = document.getElementById('filter'); s.value = 'suggested'; s.dispatchEvent(new Event('change', { bubbles: true })); return s.value; })()`);
+      await emptyPop.eval(`(() => { const c = document.querySelector('#filterChips [data-filter-id="suggested"]'); if (!c) return null; c.click(); return c.getAttribute('aria-selected'); })()`);
       const emptyTxt = await until(async () => { const x = await emptyPop.text(); return /No saved logins for this site/.test(x) && x; }, T(5000));
       rec('popup empty state: no saved logins offers Save a login for localhost',
         !!loaded && !!emptyTxt && /Save a login for localhost/.test(emptyTxt),
@@ -1208,6 +1208,23 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       await promptGone(wa, /^Sign in$/);
       const g2 = await act(wa, '#login', /^Sign in$/, false);
       rec('passkey get again: signCount increments', g2.verified === true && g2.signCount === 2, JSON.stringify(g2));
+      await promptGone(wa, /^Sign in$/);
+
+      // Two passkeys for a site (#241): register second account (bob), then choose it in overlay
+      const saveBob = await act(wa, '#reg2', /^Save passkey$/, false);
+      rec('passkey create second account (bob): in-page approve -> credential verified', saveBob.registered === true, JSON.stringify(saveBob));
+      await promptGone(wa, /^Save passkey$/);
+
+      await clearOut(wa); await wa.bringToFront(); await wa.click('#login');
+      const hasChoicePrompt = await waitPrompt(wa, /^Sign in$/);
+      rec('passkey overlay: prompt shown with multiple accounts', !!hasChoicePrompt);
+      await sleep(800); // 600ms anti-clickjacking
+      await wa.keyboard.press('ArrowDown');
+      await wa.keyboard.press('Enter');
+      const gChoice = await until(() => outJson(wa), T(12000));
+      rec('passkey choice: second passkey chosen and assertion verified',
+        gChoice && gChoice.verified === true && gChoice.userHandle === 'user-bob' && gChoice.id === saveBob.id,
+        JSON.stringify(gChoice));
       await promptGone(wa, /^Sign in$/);
 
       // Duplicate: the prompt reports "already saved"; Close resolves the page as InvalidStateError.

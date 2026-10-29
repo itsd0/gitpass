@@ -41,7 +41,11 @@ Open it from the toolbar icon, or with the keyboard command below.
 - **New item.** Create a login (and other item types) from the popup
   without opening the desktop app.
 - **Generator.** Generate a strong password from the popup and use it in
-  the page or when creating an item. Passwords generated in the extension
+  the page or when creating an item. Under it, **Recent** lists your last
+  10 generated passwords (masked until you reveal one; copy, reveal, and
+  fill when it was generated on the current site). It is hidden while locked
+  and shows "Generator history is off" when the desktop setting is off.
+  Passwords generated in the extension
   are saved to the vault's encrypted generator history (the same history
   the desktop app and `gitpass gen history` show), so a password lost to
   a form that swallowed it can be recovered from there instead of from
@@ -51,6 +55,11 @@ Open it from the toolbar icon, or with the keyboard command below.
   desktop app). `gitpass gen --no-history` skips recording for a single
   CLI generation only. Note: when the desktop app is closed, the
   standalone host currently ignores that setting — see issue #225.
+- **Opening gitpass.** Actions like "Open in gitpass" and "Open Watchtower" in
+  the popup use `open_in_app` to bring the desktop app to the front and navigate
+  directly to the item or target view (Watchtower, generator history, or
+  Settings). If the app is locked, it shows the unlock screen first and then
+  completes the navigation.
 
 When the vault is locked, the popup shows the unlock screen instead of
 your items.
@@ -120,13 +129,79 @@ Manage the exceptions on the extension options page, under
 options page also has the "Offer to save logins" switch, which turns the
 banner off entirely.
 
+## Submit after fill
+
+Off by default. On the extension options page, under "Autofill &
+saving", the "Submit the form after filling a login" switch
+(`autoSubmitAfterFill`) turns it on. When it is on, gitpass submits the
+form right after a login fill — but only when all of these hold:
+
+- The fill was one you explicitly triggered: Fill from the popup, a pick
+  from the inline menu, the ⌘⇧L fill command, or a right-click fill.
+  Nothing ever submits on page load.
+- The detected form is a real `<form>` login (or a username-only step of
+  one), and the step that was filled is complete: a full login needs its
+  username and password filled, a password-only step needs its password,
+  a username-only step needs its username. A partially filled form fills
+  and stops.
+- The form has exactly one visible submit control. Zero, or two or more,
+  means no submit.
+- The fill origin attested by the background matches the page origin.
+
+Submission uses the form's `requestSubmit()`, so the page's own
+validation still runs. It never happens for cards, identities, TOTP,
+passkeys, sign-up or change-password forms, and a formless group of
+fields never submits.
+
+Per-site exceptions live on the extension options page under "Never
+auto-submit on these sites": type a hostname (for example
+`example.com`) and choose "Add a site". gitpass still fills logins on
+those sites but never submits the form for you; the `www.` prefix is
+ignored when matching, so an exception for `example.com` also covers
+`www.example.com`. Remove a site with its Remove button to allow
+auto-submit there again.
+
+## Website icons and monograms
+
+Login rows in the popup and in the inline autofill menu show the site's
+website icon when one is available; otherwise they show a monogram —
+the first letter of the item title. Non-login items show their category
+icon instead.
+
+The extension itself never fetches an icon over the network. When an
+icon is needed, it asks the background worker, which asks `gitpass-host`
+over native messaging; the host serves a cached icon only when the
+desktop app's "Show website icons" setting is on and the vault has a
+login for that host. If icons are off, or no icon is cached for the
+site, the monogram is shown instead. Icons the extension receives are
+kept in its own memory only and are cleared when the vault locks.
+
+There is no icon toggle in the extension itself: the extension options
+page's "Website icons" row only explains that icon downloads are
+controlled by the desktop app's "Show website icons" setting. That
+desktop setting is off by default, because fetching an icon tells the
+site you have an account there; turning it off clears the icon cache.
+
 ## Passkeys
 
 When a site asks for a passkey and gitpass has one for that site, an
-in-page prompt lets you pick it. If you instead want the browser's own
-passkey flow, choose the native/device option in that prompt. If gitpass
-has no passkey for the site, no prompt appears at all and the request
-passes straight through to the browser's native flow.
+in-page prompt lets you pick it. When a site has more than one passkey
+saved in gitpass (for example multiple accounts on GitHub), the prompt
+shows an account list with usernames, vault names (if items belong to
+differing vaults), and website icons or monograms. The most recently used
+passkey is preselected and listed first.
+
+The account list supports keyboard navigation (`role="listbox"` with
+Up/Down, Home/End, Enter to sign in, and Esc to cancel). Focus starts on
+the preselected row, and the 600 ms anti-clickjacking arming window
+applies to both the Sign in button and Enter key. The chosen credential ID
+is strictly validated by the background against authoritative query matches
+before invoking `passkey_get`. The popup-window fallback (`popup/passkey.html`)
+provides the same account choice.
+
+If you instead want the browser's own passkey flow, choose the native/device
+option in that prompt. If gitpass has no passkey for the site, no prompt
+appears at all and the request passes straight through to the browser's native flow.
 
 ## What the extension never stores
 
@@ -149,6 +224,8 @@ passes straight through to the browser's native flow.
 | Right-click menu contents | `extension/bg-context.js` (`buildMenu`, issue #213) |
 | Inline menu keys | `extension/content.js` (field `keydown` handler, dropdown keys) |
 | Save / update banner, "Never for this site" | `extension/content.js` (save/update banner), `extension/options/options.html` |
+| Submit after fill, "Never auto-submit" exceptions | `extension/content.js` (`maybeAutoSubmit`), `extension/lib/forms.js` (`shouldAutoSubmit`, `visibleSubmitControls`), `extension/options/options.html` |
+| Website icons and monograms | `extension/background.js` (`site_icon`), `extension/bg-page.js` (`page:site_icon`), `extension/popup/popup.js`, `extension/content.js` (`itemIcon`), `crates/gitpass-host/src/handler.rs` (`site_icon`) |
 | Passkey prompt and native fallback | `extension/bg-passkey.js` |
 | Popup search, copy, TOTP, New item, generator | `extension/popup/popup.js`, `extension/popup/generator.js`, `extension/popup/newitem.js` |
 | Generator history recording | `extension/background.js`, `extension/bg-page.js` (`record_generated_password`), `crates/gitpass-host/src/handler.rs`, `apps/desktop/gui-core/src/api.rs` (`record_generated_password`, `rememberGeneratedPasswords`) |

@@ -150,6 +150,7 @@ pub struct WatchtowerReport {
     pub expired: Vec<String>, pub expiring_soon: Vec<String>,
     pub insecure_urls: Vec<String>,
     pub duplicates: Vec<Vec<String>>,
+    pub weak_ssh_keys: Vec<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub weak_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -213,6 +214,8 @@ pub struct Settings {
     /// Item-list density (default comfortable; older settings files without
     /// the field deserialize to comfortable).
     #[serde(default)] pub list_density: ListDensity,
+    /// Menu bar: Show gitpass in the macOS menu bar (default on).
+    #[serde(default = "default_true")] pub show_menu_bar_icon: bool,
     /// Remember generated passwords in an encrypted vault history (default on).
     #[serde(default = "default_true")] pub remember_generated_passwords: bool,
 }
@@ -224,7 +227,7 @@ impl Default for Settings {
             hide_from_screen_recording: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
-            show_website_icons: false, render_notes_markdown: true, list_density: ListDensity::Comfortable,
+            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, list_density: ListDensity::Comfortable,
             remember_generated_passwords: true }
     }
 }
@@ -1179,6 +1182,18 @@ impl App {
         })
     }
 
+    /// The passkey's site URL (`https://<rp_id>`), derived in Rust so the webview never
+    /// hands an arbitrary URL to the OS; `None` when the item has no usable rp_id.
+    pub fn item_passkey_site_url(&self, vault_id: &str, item_id: &str) -> Result<Option<String>> {
+        self.with(|u| {
+            let (_, r) = u.session.read_record(vault_id, item_id)?;
+            Ok(passkey_site_url(
+                r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value).as_deref(),
+                r.item.url.as_deref(),
+            ))
+        })
+    }
+
     /// Watchtower over live login items, reusing core `audit` (HIBP only when `hibp`).
     pub fn watchtower(&self, hibp: bool) -> Result<WatchtowerReport> {
         // Network breach check only when the caller asks AND the user opted in via Settings.hibpCheck.
@@ -1198,6 +1213,7 @@ impl App {
                 totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
                 insecure_urls: vec![],
                 duplicates: vec![],
+                weak_ssh_keys: vec![],
                 weak_reasons: HashMap::new(),
                 ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
@@ -1220,6 +1236,7 @@ impl App {
                         Finding::ExpiringSoon { .. } => out.expiring_soon.push(f.id.clone()),
                         Finding::InsecureUrl { .. } => out.insecure_urls.push(f.id.clone()),
                         Finding::Duplicate { group } => dup_groups.entry(group.clone()).or_default().push(f.id.clone()),
+                        Finding::WeakSshKey { .. } => out.weak_ssh_keys.push(f.id.clone()),
                     }
                 }
             }
@@ -1556,5 +1573,65 @@ impl App {
     }
     pub fn ssh_agent_info(&self, socket: &std::path::Path, running: bool) -> SshAgentInfo {
         SshAgentInfo { socket_path: socket.display().to_string(), config_line: gitpass_core::ssh::identity_agent_line(socket), running, approve_each_use: self.get_settings().ssh_approve_each_use }
+    }
+}
+
+/// Derive `https://<rp_id>` for a passkey item. The stored `rp_id` field wins;
+/// the item's saved URL (core stores `https://<rp_id>` there) is the fallback.
+/// Only a bare hostname is accepted — any scheme, path, userinfo, port, space
+/// or empty value yields `None`, so no webview-supplied URL can reach the OS
+/// opener through this path.
+pub fn passkey_site_url(rp_id: Option<&str>, item_url: Option<&str>) -> Option<String> {
+    let valid_host = |s: &str| {
+        !s.is_empty()
+            && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.' || c == '_')
+            && !s.starts_with(['-', '.'])
+            && !s.ends_with(['-', '.'])
+            && !s.contains("..")
+    };
+    let host = rp_id
+        .map(str::trim)
+        .filter(|s| valid_host(s))
+        .map(|s| s.to_ascii_lowercase())
+        .or_else(|| {
+            item_url
+                .and_then(|u| u.strip_prefix("https://"))
+                .map(|rest| rest.split(['/', '?', '#']).next().unwrap_or(""))
+                .filter(|h| valid_host(h))
+                .map(|h| h.to_ascii_lowercase())
+        });
+    host.map(|h| format!("https://{h}"))
+}
+
+#[cfg(test)]
+mod passkey_site_url_tests {
+    use super::passkey_site_url;
+
+    #[test]
+    fn rp_id_wins_and_is_lowercased() {
+        assert_eq!(
+            passkey_site_url(Some("GitHub.com"), Some("https://other.example.com")),
+            Some("https://github.com".to_string())
+        );
+    }
+
+    #[test]
+    fn falls_back_to_saved_url_host() {
+        assert_eq!(
+            passkey_site_url(None, Some("https://example.com/login?x=1")),
+            Some("https://example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn rejects_non_hostnames() {
+        assert_eq!(passkey_site_url(Some("https://evil.example.com"), None), None);
+        assert_eq!(passkey_site_url(Some("example.com/evil"), None), None);
+        assert_eq!(passkey_site_url(Some("user@example.com"), None), None);
+        assert_eq!(passkey_site_url(Some("example.com:8443"), None), None);
+        assert_eq!(passkey_site_url(Some("exa mple.com"), None), None);
+        assert_eq!(passkey_site_url(Some(""), None), None);
+        assert_eq!(passkey_site_url(None, Some("http://example.com")), None);
+        assert_eq!(passkey_site_url(None, None), None);
     }
 }

@@ -187,9 +187,9 @@ test('popup: shows saving is off note with undo for excepted site', async () => 
   await new Promise((r) => setTimeout(r, 80));
 
   // Switch filter to suggested
-  const filter = w.document.getElementById('filter');
-  filter.value = 'suggested';
-  filter.dispatchEvent(new w.Event('change', { bubbles: true }));
+  const filter = w.document.querySelector('#filterChips [data-filter-id="suggested"]');
+  assert.ok(filter, 'expected Suggested filter chip');
+  filter.click();
 
   await new Promise((r) => setTimeout(r, 60));
 

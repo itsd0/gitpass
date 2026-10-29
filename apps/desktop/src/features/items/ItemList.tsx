@@ -1,7 +1,7 @@
-import { useT } from "../../i18n";
+import { useI18n, useT } from "../../i18n";
 import { getItemExpiry } from "./expiry";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useVirtualizer } from "@tanstack/react-virtual";
+import { useVirtualizer, defaultRangeExtractor } from "@tanstack/react-virtual";
 import { ArrowDownUp, Check, ChevronDown, LayoutGrid, Star } from "lucide-react";
 import { api } from "../../api/client";
 import type { Filter } from "../../api/types";
@@ -110,6 +110,7 @@ export function ItemList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(base), debounced, sort, category, version]);
 
+  const lang = useI18n((s) => s.lang);
   const showRecentSection = base.kind === "all" && !searchQuery && sort !== "recent";
   const rows = useMemo(
     () =>
@@ -117,10 +118,23 @@ export function ItemList() {
         showRecentSection,
         recentLabel: t("items.recentlyUsed"),
         neverUsedLabel: t("items.neverUsed"),
+        todayLabel: t("items.section.today"),
+        yesterdayLabel: t("items.section.yesterday"),
+        previous7DaysLabel: t("items.section.previous7Days"),
+        previous30DaysLabel: t("items.section.previous30Days"),
+        locale: lang,
       }),
-    [items, sort, showRecentSection, t]
+    [items, sort, showRecentSection, t, lang]
+  );
+  const stickyIndexes = useMemo(
+    () =>
+      rows
+        .map((r, i) => (r.type === "header" ? i : -1))
+        .filter((i) => i !== -1),
+    [rows]
   );
   const parentRef = useRef<HTMLDivElement>(null);
+  const activeStickyIndexRef = useRef<number>(-1);
   const virt = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
@@ -128,6 +142,16 @@ export function ItemList() {
     getItemKey: (i) => rows[i].key,
     overscan: 8,
     initialRect: { width: 320, height: 700 },
+    rangeExtractor: (range) => {
+      const activeIndex =
+        [...stickyIndexes].reverse().find((index) => range.startIndex >= index);
+      activeStickyIndexRef.current = activeIndex ?? -1;
+      const next = new Set([
+        ...(activeIndex !== undefined && activeIndex >= 0 ? [activeIndex] : []),
+        ...(defaultRangeExtractor ? defaultRangeExtractor(range) : []),
+      ]);
+      return [...next].sort((a, b) => a - b);
+    },
   });
 
   // auto-select first item when nothing selected
@@ -318,23 +342,29 @@ export function ItemList() {
           <div style={{ height: virt.getTotalSize(), position: "relative" }}>
             {virt.getVirtualItems().map((v) => {
               const r = rows[v.index];
+              const isHeader = r.type === "header";
+              const isActiveSticky = isHeader && activeStickyIndexRef.current === v.index;
               return (
                 <div
                   key={r.key}
                   data-index={v.index}
                   style={{
-                    position: "absolute",
+                    position: isActiveSticky ? "sticky" : "absolute",
                     top: 0,
                     left: 0,
                     width: "100%",
                     height: v.size,
-                    transform: `translateY(${v.start}px)`,
+                    transform: isActiveSticky ? undefined : `translateY(${v.start}px)`,
+                    zIndex: isActiveSticky ? 10 : isHeader ? 1 : 0,
                   }}
                 >
-                  {r.type === "header" ? (
+                  {isHeader ? (
                     <div
+                      id={`header-${r.key}`}
+                      role="group"
+                      aria-label={r.label}
                       style={{ height: HEADER_H }}
-                      className="flex items-end px-4 pb-1.5 text-[11px] font-semibold tracking-wider text-muted"
+                      className="flex items-end px-4 pb-1.5 text-[11px] font-semibold tracking-wider text-muted bg-panel/95 backdrop-blur-sm select-none"
                       data-testid="group-header"
                     >
                       {r.label}
@@ -352,6 +382,7 @@ export function ItemList() {
                         onDragStart={canDrag ? (e) => onRowDragStart(e, r.item) : undefined}
                         onDragEnd={canDrag ? onRowDragEnd : undefined}
                         aria-selected={isSelected}
+                        aria-describedby={r.headerKey ? `header-${r.headerKey}` : undefined}
                         onClick={(e) => onRowClick(e, r.item.id)}
                         onMouseDown={(e) => {
                           if (e.shiftKey) e.preventDefault();

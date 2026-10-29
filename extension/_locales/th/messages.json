@@ -679,6 +679,9 @@
   "shortcutNav": {
     "message": "เลื่อนรายการ"
   },
+  "shortcutFilterChips": {
+    "message": "เลื่อนระหว่างชิปตัวกรอง"
+  },
   "shortcutFill": {
     "message": "เติมข้อมูลรายการ"
   },
@@ -849,6 +852,9 @@
   "changeOnSite": {
     "message": "เปลี่ยนที่เว็บไซต์"
   },
+  "openWatchtower": {
+    "message": "เปิด Watchtower"
+  },
   "openInGitpass": {
     "message": "เปิดใน gitpass"
   },
@@ -956,5 +962,56 @@
   },
   "optNeverAutoSubmitAdd": {
     "message": "เพิ่มไซต์"
+  },
+  "watchtowerWeakSshKey": {
+    "message": "คีย์ SSH ที่ไม่ปลอดภัย"
+  },
+  "pkChooseAccount": {
+    "message": "เลือกบัญชี"
+  },
+  "pkPasskeysCount": {
+    "message": "พาสคีย์ {n} รายการสำหรับไซต์นี้"
+  },
+  "genRecent": {
+    "message": "ล่าสุด"
+  },
+  "genRecentEmpty": {
+    "message": "ยังไม่มีรหัสผ่านที่สร้างไว้"
+  },
+  "genRecentOff": {
+    "message": "ประวัติตัวสร้างรหัสผ่านปิดอยู่"
+  },
+  "genRecentViewAll": {
+    "message": "ดูทั้งหมดใน gitpass"
+  },
+  "genRecentHide": {
+    "message": "ซ่อน"
+  },
+  "genAgoNow": {
+    "message": "เมื่อสักครู่"
+  },
+  "genAgoMin": {
+    "message": "$1 นาทีที่แล้ว",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "genAgoHour": {
+    "message": "$1 ชม. ที่แล้ว",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "genAgoDay": {
+    "message": "$1 วันที่แล้ว",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
   }
 }

@@ -6,11 +6,13 @@
 //!
 //! Agent protocol (draft-miller-ssh-agent): REQUEST_IDENTITIES(11) -> IDENTITIES_ANSWER(12),
 //! SIGN_REQUEST(13) -> SIGN_RESPONSE(14), anything else -> FAILURE(5). Supported key types:
-//! Ed25519 and ECDSA (P-256/P-384). RSA keys are rejected on import.
+//! Ed25519, ECDSA (P-256/P-384), and RSA (2048+ bits). RSA signature requests require
+//! SSH_AGENT_RSA_SHA2_256 or SSH_AGENT_RSA_SHA2_512 (SHA-1 ssh-rsa is refused).
 use crate::item::{Category, Field, FieldKind, Section};
 use crate::merge::ItemRecord;
 use crate::store::{Item, Session};
 use anyhow::{anyhow, bail, Context, Result};
+use signature::{SignatureEncoding, Signer};
 use ssh_encoding::Encode;
 use ssh_key::{Algorithm, HashAlg, LineEnding, PrivateKey};
 use std::io::{Read, Write};
@@ -20,28 +22,98 @@ pub const F_PRIVATE: &str = "private_key";
 pub const F_PUBLIC: &str = "public_key";
 pub const F_FINGERPRINT: &str = "fingerprint";
 pub const F_KEY_TYPE: &str = "key_type";
+pub const F_BIT_LENGTH: &str = "bit_length";
+
+pub const SSH_AGENT_RSA_SHA2_256: u32 = 0x02;
+pub const SSH_AGENT_RSA_SHA2_512: u32 = 0x04;
+
+/// Calculates bit length from an RSA modulus `n`.
+pub fn rsa_bit_length(n: &ssh_key::Mpint) -> usize {
+    let bytes = match n.as_positive_bytes() {
+        Some(b) => b,
+        None => return 0,
+    };
+    let mut bytes = bytes;
+    while let Some((&0, rest)) = bytes.split_first() {
+        bytes = rest;
+    }
+    if let Some((first, rest)) = bytes.split_first() {
+        rest.len() * 8 + (8 - first.leading_zeros() as usize)
+    } else {
+        0
+    }
+}
 
 /// Public facts about a key (safe to display).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
-pub struct KeyInfo { pub key_type: String, pub public_key: String, pub fingerprint: String, pub comment: String }
+pub struct KeyInfo {
+    pub key_type: String,
+    pub public_key: String,
+    pub fingerprint: String,
+    pub comment: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bit_length: Option<usize>,
+}
 
 /// A parsed, decrypted private key plus its display info.
+#[derive(Debug)]
 pub struct SshKey { pub key: PrivateKey, pub info: KeyInfo }
 
-fn check_alg(a: &Algorithm) -> Result<()> {
-    match a {
+fn check_alg(key: &PrivateKey) -> Result<()> {
+    match key.algorithm() {
         Algorithm::Ed25519 | Algorithm::Ecdsa { .. } => Ok(()),
-        other => bail!("unsupported SSH key type {} (gitpass supports ed25519 and ecdsa)", other.as_str()),
+        Algorithm::Rsa { .. } => {
+            let rsa = key
+                .public_key()
+                .key_data()
+                .rsa()
+                .ok_or_else(|| anyhow!("missing RSA public key data"))?;
+            let bits = rsa_bit_length(&rsa.n);
+            if bits < 2048 {
+                bail!("RSA key is too short ({bits} bits; gitpass requires at least 2048 bits)");
+            }
+            Ok(())
+        }
+        other => bail!(
+            "unsupported SSH key type {} (gitpass supports ed25519, ecdsa, and rsa)",
+            other.as_str()
+        ),
     }
+}
+
+fn rsa_signing_key<D: sha2::Digest + sha2::digest::const_oid::AssociatedOid>(
+    keypair: &ssh_key::private::RsaKeypair,
+) -> Result<rsa::pkcs1v15::SigningKey<D>> {
+    let n = rsa::BigUint::from_bytes_be(keypair.public.n.as_positive_bytes().ok_or_else(|| anyhow!("invalid modulus"))?);
+    let e = rsa::BigUint::from_bytes_be(keypair.public.e.as_positive_bytes().ok_or_else(|| anyhow!("invalid exponent"))?);
+    let d = rsa::BigUint::from_bytes_be(keypair.private.d.as_positive_bytes().ok_or_else(|| anyhow!("invalid d"))?);
+    let p = rsa::BigUint::from_bytes_be(keypair.private.p.as_positive_bytes().ok_or_else(|| anyhow!("invalid p"))?);
+    let q = rsa::BigUint::from_bytes_be(keypair.private.q.as_positive_bytes().ok_or_else(|| anyhow!("invalid q"))?);
+    let priv_key = rsa::RsaPrivateKey::from_components(n, e, d, vec![p, q])
+        .map_err(|e| anyhow!("RSA components: {e}"))?;
+    Ok(rsa::pkcs1v15::SigningKey::new(priv_key))
 }
 
 impl SshKey {
     fn from_key(key: PrivateKey) -> Result<Self> {
-        check_alg(&key.algorithm())?;
+        check_alg(&key)?;
         let p = key.public_key();
-        let info = KeyInfo { key_type: key.algorithm().as_str().to_string(), public_key: p.to_openssh()?.trim().to_string(),
-            fingerprint: p.fingerprint(HashAlg::Sha256).to_string(), comment: key.comment().to_string() };
+        let bit_length = match p.key_data() {
+            ssh_key::public::KeyData::Rsa(rsa) => Some(rsa_bit_length(&rsa.n)),
+            _ => None,
+        };
+        let info = KeyInfo {
+            key_type: key.algorithm().as_str().to_string(),
+            public_key: p.to_openssh()?.trim().to_string(),
+            fingerprint: p.fingerprint(HashAlg::Sha256).to_string(),
+            comment: key.comment().to_string(),
+            bit_length,
+        };
         Ok(SshKey { key, info })
+    }
+    /// Bit length for RSA keys (and other variable-length keys), or None.
+    pub fn bit_length(&self) -> Option<usize> {
+        self.info.bit_length
     }
     /// Fresh Ed25519 key from the OS RNG.
     pub fn generate_ed25519(comment: &str) -> Result<Self> {
@@ -68,6 +140,31 @@ impl SshKey {
         let sig: ssh_key::Signature = signature::Signer::try_sign(&self.key, data).map_err(|e| anyhow!("sign: {e}"))?;
         let mut v = Vec::new(); sig.encode(&mut v).map_err(|e| anyhow!("encode: {e}"))?; Ok(v)
     }
+    /// Sign `data` using agent flags (e.g. `SSH_AGENT_RSA_SHA2_256`, `SSH_AGENT_RSA_SHA2_512`).
+    /// Refuses plain SHA-1 ssh-rsa requests.
+    pub fn sign_with_flags(&self, data: &[u8], flags: u32) -> Result<Vec<u8>> {
+        if self.key.algorithm().is_rsa() {
+            let rsa = self.key.key_data().rsa().ok_or_else(|| anyhow!("missing RSA keypair data"))?;
+            let sig = if flags & SSH_AGENT_RSA_SHA2_512 != 0 {
+                let signing_key = rsa_signing_key::<sha2::Sha512>(rsa)?;
+                let data = signing_key.try_sign(data).map_err(|e| anyhow!("sign: {e}"))?;
+                ssh_key::Signature::new(Algorithm::Rsa { hash: Some(HashAlg::Sha512) }, data.to_vec())
+                    .map_err(|e| anyhow!("signature encoding: {e}"))?
+            } else if flags & SSH_AGENT_RSA_SHA2_256 != 0 {
+                let signing_key = rsa_signing_key::<sha2::Sha256>(rsa)?;
+                let data = signing_key.try_sign(data).map_err(|e| anyhow!("sign: {e}"))?;
+                ssh_key::Signature::new(Algorithm::Rsa { hash: Some(HashAlg::Sha256) }, data.to_vec())
+                    .map_err(|e| anyhow!("signature encoding: {e}"))?
+            } else {
+                bail!("refusing plain ssh-rsa (SHA-1) signature request: agent client must request rsa-sha2-256 or rsa-sha2-512");
+            };
+            let mut v = Vec::new();
+            sig.encode(&mut v).map_err(|e| anyhow!("encode: {e}"))?;
+            Ok(v)
+        } else {
+            self.sign(data)
+        }
+    }
     /// Verify an SSH signature blob (`sig_blob`) for `data` against this key's public key.
     pub fn verify(&self, data: &[u8], sig_blob: &[u8]) -> Result<()> {
         let sig = <ssh_key::Signature as ssh_encoding::Decode>::decode(&mut &sig_blob[..]).map_err(|e| anyhow!("decode signature: {e}"))?;
@@ -79,12 +176,16 @@ impl SshKey {
         let mut it = Item::default(); it.title = title.into();
         let mut r = ItemRecord::new(it);
         r.category = Category::SshKey;
-        r.sections = vec![Section { id: "main".into(), title: None, fields: vec![
+        let mut fields = vec![
             f(F_PRIVATE, "private key", FieldKind::Concealed, self.private_pem()?.to_string()),
             f(F_PUBLIC, "public key", FieldKind::Multiline, self.info.public_key.clone()),
             f(F_FINGERPRINT, "fingerprint", FieldKind::Text, self.info.fingerprint.clone()),
             f(F_KEY_TYPE, "key type", FieldKind::Text, self.info.key_type.clone()),
-        ] }];
+        ];
+        if let Some(bits) = self.bit_length() {
+            fields.push(f(F_BIT_LENGTH, "bit length", FieldKind::Text, bits.to_string()));
+        }
+        r.sections = vec![Section { id: "main".into(), title: None, fields }];
         Ok(r)
     }
     /// Parse the private key stored in an `ssh_key` record.
@@ -98,7 +199,17 @@ impl SshKey {
 /// Public info of an OpenSSH public key line (`ssh-ed25519 AAAA... comment`).
 pub fn public_info(line: &str) -> Result<KeyInfo> {
     let p = ssh_key::PublicKey::from_openssh(line.trim()).map_err(|e| anyhow!("bad public key: {e}"))?;
-    Ok(KeyInfo { key_type: p.algorithm().as_str().into(), public_key: p.to_openssh()?.trim().into(), fingerprint: p.fingerprint(HashAlg::Sha256).to_string(), comment: p.comment().into() })
+    let bit_length = match p.key_data() {
+        ssh_key::public::KeyData::Rsa(rsa) => Some(rsa_bit_length(&rsa.n)),
+        _ => None,
+    };
+    Ok(KeyInfo {
+        key_type: p.algorithm().as_str().into(),
+        public_key: p.to_openssh()?.trim().into(),
+        fingerprint: p.fingerprint(HashAlg::Sha256).to_string(),
+        comment: p.comment().into(),
+        bit_length,
+    })
 }
 
 /// Parse an OpenSSH public key line (`ssh-ed25519 AAAA...`) and return its wire-format public blob.
@@ -202,10 +313,10 @@ pub type ApprovalFn = Box<dyn Fn(&str, &str) -> bool + Send + Sync>;
 pub struct StaticKeys { pub ids: Vec<Identity>, pub approve: ApprovalFn }
 impl KeyProvider for StaticKeys {
     fn identities(&self) -> Vec<(Vec<u8>, String)> { self.ids.iter().map(|i| (i.blob.clone(), i.title.clone())).collect() }
-    fn sign(&self, blob: &[u8], data: &[u8], _flags: u32) -> Result<Vec<u8>> {
+    fn sign(&self, blob: &[u8], data: &[u8], flags: u32) -> Result<Vec<u8>> {
         let id = self.ids.iter().find(|i| i.blob == blob).ok_or_else(|| anyhow!("unknown key"))?;
         if !(self.approve)(&id.title, &id.key.info.fingerprint) { bail!("denied"); }
-        id.key.sign(data)
+        id.key.sign_with_flags(data, flags)
     }
 }
 
@@ -256,5 +367,126 @@ mod tests {
     #[test]
     fn rejects_garbage_and_wrong_passphrase() {
         assert!(SshKey::import_openssh("nope", None).is_err());
+    }
+    #[test]
+    fn rsa_2048_import_and_signature_flags() {
+        use ssh_key::private::{KeypairData, RsaKeypair};
+        let rsa_pair = RsaKeypair::random(&mut rand::rngs::OsRng, 2048).unwrap();
+        let priv_key = PrivateKey::new(KeypairData::Rsa(rsa_pair), "rsa@gitpass").unwrap();
+        let pem = priv_key.to_openssh(LineEnding::LF).unwrap();
+
+        let k = SshKey::import_openssh(&pem, None).unwrap();
+        assert_eq!(k.info.key_type, "ssh-rsa");
+        assert_eq!(k.info.bit_length, Some(2048));
+        assert!(k.info.public_key.starts_with("ssh-rsa AAAA"));
+        assert_eq!(k.info.comment, "rsa@gitpass");
+
+        // to_record includes bit length
+        let rec = k.to_record("My RSA Key").unwrap();
+        assert_eq!(rec.category, Category::SshKey);
+        let bit_field = rec.find_field(F_BIT_LENGTH).expect("bit_length field exists");
+        assert_eq!(bit_field.value.as_deref(), Some("2048"));
+
+        let payload = b"gitpass rsa test payload";
+
+        // Plain flags=0 (SHA-1) is REFUSED
+        assert!(k.sign_with_flags(payload, 0).is_err());
+
+        // SSH_AGENT_RSA_SHA2_256 succeeds and verifies
+        let sig256 = k.sign_with_flags(payload, SSH_AGENT_RSA_SHA2_256).unwrap();
+        assert!(k.verify(payload, &sig256).is_ok());
+        assert!(k.verify(b"wrong", &sig256).is_err());
+        let blob = k.public_blob().unwrap();
+        assert!(verify_blob(&blob, payload, &sig256).is_ok());
+
+        // SSH_AGENT_RSA_SHA2_512 succeeds and verifies
+        let sig512 = k.sign_with_flags(payload, SSH_AGENT_RSA_SHA2_512).unwrap();
+        assert!(k.verify(payload, &sig512).is_ok());
+        assert!(verify_blob(&blob, payload, &sig512).is_ok());
+
+        // Agent wire protocol testing
+        let p = StaticKeys {
+            ids: vec![Identity {
+                vault_id: "v".into(),
+                item_id: "i".into(),
+                title: "rsa-title".into(),
+                key: k,
+                blob: blob.clone(),
+            }],
+            approve: Box::new(|_, _| true),
+        };
+
+        // REQUEST_IDENTITIES advertises the RSA key
+        let r = handle_message(&[SSH_AGENTC_REQUEST_IDENTITIES], &p);
+        assert_eq!(r[0], SSH_AGENT_IDENTITIES_ANSWER);
+
+        // SIGN_REQUEST with flags=0 -> SSH_AGENT_FAILURE (5)
+        let mut req_sha1 = vec![SSH_AGENTC_SIGN_REQUEST];
+        put_str(&mut req_sha1, &blob);
+        put_str(&mut req_sha1, payload);
+        req_sha1.extend_from_slice(&0u32.to_be_bytes());
+        assert_eq!(handle_message(&req_sha1, &p), vec![SSH_AGENT_FAILURE]);
+
+        // SIGN_REQUEST with flags=SSH_AGENT_RSA_SHA2_256 -> SSH_AGENT_SIGN_RESPONSE (14)
+        let mut req_sha256 = vec![SSH_AGENTC_SIGN_REQUEST];
+        put_str(&mut req_sha256, &blob);
+        put_str(&mut req_sha256, payload);
+        req_sha256.extend_from_slice(&SSH_AGENT_RSA_SHA2_256.to_be_bytes());
+        let resp256 = handle_message(&req_sha256, &p);
+        assert_eq!(resp256[0], SSH_AGENT_SIGN_RESPONSE);
+
+        // SIGN_REQUEST with flags=SSH_AGENT_RSA_SHA2_512 -> SSH_AGENT_SIGN_RESPONSE (14)
+        let mut req_sha512 = vec![SSH_AGENTC_SIGN_REQUEST];
+        put_str(&mut req_sha512, &blob);
+        put_str(&mut req_sha512, payload);
+        req_sha512.extend_from_slice(&SSH_AGENT_RSA_SHA2_512.to_be_bytes());
+        let resp512 = handle_message(&req_sha512, &p);
+        assert_eq!(resp512[0], SSH_AGENT_SIGN_RESPONSE);
+    }
+
+    #[test]
+    fn rsa_encrypted_import_and_short_rsa_rejected() {
+        use ssh_key::private::{KeypairData, RsaKeypair};
+        let rsa_pair = RsaKeypair::random(&mut rand::rngs::OsRng, 2048).unwrap();
+        let priv_key = PrivateKey::new(KeypairData::Rsa(rsa_pair), "enc@test").unwrap();
+        let enc = priv_key.encrypt(&mut rand::rngs::OsRng, "correct passphrase").unwrap();
+        let pem = enc.to_openssh(LineEnding::LF).unwrap();
+
+        // Needs passphrase
+        assert!(SshKey::import_openssh(&pem, None).is_err());
+        assert!(SshKey::import_openssh(&pem, Some("wrong passphrase")).is_err());
+        let imported = SshKey::import_openssh(&pem, Some("correct passphrase")).unwrap();
+        assert_eq!(imported.info.bit_length, Some(2048));
+        assert_eq!(imported.info.key_type, "ssh-rsa");
+
+        // 1024-bit RSA key is rejected (< 2048 bits)
+        // Construct raw 1024-bit RSA key using rsa crate directly
+        use rsa::traits::{PrivateKeyParts, PublicKeyParts};
+        let raw_rsa = rsa::RsaPrivateKey::new(&mut rand::rngs::OsRng, 1024).unwrap();
+        let p_n = raw_rsa.n();
+        let p_e = raw_rsa.e();
+        let p_d = raw_rsa.d();
+        let p_primes = raw_rsa.primes();
+        let p_p = &p_primes[0];
+        let p_q = &p_primes[1];
+        let p_iqmp = raw_rsa.crt_coefficient().unwrap();
+
+        let rsa_kp = ssh_key::private::RsaKeypair {
+            public: ssh_key::public::RsaPublicKey {
+                n: ssh_key::Mpint::from_positive_bytes(&p_n.to_bytes_be()).unwrap(),
+                e: ssh_key::Mpint::from_positive_bytes(&p_e.to_bytes_be()).unwrap(),
+            },
+            private: ssh_key::private::RsaPrivateKey {
+                d: ssh_key::Mpint::from_positive_bytes(&p_d.to_bytes_be()).unwrap(),
+                iqmp: ssh_key::Mpint::from_positive_bytes(&p_iqmp.to_bytes_be()).unwrap(),
+                p: ssh_key::Mpint::from_positive_bytes(&p_p.to_bytes_be()).unwrap(),
+                q: ssh_key::Mpint::from_positive_bytes(&p_q.to_bytes_be()).unwrap(),
+            },
+        };
+        let k1024 = PrivateKey::new(KeypairData::Rsa(rsa_kp), "short1024").unwrap();
+        let pem1024 = k1024.to_openssh(LineEnding::LF).unwrap();
+        let err = SshKey::import_openssh(&pem1024, None).unwrap_err();
+        assert!(err.to_string().contains("RSA key is too short"), "expected too short error, got: {err}");
+        assert!(err.to_string().contains("1024"));
     }
 }

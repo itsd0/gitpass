@@ -238,6 +238,61 @@ fn item_findings_contract_and_security() {
 }
 
 #[test]
+fn generator_history_is_read_only_newest_first_and_locked_refused() {
+    let mut f = setup();
+    assert!(err(&mut f.host, json!({"cmd":"generator_history"})).contains("locked"));
+    ok(&mut f.host, json!({"cmd":"unlock","password":PW}));
+    let r = ok(&mut f.host, json!({"cmd":"generator_history"}));
+    assert_eq!(r["entries"].as_array().unwrap().len(), 0, "{r}");
+    assert_eq!(r["enabled"], true);
+
+    for i in 1..=12 {
+        ok(&mut f.host, json!({"cmd":"record_generated_password","password":format!("FAKE-gen-{i:02}"),"origin":"https://www.example.invalid/signup"}));
+    }
+    // default limit 10, newest first (ties on the same second keep insertion order: newest is index 0)
+    let r = ok(&mut f.host, json!({"cmd":"generator_history"}));
+    let e = r["entries"].as_array().unwrap();
+    assert_eq!(e.len(), 10, "{r}");
+    assert_eq!(e[0]["value"], "FAKE-gen-12");
+    assert_eq!(e[0]["host"], "example.invalid");
+    assert_eq!(e[0]["source"], "extension");
+    assert!(e[0]["created_at"].as_u64().unwrap() > 0 && e[0]["id"].as_str().is_some());
+    let w = ok(&mut f.host, json!({"cmd":"generator_history","limit":3}));
+    assert_eq!(w["entries"].as_array().unwrap().len(), 3);
+    // limit is clamped to 1..=100
+    assert_eq!(ok(&mut f.host, json!({"cmd":"generator_history","limit":0}))["entries"].as_array().unwrap().len(), 1);
+    assert_eq!(ok(&mut f.host, json!({"cmd":"generator_history","limit":9999}))["entries"].as_array().unwrap().len(), 12);
+    // read-only: reading does not add or remove entries
+    assert_eq!(ok(&mut f.host, json!({"cmd":"generator_history","limit":100}))["entries"].as_array().unwrap().len(), 12);
+    // settings.rememberGeneratedPasswords false: enabled false and no values
+    std::fs::write(f.host.cfg.vault_path.join(".gitpass-settings.json"),
+        serde_json::to_string(&json!({"settings": {"rememberGeneratedPasswords": false}})).unwrap()).unwrap();
+    let off = ok(&mut f.host, json!({"cmd":"generator_history"}));
+    assert_eq!(off["enabled"], false);
+    assert!(off["entries"].as_array().unwrap().is_empty());
+    assert!(!off.to_string().contains("FAKE-gen"));
+}
+
+#[test]
+fn open_in_app_standalone_validation() {
+    let mut f = setup();
+
+    // Unknown view rejected with bad_request
+    let e1 = err(&mut f.host, json!({"cmd": "open_in_app", "view": "invalid_screen"}));
+    assert!(e1.starts_with("bad_request"), "unknown view must return bad_request: {e1}");
+
+    // Valid views pass validation (not bad_request)
+    for v in ["generator_history", "watchtower", "settings"] {
+        let r = call(&mut f.host, json!({"cmd": "open_in_app", "view": v}));
+        if r["ok"] == false {
+            assert_eq!(r["error"], "app_not_running", "expected app_not_running if app uninstalled, got: {r}");
+        } else {
+            assert_eq!(r["result"]["launched"], true);
+        }
+    }
+}
+
+#[test]
 fn site_icon_contract_and_security() {
     let mut f = setup();
     let cache_dir = tempfile::tempdir().unwrap();

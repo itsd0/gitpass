@@ -112,6 +112,24 @@ input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 
 .panes { flex: 1; display: flex; min-height: 0; }
 .left { width: 280px; display: flex; flex-direction: column; border-right: 1px solid rgb(var(--border)); background: rgb(var(--panel)); }
 .filter-wrap { padding: 8px; border-bottom: 1px solid rgb(var(--border)); }
+.filter-chips-row { position: relative; }
+.filter-chips { display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; padding-bottom: 2px;
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 10px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 10px), transparent); }
+.filter-chip { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px;
+  border-radius: 99px; border: 1px solid rgb(var(--border)); background: none; color: rgb(var(--muted));
+  font: inherit; font-size: 12px; white-space: nowrap; cursor: pointer; }
+.filter-chip:hover { color: rgb(var(--fg)); background: rgb(var(--hover)); }
+.filter-chip[aria-selected="true"] { background: rgb(var(--accent)); border-color: rgb(var(--accent)); color: #fff; font-weight: 600; }
+.filter-chip:focus-visible { outline: none; border-color: rgb(var(--accent)); box-shadow: 0 0 0 3px rgb(var(--accent) / .25); }
+.filter-chip .ic { display: inline-flex; }
+.filter-chip .ic svg { display: block; }
+.filter-vault-menu { position: absolute; left: 0; top: calc(100% + 4px); z-index: 5; min-width: 170px;
+  background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px #0008; }
+.filter-vault-menu button { display: flex; width: 100%; align-items: center; gap: 8px; padding: 7px 8px; border: 0;
+  background: none; color: rgb(var(--fg)); font: inherit; border-radius: 6px; cursor: pointer; text-align: left; }
+.filter-vault-menu button:hover, .filter-vault-menu button:focus-visible { background: rgb(var(--hover)); outline: none; }
+.filter-vault-menu button[aria-selected="true"] { font-weight: 600; color: rgb(var(--accent)); }
 .sort-select { margin-top: 6px; }
 .excepted-note { margin-top: 6px; font-size: 12px; color: rgb(var(--muted)); display: flex; align-items: center; justify-content: center; gap: 4px; }
 .excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--accent)); cursor: pointer; text-decoration: underline; }
@@ -221,6 +239,22 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .gen-toggles { gap: 16px; }
 .gen-acts { display: flex; align-items: center; gap: 8px; margin-top: auto; }
 .gen-acts .btn-link { margin-right: auto; padding-left: 0; }
+.panel:has(.gen-recent) { overflow-y: auto; }
+.gen-recent { border-top: 1px solid rgb(var(--border)); padding-top: 8px; flex: none; }
+.gen-recent-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: 0; color: rgb(var(--fg)); font: inherit; font-size: 12px; font-weight: 600; padding: 4px 0; cursor: pointer; border-radius: 6px; }
+.gen-recent-toggle:focus-visible, .gen-recent-row:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 1px; }
+.gen-recent-chev svg.ui { width: 14px; height: 14px; transition: transform .15s; }
+.gen-recent-chev.open svg.ui { transform: rotate(180deg); }
+.gen-recent-body { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.gen-recent-note { font-size: 12px; }
+.gen-recent-list { list-style: none; margin: 0; padding: 0; max-height: 168px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.gen-recent-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; border: 1px solid rgb(var(--border)); background: rgb(var(--card)); }
+.gen-recent-row:hover { background: rgb(var(--hover)); }
+.gen-recent-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gen-recent-val { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; }
+.gen-recent-meta { font-size: 11px; color: rgb(var(--muted)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gen-recent-acts { display: flex; gap: 2px; flex: none; }
+.gen-recent-all { align-self: flex-start; padding-left: 0; font-size: 12px; cursor: pointer; }
 .gen-row { display: flex; align-items: center; gap: 10px; }
 .gen-row input[type=range] { flex: 1; accent-color: rgb(var(--accent)); }
 .tog { display: flex; align-items: center; gap: 6px; font-size: 13px !important; color: rgb(var(--fg)) !important; }

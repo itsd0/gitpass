@@ -154,7 +154,15 @@ async function popupRoute(msg) {
     case 'update_password': return host('update_password', { item_id: msg.item_id, password: msg.password, username: msg.username });
     case 'save_login': return host('save_login', { origin: msg.origin, title: msg.title, username: msg.username, password: msg.password, vault_id: msg.vault_id });
     case 'set_favorite': return host('set_favorite', { item_id: msg.item_id, favorite: !!msg.favorite });
-    case 'open_in_app': return host('open_in_app', msg.item_id ? { item_id: msg.item_id } : {});
+    case 'open_in_app': {
+      const p = {};
+      if (msg.item_id) p.item_id = msg.item_id;
+      if (msg.view) {
+        p.view = msg.view;
+        if (msg.section) p.section = msg.section;
+      }
+      return host('open_in_app', p);
+    }
     case 'site_icon': {
       const h = String(msg.host || '').trim().toLowerCase();
       if (!h) throw Object.assign(new Error('empty host'), { code: 'bad_request' });
@@ -180,6 +188,7 @@ async function popupRoute(msg) {
     case 'can_fill_generated': return canFillGenerated();
     case 'fill_generated': return fillGenerated(msg.password);
     case 'record_generated': return recordGenerated(msg.password);
+    case 'generator_history': return host('generator_history', { limit: 10 }); // read-only; values go to the popup only
     case 'open_fill': return openFill(msg);
   }
   throw new Error('unknown popup message');

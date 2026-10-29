@@ -45,9 +45,9 @@ function get(store, q) {
   const rp = rpFor(q.origin, q.rp_id);
   if (!q.challenge) throw Object.assign(new Error('missing challenge'), { code: 'bad_request' });
   const allow = new Set(q.allow_credentials || []);
-  const pk = store.list().find((p) => p.rp_id === rp && (!allow.size || allow.has(p.credential_id)));
+  const pk = store.list().find((p) => p.rp_id === rp && (!allow.size || allow.has(p.credential_id)) && (!q.credential_id || p.credential_id === q.credential_id));
   if (!pk) throw Object.assign(new Error('no passkey for this site'), { code: 'not_found' });
-  pk.sign_count += 1; store.put(pk);
+  pk.sign_count += 1; pk.last_used = Date.now(); store.put(pk);
   const ad = authData(rp, pk.sign_count, null); const cd = clientData('webauthn.get', q.challenge, q.origin);
   const key = crypto.createPrivateKey({ key: unb64u(pk.pkcs8), format: 'der', type: 'pkcs8' });
   const sig = crypto.sign('sha256', Buffer.concat([ad, sha256(cd)]), key); // DER ECDSA, as WebAuthn requires

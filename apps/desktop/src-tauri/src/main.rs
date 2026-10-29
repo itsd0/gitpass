@@ -4,6 +4,7 @@ mod biometric;
 mod commands;
 mod hotkey;
 mod system_events;
+mod tray;
 #[cfg(test)]
 mod updater_tests;
 use commands as c;
@@ -39,6 +40,21 @@ fn main() {
                 })
                 .build(),
         )
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() == "main" {
+                    let handle = window.app_handle();
+                    let show_tray = handle
+                        .try_state::<Arc<gitpass_gui_core::api::App>>()
+                        .map(|s| s.get_settings().show_menu_bar_icon)
+                        .unwrap_or(true);
+                    if show_tray {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                }
+            }
+        })
         .manage(app)
         .setup(|h| {
             c::spawn_idle_watcher(h.handle().clone());
@@ -46,6 +62,7 @@ fn main() {
             agent_ui::start(h.handle());
             hotkey::register_startup_hotkey(h.handle());
             c::setup_menu(h)?;
+            tray::setup(h.handle())?;
             // Windows are created content-protected by tauri.conf.json; re-apply the saved
             // setting at startup so a user who turned it off is not protected by default.
             {
@@ -62,7 +79,7 @@ fn main() {
             c::save_attachment, c::remove_attachment, c::list_tags, c::rename_tag, c::delete_tag, c::generate_password, c::get_generator_history, c::delete_generator_history_entry, c::clear_generator_history, c::record_generated_password, c::copy_password, c::password_strength, c::watchtower, c::import_file, c::export_items,
             c::identity, c::fingerprint_of, c::list_members, c::share_vault, c::unshare_vault, c::accept_share, c::list_devices,
             c::revoke_device, c::get_settings, c::set_settings, c::change_password, c::rotate_secret_key, c::sync_status,
-            c::sync, c::remote_connect, c::remote_disconnect, c::open_new_repo_page, c::open_change_password, c::onboarding, c::set_onboarding, c::emergency_kit, c::emergency_kit_data, c::favicon_url, c::touch, c::create_account, c::unlock_biometric, c::ssh_generate, c::ssh_import, c::ssh_agent_info,
+            c::sync, c::remote_connect, c::remote_disconnect, c::open_new_repo_page, c::open_change_password, c::open_passkey_site, c::onboarding, c::set_onboarding, c::emergency_kit, c::emergency_kit_data, c::favicon_url, c::touch, c::create_account, c::unlock_biometric, c::ssh_generate, c::ssh_import, c::ssh_agent_info,
         ])
         .run(tauri::generate_context!())
         .expect("error while running gitpass desktop");

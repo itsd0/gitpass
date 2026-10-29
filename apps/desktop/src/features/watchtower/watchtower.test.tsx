@@ -3,7 +3,7 @@ import { cleanup } from '@testing-library/react';
 import { api } from '../../api/client';
 import { mock } from '../../api/mock';
 import { useSettings } from '../settings/useSettings';
-import { useI18n } from '../../i18n';
+import { useI18n, translate } from '../../i18n';
 const it3 = { id: 'i3', vaultId: 'v-private', category: 'login' as const, title: 'Fake Forum', subtitle: 'demo', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: '', createdAt: '', url: 'https://forum.example.org', changePasswordUrl: 'https://forum.example.org/.well-known/change-password' };
 const it3x = { ...it3, id: 'i3x', title: 'Fake 2FA Site', url: 'https://2fa.example.org', changePasswordUrl: 'https://2fa.example.org/.well-known/change-password' };
 const itExp = { ...it3, id: 'i-exp', category: 'credit_card' as const, title: 'Expired Card', url: null, changePasswordUrl: undefined };
@@ -305,5 +305,22 @@ describe('watchtower score', () => {
     render(<WatchtowerPage />);
     await screen.findByTestId("score");
     expect(screen.getByTestId("chip-reason-i3").textContent).toBe("(มีชื่อผู้ใช้อยู่ในรหัสผ่าน)");
+  });
+  it("extracts weakSshKey issue IDs and renders Weak SSH keys card", async () => {
+    const r = { score: 0, weak: [], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [], expired: [], expiringSoon: [], insecureUrls: [], duplicates: [], weakSshKeys: ["i-weak-ssh"], checkedAt: "", hibpChecked: false };
+    expect(issueIds(r, "weakSshKey")).toEqual(["i-weak-ssh"]);
+
+    render(<WatchtowerPage />);
+    await screen.findByTestId("score");
+    expect(screen.getByTestId("count-weakSshKey")).toBeInTheDocument();
+  });
+
+  it("localizes weak SSH keys card in English, Burmese, and Thai", () => {
+    useI18n.getState().setLang("en");
+    expect(translate("en", "watchtower.weakSshKey")).toBe("Weak SSH keys");
+    useI18n.getState().setLang("my");
+    expect(translate("my", "watchtower.weakSshKey")).toBe("အားနည်းသော SSH သော့များ");
+    useI18n.getState().setLang("th");
+    expect(translate("th", "watchtower.weakSshKey")).toBe("คีย์ SSH ที่ไม่ปลอดภัย");
   });
 });

@@ -32,7 +32,10 @@ function popup(items) {
 }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const q = (w, sel) => w.document.querySelector(sel);
-const change = (w, sel, value) => { const s = q(w, sel); s.value = value; s.dispatchEvent(new w.Event('change', { bubbles: true })); };
+const change = (w, sel, value) => {
+  if (sel === '#filter') { const c = q(w, `#filterChips [data-filter-id="${value}"]`); assert.ok(c, `expected filter chip ${value}`); c.click(); return; }
+  const s = q(w, sel); s.value = value; s.dispatchEvent(new w.Event('change', { bubbles: true }));
+};
 const titles = (w) => [...w.document.querySelectorAll('#listInner .row .t')].map((e) => e.textContent);
 
 test('filterItems sorts by last edited, date created or title (favorites stay first)', () => {

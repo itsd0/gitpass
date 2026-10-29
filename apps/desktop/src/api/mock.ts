@@ -112,7 +112,7 @@ cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_ca
 { const a = [...db.values()][5].detail; a.archived = true; const b = [...db.values()][22].detail; b.deletedAt = new Date(Date.now() - 29 * 86400000).toISOString(); }
 
 add('v_private', 'passkey', 'webauthn.example.invalid', 'demo@example.invalid', 6, [['site', 'text', 'webauthn.example.invalid'], ['user name', 'text', 'demo@example.invalid'], ['credential id', 'text', 'FAKE-cred-id'], ['private key', 'concealed', 'FAKE'], ['sign count', 'text', '3']]);
-let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, hideFromScreenRecording: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false, renderNotesMarkdown: true, listDensity: 'comfortable', rememberGeneratedPasswords: true };
+let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, hideFromScreenRecording: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false, renderNotesMarkdown: true, showMenuBarIcon: true, listDensity: 'comfortable', rememberGeneratedPasswords: true };
 let mockGeneratorHistory: T.GeneratorHistoryEntry[] = [
   { id: "gh-1", value: "FAKE-mock-pw-1", createdAt: Math.floor(Date.now() / 1000) - 300, source: "desktop", host: null },
   { id: "gh-2", value: "FAKE-mock-pw-2", createdAt: Math.floor(Date.now() / 1000) - 7200, source: "extension", host: "github.com" },
@@ -634,6 +634,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       expiringSoon: activeExpiringSoon,
       insecureUrls: activeInsecureUrls,
       duplicates,
+      weakSshKeys: [],
       weakReasons: Object.fromEntries(activeWeak.map((id) => [id, "contains the username"])),
       ignored: ignoredList,
       checkedAt: new Date().toISOString(),
@@ -681,6 +682,15 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     const url = summary(get(a.itemId).detail).changePasswordUrl;
     if (!url) return Promise.reject(new Error('this item has no change-password URL'));
     if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
+    return delay(undefined);
+  },
+  // Dev mock only: the real path derives https://<rp_id> in Rust (open_passkey_site).
+  open_passkey_site: (a: { itemId: string }) => {
+    const d = get(a.itemId).detail;
+    const site = d.sections.flatMap((s) => s.fields).find((f) => /^(site|website|rp_id)$/i.test(f.label) || f.label === 'rp_id');
+    const host = (site?.value ?? '') || (() => { try { return new URL(d.url ?? '').hostname; } catch { return ''; } })();
+    if (!host) return Promise.reject(new Error('this item has no passkey site'));
+    if (typeof window !== 'undefined') window.open(`https://${host}`, '_blank', 'noopener');
     return delay(undefined);
   },
   sync: () => delay({ message: 'Pulled 1 commit (mock)' }, 400),

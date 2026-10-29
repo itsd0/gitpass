@@ -40,6 +40,8 @@ pub trait AgentUi: Send + Sync {
     fn request_unlock(&self, reason: &str);
     /// Focus the app on an item (`None` = just bring the window forward).
     fn open_item(&self, vault_id: Option<&str>, item_id: Option<&str>);
+    /// Focus the app on a specific view ("generator_history" | "watchtower" | "settings") with an optional section.
+    fn open_view(&self, _view: &str, _section: Option<&str>) {}
     /// Ask the user to allow a sensitive action (SSH signature, passkey). Blocks until answered.
     /// Default: deny (headless).
     fn approve(&self, _title: &str, _message: &str) -> bool { false }
@@ -481,6 +483,19 @@ impl Agent {
                 let recorded = self.app.record_generated_password(pw, source, host).map_err(host_err)?.is_some();
                 Ok(json!({"ok": true, "recorded": recorded}))
             }
+            "generator_history" => {
+                // Read-only, popup-facing: newest first, never logged. Refused while locked.
+                let limit = gitpass_host::handler::history_limit(q);
+                let mut entries = self.app.get_generator_history().map_err(host_err)?; // errors while locked
+                if !self.app.get_settings().remember_generated_passwords {
+                    return Ok(json!({"enabled": false, "entries": []}));
+                }
+                entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                let out: Vec<Value> = entries.iter().take(limit).map(|e| json!({
+                    "id": e.id, "value": e.value, "created_at": e.created_at, "source": e.source, "host": e.host,
+                })).collect();
+                Ok(json!({"enabled": true, "entries": out}))
+            }
             "passkey_query" => {
                 self.app.state.with(|x| {
                     gitpass_host::passkey::query(&x.session, q)
@@ -578,9 +593,25 @@ impl Agent {
                 }
             }
             "open_in_app" => {
+                let view_opt = s("view").filter(|v| !v.is_empty());
+                if let Some(ref v) = view_opt {
+                    if !matches!(v.as_str(), "generator_history" | "watchtower" | "settings") {
+                        return Err(err("bad_request", format!("unknown view '{v}'")));
+                    }
+                }
                 match s("item_id").filter(|v| !v.is_empty()) {
-                    Some(id) => { let (v, i) = split_id(&id)?; self.ui.open_item(Some(&v), Some(&i)); }
-                    None => self.ui.open_item(None, None),
+                    Some(id) => {
+                        let (v, i) = split_id(&id)?;
+                        self.ui.open_item(Some(&v), Some(&i));
+                    }
+                    None => {
+                        if let Some(v) = view_opt {
+                            let sec = s("section").filter(|s| !s.is_empty());
+                            self.ui.open_view(&v, sec.as_deref());
+                        } else {
+                            self.ui.open_item(None, None);
+                        }
+                    }
                 }
                 Ok(json!({"ok": true}))
             }

@@ -95,7 +95,7 @@ describe("Recently used list and detail", () => {
 
   it("supports sorting by recently used", async () => {
     const items = [
-      mockSummary("i1", "Beta", 1793210000),
+      mockSummary("i1", "Beta", Math.floor(Date.now() / 1000)),
       mockSummary("i2", "Alpha"),
     ];
     useItemsUI.setState({ items, loading: false, sort: "recent" });
@@ -104,7 +104,7 @@ describe("Recently used list and detail", () => {
     render(<ItemList />);
 
     const headers = screen.getAllByTestId("group-header");
-    expect(headers[0].textContent).toBe("Recently used");
+    expect(headers[0].textContent).toBe("Today");
     expect(headers[1].textContent).toBe("Never used");
   });
 

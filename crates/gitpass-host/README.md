@@ -38,7 +38,8 @@ query?, limit?}`, `match {origin}`, `get_item {item_id}`, `reveal {item_id, fiel
 `source:"popup"` or `source:"inpage_click"`) → `{<field id>: value}`, `totp` → `{code, remaining, period}`,
 `save_login {origin, title?, username, password, vault_id?}` → `{item_id}`, `update_password`, `item_findings {item_id}`,
 `record_generated_password {password, source?, origin?}` → `{ok: true, recorded: bool}` (skips recording and returns `recorded: false` when `settings.rememberGeneratedPasswords` in `.gitpass-settings.json` is false), `site_icon {host}`,
-`generate {len, digits, symbols}`, `list_vaults`, `open_in_app`. Standalone-only: `unlock`; 0.5 compat: `search`,
+`generator_history {limit?}` → `{enabled, entries:[{id, value, created_at, source, host?}]}` (read-only, newest first, default 10, max 100; popup only),
+`generate {len, digits, symbols}`, `list_vaults`, `open_in_app {item_id?, view?, section?}` (`view`: `"generator_history" | "watchtower" | "settings"`, `item_id` wins). Standalone-only: `unlock`; 0.5 compat: `search`,
 `match {url}`.
 
 ItemSummary: `{id:"<vault>:<item>", vault_id, vault_name, category, title, subtitle, url?, favicon_host?, has_totp,
@@ -102,6 +103,8 @@ equal its host or be a registrable suffix (public suffixes refused). ES256 only.
 
 - `passkey_create {origin, rp_id?, rp_name?, challenge, user_id, user_name, user_display_name?, exclude_credentials?, algorithms?, vault_id?}`
   → `{item_id, rp_id, credential_id, client_data_json, attestation_object, authenticator_data, public_key (SPKI), public_key_algorithm:-7, transports}`
+- `passkey_query {origin, rp_id?, allow_credentials?}`
+  → `{rp_id, matching: [{credential_id, user_name, user_handle, vault_name, last_used}]}`
 - `passkey_get {origin, rp_id?, challenge, allow_credentials?, credential_id?}`
   → `{item_id, credential_id, client_data_json, authenticator_data, signature (DER), user_handle, sign_count}`
 

@@ -218,8 +218,9 @@ gitpass ssh agent                                  # foreground; the desktop app
 ```
 
 `ssh generate` creates an Ed25519 key in a new SSH Key item. `ssh import` reads an
-OpenSSH private key (ed25519 or ECDSA P-256/P-384; RSA keys are rejected; a passphrase
-comes from `GITPASS_SSH_PASSPHRASE` or a prompt). `ssh public` prints the
+OpenSSH private key (Ed25519, ECDSA P-256/P-384, or RSA 2048+ bits; RSA under 2048 bits and DSA keys
+are rejected; a passphrase comes from `GITPASS_SSH_PASSPHRASE` or a prompt). The SSH agent signs
+RSA requests with `rsa-sha2-256` or `rsa-sha2-512` only (plain SHA-1 `ssh-rsa` is refused). `ssh public` prints the
 `authorized_keys` line; `ssh config` prints the `~/.ssh/config` `IdentityAgent` snippet
 (both `config` and `agent` accept `--socket PATH`).
 

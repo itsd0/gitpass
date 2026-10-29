@@ -27,17 +27,19 @@
     let accountName = args.user_name || args.user_display_name || '';
 
     // Bug 4: If gitpass has no passkey for the site, don't show the prompt at all; pass call straight through
+    let matching = [];
     if (kind === 'get' && host) {
       const q = await host('passkey_query', { origin, rp_id: rpId, allow_credentials: args.allow_credentials }).catch(() => null);
       if (!q || !q.matching || q.matching.length === 0) {
         throw err('not_found', 'No matching passkey found in gitpass');
       }
-      accountName = q.matching[0].user_name || '';
+      matching = (q.matching || []).slice().sort((a, b) => (b.last_used || 0) - (a.last_used || 0));
+      accountName = matching[0].user_name || '';
     }
 
     const id = 'r' + (++n) + '-' + Date.now();
     return new Promise((resolve, reject) => {
-      reqs.set(id, { kind, origin, args, tabId: sender.tab.id, resolve, reject, user_name: accountName });
+      reqs.set(id, { kind, origin, args, tabId: sender.tab.id, resolve, reject, user_name: accountName, matching });
 
       // Bug 3: Show prompt in-page in the current tab via content script
       if (root.chrome && chrome.tabs && chrome.tabs.sendMessage && sender.tab && typeof sender.tab.id === 'number') {
@@ -47,7 +49,14 @@
           kind,
           rpId,
           userName: accountName,
-          origin
+          origin,
+          matching: matching.map((m) => ({
+            credential_id: m.credential_id,
+            user_name: m.user_name || '',
+            user_handle: m.user_handle || '',
+            vault_name: m.vault_name || '',
+            last_used: m.last_used || 0
+          }))
         }, { frameId: 0 }, (response) => {
           if (chrome.runtime && chrome.runtime.lastError || !response) {
             // Content script unreachable or error: fall back to extension popup window if available
@@ -62,10 +71,27 @@
             return;
           }
           if (response.approved) {
+            let chosenCredId = null;
+            if (kind === 'get' && matching.length > 0) {
+              const cid = response.credential_id || response.credentialId;
+              if (cid) {
+                const found = matching.find((m) => m.credential_id === cid);
+                if (!found) {
+                  reqs.delete(id);
+                  reject(err('bad_request', 'Invalid credential_id'));
+                  return;
+                }
+                chosenCredId = cid;
+              } else {
+                chosenCredId = matching[0].credential_id;
+              }
+            }
             reqs.delete(id);
             if (!host) { reject(err('no_host', 'no host')); return; }
             const title = args.rp_name || rpId;
-            runApproved({ kind, host, args: { ...args, origin, source: 'popup', approved: true }, tabId: sender.tab.id, reqId: id, title })
+            const runArgs = { ...args, origin, source: 'popup', approved: true };
+            if (chosenCredId) runArgs.credential_id = chosenCredId;
+            runApproved({ kind, host, args: runArgs, tabId: sender.tab.id, reqId: id, title })
               .then(resolve, reject);
           } else {
             reqs.delete(id);
@@ -123,13 +149,44 @@
     const r = reqs.get(msg.req);
     switch (msg.type) {
       case 'passkey-ui:request': if (!r) throw err('not_found', 'request expired');
-        return { kind: r.kind, origin: r.origin, rp_id: r.args.rp_id || new URL(r.origin).hostname, user_name: r.user_name || r.args.user_name || '', rp_name: r.args.rp_name || '' };
+        return {
+          kind: r.kind,
+          origin: r.origin,
+          rp_id: r.args.rp_id || new URL(r.origin).hostname,
+          user_name: r.user_name || r.args.user_name || '',
+          rp_name: r.args.rp_name || '',
+          matching: (r.matching || []).map((m) => ({
+            credential_id: m.credential_id,
+            user_name: m.user_name || '',
+            user_handle: m.user_handle || '',
+            vault_name: m.vault_name || '',
+            last_used: m.last_used || 0
+          }))
+        };
       case 'passkey-ui:status': return host('status');
       case 'passkey-ui:request_unlock': return host('request_unlock', { reason: 'Use a passkey' });
       case 'passkey-ui:decide': {
         if (!r) throw err('not_found', 'request expired');
         if (!msg.approved) { reqs.delete(msg.req); r.reject(err('cancelled', 'The user declined')); return { done: true }; }
-        try { const res = await host('passkey_' + r.kind, { ...r.args, origin: r.origin, source: 'popup', approved: true }); reqs.delete(msg.req); r.resolve(res); return { done: true }; }
+        let chosenCredId = null;
+        if (r.kind === 'get' && r.matching && r.matching.length > 0) {
+          const cid = msg.credential_id || msg.credentialId;
+          if (cid) {
+            const found = r.matching.find((m) => m.credential_id === cid);
+            if (!found) {
+              reqs.delete(msg.req);
+              const e = err('bad_request', 'Invalid credential_id');
+              r.reject(e);
+              return { done: true, error: e.message, code: e.code };
+            }
+            chosenCredId = cid;
+          } else {
+            chosenCredId = r.matching[0].credential_id;
+          }
+        }
+        const callArgs = { ...r.args, origin: r.origin, source: 'popup', approved: true };
+        if (chosenCredId) callArgs.credential_id = chosenCredId;
+        try { const res = await host('passkey_' + r.kind, callArgs); reqs.delete(msg.req); r.resolve(res); return { done: true }; }
         catch (e) { if (e.code === 'locked') throw e; reqs.delete(msg.req); r.reject(e); return { done: true, error: e.message, code: e.code }; }
       }
     }

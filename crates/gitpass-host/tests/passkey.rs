@@ -101,3 +101,64 @@ fn policy_approval_rpid_exclude() {
     let q_empty = ok(&mut f.host, json!({"cmd":"passkey_query","origin":"https://other.example","rp_id":"other.example"}));
     assert_eq!(q_empty["matching"].as_array().unwrap().len(), 0);
 }
+
+
+#[test]
+fn multiple_passkeys_query_choice_and_last_used() {
+    let mut f = v5_vault();
+    ok(&mut f.host, json!({"cmd":"unlock","password":PW}));
+    let c1 = create(&mut f.host, json!({"user_id":"dXNlci0x","user_name":"alice@example.com"}));
+    let c2 = create(&mut f.host, json!({"user_id":"dXNlci0y","user_name":"bob@example.com"}));
+
+    // Query returns both passkeys with vault_name
+    let q = ok(&mut f.host, json!({"cmd":"passkey_query","origin":ORIGIN,"rp_id":"example.com"}));
+    let matches = q["matching"].as_array().unwrap();
+    assert_eq!(matches.len(), 2);
+    assert_ne!(c1["credential_id"], c2["credential_id"]);
+    assert_eq!(matches[0]["vault_name"], "Personal");
+    assert_eq!(matches[1]["vault_name"], "Personal");
+
+    // Passkey get with credential_id chooses specific passkey
+    let g2 = ok(&mut f.host, json!({
+        "cmd":"passkey_get",
+        "source":"popup",
+        "approved":true,
+        "origin":ORIGIN,
+        "rp_id":"example.com",
+        "challenge":"Y2hhbGxlbmdlLTI",
+        "credential_id": c2["credential_id"]
+    }));
+    assert_eq!(g2["credential_id"], c2["credential_id"]);
+    assert_eq!(unb64(g2["user_handle"].as_str().unwrap()).unwrap(), b"user-2");
+
+    // Query now returns c2 first because it was most recently used!
+    let q2 = ok(&mut f.host, json!({"cmd":"passkey_query","origin":ORIGIN,"rp_id":"example.com"}));
+    let matches2 = q2["matching"].as_array().unwrap();
+    assert_eq!(matches2[0]["credential_id"], c2["credential_id"]);
+    assert_eq!(matches2[0]["user_name"], "bob@example.com");
+    assert!(matches2[0]["last_used"].as_u64().unwrap() > 0);
+
+    // Invalid base64url credential_id rejected with bad_request
+    let (err_code, _) = err(&mut f.host, json!({
+        "cmd":"passkey_get",
+        "source":"popup",
+        "approved":true,
+        "origin":ORIGIN,
+        "rp_id":"example.com",
+        "challenge":"Y2hhbGxlbmdlLTI",
+        "credential_id": "not base64url!!!"
+    }));
+    assert_eq!(err_code, "bad_request");
+
+    // Unknown credential_id returns not_found
+    let (err_code, _) = err(&mut f.host, json!({
+        "cmd":"passkey_get",
+        "source":"popup",
+        "approved":true,
+        "origin":ORIGIN,
+        "rp_id":"example.com",
+        "challenge":"Y2hhbGxlbmdlLTI",
+        "credential_id": "AAAA"
+    }));
+    assert_eq!(err_code, "not_found");
+}

@@ -447,23 +447,91 @@ async function loadData() {
   }
 }
 
+let vaultMenuOpen = false;
+function closeVaultMenu() {
+  vaultMenuOpen = false;
+  const m = $('vaultMenu');
+  if (m) { m.classList.add('hidden'); m.textContent = ''; }
+  const chip = document.querySelector('#filterChips [data-filter-id="vaults"]');
+  if (chip) chip.setAttribute('aria-expanded', 'false');
+}
+document.addEventListener('click', (e) => {
+  if (!vaultMenuOpen) return;
+  if (e.target && e.target.closest && e.target.closest('.filter-chips-row')) return;
+  closeVaultMenu();
+});
 function renderFilter() {
-  const s = $('filter'); s.textContent = '';
-  let group = null, parent = s;
-  for (const f of V.buildFilters(S.vaults)) {
-    if (f.group !== group) { group = f.group; parent = group ? Object.assign(el('optgroup'), { label: group === 'category' ? t('categories', 'Categories') : t('vaults', 'Vaults') }) : s; if (group) s.append(parent); }
-    const o = el('option', null, f.key ? t(f.key, f.label) : f.label); o.value = f.id;
-    if (f.id === 'suggested' && S.origin) o.textContent += ' · ' + V.hostOfUrl(S.origin);
-    parent.append(o);
+  const wrap = $('filterChips'); if (!wrap) return;
+  const prev = document.activeElement;
+  const hadChipFocus = !!(prev && prev.classList && prev.classList.contains('filter-chip'));
+  const focusId = hadChipFocus ? prev.dataset.filterId : null;
+  wrap.textContent = '';
+  closeVaultMenu();
+  const chips = V.buildFilterChips(S.all, S.vaults, { origin: S.origin, currentFilter: S.filter });
+  const setRoving = (focused) => {
+    for (const c of wrap.querySelectorAll('.filter-chip')) c.tabIndex = c === focused ? 0 : -1;
+  };
+  for (const f of chips) {
+    const active = f.kind === 'vaults' ? S.filter.startsWith('vault:') : S.filter === f.id;
+    const b = el('button', 'filter-chip'); b.type = 'button';
+    b.dataset.filterId = f.id;
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', active ? 'true' : 'false');
+    b.tabIndex = active ? 0 : -1;
+    if (f.category && typeof categoryIcon === 'function') {
+      const ic = el('span', 'ic'); ic.innerHTML = categoryIcon(f.category, 14); b.append(ic);
+      b.append(document.createTextNode(t(f.key, f.label)));
+    } else if (f.id === 'suggested' && f.host) {
+      b.textContent = t(f.key, f.label) + ' · ' + f.host;
+    } else if (f.kind === 'vaults') {
+      b.textContent = t(f.key, f.label) + ' ▾';
+      b.setAttribute('aria-haspopup', 'menu');
+      b.setAttribute('aria-expanded', 'false');
+    } else {
+      b.textContent = f.key ? t(f.key, f.label) : f.label;
+    }
+    b.onclick = () => {
+      if (f.kind === 'vaults') {
+        vaultMenuOpen = !vaultMenuOpen;
+        b.setAttribute('aria-expanded', vaultMenuOpen ? 'true' : 'false');
+        const m = $('vaultMenu'); m.textContent = '';
+        if (vaultMenuOpen) {
+          for (const v of f.vaults) {
+            const item = el('button', null, v.label); item.type = 'button';
+            item.setAttribute('role', 'menuitem');
+            item.setAttribute('aria-selected', S.filter === v.id ? 'true' : 'false');
+            item.onclick = (ev) => { ev.stopPropagation(); S.filter = v.id; renderFilter(); applyFilter(true); const vc = document.querySelector('#filterChips [data-filter-id="vaults"]'); if (vc) vc.focus(); };
+            item.onkeydown = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeVaultMenu(); const vc = document.querySelector('#filterChips [data-filter-id="vaults"]'); if (vc) vc.focus(); } };
+            m.append(item);
+          }
+          m.classList.remove('hidden');
+        } else { m.classList.add('hidden'); }
+        return;
+      }
+      S.filter = f.id; renderFilter(); applyFilter(true);
+    };
+    b.onkeydown = (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'Home' || e.key === 'End') {
+        e.preventDefault();
+        const all = [...wrap.querySelectorAll('.filter-chip')];
+        const next = all[V.chipNavIndex(all.indexOf(b), e.key, all.length)];
+        if (next) { setRoving(next); next.focus(); }
+      } else if (e.key === 'Escape' && vaultMenuOpen) {
+        e.stopPropagation(); closeVaultMenu(); b.focus();
+      }
+    };
+    wrap.append(b);
   }
-  s.value = S.filter;
+  if (focusId) {
+    const restore = wrap.querySelector(`[data-filter-id="${focusId}"]`);
+    if (restore) { setRoving(restore); restore.focus(); }
+  }
   const noteEl = $('siteExceptedNote');
   if (noteEl) {
     const showNote = S.filter === 'suggested' && isSiteExcepted();
     noteEl.classList.toggle('hidden', !showNote);
   }
 }
-$('filter').onchange = () => { S.filter = $('filter').value; applyFilter(true); };
 
 // Sort menu (#165): newest edit first by default; the choice is kept in extension storage.
 const SORT_LABELS = { updated: ['sortUpdated', 'Last edited'], created: ['sortCreated', 'Date created'], title: ['sortTitle', 'Title'] };
@@ -993,6 +1061,13 @@ function renderDetail(d) {
       warnActs.append(siteBtn);
     }
 
+    const wtBtn = el('button', 'btn btn-link warn-action', t('openWatchtower', 'Open Watchtower'));
+    wtBtn.type = 'button';
+    wtBtn.onclick = () => {
+      send({ type: 'popup:open_in_app', view: 'watchtower' }).catch(showErr);
+    };
+    warnActs.append(wtBtn);
+
     const appBtn = el('button', 'btn btn-link warn-action', t('openInGitpass', 'Open in gitpass'));
     appBtn.type = 'button';
     appBtn.onclick = () => {
@@ -1389,6 +1464,7 @@ function openShortcuts() {
 
   const shortcuts = [
     { keys: ['↑', '↓'], label: t('shortcutNav', 'Navigate list') },
+    { keys: ['←', '→'], label: t('shortcutFilterChips', 'Move between filter chips') },
     { keys: [isMac ? '↵' : 'Enter'], label: t('shortcutFill', 'Fill item') },
     { keys: [`${cmd}C`], label: t('shortcutCopyPw', 'Copy password') },
     { keys: [`${cmd}${shift}C`], label: t('shortcutCopyTotp', 'Copy one-time code (TOTP)') },
@@ -1522,6 +1598,7 @@ async function openGenerator(opts) {
   if (useBtn) acts.append(useBtn);
   if (updateBtn) acts.append(updateBtn);
   acts.append(copyBtn); p.append(acts);
+  p.append(recentSection());
 
   const persist = () => saveGeneratorSettings(st).catch(() => {});
   let persistT = null;
@@ -1608,6 +1685,98 @@ async function openGenerator(opts) {
   syncControls();
   paintStrength();
   void run();
+}
+
+/** Collapsible "Recent" list of generated passwords (issue #226). Values come from the read-only host command
+ *  `generator_history` (popup only), are masked until revealed per row, and are fetched only when expanded. */
+function recentSection() {
+  const box = el('section', 'gen-recent');
+  const head = el('button', 'gen-recent-toggle'); head.type = 'button';
+  head.setAttribute('aria-expanded', 'false');
+  const headLab = el('span', null, t('genRecent', 'Recent'));
+  const chev = el('span', 'gen-recent-chev'); chev.innerHTML = UI.chevron;
+  head.append(headLab, chev);
+  const body = el('div', 'gen-recent-body hidden');
+  body.id = 'genRecentBody'; head.setAttribute('aria-controls', body.id);
+  box.append(head, body);
+  let loaded = false;
+  let canFill = false;
+
+  const note = (text) => { body.textContent = ''; body.append(el('p', 'muted gen-recent-note', text)); };
+  const rows = () => [...body.querySelectorAll('.gen-recent-row')];
+  function focusRow(i) {
+    const rs = rows(); if (!rs.length) return;
+    const n = Math.max(0, Math.min(rs.length - 1, i));
+    rs.forEach((r, k) => { r.tabIndex = k === n ? 0 : -1; });
+    rs[n].focus();
+  }
+  function paintRow(e, nowSecs) {
+    const li = el('li', 'gen-recent-row'); li.tabIndex = -1; li.dataset.id = String(e.id);
+    let shown = false;
+    const val = el('code', 'gen-recent-val', G.maskValue(e.value));
+    const age = G.ageParts(e.created_at, nowSecs);
+    const ageText = age.key === 'genAgoNow' ? t('genAgoNow', 'just now')
+      : t(age.key, age.key === 'genAgoMin' ? '$1 min ago' : age.key === 'genAgoHour' ? '$1 h ago' : '$1 d ago', [String(age.n)]);
+    const meta = el('span', 'gen-recent-meta', (e.host ? e.host + ' · ' : '') + ageText);
+    const info = el('div', 'gen-recent-info'); info.append(val, meta);
+    const toggle = () => {
+      shown = !shown;
+      val.textContent = shown ? e.value : G.maskValue(e.value);
+      eyeB.innerHTML = shown ? UI.eyeOff : UI.eye;
+      eyeB.setAttribute('aria-pressed', String(shown));
+      eyeB.title = shown ? t('genRecentHide', 'Hide') : t('reveal', 'Reveal');
+    };
+    const doCopy = () => copy(e.value, t('passwordCopied', 'Password copied'));
+    const copyB = iconBtn(UI.copy, t('copy', 'Copy'), doCopy);
+    const eyeB = iconBtn(UI.eye, t('reveal', 'Reveal'), toggle); eyeB.setAttribute('aria-pressed', 'false');
+    const acts = el('div', 'gen-recent-acts'); acts.append(copyB, eyeB);
+    if (canFill && G.hostMatches(e.host, S.origin)) {
+      acts.append(iconBtn(UI.external, t('fillTitle', 'Fill on this page'), () => send({ type: 'popup:fill_generated', password: e.value })
+        .then(() => { toast(t('genFilled', 'Filled on this page')); window.close(); })
+        .catch(() => toast(t('genFillFailed', 'Could not fill on this page')))));
+    }
+    li.append(info, acts);
+    li.addEventListener('keydown', (ev) => {
+      if (ev.target !== li) return;
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); focusRow(rows().indexOf(li) + 1); }
+      else if (ev.key === 'ArrowUp') { ev.preventDefault(); focusRow(rows().indexOf(li) - 1); }
+      else if (ev.key === 'Enter') { ev.preventDefault(); void doCopy(); }
+      else if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); toggle(); }
+    });
+    return li;
+  }
+  async function load() {
+    note('…');
+    let r;
+    try { r = await send({ type: 'popup:generator_history' }); }
+    catch (err) {
+      if (err && err.code === 'locked') { box.classList.add('hidden'); return; } // locked: section hidden
+      note(errText(err)); return;
+    }
+    if (S.panel !== 'gen' || !box.isConnected) return;
+    const h = G.cleanHistory(r, 10);
+    if (!h.enabled) return note(t('genRecentOff', 'Generator history is off'));
+    if (!h.entries.length) return note(t('genRecentEmpty', 'No generated passwords yet'));
+    try { canFill = !!((await send({ type: 'popup:can_fill_generated' })) || {}).canFill; } catch (_) { canFill = false; }
+    if (S.panel !== 'gen' || !box.isConnected) return;
+    const ul = el('ul', 'gen-recent-list'); ul.setAttribute('role', 'list');
+    const now = Math.floor(Date.now() / 1000);
+    for (const e of h.entries) ul.append(paintRow(e, now));
+    body.textContent = '';
+    body.append(ul);
+    const all = el('button', 'btn-link gen-recent-all', t('genRecentViewAll', 'View all in gitpass')); all.type = 'button';
+    all.onclick = () => send({ type: 'popup:open_in_app' }).catch(showErr);
+    body.append(all);
+    const first = ul.firstElementChild; if (first) first.tabIndex = 0;
+  }
+  head.onclick = () => {
+    const open = head.getAttribute('aria-expanded') !== 'true';
+    head.setAttribute('aria-expanded', String(open));
+    body.classList.toggle('hidden', !open);
+    chev.classList.toggle('open', open);
+    if (open && !loaded) { loaded = true; void load(); }
+  };
+  return box;
 }
 
 /** New item: every type the desktop app supports (except passkeys, which websites create, and documents,
