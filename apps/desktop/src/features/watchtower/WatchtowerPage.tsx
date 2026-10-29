@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import type { ItemSummary, WatchtowerReport } from "../../api/types";
 import { api } from "../../api/client";
-import { useT } from "../../i18n";
+import { useT, useI18n, type Key as TranslationKey } from "../../i18n";
 import {
   Button,
   DropdownMenu,
@@ -82,12 +82,12 @@ export function ScoreGauge({ score }: { score: number }) {
   );
 }
 
-const CARDS: { key: IssueKey; title: string; desc: string; Icon: typeof AlertTriangle }[] = [
-  { key: "weak", title: "Weak passwords", desc: "Easy to guess. Generate a strong replacement.", Icon: AlertTriangle },
-  { key: "reused", title: "Reused passwords", desc: "Same password on multiple sites.", Icon: Copy },
-  { key: "old", title: "Old passwords", desc: "Not changed in a long time.", Icon: Clock },
-  { key: "breached", title: "Breached passwords", desc: "Found in known data breaches (HIBP).", Icon: ShieldAlert },
-  { key: "missingTotp", title: "Missing 2FA", desc: "Logins with a URL but no one-time password saved.", Icon: Smartphone },
+const CARDS: { key: IssueKey; titleKey: TranslationKey; descKey: TranslationKey; Icon: typeof AlertTriangle }[] = [
+  { key: "weak", titleKey: "watchtower.weakPasswords", descKey: "watchtower.weakPasswordsDesc", Icon: AlertTriangle },
+  { key: "reused", titleKey: "watchtower.reusedPasswords", descKey: "watchtower.reusedPasswordsDesc", Icon: Copy },
+  { key: "old", titleKey: "watchtower.oldPasswords", descKey: "watchtower.oldPasswordsDesc", Icon: Clock },
+  { key: "breached", titleKey: "watchtower.breachedPasswords", descKey: "watchtower.breachedPasswordsDesc", Icon: ShieldAlert },
+  { key: "missingTotp", titleKey: "watchtower.missingTotp", descKey: "watchtower.missingTotpDesc", Icon: Smartphone },
 ];
 
 const ISSUE_TO_KIND: Record<IssueKey, string> = {
@@ -107,16 +107,17 @@ const ISSUE_TO_KIND: Record<IssueKey, string> = {
 
 export function WatchtowerPage() {
   const t = useT();
+  const lang = useI18n((s) => s.lang);
   const cards = [
     ...CARDS,
-    { key: "duplicates" as const, title: t("watchtower.duplicates"), desc: t("watchtower.duplicatesDesc"), Icon: Layers },
-    { key: "totpAvailable" as const, title: t("watchtower.totpAvailable"), desc: t("watchtower.totpAvailableDesc"), Icon: Smartphone },
-    { key: "passkeyAvailable" as const, title: t("watchtower.passkeyAvailable"), desc: t("watchtower.passkeyAvailableDesc"), Icon: KeyRound },
-    { key: "expired" as const, title: t("watchtower.expired"), desc: t("watchtower.expiredDesc"), Icon: CalendarX },
-    { key: "expiringSoon" as const, title: t("watchtower.expiringSoon"), desc: t("watchtower.expiringSoonDesc"), Icon: CalendarClock },
-    { key: "insecureUrls" as const, title: t("watchtower.insecureUrls"), desc: t("watchtower.insecureUrlsDesc"), Icon: Globe },
-    { key: "weakSshKey" as const, title: t("watchtower.weakSshKey"), desc: t("watchtower.weakSshKeyDesc"), Icon: Key },
-  ];
+    { key: "duplicates" as const, titleKey: "watchtower.duplicates" as const, descKey: "watchtower.duplicatesDesc" as const, Icon: Layers },
+    { key: "totpAvailable" as const, titleKey: "watchtower.totpAvailable" as const, descKey: "watchtower.totpAvailableDesc" as const, Icon: Smartphone },
+    { key: "passkeyAvailable" as const, titleKey: "watchtower.passkeyAvailable" as const, descKey: "watchtower.passkeyAvailableDesc" as const, Icon: KeyRound },
+    { key: "expired" as const, titleKey: "watchtower.expired" as const, descKey: "watchtower.expiredDesc" as const, Icon: CalendarX },
+    { key: "expiringSoon" as const, titleKey: "watchtower.expiringSoon" as const, descKey: "watchtower.expiringSoonDesc" as const, Icon: CalendarClock },
+    { key: "insecureUrls" as const, titleKey: "watchtower.insecureUrls" as const, descKey: "watchtower.insecureUrlsDesc" as const, Icon: Globe },
+    { key: "weakSshKey" as const, titleKey: "watchtower.weakSshKey" as const, descKey: "watchtower.weakSshKeyDesc" as const, Icon: Key },
+  ].map((c) => ({ ...c, title: t(c.titleKey), desc: t(c.descKey) }));
   const { selectItem, setRoute, setEditing } = useApp();
   const settings = useSettings((st) => st.settings);
   const hibp = !!settings?.hibpCheck;
@@ -261,9 +262,9 @@ export function WatchtowerPage() {
     <div className="h-full overflow-y-auto" data-testid="watchtower-scroll">
     <div className="mx-auto max-w-5xl space-y-6 p-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Watchtower</h1>
+        <h1 className="text-2xl font-semibold">{t("nav.watchtower")}</h1>
         <Button variant="ghost" size="sm" disabled={busy} onClick={() => load(hibp)}>
-          <RefreshCw size={14} /> Re-check
+          <RefreshCw size={14} /> {t("watchtower.recheck")}
         </Button>
       </div>
       {err && (
@@ -275,12 +276,13 @@ export function WatchtowerPage() {
         {report ? <ScoreGauge score={report.score} /> : <Skeleton className="h-40 w-40 rounded-full" />}
         <div className="max-w-md flex-1 space-y-3">
           <p className="text-fg">
-            Your security score reflects weak, reused, old and breached passwords and missing two-factor authentication.
+            {t("watchtower.scoreExplanation")}
           </p>
           {report && (
             <p className="text-xs text-muted">
-              Last checked {new Date(report.checkedAt).toLocaleString()}
-              {report.hibpChecked ? " · breach check included" : " · breach check off"}
+              {t(report.hibpChecked ? "watchtower.lastCheckedOn" : "watchtower.lastCheckedOff", {
+                date: new Date(report.checkedAt).toLocaleString(lang),
+              })}
             </p>
           )}
           <div className="rounded-lg border border-border p-3">
@@ -296,10 +298,9 @@ export function WatchtowerPage() {
               {t('watchtower.breachCheckLabel')}
             </label>
             <p className="mt-1 text-xs text-muted">
-              Off by default. When on, gitpass hashes each password with SHA-1 locally and sends only the{" "}
-              <b>first 5 characters</b> of the hash to Have I Been Pwned (k-anonymity). HIBP returns every breached hash
-              with that prefix and the match is done on your device — your passwords and full hashes never leave this
-              computer, and HIBP can’t tell which password you checked.
+              {t("watchtower.hibpNoteIntro")}{" "}
+              <b>{t("watchtower.hibpNoteFirst5")}</b>{" "}
+              {t("watchtower.hibpNoteRest")}
             </p>
           </div>
         </div>
@@ -333,11 +334,11 @@ export function WatchtowerPage() {
               </div>
               <p className="mt-1 text-xs text-muted">{desc}</p>
               {off ? (
-                <p className="mt-3 text-xs text-muted">Enable the breach check above to scan.</p>
+                <p className="mt-3 text-xs text-muted">{t("watchtower.breachOffHint")}</p>
               ) : ids.length === 0 ? (
                 report && (
                   <p className="mt-3 flex items-center gap-1 text-xs text-ok">
-                    <ShieldCheck size={12} /> No issues
+                    <ShieldCheck size={12} /> {t("watchtower.noIssues")}
                   </p>
                 )
               ) : key === "reused" ? (
@@ -345,7 +346,7 @@ export function WatchtowerPage() {
                   {report!.reused.map((g, i) => (
                     <li key={i} className="rounded bg-bg p-2">
                       <div className="mb-1 text-[11px] text-muted">
-                        Group {i + 1} · {g.length} items
+                        {t("watchtower.duplicateGroup", { n: i + 1, count: g.length })}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         {g.map((id) => (
@@ -398,7 +399,7 @@ export function WatchtowerPage() {
                               variant="outline"
                               className="h-7 px-2 text-xs border-accent text-accent hover:bg-accent/10 focus-visible:ring-accent"
                               onClick={() => void handleArchiveOlder(older)}
-                              aria-label={`${t("watchtower.archiveOlder")}: ${groupTitle}`}
+                              aria-label={t("watchtower.archiveOlderFor", { group: groupTitle })}
                             >
                               <Archive size={12} className="mr-1" />
                               {t("watchtower.archiveOlder")}
@@ -475,7 +476,7 @@ export function WatchtowerPage() {
                               target="_blank"
                               rel="noreferrer noopener"
                               className="inline-flex items-center gap-1 rounded bg-hover px-2 py-1 text-[11px] font-medium text-fg hover:bg-hover/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-                              aria-label={`${t("watchtower.openHttps")} for ${it?.title ?? id}`}
+                              aria-label={t("watchtower.openHttpsFor", { title: it?.title ?? id })}
                             >
                               <ExternalLink size={12} className="text-accent" />
                               <span>{t("watchtower.openHttps")}</span>
@@ -496,7 +497,7 @@ export function WatchtowerPage() {
                             type="button"
                             onClick={() => openEdit(id)}
                             className="inline-flex items-center gap-1 rounded bg-hover px-2 py-1 text-[11px] font-medium text-fg hover:bg-hover/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
-                            aria-label={`${t("watchtower.editUrl")} for ${it?.title ?? id}`}
+                            aria-label={t("watchtower.editUrlFor", { title: it?.title ?? id })}
                           >
                             <Pencil size={12} className="text-accent" />
                             <span>{t("watchtower.editUrl")}</span>
@@ -505,7 +506,7 @@ export function WatchtowerPage() {
                             <DropdownMenuTrigger asChild>
                               <button
                                 type="button"
-                                aria-label={`${t("watchtower.moreOptions")} for ${it?.title ?? id}`}
+                                aria-label={t("watchtower.moreOptionsFor", { title: it?.title ?? id })}
                                 className="inline-flex items-center justify-center rounded bg-hover p-1 text-muted hover:text-fg hover:bg-hover/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
                               >
                                 <MoreVertical size={13} />
@@ -595,7 +596,7 @@ export function WatchtowerPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => stopIgnoring(item.itemId, item.kind, item.vaultId)}
-                        aria-label={`${t("watchtower.stopIgnoring")} for ${item.title}`}
+                        aria-label={t("watchtower.stopIgnoringFor", { title: item.title })}
                       >
                         {t("watchtower.stopIgnoring")}
                       </Button>
@@ -678,7 +679,7 @@ function FindingChip({
           <button
             type="button"
             onClick={() => setMenuOpen((o) => !o)}
-            aria-label={`${t("watchtower.moreOptions")} for ${title}`}
+            aria-label={t("watchtower.moreOptionsFor", { title })}
             className="rounded-r-md px-1 py-1 text-muted hover:text-fg focus-visible:outline-none"
           >
             <MoreVertical size={12} />

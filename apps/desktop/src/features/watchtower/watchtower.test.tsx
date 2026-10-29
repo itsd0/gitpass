@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import { cleanup } from '@testing-library/react';
 import { api } from '../../api/client';
 import { mock } from '../../api/mock';
@@ -21,7 +23,7 @@ beforeEach(() => {
   vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'], passkeyAvailable: ['i3x'], expired: ['i-exp'], expiringSoon: ['i-soon'], insecureUrls: ['i-insecure'], duplicates: [['dup-older', 'dup-newer']], checkedAt: '', hibpChecked: on }; });
 });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); useI18n.getState().setLang('en'); });
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { gaugeDash, issueIds, scoreBand } from './score';
 import { ScoreGauge, WatchtowerPage } from './WatchtowerPage';
 import { useApp } from '../../lib/store';
@@ -330,5 +332,60 @@ describe('watchtower score', () => {
     expect(translate("my", "watchtower.weakSshKey")).toBe("အားနည်းသော SSH သော့များ");
     useI18n.getState().setLang("th");
     expect(translate("th", "watchtower.weakSshKey")).toBe("คีย์ SSH ที่ไม่ปลอดภัย");
+  });
+
+  it("has no hard-coded Watchtower copy in the page source", () => {
+    const source = fs.readFileSync(path.resolve(__dirname, 'WatchtowerPage.tsx'), 'utf8');
+    const banned = [
+      '>Re-check<', '>Watchtower<', 'Weak passwords', 'Reused passwords', 'Old passwords', 'Breached passwords',
+      'Missing 2FA', 'Last checked ', 'breach check included', 'breach check off',
+      'Enable the breach check above to scan.', '>No issues<', 'Off by default. When on, gitpass hashes',
+    ];
+    for (const copy of banned) expect(source.includes(copy), `WatchtowerPage.tsx should not contain: ${copy}`).toBe(false);
+  });
+
+  it("renders localized Watchtower copy in Burmese and Thai, including the language-aware date", async () => {
+    const iso = '2026-10-28T12:00:00Z';
+    vi.mocked(api.watchtower).mockResolvedValue({
+      score: 71, weak: ['i3'], reused: [], old: [], breached: [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'],
+      passkeyAvailable: [], expired: [], expiringSoon: [], insecureUrls: [], duplicates: [], checkedAt: iso, hibpChecked: false,
+    });
+    const english = [
+      'Re-check',
+      'Your security score reflects weak, reused, old and breached passwords and missing two-factor authentication.',
+      'Weak passwords', 'Easy to guess. Generate a strong replacement.',
+      'Reused passwords', 'Same password on multiple sites.',
+      'Old passwords', 'Not changed in a long time.',
+      'Breached passwords', 'Found in known data breaches (HIBP).',
+      'Missing 2FA', 'Logins with a URL but no one-time password saved.',
+      'Off by default. When on, gitpass hashes each password with SHA-1 locally and sends only the',
+      'Enable the breach check above to scan.',
+      'No issues',
+    ];
+    for (const lang of ['my', 'th'] as const) {
+      useSettings.setState({ settings: { autoLockMinutes: 10, clipboardClearSecs: 30, theme: 'dark', language: lang, biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false } });
+      useI18n.getState().setLang(lang);
+      render(<WatchtowerPage />);
+      await screen.findByTestId('score');
+      const text = document.body.textContent ?? '';
+      for (const copy of english) expect(text.includes(copy), `${lang} still shows English: ${copy}`).toBe(false);
+      expect(screen.getByText(translate(lang, 'watchtower.weakPasswords'))).toBeTruthy();
+      expect(screen.getByText(translate(lang, 'watchtower.recheck'))).toBeTruthy();
+      expect(text).toContain(new Date(iso).toLocaleString(lang));
+      cleanup();
+      useSettings.setState({ settings: null });
+    }
+    useI18n.getState().setLang('en');
+  });
+
+  it("re-renders the card list when the language changes", async () => {
+    useSettings.setState({ settings: { autoLockMinutes: 10, clipboardClearSecs: 30, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false } });
+    render(<WatchtowerPage />);
+    await screen.findByTestId('score');
+    expect(screen.getByText('Weak passwords')).toBeTruthy();
+    act(() => useI18n.getState().setLang('th'));
+    expect(await screen.findByText('รหัสผ่านที่อ่อนแอ')).toBeTruthy();
+    expect(screen.queryByText('Weak passwords')).toBeNull();
+    useSettings.setState({ settings: null });
   });
 });

@@ -143,9 +143,21 @@ input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 
 .search-hints { display: flex; align-items: center; justify-content: center; height: 26px; padding: 0 8px; background: rgb(var(--sidebar)); border-top: 1px solid rgb(var(--border)); font-size: 11px; color: rgb(var(--muted)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; user-select: none; cursor: pointer; }
 .search-hints:hover { color: rgb(var(--fg)); }
 .search-hints.hidden { display: none !important; }
-.row { height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 10px; cursor: pointer; border-left: 3px solid transparent; }
+.row { position: relative; height: 52px; display: flex; align-items: center; gap: 10px; padding: 0 10px; cursor: pointer; border-left: 3px solid transparent; }
 .row:hover { background: rgb(var(--hover)); }
 .row.sel { background: rgb(var(--active)); border-left-color: rgb(var(--accent)); box-shadow: inset 0 0 0 1px rgb(var(--accent) / .35); }
+/* List row quick actions (issue #255): absolutely positioned at the right edge
+   so they never move the title or change the 52px row height. Hidden until the
+   row is hovered, selected, or contains keyboard focus, when they sit over
+   the star/TOTP area on the row's own background. Orange focus ring, light
+   and dark via the existing CSS variables. */
+.row .quick-actions { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: none; gap: 2px; padding: 2px 2px 2px 8px; border-radius: 8px; z-index: 1; }
+.row:hover .quick-actions, .row:focus-within .quick-actions { display: flex; background: rgb(var(--hover)); }
+.row.sel .quick-actions { display: flex; background: rgb(var(--active)); }
+.row .quick-btn { width: 28px; height: 28px; display: grid; place-items: center; border-radius: 6px; border: 0; background: none; color: rgb(var(--muted)); cursor: pointer; flex: none; }
+.row .quick-btn:hover { background: rgb(var(--hover)); color: rgb(var(--fg)); }
+.row .quick-btn:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--accent)); color: rgb(var(--fg)); }
+.row .quick-btn svg.ui { width: 15px; height: 15px; }
 mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weight: inherit; border-radius: 2px; padding: 0 1px; }
 .row.sel mark.hl { background: rgb(var(--accent) / .35); color: inherit; }
 .row .meta { min-width: 0; flex: 1; }
