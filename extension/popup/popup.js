@@ -124,7 +124,7 @@ function show(view) {
 }
 
 // ---------- state ----------
-const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null, neverSave: [], edit: null };
+const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', sort: 'updated', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null, neverSave: [], edit: null };
 
 async function refreshNeverSave() {
   if (window.__gitpassMockNeverSave) {
@@ -372,6 +372,20 @@ function renderDetailError(err, onRetry) {
 }
 
 // ---------- data + list ----------
+// The host caps one reply at 1 MiB, so fetch every item in pages (#165: the popup must list all items).
+const LIST_PAGE = 500;
+async function listAllItems() {
+  let items = [], offset = 0;
+  for (let guard = 0; guard < 1000; guard++) {
+    const r = await send({ type: 'popup:list_items', limit: LIST_PAGE, offset });
+    items = items.concat((r && r.items) || []);
+    const next = r && r.next_offset;
+    if (typeof next !== 'number' || next <= offset) break;
+    offset = next;
+  }
+  return { items };
+}
+
 async function loadData() {
   startListLoading();
   let listError = null;
@@ -382,7 +396,7 @@ async function loadData() {
   try {
     const results = await Promise.all([
       send({ type: 'popup:list_vaults' }).catch(() => ({ vaults: [] })),
-      send({ type: 'popup:list_items' }),
+      listAllItems(),
       send({ type: 'popup:match_active' }).catch(() => ({ items: [], origin: null })),
     ]);
     vaults = results[0];
@@ -415,6 +429,8 @@ async function loadData() {
   S.suggested = (match && match.items) || [];
   S.origin = (match && match.origin) || null;
   await refreshNeverSave();
+  await loadSort();
+  renderSort();
 
   const want = window.__gitpassMockParams && window.__gitpassMockParams.get('filter');
   if (want) S.filter = want;
@@ -446,6 +462,27 @@ function renderFilter() {
   }
 }
 $('filter').onchange = () => { S.filter = $('filter').value; applyFilter(true); };
+
+// Sort menu (#165): newest edit first by default; the choice is kept in extension storage.
+const SORT_LABELS = { updated: ['sortUpdated', 'Last edited'], created: ['sortCreated', 'Date created'], title: ['sortTitle', 'Title'] };
+function renderSort() {
+  const s = $('sort'); if (!s) return;
+  s.textContent = '';
+  s.setAttribute('aria-label', t('sortBy', 'Sort by'));
+  for (const k of V.SORTS) { const o = el('option', null, t(SORT_LABELS[k][0], SORT_LABELS[k][1])); o.value = k; s.append(o); }
+  s.value = S.sort;
+}
+function loadSort() {
+  if (!globalThis.chrome || !chrome.storage || !chrome.storage.local) return Promise.resolve();
+  return new Promise((res) => {
+    try { chrome.storage.local.get('popupSort', (r) => { const v = r && r.popupSort; if (V.SORTS.includes(v)) S.sort = v; res(); }); } catch (_) { res(); }
+  });
+}
+if ($('sort')) $('sort').onchange = () => {
+  S.sort = $('sort').value;
+  try { if (globalThis.chrome && chrome.storage && chrome.storage.local) chrome.storage.local.set({ popupSort: S.sort }); } catch (_) { /* ignore */ }
+  applyFilter(false);
+};
 const undoExceptedBtn = $('undoExcepted');
 if (undoExceptedBtn) {
   undoExceptedBtn.onclick = async () => {
@@ -458,7 +495,7 @@ if (undoExceptedBtn) {
 
 function applyFilter(selectFirst) {
   const prevId = S.rows[S.sel] && S.rows[S.sel].id;
-  S.rows = V.filterItems(S.all, S.suggested, S.filter, S.query);
+  S.rows = V.filterItems(S.all, S.suggested, S.filter, S.query, S.sort);
   let idx = prevId ? S.rows.findIndex((r) => r.id === prevId) : -1;
   if (idx < 0 && (selectFirst || prevId)) idx = S.rows.length ? 0 : -1;
   $('list').scrollTop = 0;
@@ -495,6 +532,8 @@ function updateSearchHints() {
 function renderList() {
   const list = $('list'), inner = $('listInner');
   inner.textContent = '';
+  // Reset spacer padding first: an empty list must not keep the previous list's padTop/padBottom as blank space.
+  inner.style.paddingTop = '0px'; inner.style.paddingBottom = '0px';
   updateSearchHints();
   if (!S.rows.length) { stopListTotp(); renderEmpty(inner); return; }
   const w = V.virtualWindow(list.scrollTop, list.clientHeight || 380, ROW_H, S.rows.length);
@@ -1507,7 +1546,7 @@ function liveReload() {
   clearTimeout(liveT);
   liveT = setTimeout(async () => {
     const [all, match] = await Promise.all([
-      send({ type: 'popup:list_items' }).catch(() => null),
+      listAllItems().catch(() => null),
       send({ type: 'popup:match_active' }).catch(() => null),
     ]);
     if (!all) return;
