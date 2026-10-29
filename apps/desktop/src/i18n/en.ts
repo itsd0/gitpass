@@ -81,6 +81,8 @@ export const en = {
   'settings.showWebsiteIconsHelp': 'Fetch icons for websites over HTTPS. Off by default because fetching tells each site you have an account there. Turning this off clears the cache.',
   'settings.renderNotesMarkdown': 'Render notes as Markdown',
   'settings.renderNotesMarkdownHelp': 'Format headings, lists, code blocks and links safely in notes. Raw HTML and remote images are never loaded.',
+  'settings.listDensity': 'List density', 'settings.listDensity.comfortable': 'Comfortable', 'settings.listDensity.compact': 'Compact',
+  'settings.listDensityHelp': 'Comfortable shows two lines per item; Compact shows one line per item with smaller rows.',
   'editor.edit': 'Edit',
   'editor.preview': 'Preview',
   'editor.notesMode': 'Notes mode',
@@ -145,7 +147,7 @@ export const en = {
   // palette
   'palette.placeholder': 'Search items or type a command…', 'palette.commands': 'Commands', 'palette.items': 'Items', 'palette.empty': 'No results for “{q}”',
   'palette.label': 'Command palette', 'cmd.newItem': 'New item', 'cmd.lock': 'Lock gitpass', 'cmd.watchtower': 'Go to Watchtower', 'cmd.settings': 'Go to Settings', 'cmd.people': 'Go to People',
-  'cmd.toggleTheme': 'Toggle theme', 'cmd.sync': 'Sync now', 'cmd.shortcuts': 'Keyboard shortcuts', 'cmd.home': 'Go to Home',
+  'cmd.toggleTheme': 'Toggle theme', 'cmd.toggleListDensity': 'Toggle compact list', 'cmd.sync': 'Sync now', 'cmd.shortcuts': 'Keyboard shortcuts', 'cmd.home': 'Go to Home',
   'cmd.showLargeType': 'Show password in large type',
   // large type view
   'largetype.action': 'Show in large type',

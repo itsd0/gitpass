@@ -1786,3 +1786,29 @@ fn settings_render_notes_markdown_roundtrip_and_defaults() {
     assert!(!updated.render_notes_markdown);
     assert!(!e.app.get_settings().render_notes_markdown);
 }
+
+#[test]
+fn settings_list_density_roundtrip_and_defaults() {
+    let s = Settings::default();
+    assert_eq!(s.list_density, ListDensity::Comfortable);
+
+    // Legacy JSON without listDensity defaults to comfortable
+    let legacy_json = r#"{"autoLockMinutes":5,"clipboardClearSecs":90,"theme":"dark","language":"en","biometricUnlock":false}"#;
+    let parsed: Settings = serde_json::from_str(legacy_json).unwrap();
+    assert_eq!(parsed.list_density, ListDensity::Comfortable);
+
+    // Compact round-trips through JSON and app persistence
+    let mut custom = s;
+    custom.list_density = ListDensity::Compact;
+    let serialized = serde_json::to_string(&custom).unwrap();
+    assert!(serialized.contains(r#""listDensity":"compact""#));
+    let deserialized: Settings = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(deserialized.list_density, ListDensity::Compact);
+
+    let e = env();
+    let initial = e.app.get_settings();
+    assert_eq!(initial.list_density, ListDensity::Comfortable);
+    let updated = e.app.set_settings(Settings { list_density: ListDensity::Compact, ..initial }).unwrap();
+    assert_eq!(updated.list_density, ListDensity::Compact);
+    assert_eq!(e.app.get_settings().list_density, ListDensity::Compact);
+}
