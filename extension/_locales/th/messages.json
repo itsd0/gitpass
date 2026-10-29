@@ -857,7 +857,7 @@
   },
   "updatePassword": {
     "message": "อัปเดตรหัสผ่าน"
-    },
+  },
   "sortBy": {
     "message": "เรียงตาม"
   },
@@ -926,5 +926,14 @@
   },
   "ctxUnlockGitpass": {
     "message": "ปลดล็อก gitpass…"
+  },
+  "optBadge": {
+    "message": "แสดงจำนวนรายการที่ตรงกันบนไอคอนแถบเครื่องมือ"
+  },
+  "optBadgeBody": {
+    "message": "แสดงจำนวนรายการเข้าสู่ระบบที่ตรงกับเว็บไซต์ปัจจุบัน แสดงเฉพาะตัวเลขเท่านั้น"
+  },
+  "badgeAppNotRunning": {
+    "message": "แอป gitpass ไม่ได้ทำงานอยู่"
   }
 }

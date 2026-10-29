@@ -15,6 +15,8 @@ if (typeof importScripts === 'function' && !globalThis.GitpassPasskey) importScr
 if (typeof importScripts === 'function' && !globalThis.GitpassCommand) importScripts('bg-command.js');
 // Right-click context menu (#213); installed at the bottom once the helpers exist.
 if (typeof importScripts === 'function' && !globalThis.GitpassContextMenu) importScripts('bg-context.js');
+// Toolbar icon state + match-count badge (#218)
+if (typeof importScripts === 'function' && !globalThis.GitpassBadge) importScripts('bg-badge.js');
 
 const HOST = 'com.gitpass.host';
 let contextMenuApi = null; // set by the install at the bottom; host events rebuild the menu
@@ -31,6 +33,7 @@ function connect() {
       if (msg.event === 'lock' || msg.event === 'unlock' || msg.event === 'changed') {
         chrome.runtime.sendMessage({ type: 'popup:event', event: msg.event }).catch(() => {});
         if (contextMenuApi) contextMenuApi.rebuild(); // locked menu vs full menu (#213)
+        if (globalThis.gitpassBadge) globalThis.gitpassBadge.onHostEvent(msg.event);
       }
       return;
     }
@@ -62,6 +65,7 @@ if (typeof chrome !== 'undefined' && chrome.idle && chrome.idle.onStateChanged) 
     if (state === 'locked') {
       host('lock').catch(() => {});
       chrome.runtime.sendMessage({ type: 'popup:event', event: 'lock', reason: 'screen' }).catch(() => {});
+      if (globalThis.gitpassBadge) globalThis.gitpassBadge.onHostEvent('lock');
     } else if (state === 'idle') {
       host('status').catch(() => {});
     }
@@ -146,6 +150,7 @@ async function popupRoute(msg) {
     case 'open_in_app': return host('open_in_app', msg.item_id ? { item_id: msg.item_id } : {});
     case 'can_fill_generated': return canFillGenerated();
     case 'fill_generated': return fillGenerated(msg.password);
+    case 'record_generated': return recordGenerated(msg.password);
     case 'open_fill': return openFill(msg);
   }
   throw new Error('unknown popup message');
@@ -170,7 +175,16 @@ async function fillGenerated(password) {
   if (typeof password !== 'string' || !password || password.length > 1024) throw Object.assign(new Error('password is required'), { code: 'bad_request' });
   const r = await chrome.tabs.sendMessage(tab.id, { type: 'gitpass-fill-generated', origin, password }, { frameId: 0 });
   if (!r || !r.filled) throw Object.assign(new Error('no focused password field'), { code: 'bad_request' });
+  await host('record_generated_password', { password, origin, source: 'extension' }).catch(() => {});
   return { filled: true };
+}
+
+/** Record a generated password (e.g. from popup copy). */
+async function recordGenerated(password) {
+  if (typeof password !== 'string' || !password || password.length > 1024) return { ok: false };
+  const { origin } = await activeOrigin();
+  await host('record_generated_password', { password, origin: origin || null, source: 'extension' }).catch(() => {});
+  return { ok: true };
 }
 
 /** Open & Fill: fill the active tab if it matches; for logins with a URL otherwise open that URL first. */async function openFill(msg) {
@@ -210,6 +224,9 @@ globalThis.gitpassFillLoginCommand = fillLoginCommand; // e2e drives the command
 if (chrome.commands && chrome.commands.onCommand) {
   chrome.commands.onCommand.addListener((cmd) => { if (cmd === GitpassCommand.COMMAND) fillLoginCommand().catch(() => {}); });
 }
+
+// Toolbar icon: locked / not running variant, and the count of logins for the active tab (#218).
+if (globalThis.GitpassBadge) globalThis.gitpassBadge = GitpassBadge.install({ host });
 
 // Messages from the popup (extension pages) and content scripts.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

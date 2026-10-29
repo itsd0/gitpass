@@ -26,6 +26,7 @@
       "bg-page.js",
       "bg-command.js",
       "bg-context.js",
+      "bg-badge.js",
       "background.js",
       "bg-onboard.js",
       "bg-passkey.js"

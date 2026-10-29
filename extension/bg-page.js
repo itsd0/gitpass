@@ -395,13 +395,17 @@
       case 'page:generate': {
         // Optional site rules (#188): parsed constraints only, validated and clamped here before the host sees them.
         const PR = root.GitpassPasswordRules || (typeof require === 'function' ? require('./lib/password-rules.js') : null);
+        let r;
         if (a.rules == null || !PR) {
-          const r = await host('generate', { len: 20, digits: true, symbols: true });
-          return { origin, password: r.password };
+          r = await host('generate', { len: 20, digits: true, symbols: true });
+        } else {
+          const s = PR.sanitize(a.rules);
+          if (!s.ok) throw err('bad_request', 'password rules ' + s.reason);
+          r = await host('generate', { len: s.len, rules: { classes: s.classes } });
         }
-        const s = PR.sanitize(a.rules);
-        if (!s.ok) throw err('bad_request', 'password rules ' + s.reason);
-        const r = await host('generate', { len: s.len, rules: { classes: s.classes } });
+        if (r && r.password) {
+          await host('record_generated_password', { password: r.password, origin, source: 'extension' }).catch(() => {});
+        }
         return { origin, password: r.password };
       }
       case 'page:request_unlock': return host('request_unlock', { reason: 'Fill on ' + new URL(origin).host });
