@@ -23,6 +23,22 @@ fn clean_host(s: &str) -> Option<String> {
     u.host_str().map(|h| h.trim_start_matches("www.").to_string()).filter(|h| !h.is_empty())
 }
 
+/// Read the `rememberGeneratedPasswords` preference from `.gitpass-settings.json`.
+/// Defaults to `true` when missing, matching desktop settings.
+fn remember_generated_passwords(vault_path: &std::path::Path) -> bool {
+    let settings_path = vault_path.join(".gitpass-settings.json");
+    std::fs::read_to_string(&settings_path)
+        .ok()
+        .and_then(|str| serde_json::from_str::<Value>(&str).ok())
+        .map(|v| {
+            v.get("settings")
+                .and_then(|s| s.get("rememberGeneratedPasswords").or_else(|| s.get("remember_generated_passwords")))
+                .and_then(Value::as_bool)
+                .unwrap_or(true)
+        })
+        .unwrap_or(true)
+}
+
 
 /// `limit` of the `generator_history` command: default 10, clamped to 1..=100.
 pub fn history_limit(req: &Value) -> usize {
@@ -680,18 +696,25 @@ impl Host {
                 let source = req.get("source").and_then(Value::as_str).unwrap_or("extension");
                 let origin_or_host = req.get("origin").or_else(|| req.get("host")).and_then(Value::as_str);
                 let host = origin_or_host.and_then(clean_host);
+                if !remember_generated_passwords(&self.cfg.vault_path) {
+                    return Ok(json!({"ok": true, "recorded": false}));
+                }
                 self.sess()?.record_generated_password(pw, source, host)?;
-                Ok(json!({"ok": true}))
+                Ok(json!({"ok": true, "recorded": true}))
             }
             "generator_history" => {
                 // Read-only, popup-facing: newest first, never logged. Refused while locked (`sess()`).
                 let limit = history_limit(req);
-                let mut entries = self.sess()?.read_generator_history()?.entries;
+                let sess = self.sess()?;
+                // Same setting as `record_generated_password`: when off, the popup gets no values.
+                if !remember_generated_passwords(&self.cfg.vault_path) {
+                    return Ok(json!({"enabled": false, "entries": []}));
+                }
+                let mut entries = sess.read_generator_history()?.entries;
                 entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
                 let out: Vec<Value> = entries.iter().take(limit).map(|e| json!({
                     "id": e.id, "value": e.value, "created_at": e.created_at, "source": e.source, "host": e.host,
                 })).collect();
-                // The standalone host has no desktop settings, so history is always on here.
                 Ok(json!({"enabled": true, "entries": out}))
             }
             "list_vaults" => {
