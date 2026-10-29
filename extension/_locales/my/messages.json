@@ -935,5 +935,8 @@
   },
   "badgeAppNotRunning": {
     "message": "gitpass အက်ပ် မလုပ်ဆောင်နေပါ"
+  },
+  "watchtowerWeakSshKey": {
+    "message": "အားနည်းသော SSH သော့"
   }
 }

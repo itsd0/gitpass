@@ -935,5 +935,8 @@
   },
   "badgeAppNotRunning": {
     "message": "แอป gitpass ไม่ได้ทำงานอยู่"
+  },
+  "watchtowerWeakSshKey": {
+    "message": "คีย์ SSH ที่ไม่ปลอดภัย"
   }
 }

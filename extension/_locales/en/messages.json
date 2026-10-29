@@ -856,5 +856,8 @@
   },
   "badgeAppNotRunning": {
     "message": "gitpass app not running"
+  },
+  "watchtowerWeakSshKey": {
+    "message": "Weak SSH key"
   }
 }
