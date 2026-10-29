@@ -70,3 +70,23 @@ describe('sidebar icon rail', () => {
     expect(within(screen.getByTestId('sidebar')).queryByText(en('nav.allItems'))).toBeNull();
   });
 });
+
+describe('sidebar icon rail with collapsible sections (#284)', () => {
+  beforeEach(() => {
+    vi.spyOn(api, 'listVaults').mockResolvedValue(VAULTS);
+    vi.spyOn(api, 'listTags').mockResolvedValue(['work']);
+    vi.spyOn(api, 'listItems').mockResolvedValue([]);
+    // Vaults/Tags sections collapsed in the expanded sidebar must not hide their icons in the rail,
+    // since the rail has no section headers to re-open them.
+    localStorage.setItem('gitpass.sidebar.collapsedSections', JSON.stringify({ vaults: true, tags: true }));
+    useApp.setState({ route: { name: 'items', filter: { kind: 'all', sort: 'updated' } }, modal: null, sidebarCollapsed: true, itemsVersion: 0 });
+  });
+  afterEach(() => localStorage.removeItem('gitpass.sidebar.collapsedSections'));
+
+  it('still shows every vault and tag icon, with no section toggles or counts', async () => {
+    renderSidebar();
+    for (const name of ['Personal', 'Work', 'work']) expect(await screen.findByRole('button', { name })).toBeTruthy();
+    expect(screen.queryAllByRole('button', { expanded: false }).filter((b) => b.textContent)).toHaveLength(0);
+    expect(screen.queryAllByTestId('sidebar-count')).toHaveLength(0);
+  });
+});
