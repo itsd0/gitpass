@@ -236,3 +236,81 @@ fn item_findings_contract_and_security() {
     assert!(!kinds1_after.contains(&"weak"), "ignored finding must be hidden: {f1_after:?}");
     assert!(kinds1_after.contains(&"reused"), "non-ignored finding must still be visible");
 }
+
+#[test]
+fn record_generated_password_respects_settings_and_returns_recorded_flag() {
+    let mut f = setup();
+    let history_file = f.host.cfg.vault_path.join("generator_history.enc");
+    let settings_file = f.host.cfg.vault_path.join(".gitpass-settings.json");
+
+    // 1. Initially no generator history on disk
+    assert!(!history_file.exists());
+
+    // 2. Default (no settings file): records password and returns recorded: true
+    ok(&mut f.host, json!({"cmd": "unlock", "password": PW}));
+    let r1 = ok(&mut f.host, json!({
+        "cmd": "record_generated_password",
+        "password": "FAKE-generated-password-1",
+        "source": "extension",
+        "origin": "https://github.com/login"
+    }));
+    assert_eq!(r1["ok"], true);
+    assert_eq!(r1["recorded"], true);
+    assert!(history_file.exists(), "generator_history.enc must exist after recording");
+    let bytes_after_r1 = std::fs::read(&history_file).unwrap();
+
+    // 3. When settings.rememberGeneratedPasswords is false (real desktop LocalFile structure):
+    // Skips recording, returns recorded: false, and generator_history.enc is unchanged.
+    std::fs::write(&settings_file, serde_json::to_string(&json!({
+        "settings": {
+            "rememberGeneratedPasswords": false
+        }
+    })).unwrap()).unwrap();
+
+    let r2 = ok(&mut f.host, json!({
+        "cmd": "record_generated_password",
+        "password": "FAKE-generated-password-2",
+        "source": "extension",
+        "origin": "https://example.com"
+    }));
+    assert_eq!(r2["ok"], true);
+    assert_eq!(r2["recorded"], false);
+    let bytes_after_r2 = std::fs::read(&history_file).unwrap();
+    assert_eq!(bytes_after_r1, bytes_after_r2, "history file must not be modified when setting is off");
+
+    // 4. When locked and setting is off: returns ok: true, recorded: false without needing unlock
+    ok(&mut f.host, json!({"cmd": "lock"}));
+    let r3 = ok(&mut f.host, json!({
+        "cmd": "record_generated_password",
+        "password": "FAKE-generated-password-3",
+        "source": "extension"
+    }));
+    assert_eq!(r3["ok"], true);
+    assert_eq!(r3["recorded"], false);
+
+    // 5. When setting is restored to true: records again and updates history file
+    std::fs::write(&settings_file, serde_json::to_string(&json!({
+        "settings": {
+            "rememberGeneratedPasswords": true
+        }
+    })).unwrap()).unwrap();
+
+    // When locked and setting is true: requires unlock
+    assert!(err(&mut f.host, json!({
+        "cmd": "record_generated_password",
+        "password": "FAKE-generated-password-4"
+    })).contains("locked"));
+
+    // Once unlocked: records and updates history
+    ok(&mut f.host, json!({"cmd": "unlock", "password": PW}));
+    let r4 = ok(&mut f.host, json!({
+        "cmd": "record_generated_password",
+        "password": "FAKE-generated-password-4",
+        "source": "extension",
+        "host": "google.com"
+    }));
+    assert_eq!(r4["ok"], true);
+    assert_eq!(r4["recorded"], true);
+    let bytes_after_r4 = std::fs::read(&history_file).unwrap();
+    assert_ne!(bytes_after_r1, bytes_after_r4, "history file must be updated when setting is re-enabled");
+}
