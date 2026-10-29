@@ -393,12 +393,54 @@
     return out;
   }
 
+  function getMonogram(title) {
+    const t = String(title || '').trim();
+    if (!t) return '?';
+    return Array.from(t)[0].toUpperCase();
+  }
+
+  function escapeXml(str) {
+    return String(str || '').replace(/[&<>"']/g, (c) => {
+      switch (c) {
+        case '&': return '&amp;';
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '"': return '&quot;';
+        case "'": return '&apos;';
+        default: return c;
+      }
+    });
+  }
+
+  function monogramIcon(title, size) {
+    const letter = getMonogram(title);
+    const s = size || 24;
+    const fs = Math.max(10, Math.round(s * 0.45));
+    const r = (s / 2) - 1;
+    const c = s / 2;
+    return `<svg viewBox="0 0 ${s} ${s}" width="${s}" height="${s}" aria-hidden="true" style="flex-shrink:0" class="monogram-svg">` +
+      `<circle cx="${c}" cy="${c}" r="${r}" fill="#F28C28" fill-opacity="0.15" stroke="#F28C28" stroke-opacity="0.3" stroke-width="1"/>` +
+      `<text x="${c}" y="${c}" dy="0.36em" text-anchor="middle" fill="#F28C28" font-size="${fs}" font-family="Inter,ui-sans-serif,system-ui,-apple-system,sans-serif" font-weight="600">${escapeXml(letter)}</text>` +
+      `</svg>`;
+  }
+
+  function createIconCache() {
+    const cache = new Map();
+    return {
+      get: (host) => cache.get(host),
+      set: (host, dataUrl) => cache.set(host, dataUrl),
+      has: (host) => cache.has(host),
+      clear: () => cache.clear(),
+      size: () => cache.size,
+    };
+  }
+
   /** Watchtower findings worth caching: a failed lookup (null/undefined) stays uncached so it is retried. */
   function cacheableFindings(res) {
     return Boolean(res && Array.isArray(res.kinds));
   }
 
-  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed };
+  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

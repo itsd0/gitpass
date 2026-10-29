@@ -13,6 +13,37 @@
     passkey: ['<circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 10.5-4"/>', '<circle cx="17.5" cy="13.5" r="2.5"/><path d="M17.5 16v5M17.5 18.5h2"/>'],
     wifi: [`<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0"/><circle cx="12" cy="19.2" r="1.1" fill="${S}" stroke="none"/>`, '<path d="M8.5 16a5 5 0 0 1 7 0"/>'],
   };
+  function escapeXml(str) {
+    return String(str || '').replace(/[&<>"']/g, (c) => {
+      switch (c) {
+        case '&': return '&amp;';
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '"': return '&quot;';
+        case "'": return '&apos;';
+        default: return c;
+      }
+    });
+  }
+
+  function getMonogram(title) {
+    const t = String(title || '').trim();
+    if (!t) return '?';
+    return Array.from(t)[0].toUpperCase();
+  }
+
+  function monogramIcon(title, size) {
+    const letter = getMonogram(title);
+    const s = size || 24;
+    const fs = Math.max(10, Math.round(s * 0.45));
+    const r = (s / 2) - 1;
+    const c = s / 2;
+    return `<svg viewBox="0 0 ${s} ${s}" width="${s}" height="${s}" aria-hidden="true" style="flex-shrink:0" class="monogram-svg">` +
+      `<circle cx="${c}" cy="${c}" r="${r}" fill="${A}" fill-opacity="0.15" stroke="${A}" stroke-opacity="0.3" stroke-width="1"/>` +
+      `<text x="${c}" y="${c}" dy="0.36em" text-anchor="middle" fill="${A}" font-size="${fs}" font-family="Inter,ui-sans-serif,system-ui,-apple-system,sans-serif" font-weight="600">${escapeXml(letter)}</text>` +
+      `</svg>`;
+  }
+
   function categoryIcon(cat, size) {
     const g = G[cat] || G.secure_note, sw = size <= 20 ? 1.9 : size <= 28 ? 1.7 : 1.5;
     return `<svg viewBox="0 0 64 64" width="${size}" height="${size}" aria-hidden="true" style="flex-shrink:0">` +
@@ -20,6 +51,6 @@
       `<g transform="translate(14 14) scale(1.5)" fill="none" stroke="${S}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${g[0]}</g>` +
       `<g transform="translate(14 14) scale(1.5)" fill="none" stroke="${A}" stroke-width="${sw}" stroke-linecap="round">${g[1]}</g></svg>`;
   }
-  root.GitpassIcons = { categoryIcon, CATEGORIES: Object.keys(G) };
+  root.GitpassIcons = { categoryIcon, getMonogram, monogramIcon, CATEGORIES: Object.keys(G) };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.GitpassIcons;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
