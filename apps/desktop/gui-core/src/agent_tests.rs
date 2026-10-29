@@ -438,3 +438,53 @@ fn item_findings_agent_contract_and_security() {
     e.app.lock();
     assert_eq!(c.err("item_findings", json!({"item_id": id1})), "locked");
 }
+
+#[test]
+fn record_generated_password_agent_contract_and_settings() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+
+    // 1. By default, remember_generated_passwords is true: records and returns recorded: true
+    let r1 = c.ok("record_generated_password", json!({
+        "password": "FAKE-generated-agent-1",
+        "source": "extension",
+        "origin": "https://github.com/login"
+    }));
+    assert_eq!(r1["ok"], true);
+    assert_eq!(r1["recorded"], true);
+
+    let hist1 = e.app.get_generator_history().unwrap();
+    assert_eq!(hist1.len(), 1);
+    assert_eq!(hist1[0].value, "FAKE-generated-agent-1");
+
+    // 2. Turn off remember_generated_passwords setting
+    let mut s = e.app.get_settings();
+    s.remember_generated_passwords = false;
+    e.app.set_settings(s).unwrap();
+
+    let r2 = c.ok("record_generated_password", json!({
+        "password": "FAKE-generated-agent-2",
+        "source": "extension",
+        "origin": "https://example.com"
+    }));
+    assert_eq!(r2["ok"], true);
+    assert_eq!(r2["recorded"], false);
+
+    let hist2 = e.app.get_generator_history().unwrap();
+    assert_eq!(hist2.len(), 1, "history must not have grown when setting is off");
+
+    // 3. Turn setting back on: records again
+    let mut s = e.app.get_settings();
+    s.remember_generated_passwords = true;
+    e.app.set_settings(s).unwrap();
+
+    let r3 = c.ok("record_generated_password", json!({
+        "password": "FAKE-generated-agent-3",
+        "source": "extension"
+    }));
+    assert_eq!(r3["ok"], true);
+    assert_eq!(r3["recorded"], true);
+
+    let hist3 = e.app.get_generator_history().unwrap();
+    assert_eq!(hist3.len(), 2);
+}
