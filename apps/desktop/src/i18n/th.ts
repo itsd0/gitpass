@@ -619,4 +619,18 @@ export const th: Partial<Record<Key, string>> = {
   "onboarding.extGet": "ติดตั้งเลย",
   "settings.showSetupGuide": "แสดงคู่มือการตั้งค่า",
   "settings.showSetupGuideHelp": "แสดงรายการตรวจสอบการตั้งค่าบนหน้าแรก",
+  // item keyboard shortcuts + palette actions
+  "itemKeys.copyPassword": "คัดลอกรหัสผ่าน",
+  "itemKeys.copyUsername": "คัดลอกชื่อผู้ใช้",
+  "itemKeys.copyTotp": "คัดลอกรหัสครั้งเดียว",
+  "itemKeys.edit": "แก้ไขรายการ",
+  "itemKeys.openWebsite": "เปิดเว็บไซต์",
+  "itemKeys.passwordCopied": "คัดลอกรหัสผ่านแล้ว",
+  "itemKeys.secretCopied": "คัดลอกข้อมูลลับแล้ว",
+  "itemKeys.usernameCopied": "คัดลอกชื่อผู้ใช้แล้ว",
+  "itemKeys.totpCopied": "คัดลอกรหัสครั้งเดียวแล้ว",
+  "itemKeys.noSecret": "รายการนี้ไม่มีรหัสผ่าน",
+  "itemKeys.noUsername": "ไม่มีชื่อผู้ใช้",
+  "itemKeys.noTotp": "รายการนี้ไม่มีรหัสครั้งเดียว",
+  "itemKeys.noWebsite": "รายการนี้ไม่มีเว็บไซต์",
 };

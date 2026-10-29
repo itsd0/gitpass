@@ -616,5 +616,19 @@ export const en = {
   "onboarding.extGet": "Get it now",
   "settings.showSetupGuide": "Show setup guide",
   "settings.showSetupGuideHelp": "Display the setup checklist on the Home page",
+  // item keyboard shortcuts + palette actions
+  "itemKeys.copyPassword": "Copy password",
+  "itemKeys.copyUsername": "Copy username",
+  "itemKeys.copyTotp": "Copy one-time code",
+  "itemKeys.edit": "Edit item",
+  "itemKeys.openWebsite": "Open website",
+  "itemKeys.passwordCopied": "Password copied",
+  "itemKeys.secretCopied": "Secret copied",
+  "itemKeys.usernameCopied": "Username copied",
+  "itemKeys.totpCopied": "One-time code copied",
+  "itemKeys.noSecret": "No password on this item",
+  "itemKeys.noUsername": "No username",
+  "itemKeys.noTotp": "No one-time code on this item",
+  "itemKeys.noWebsite": "No website on this item",
 } as const;
 export type Key = keyof typeof en;
