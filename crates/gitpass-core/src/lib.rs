@@ -9,6 +9,7 @@ pub mod audit;
 pub mod crypto;
 pub mod device;
 pub mod fsutil;
+pub mod gen_history;
 pub mod generate;
 pub mod keys;
 pub mod import;
@@ -25,6 +26,7 @@ pub mod totp;
 
 pub use merge::{merge_records as merge_items, ItemRecord, MergeReport};
 pub use search::rank as fuzzy_find;
+pub use gen_history::{GeneratorHistory, GeneratorHistoryEntry};
 pub use item::{Category, FieldKind};
 pub use store::{Item, Session, UnlockOpts, FORMAT_VERSION, MIN_READ_FORMAT};
 pub use totp::code_now as totp_now;

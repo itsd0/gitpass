@@ -89,6 +89,9 @@ test('opens in random mode, shows strength and copies the generated value', asyn
   button(w, 'Copy').click();
   await settle();
   assert.strictEqual(w.__gitpassMockClipboard, PASSWORD);
+  const recMsg = sent.find((m) => m.type === 'popup:record_generated');
+  assert.ok(recMsg, 'must record generated password on copy');
+  assert.strictEqual(recMsg.password, PASSWORD);
 });
 
 test('mode tabs switch ranges and ask the host for words or PIN digits', async () => {
