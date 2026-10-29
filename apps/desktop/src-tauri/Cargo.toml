@@ -17,7 +17,6 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 gitpass-gui-core = { path = "../gui-core" }
 gitpass-core = { path = "../../../crates/gitpass-core" }
 gitpass-pasteboard = { path = "../../../crates/gitpass-pasteboard" }
-serde = { version = "1", features = ["derive"] }
 arboard = { version = "3", default-features = false }
 zeroize = "1"
 anyhow = "1"
