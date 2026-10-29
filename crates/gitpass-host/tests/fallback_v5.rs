@@ -179,8 +179,10 @@ fn fill_totp_save_update_vaults_generate() {
     assert!(g.chars().any(|c| c.is_ascii_digit()) && g.chars().any(|c| !c.is_ascii_alphanumeric()));
 
     // Passphrase and PIN modes share gitpass-core's generator with the CLI and desktop app.
+    // The default `-` join is only smoke-checked: it cannot be word-counted by splitting,
+    // because four EFF words themselves contain a hyphen (exact counts use the `.` join below).
     let g = ok(&mut f.host, json!({"cmd":"generate","len":5,"words":true}))["password"].as_str().unwrap().to_string();
-    assert_eq!(g.split('-').count(), 5, "{g}");
+    assert!(g.contains('-'), "{g}");
     let g = ok(&mut f.host, json!({"cmd":"generate","len":6,"pin":true,"digits":false,"symbols":false}))["password"].as_str().unwrap().to_string();
     assert_eq!(g.len(), 6, "{g}");
     assert!(g.chars().all(|c| c.is_ascii_digit()), "{g}");
@@ -189,14 +191,16 @@ fn fill_totp_save_update_vaults_generate() {
     assert_eq!(err(&mut f.host, json!({"cmd":"generate","len":7})).0, "bad_request");
     assert_eq!(err(&mut f.host, json!({"cmd":"generate","len":129})).0, "bad_request");
 
-    // Parity with the desktop app and CLI: a passphrase with symbols off joins words with '.', not '-'.
+    // Parity with the desktop app and CLI: a passphrase with symbols off joins words with '.'.
+    // (A `-` inside a word is possible: four EFF words themselves contain a hyphen,
+    // so the `.` join is checked by splitting on `.`, not by absence of `-`.)
     let g = ok(&mut f.host, json!({"cmd":"generate","len":4,"words":true,"symbols":false,"digits":false}))["password"].as_str().unwrap().to_string();
     assert_eq!(g.split('.').count(), 4, "{g}");
-    assert!(!g.contains('-'), "{g}");
     // Defaults per mode when `len` is absent.
     assert_eq!(ok(&mut f.host, json!({"cmd":"generate"}))["password"].as_str().unwrap().len(), 20);
     assert_eq!(ok(&mut f.host, json!({"cmd":"generate","pin":true}))["password"].as_str().unwrap().len(), 6);
-    assert_eq!(ok(&mut f.host, json!({"cmd":"generate","words":true}))["password"].as_str().unwrap().split('-').count(), 5);
+    // Default words join with `-`; not word-counted by splitting, for the hyphen-word reason above.
+    assert!(ok(&mut f.host, json!({"cmd":"generate","words":true}))["password"].as_str().unwrap().contains('-'));
 
     let st = ok(&mut f.host, json!({"cmd":"status"}));
     assert_eq!(st["app_running"], false);

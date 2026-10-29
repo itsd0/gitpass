@@ -17,15 +17,26 @@ pub const MAX_WORDS: usize = 20;
 pub const MIN_PIN: usize = 4;
 pub const MAX_PIN: usize = 16;
 
-/// 128 short, easy-to-spell words: ~7 bits of entropy per word.
-pub const WORDLIST: &[&str] = &["acorn","amber","anchor","apple","arrow","aspen","atlas","badge","bamboo","banjo","beacon","birch","bison","blossom","breeze","bridge",
-    "cactus","canyon","carbon","cedar","cherry","cinder","citrus","clover","cobalt","comet","coral","cosmos","crane","crystal","dahlia","delta",
-    "desert","dolphin","dragon","drift","eagle","ember","falcon","fern","fjord","forest","fossil","galaxy","garnet","geyser","glacier","granite",
-    "harbor","hazel","heron","horizon","indigo","island","ivory","jasmine","jungle","kayak","kernel","lagoon","lantern","lava","lemon","lilac",
-    "lotus","lunar","magnet","mango","maple","marble","meadow","meteor","mint","mosaic","nectar","nebula","oasis","ocean","olive","onyx",
-    "orbit","orchid","otter","panda","pebble","pepper","phoenix","pine","planet","plum","polar","prairie","quartz","quill","radar","raven",
-    "reef","ripple","river","rocket","saffron","salmon","sapphire","savanna","sequoia","shadow","sierra","silver","sparrow","spruce","summit","sunset",
-    "thistle","thunder","tiger","topaz","tulip","tundra","turtle","velvet","violet","walnut","willow","winter","zebra","zenith","yarrow","yonder"];
+/// The EFF large wordlist (7,776 words, CC BY 3.0, https://www.eff.org/dice),
+/// words only (dice numbers stripped), one word per line. A few words contain a
+/// hyphen (`drop-down`, `felt-tip`, `t-shirt`, `yo-yo`), so a `-`-joined passphrase
+/// cannot be word-counted by splitting on `-`.
+const EFF_WORDLIST_TXT: &str = include_str!("eff_large_wordlist.txt");
+
+/// Passphrase words: the EFF large wordlist, ~12.9 bits of entropy per word.
+/// Words are drawn with `SliceRandom::choose` from the existing CSPRNG (`OsRng`),
+/// which samples uniformly (no modulo bias). Parsed once on first use from the
+/// checked-in text file above, so the file stays the single source of truth.
+pub static WORDLIST: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| EFF_WORDLIST_TXT.lines().collect());
+
+/// Bits of entropy per passphrase word: log2(7776).
+pub const WORD_ENTROPY_BITS: f64 = 12.924813;
+
+/// Entropy of a passphrase of `words` words drawn uniformly from [`WORDLIST`].
+/// Callers that display a passphrase strength should use this, not a
+/// character-pool estimate, which overstates word entropy.
+pub fn passphrase_entropy_bits(words: usize) -> f64 { words as f64 * WORD_ENTROPY_BITS }
 
 /// Character-mode digits skip 0 and 1 (easy to confuse with O and l).
 const DIGITS: &[u8] = b"23456789";
@@ -266,8 +277,10 @@ mod tests {
 
     #[test]
     fn passphrase_words_separator_capitalize_and_digit() {
-        let plain = generate(&opts(5, true, false, true, false));
-        let parts: Vec<&str> = plain.split('-').collect();
+        // `.` separator: exact word counts. `-` joins cannot be counted by splitting,
+        // because four EFF words themselves contain a hyphen (e.g. `drop-down`).
+        let plain = generate(&Options { separator: '.', ..opts(5, true, false, true, false) });
+        let parts: Vec<&str> = plain.split('.').collect();
         assert_eq!(parts.len(), 5, "{plain}");
         assert!(parts.iter().all(|w| WORDLIST.contains(w)), "{plain}");
 
@@ -277,11 +290,12 @@ mod tests {
         assert_eq!(parts.len(), 4, "{titled}");
         assert!(parts.iter().all(|w| w.chars().next().unwrap().is_ascii_uppercase()), "{titled}");
 
-        let digits = Options { digits: true, ..opts(6, true, true, true, false) };
+        let digits = Options { digits: true, separator: '.', ..opts(6, true, true, true, false) };
         let with_digit = generate(&digits);
-        let parts: Vec<&str> = with_digit.split('-').collect();
+        let parts: Vec<&str> = with_digit.split('.').collect();
         assert_eq!(parts.len(), 6, "{with_digit}");
         assert_eq!(parts.iter().filter(|w| w.ends_with(|c: char| c.is_ascii_digit())).count(), 1, "{with_digit}");
+        assert!(parts.iter().all(|w| WORDLIST.contains(&w.trim_end_matches(|c: char| c.is_ascii_digit()))), "{with_digit}");
     }
 
     #[test]
@@ -329,10 +343,29 @@ mod tests {
     }
 
     #[test]
-    fn wordlist_has_128_unique_ascii_words() {
-        assert_eq!(WORDLIST.len(), 128);
+    fn wordlist_is_the_eff_large_list() {
+        assert_eq!(WORDLIST.len(), 7776);
         let unique: std::collections::BTreeSet<_> = WORDLIST.iter().collect();
         assert_eq!(unique.len(), WORDLIST.len());
-        assert!(WORDLIST.iter().all(|w| w.bytes().all(|b| b.is_ascii_lowercase())));
+        assert!(WORDLIST.iter().all(|w| !w.is_empty() && w.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')));
+        // The checked-in text file is the single source: the list is exactly its lines.
+        assert!(WORDLIST.iter().copied().eq(EFF_WORDLIST_TXT.lines()));
+        assert!((WORD_ENTROPY_BITS - (WORDLIST.len() as f64).log2()).abs() < 1e-6);
+        assert_eq!(passphrase_entropy_bits(5), 5.0 * WORD_ENTROPY_BITS);
+    }
+
+    #[test]
+    fn passphrase_sample_uses_many_distinct_words() {
+        // 100 passphrases x 20 words = 2000 uniform draws from 7776 words:
+        // expect ~1770 distinct, so 1000 is a very conservative floor.
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..100 {
+            let p = generate(&Options { separator: '.', ..opts(20, true, false, true, false) });
+            for w in p.split('.') {
+                assert!(WORDLIST.contains(&w), "{p}");
+                seen.insert(w.to_string());
+            }
+        }
+        assert!(seen.len() > 1000, "only {} distinct words in 2000 draws", seen.len());
     }
 }

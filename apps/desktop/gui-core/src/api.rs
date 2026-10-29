@@ -379,10 +379,27 @@ pub struct App {
 fn ts(secs_str: &str) -> String { secs_str.trim().parse::<i64>().map(iso8601).unwrap_or_else(|_| secs_str.to_string()) }
 fn nonempty(o: Option<String>) -> Option<String> { o.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) }
 
+/// Bits for a value that is exactly passphrase words joined by a word separator
+/// (optionally capitalized, optionally with a trailing digit on a word), else
+/// `None`. Such values get word entropy (`log2(7776)` per word), not the
+/// character-pool estimate, which would overstate a passphrase's strength.
+fn passphrase_bits(pw: &str) -> Option<f64> {
+    let parts: Vec<&str> = pw.split(|c| ['-', '.', '_', ' '].contains(&c)).collect();
+    if parts.len() < gitpass_core::generate::MIN_WORDS { return None; }
+    for part in &parts {
+        let stripped = part.trim_end_matches(|c: char| c.is_ascii_digit());
+        if stripped.is_empty() || !gitpass_core::generate::WORDLIST.contains(&stripped.to_ascii_lowercase().as_str()) {
+            return None;
+        }
+    }
+    Some(gitpass_core::generate::passphrase_entropy_bits(parts.len()))
+}
+
 /// 0-100 from the core entropy estimate (common passwords / few distinct chars capped at 10).
+/// A value made of passphrase words scores on word entropy, not char-pool entropy.
 pub fn strength(pw: &str) -> u8 {
     if pw.is_empty() { return 0; }
-    let bits = audit::entropy_bits(pw);
+    let bits = passphrase_bits(pw).unwrap_or_else(|| audit::entropy_bits(pw));
     let mut s = (bits * 100.0 / 128.0).round().clamp(0.0, 100.0) as u8;
     if let Some(r) = audit::weakness(pw, &AuditOpts { min_length: 1, min_entropy_bits: 0.0, ..Default::default() }) { let _ = r; s = s.min(10); }
     s
@@ -554,7 +571,7 @@ fn mime_for(name: &str) -> &'static str {
 /// Separators the desktop generator offers for word passphrases; anything else is a bad request.
 pub const WORD_SEPARATORS: [char; 4] = ['-', '.', '_', ' '];
 
-/// Generate a password (`Words`: `length` words from a 128-word list joined by `separator`, ~7 bits/word;
+/// Generate a password (`Words`: `length` words from the EFF large wordlist (7,776 words) joined by `separator`, ~12.9 bits/word;
 /// `Pin`: `length` digits). Defaults, limits and the separator rule come from gitpass-core (an omitted
 /// separator is `-`, or `.` with symbols off); an out-of-range length or an unoffered separator is an error.
 pub fn generate(r: &gitpass_core::generate::Request) -> Result<String> {

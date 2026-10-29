@@ -56,19 +56,24 @@ fn character_mode_toggles() {
 
 #[test]
 fn passphrase_mode_uses_the_shared_wordlist() {
-    let pw = out(&gp(&["gen", "--words", "5"]));
-    let words: Vec<&str> = pw.split('-').collect();
+    // Exact word counts use `.`: a `-` join cannot be counted by splitting, because
+    // four EFF words themselves contain a hyphen (e.g. `drop-down`).
+    let pw = out(&gp(&["gen", "--words", "5", "--separator", "."]));
+    let words: Vec<&str> = pw.split('.').collect();
     assert_eq!(words.len(), 5, "{pw}");
     let mut with_digit = 0;
     for w in &words {
-        let alpha: String = w.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
-        assert!(WORDLIST.contains(&alpha.as_str()), "{w}");
+        let alpha = w.trim_end_matches(|c: char| c.is_ascii_digit());
+        assert!(WORDLIST.contains(&alpha), "{w}");
         if alpha.len() < w.len() {
             assert!(w[alpha.len()..].chars().all(|c| c.is_ascii_digit()), "{w}");
             with_digit += 1;
         }
     }
     assert_eq!(with_digit, 1, "one word carries the digit by default: {pw}");
+    // The default `-` join still generates a hyphenated passphrase.
+    let dashed = out(&gp(&["gen", "--words", "5"]));
+    assert!(!dashed.is_empty() && dashed.contains('-'), "{dashed}");
 
     let titled = out(&gp(&["gen", "--words", "4", "--no-digits", "--separator", ".", "--capitalize"]));
     let words: Vec<&str> = titled.split('.').collect();
