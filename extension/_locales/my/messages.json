@@ -967,6 +967,12 @@
   "watchtowerWeakSshKey": {
     "message": "အားနည်းသော SSH သော့"
   },
+  "pkChooseAccount": {
+    "message": "အကောင့်တစ်ခု ရွေးပါ"
+  },
+  "pkPasskeysCount": {
+    "message": "ဤဆိုက်အတွက် passkey {n} ခု"
+  },
   "catBankAccount": {
     "message": "ဘဏ်အကောင့်များ"
   },
