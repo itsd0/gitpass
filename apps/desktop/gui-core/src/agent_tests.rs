@@ -130,6 +130,8 @@ fn locked_responses() {
     }
     assert_eq!(c.err("nope", json!({})), "bad_request");
     assert!(c.ok("generate", json!({"len": 24, "digits": true, "symbols": false}))["password"].as_str().unwrap().len() == 24);
+    assert_eq!(c.err("generate", json!({"len": 4})), "bad_request");
+    assert_eq!(c.ok("generate", json!({"pin": true}))["password"].as_str().unwrap().len(), 6);
 }
 
 #[test]

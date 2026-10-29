@@ -68,7 +68,11 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn rename_tag(s: State<App>, old: String, new: String) -> R<a::BulkResult> { s.rename_tag(&old, &new).map_err(e) }
 #[tauri::command] pub fn delete_tag(s: State<App>, name: String) -> R<a::BulkResult> { s.delete_tag(&name).map_err(e) }
 #[allow(clippy::too_many_arguments)] // Tauri command args map 1:1 to the JS invoke payload.
-#[tauri::command] pub fn generate_password(_s: State<App>, length: usize, symbols: bool, digits: bool, words: Option<bool>, pin: Option<bool>, separator: Option<char>, capitalize: Option<bool>) -> R<String> { a::generate(length, symbols, digits, words.unwrap_or(false), pin.unwrap_or(false), separator, capitalize) }
+#[tauri::command] pub fn generate_password(_s: State<App>, length: usize, symbols: bool, digits: bool, words: Option<bool>, pin: Option<bool>, separator: Option<char>, capitalize: Option<bool>) -> R<String> {
+    use gitpass_core::generate::{Mode, Request};
+    let mode = if pin.unwrap_or(false) { Mode::Pin } else if words.unwrap_or(false) { Mode::Words } else { Mode::Random };
+    a::generate(&Request { mode, length: Some(length), symbols, digits, separator, capitalize: capitalize.unwrap_or(false) }).map_err(e)
+}
 #[tauri::command] pub fn copy_password(s: State<App>, password: String) -> R<()> { s.copy_password(&password).map_err(e) }
 #[tauri::command] pub fn password_strength(s: State<App>, password: String) -> u8 { s.password_strength(&Zeroizing::new(password)) }
 #[tauri::command(async)] pub fn watchtower(s: State<'_, App>, hibp: bool) -> R<a::WatchtowerReport> { s.watchtower(hibp).map_err(e) }

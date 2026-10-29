@@ -457,12 +457,13 @@ impl Agent {
                 Ok(json!({"favorite": fav}))
             }
             "generate" => {
-                let len = q.get("len").and_then(|v| v.as_u64()).unwrap_or(20) as usize;
+                use gitpass_core::generate::{Mode, Request};
                 let b = |k: &str| q.get(k).and_then(|v| v.as_bool()).unwrap_or(true);
                 let pin = q.get("pin").and_then(|v| v.as_bool()).unwrap_or(false);
                 let words = q.get("words").and_then(|v| v.as_bool()).unwrap_or(false);
-                let pw = api::generate(len, b("symbols"), b("digits"), words, pin, None, None).map_err(|m| err("bad_request", m))?;
-                Ok(json!({"password": pw}))
+                let mode = if pin { Mode::Pin } else if words { Mode::Words } else { Mode::Random };
+                let r = Request { mode, length: q.get("len").and_then(|v| v.as_u64()).map(|v| v as usize), symbols: b("symbols"), digits: b("digits"), ..Request::new(mode) };
+                Ok(json!({"password": api::generate(&r).map_err(|e| err("bad_request", e.to_string()))?}))
             }
             "passkey_query" => {
                 self.app.state.with(|x| {

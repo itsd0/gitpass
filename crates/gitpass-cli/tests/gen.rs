@@ -35,9 +35,8 @@ fn default_and_lengths_match_todays_output() {
     assert!(pw.chars().any(|c| SYMBOLS.contains(c)), "{pw}");
 
     assert_eq!(out(&gp(&["gen", "32"])).chars().count(), 32);
-    assert_eq!(out(&gp(&["gen", "6"])).chars().count(), 6);
-    // The CLI has always used 4 as the floor (the desktop floors character passwords at 8).
-    assert_eq!(out(&gp(&["gen", "0"])).chars().count(), 4);
+    assert_eq!(out(&gp(&["gen", "8"])).chars().count(), 8);
+    assert_eq!(out(&gp(&["gen", "128"])).chars().count(), 128);
 }
 
 #[test]
@@ -85,8 +84,23 @@ fn pin_mode_is_digits_only() {
     let pin = out(&gp(&["gen", "--pin", "6"]));
     assert_eq!(pin.len(), 6, "{pin}");
     assert!(pin.chars().all(|c| c.is_ascii_digit()), "{pin}");
-    // Same clamp as the desktop PIN generator.
-    assert_eq!(out(&gp(&["gen", "--pin", "2"])).len(), 4);
+}
+
+#[test]
+fn out_of_range_lengths_are_errors_like_the_desktop_and_host() {
+    for (args, needle) in [
+        (vec!["gen", "7"], "8..=128 characters"),
+        (vec!["gen", "129"], "8..=128 characters"),
+        (vec!["gen", "--words", "2"], "3..=20 words"),
+        (vec!["gen", "--words", "21"], "3..=20 words"),
+        (vec!["gen", "--pin", "3"], "4..=16 digits"),
+        (vec!["gen", "--pin", "17"], "4..=16 digits"),
+    ] {
+        let o = gp(&args);
+        assert!(!o.status.success(), "{args:?} should fail");
+        assert!(err(&o).contains(needle), "{args:?}: {}", err(&o));
+        assert!(out(&o).is_empty(), "{args:?} printed a secret");
+    }
 }
 
 #[test]

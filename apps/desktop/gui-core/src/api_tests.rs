@@ -6,6 +6,7 @@ use gitpass_core::import::{self, ImportFormat};
 use gitpass_core::item::{Category, FieldKind};
 use gitpass_core::store::{self, UnlockOpts};
 use gitpass_pasteboard::PasteboardMarkers;
+use gitpass_core::generate::Mode;
 use std::sync::Arc;
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 
@@ -324,39 +325,50 @@ fn attachments_via_paths() {
     assert!(e.app.remove_attachment(&e.vault, &n.id, &a.id).is_err());
 }
 
+/// Build a generator request the way the desktop commands do (length given, named fields).
+fn gen_pw(mode: gitpass_core::generate::Mode, length: usize, symbols: bool, digits: bool, separator: Option<char>, capitalize: Option<bool>) -> anyhow::Result<String> {
+    generate(&gitpass_core::generate::Request { mode, length: Some(length), symbols, digits, separator, capitalize: capitalize.unwrap_or(false) })
+}
+
 #[test]
 fn generate_words_separator_capitalize_and_rejection() {
     // Explicit separator joins the words; capitalize upper-cases each word's first letter.
-    let p = generate(5, true, false, true, false, Some('_'), Some(true)).unwrap();
+    let p = gen_pw(Mode::Words, 5, true, false, Some('_'), Some(true)).unwrap();
     let words: Vec<&str> = p.split('_').collect();
     assert_eq!(words.len(), 5);
     assert!(words.iter().all(|w| w.chars().next().unwrap().is_ascii_uppercase()
         && w[1..].chars().all(|c| c.is_ascii_lowercase())), "{p}");
-    let spaced = generate(4, true, false, true, false, Some(' '), None).unwrap();
+    let spaced = gen_pw(Mode::Words, 4, true, false, Some(' '), None).unwrap();
     assert_eq!(spaced.split(' ').count(), 4);
     // Omitted values keep the historical defaults: '-' with symbols, '.' without, no capitalization.
-    assert_eq!(generate(3, true, false, true, false, None, None).unwrap().split('-').count(), 3);
-    let dotted = generate(3, false, false, true, false, None, None).unwrap();
+    assert_eq!(gen_pw(Mode::Words, 3, true, false, None, None).unwrap().split('-').count(), 3);
+    let dotted = gen_pw(Mode::Words, 3, false, false, None, None).unwrap();
     assert_eq!(dotted.split('.').count(), 3);
     assert!(dotted.chars().all(|c| c.is_ascii_lowercase() || c == '.'));
     // Anything outside the offered separators is a bad request.
-    assert!(generate(3, true, false, true, false, Some('!'), None).is_err());
-    assert!(generate(3, true, false, true, false, Some('/'), None).is_err());
+    assert!(gen_pw(Mode::Words, 3, true, false, Some('!'), None).is_err());
+    assert!(gen_pw(Mode::Words, 3, true, false, Some('/'), None).is_err());
     // Separator/capitalize do not change the random-mode shape (still 20 characters).
-    assert_eq!(generate(20, true, true, false, false, Some('_'), Some(true)).unwrap().len(), 20);
+    assert_eq!(gen_pw(Mode::Random, 20, true, true, Some('_'), Some(true)).unwrap().len(), 20);
 }
 
 #[test]
 fn tools_generate_strength_watchtower_hibp() {
     let e = env();
-    let p = generate(24, true, true, false, false, None, None).unwrap();
+    let p = gen_pw(Mode::Random, 24, true, true, None, None).unwrap();
     assert_eq!(p.len(), 24);
     assert!(p.chars().any(|c| c.is_ascii_digit()) && p.chars().any(|c| "!@#$%^&*-_=+?".contains(c)));
-    assert!(generate(20, false, false, false, false, None, None).unwrap().chars().all(|c| c.is_ascii_alphabetic()));
-    assert_eq!(generate(5, true, false, true, false, None, None).unwrap().split('-').count(), 5);
-    let pin = generate(6, false, false, false, true, None, None).unwrap();
+    assert!(gen_pw(Mode::Random, 20, false, false, None, None).unwrap().chars().all(|c| c.is_ascii_alphabetic()));
+    assert_eq!(gen_pw(Mode::Words, 5, true, false, None, None).unwrap().split('-').count(), 5);
+    let pin = gen_pw(Mode::Pin, 6, false, false, None, None).unwrap();
     assert_eq!(pin.len(), 6);
     assert!(pin.chars().all(|c| c.is_ascii_digit()));
+    // Same shapes and limits as the browser host and the CLI.
+    assert_eq!(gen_pw(Mode::Words, 4, false, false, None, None).unwrap().split('.').count(), 4);
+    assert!(gen_pw(Mode::Random, 7, true, true, None, None).is_err());
+    assert!(gen_pw(Mode::Random, 129, true, true, None, None).is_err());
+    assert!(gen_pw(Mode::Pin, 2, true, true, None, None).is_err());
+    assert!(gen_pw(Mode::Words, 21, true, true, None, None).is_err());
     assert!(e.app.password_strength("password") <= 10);
     assert!(e.app.password_strength(&p) >= 90);
     assert_eq!(e.app.password_strength(""), 0);

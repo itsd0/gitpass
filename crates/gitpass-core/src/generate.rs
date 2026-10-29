@@ -7,8 +7,8 @@ use rand::rngs::OsRng;
 use rand::seq::SliceRandom;
 use rand::Rng;
 
-/// Character passwords are clamped to 4..=128; 4 is the historical `gitpass gen` floor.
-pub const MIN_LENGTH: usize = 4;
+/// Character passwords are 8..=128 characters (the floor the desktop app and the browser host always used).
+pub const MIN_LENGTH: usize = 8;
 pub const MAX_LENGTH: usize = 128;
 /// Passphrases are 3..=20 words.
 pub const MIN_WORDS: usize = 3;
@@ -45,6 +45,86 @@ pub struct Options {
     pub separator: char,
     /// Upper-cases the first letter of every passphrase word.
     pub capitalize: bool,
+}
+
+/// What kind of secret to generate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode {
+    /// Random characters; `symbols`/`digits` pick the classes.
+    Random,
+    /// A passphrase of words; `digits` adds one digit to one word.
+    Words,
+    /// Digits only.
+    Pin,
+}
+
+impl Mode {
+    /// Inclusive length range for the mode (characters, words or digits).
+    pub fn range(self) -> (usize, usize) {
+        match self {
+            Mode::Random => (MIN_LENGTH, MAX_LENGTH),
+            Mode::Words => (MIN_WORDS, MAX_WORDS),
+            Mode::Pin => (MIN_PIN, MAX_PIN),
+        }
+    }
+    /// Length used when the caller gives none.
+    pub fn default_length(self) -> usize {
+        match self {
+            Mode::Random => 20,
+            Mode::Words => 5,
+            Mode::Pin => 6,
+        }
+    }
+    fn unit(self) -> &'static str {
+        match self {
+            Mode::Random => "characters",
+            Mode::Words => "words",
+            Mode::Pin => "digits",
+        }
+    }
+}
+
+/// A caller's generator request, in named fields so no call site passes `symbols`/`digits` positionally.
+/// Turn it into [`Options`] with [`Options::for_request`], which owns the defaults and limits.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Request {
+    pub mode: Mode,
+    /// `None` uses [`Mode::default_length`].
+    pub length: Option<usize>,
+    pub symbols: bool,
+    pub digits: bool,
+    /// `None` joins words with `-`, or `.` when `symbols` is off.
+    pub separator: Option<char>,
+    pub capitalize: bool,
+}
+
+impl Request {
+    /// Symbols and digits on, default length and separator, no capitalization.
+    pub fn new(mode: Mode) -> Self {
+        Self { mode, length: None, symbols: true, digits: true, separator: None, capitalize: false }
+    }
+}
+
+impl Options {
+    /// The one place that maps a request onto generator options: the length default per mode, the
+    /// separator rule and the length limits. A length outside [`Mode::range`] is an error rather than
+    /// being clamped, so the CLI, the desktop app and the browser host answer the same way.
+    pub fn for_request(r: &Request) -> Result<Options, String> {
+        let (min, max) = r.mode.range();
+        let length = r.length.unwrap_or_else(|| r.mode.default_length());
+        if !(min..=max).contains(&length) {
+            return Err(format!("length must be {min}..={max} {}", r.mode.unit()));
+        }
+        Ok(Options {
+            length,
+            symbols: r.symbols,
+            digits: r.digits,
+            words: r.mode == Mode::Words,
+            pin: r.mode == Mode::Pin,
+            separator: r.separator.unwrap_or(if r.symbols { '-' } else { '.' }),
+            capitalize: r.capitalize,
+        })
+    }
 }
 
 /// Generate a secret. `pin` wins over `words`, and both win over the character mode.
@@ -140,6 +220,34 @@ mod tests {
         assert!(generate(&opts(64, true, true, false, false)).bytes().all(|b| {
             b.is_ascii_alphabetic() || DIGITS.contains(&b) || SYMBOLS.contains(&b)
         }));
+    }
+
+    #[test]
+    fn for_request_owns_defaults_limits_and_separator() {
+        let o = Options::for_request(&Request::new(Mode::Random)).unwrap();
+        assert_eq!((o.length, o.symbols, o.digits, o.words, o.pin), (20, true, true, false, false));
+        assert_eq!(Options::for_request(&Request::new(Mode::Words)).unwrap().length, 5);
+        assert_eq!(Options::for_request(&Request::new(Mode::Pin)).unwrap().length, 6);
+
+        let mut w = Request::new(Mode::Words);
+        assert_eq!(Options::for_request(&w).unwrap().separator, '-');
+        w.symbols = false;
+        assert_eq!(Options::for_request(&w).unwrap().separator, '.');
+        w.separator = Some('_');
+        assert_eq!(Options::for_request(&w).unwrap().separator, '_');
+
+        for (mode, ok, bad) in [
+            (Mode::Random, [MIN_LENGTH, MAX_LENGTH], [MIN_LENGTH - 1, MAX_LENGTH + 1]),
+            (Mode::Words, [MIN_WORDS, MAX_WORDS], [MIN_WORDS - 1, MAX_WORDS + 1]),
+            (Mode::Pin, [MIN_PIN, MAX_PIN], [MIN_PIN - 1, MAX_PIN + 1]),
+        ] {
+            for n in ok {
+                assert_eq!(Options::for_request(&Request { length: Some(n), ..Request::new(mode) }).unwrap().length, n);
+            }
+            for n in bad {
+                assert!(Options::for_request(&Request { length: Some(n), ..Request::new(mode) }).is_err(), "{mode:?} {n}");
+            }
+        }
     }
 
     #[test]
