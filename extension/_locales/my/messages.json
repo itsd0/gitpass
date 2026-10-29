@@ -971,5 +971,47 @@
   },
   "pkPasskeysCount": {
     "message": "ဤဆိုက်အတွက် passkey {n} ခု"
+  },
+  "genRecent": {
+    "message": "မကြာသေးမီ"
+  },
+  "genRecentEmpty": {
+    "message": "ထုတ်လုပ်ထားသော စကားဝှက် မရှိသေးပါ"
+  },
+  "genRecentOff": {
+    "message": "ဖန်တီးမှု မှတ်တမ်းကို ပိတ်ထားသည်"
+  },
+  "genRecentViewAll": {
+    "message": "gitpass တွင် အားလုံးကြည့်ရန်"
+  },
+  "genRecentHide": {
+    "message": "ဖျောက်ရန်"
+  },
+  "genAgoNow": {
+    "message": "ယခုလေးတင်"
+  },
+  "genAgoMin": {
+    "message": "$1 မိနစ်က",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "genAgoHour": {
+    "message": "$1 နာရီက",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "genAgoDay": {
+    "message": "$1 ရက်က",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
   }
 }
