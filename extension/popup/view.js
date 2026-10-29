@@ -276,7 +276,86 @@
     return it.subtitle || host || '—';
   }
 
-  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle };
+  /** Severity token for a Watchtower finding kind: danger or warn. */
+  function findingSeverity(kind) {
+    if (kind === 'weak' || kind === 'reused' || kind === 'pwned' || kind === 'expired') return 'danger';
+    return 'warn';
+  }
+
+  /** Display label for a Watchtower finding chip. */
+  function findingLabel(kind, meta, tFn) {
+    const t = typeof tFn === 'function' ? tFn : (k, d) => d;
+    switch (kind) {
+      case 'weak':
+        return t('watchtowerWeak', 'Weak password');
+      case 'reused':
+        return meta && meta.reused_count
+          ? t('watchtowerReusedN', 'Reused on $1 items', [meta.reused_count])
+          : t('watchtowerReused', 'Reused password');
+      case 'pwned':
+        return t('watchtowerPwned', 'In a data breach');
+      case 'old':
+        if (meta && typeof meta.old_days === 'number') {
+          if (meta.old_days >= 365) {
+            const yrs = Math.floor(meta.old_days / 365);
+            return yrs === 1
+              ? t('watchtowerOld1Yr', 'Not changed in 1 year')
+              : t('watchtowerOldNYrs', 'Not changed in $1 years', [yrs]);
+          }
+          return t('watchtowerOldNDays', 'Not changed in $1 days', [meta.old_days]);
+        }
+        return t('watchtowerOld', 'Old password');
+      case 'insecure_url':
+        return t('watchtowerInsecureUrl', 'Insecure website (HTTP)');
+      case 'missing_totp':
+        return t('watchtowerMissingTotp', '2FA not configured');
+      case 'totp_available':
+        return t('watchtowerTotpAvailable', '2FA available on site');
+      case 'passkey_available':
+        return t('watchtowerPasskeyAvailable', 'Passkey available');
+      case 'expired':
+        return t('watchtowerExpired', 'Expired');
+      case 'expiring_soon':
+        return t('watchtowerExpiringSoon', 'Expiring soon');
+      case 'duplicate':
+        return t('watchtowerDuplicate', 'Duplicate login');
+      default:
+        return String(kind);
+    }
+  }
+
+  /** Whether an item findings object contains any active findings. */
+  function hasWatchtowerFindings(findings) {
+    return Boolean(findings && Array.isArray(findings.kinds) && findings.kinds.length > 0);
+  }
+
+  /**
+   * Run `fn` over `items` with at most `limit` calls in flight. The first call runs alone so a
+   * host-side cache (e.g. the Watchtower audit) is warm before the rest fan out.
+   */
+  async function mapLimit(items, limit, fn) {
+    const list = Array.from(items || []);
+    if (!list.length) return [];
+    const out = new Array(list.length);
+    out[0] = await fn(list[0], 0);
+    let next = 1;
+    const n = Math.max(1, Math.min(limit | 0 || 1, list.length - 1));
+    const worker = async () => {
+      while (next < list.length) {
+        const i = next++;
+        out[i] = await fn(list[i], i);
+      }
+    };
+    await Promise.all(Array.from({ length: n }, worker));
+    return out;
+  }
+
+  /** Watchtower findings worth caching: a failed lookup (null/undefined) stays uncached so it is retried. */
+  function cacheableFindings(res) {
+    return Boolean(res && Array.isArray(res.kinds));
+  }
+
+  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

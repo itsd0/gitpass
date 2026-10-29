@@ -662,6 +662,87 @@
   "optFillShortcutBody": {
     "message": "Fills the best-matching login on the current page without opening the popup."
   },
+  "watchtowerWarnings": {
+    "message": "Watchtower warnings"
+  },
+  "watchtowerWarning": {
+    "message": "Security warning"
+  },
+  "watchtowerWeak": {
+    "message": "Weak password"
+  },
+  "watchtowerReused": {
+    "message": "Reused password"
+  },
+  "watchtowerReusedN": {
+    "message": "Reused on $1 items",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerPwned": {
+    "message": "In a data breach"
+  },
+  "watchtowerOld": {
+    "message": "Old password"
+  },
+  "watchtowerOld1Yr": {
+    "message": "Not changed in 1 year"
+  },
+  "watchtowerOldNYrs": {
+    "message": "Not changed in $1 years",
+    "placeholders": {
+      "years": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerOldNDays": {
+    "message": "Not changed in $1 days",
+    "placeholders": {
+      "days": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerInsecureUrl": {
+    "message": "Insecure website (HTTP)"
+  },
+  "watchtowerMissingTotp": {
+    "message": "2FA not configured"
+  },
+  "watchtowerTotpAvailable": {
+    "message": "2FA available on site"
+  },
+  "watchtowerPasskeyAvailable": {
+    "message": "Passkey available"
+  },
+  "watchtowerExpired": {
+    "message": "Expired"
+  },
+  "watchtowerExpiringSoon": {
+    "message": "Expiring soon"
+  },
+  "watchtowerDuplicate": {
+    "message": "Duplicate login"
+  },
+  "generateAndUpdate": {
+    "message": "Generate & update"
+  },
+  "changeOnSite": {
+    "message": "Change on site"
+  },
+  "openInGitpass": {
+    "message": "Open in gitpass"
+  },
+  "passwordUpdated": {
+    "message": "Password updated"
+  },
+  "updatePassword": {
+    "message": "Update password"
+    },
   "sortBy": {
     "message": "Sort by"
   },
