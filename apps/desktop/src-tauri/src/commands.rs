@@ -69,7 +69,9 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn delete_tag(s: State<App>, name: String) -> R<a::BulkResult> { s.delete_tag(&name).map_err(e) }
 #[allow(clippy::too_many_arguments)] // Tauri command args map 1:1 to the JS invoke payload.
 #[tauri::command] pub fn generate_password(s: State<App>, length: usize, symbols: bool, digits: bool, words: Option<bool>, pin: Option<bool>, separator: Option<char>, capitalize: Option<bool>) -> R<String> {
-    let pw = a::generate(length, symbols, digits, words.unwrap_or(false), pin.unwrap_or(false), separator, capitalize)?;
+    use gitpass_core::generate::{Mode, Request};
+    let mode = if pin.unwrap_or(false) { Mode::Pin } else if words.unwrap_or(false) { Mode::Words } else { Mode::Random };
+    let pw = a::generate(&Request { mode, length: Some(length), symbols, digits, separator, capitalize: capitalize.unwrap_or(false) }).map_err(e)?;
     let _ = s.record_generated_password(&pw, "desktop", None);
     Ok(pw)
 }

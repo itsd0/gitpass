@@ -189,6 +189,37 @@
     return { prompt: 'save' };
   }
 
+  /**
+   * Card duplicate check (#196): a card with the same last 4 digits AND expiry
+   * already in the vault suppresses the prompt. Summaries carry only the masked
+   * subtitle ('•••• 4242'), so expiry comes from get_item detail (a non-secret
+   * month_year field). A list/get failure (locked, app restarting) never
+   * suppresses: the banner still shows and the save surfaces the real error.
+   * Without an expiry on the capture there is nothing to match against, so no
+   * suppression either — last 4 alone is not a duplicate.
+   */
+  async function hasDuplicateCard(host, cap) {
+    if (!cap.expiry) return false;
+    const last4 = cap.number.slice(-4);
+    let items;
+    try {
+      const r = await host('list_items', { category: 'credit_card', limit: 500 });
+      items = (r && r.items) || [];
+    } catch (_) { return false; }
+    for (const it of items) {
+      if (!(it.subtitle || '').endsWith(last4)) continue;
+      try {
+        const rec = await host('get_item', { item_id: it.id });
+        const fields = (rec && rec.item && rec.item.fields) || [];
+        const ex = fields.find((f) => f.name === 'expiry');
+        const CB = root.GitpassBanner || (typeof require === 'function' ? require('./lib/banner.js') : null);
+        const norm = CB ? CB.normalizeCardExpiry(ex && ex.value) : '';
+        if (norm && norm === cap.expiry) return true;
+      } catch (_) { /* fall through: a card we cannot read is not a proven duplicate */ }
+    }
+    return false;
+  }
+
   async function handle(msg, sender, host) {
     const origin = senderOrigin(sender);
     const tabId = sender.tab.id;
@@ -387,6 +418,31 @@
       // ---- save-login / update-password banner ----
       case 'page:capture': {
         const kind = a.kind;
+        // ---- save-card banner (#196) ----
+        // The content script sends only { number, name, expiry }; sanitizeCardCapture
+        // rebuilds exactly those three fields (dropping a CVV or anything else a
+        // compromised page might stuff into the message) and re-checks Luhn here,
+        // so the background never trusts the page's word for a valid card.
+        if (kind === 'card') {
+          const CB = root.GitpassBanner || (typeof require === 'function' ? require('./lib/banner.js') : null);
+          if (!CB) throw err('bad_request', 'card helpers unavailable');
+          const cap = CB.sanitizeCardCapture(a);
+          if (!cap) throw err('bad_request', 'card');
+          await waitInflight(tabId); // process this capture after the save that is still writing
+          if (await isExceptedSite(origin)) {
+            pendingSaves.delete(tabId);
+            return { prompt: null };
+          }
+          if (await hasDuplicateCard(host, cap)) {
+            pendingSaves.delete(tabId);
+            return { prompt: null };
+          }
+          const masked = CB.cardMasked(cap.number);
+          const brand = CB.cardBrand(cap.number);
+          const title = CB.cardTitleDefault(cap.number);
+          pendingSaves.set(tabId, { origin, kind: 'card', ...cap, prompt: 'save_card', masked, brand, title, ts: Date.now() });
+          return { prompt: 'save_card', masked, brand, title, vaults: await vaultChoices(host) };
+        }
         const username = typeof a.username === 'string' ? a.username.slice(0, 512) : '';
         if (kind === 'username') { if (username) lastUsername.set(tabId, { origin, username, ts: Date.now() }); return { prompt: null }; }
         if (!['login', 'signup', 'change_password'].includes(kind)) throw err('bad_request', 'kind');
@@ -412,7 +468,7 @@
           return { prompt: null };
         }
         const p = fresh(pendingSaves, tabId, origin, true);
-        return p ? { prompt: p.prompt, username: p.username, title: p.title || null, vaults: await vaultChoices(host) } : { prompt: null };
+        return p ? { prompt: p.prompt, username: p.username, title: p.title || null, masked: p.masked || null, brand: p.brand || null, vaults: await vaultChoices(host) } : { prompt: null };
       }
       case 'page:save_decision': {
         const p = fresh(pendingSaves, tabId, origin, true);
@@ -439,6 +495,24 @@
             if (pendingSaves.get(tabId) === p) pendingSaves.delete(tabId); // never drop a newer capture
             rememberSaved(tabId, origin, p.item_id);
             return { done: true, action: 'update' };
+          }
+          // save_card (#196): a card capture becomes a credit_card item through the
+          // host's generic create_item path — the same ItemInput shape the popup's
+          // New item form sends. Only number/cardholder/expiry are ever in
+          // pendingSaves, so a CVV cannot reach the vault through this route.
+          if (p.kind === 'card') {
+            if (a.action !== 'save' || p.prompt !== 'save_card') throw err('bad_request', 'action');
+            const title = saveTitle(a.title, p.origin);
+            const vault_id = await saveVault(host, a.vault_id);
+            const fields = [{ id: 'number', label: 'number', kind: 'concealed', value: p.number }];
+            if (p.name) fields.push({ id: 'cardholder', label: 'cardholder name', kind: 'text', value: p.name });
+            if (p.expiry) fields.push({ id: 'expiry', label: 'expiry date', kind: 'month_year', value: p.expiry });
+            const item = { category: 'credit_card', title, url: p.origin, sections: [{ id: 'main', title: null, fields }] };
+            if (vault_id) item.vaultId = vault_id;
+            const r = await host('create_item', { item });
+            if (pendingSaves.get(tabId) === p) pendingSaves.delete(tabId);
+            rememberSaved(tabId, origin, r && r.item_id);
+            return { done: true, action: 'save', item_id: r && r.item_id };
           }
           // save (new prompt) and save_new (second account from an update prompt). Neither carries an
           // item id, origin or password from the page side: they come from pendingSaves.

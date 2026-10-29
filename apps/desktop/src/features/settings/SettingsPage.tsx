@@ -149,6 +149,32 @@ function General({ highlightedId }: { highlightedId?: string | null }) {
         </button>
       </SettingsRow>
       <SettingsRow
+        id="setting-render-notes-markdown"
+        highlighted={highlightedId === 'setting-render-notes-markdown'}
+        label={t('settings.renderNotesMarkdown')}
+        description={t('settings.renderNotesMarkdownHelp')}
+      >
+        <button
+          type="button"
+          role="switch"
+          aria-checked={settings.renderNotesMarkdown ?? true}
+          aria-label={t('settings.renderNotesMarkdown')}
+          data-testid="render-notes-markdown-switch"
+          onClick={() => s({ renderNotesMarkdown: !(settings.renderNotesMarkdown ?? true) })}
+          className={cn(
+            'relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            (settings.renderNotesMarkdown ?? true) ? 'bg-accent' : 'bg-border'
+          )}
+        >
+          <span
+            className={cn(
+              'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+              (settings.renderNotesMarkdown ?? true) ? 'translate-x-5' : 'translate-x-0.5'
+            )}
+          />
+        </button>
+      </SettingsRow>
+      <SettingsRow
         id="setting-quick-access-hotkey"
         highlighted={highlightedId === 'setting-quick-access-hotkey'}
         label={t('settings.quickAccessHotkey')}

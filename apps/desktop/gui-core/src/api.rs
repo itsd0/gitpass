@@ -200,6 +200,8 @@ pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_capitalize: Option<bool>,
     /// Privacy: Settings → Appearance gets a toggle, "Show website icons" (off by default, because fetching tells each site you have a login there).
     #[serde(default)] pub show_website_icons: bool,
+    /// Display: render notes and secure notes as safe Markdown (default on).
+    #[serde(default = "default_true")] pub render_notes_markdown: bool,
     /// Remember generated passwords in an encrypted vault history (default on).
     #[serde(default = "default_true")] pub remember_generated_passwords: bool,
 }
@@ -210,7 +212,7 @@ impl Default for Settings {
             lock_on_sleep: true, lock_on_screen_lock: true, lock_on_user_switch: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
-            show_website_icons: false, remember_generated_passwords: true }
+            show_website_icons: false, render_notes_markdown: true, remember_generated_passwords: true }
     }
 }
 
@@ -545,22 +547,17 @@ fn mime_for(name: &str) -> &'static str {
 /// Separators the desktop generator offers for word passphrases; anything else is a bad request.
 pub const WORD_SEPARATORS: [char; 4] = ['-', '.', '_', ' '];
 
-/// Generate a password (`words`: `length` words from a 128-word list joined by `separator`, ~7 bits/word, `pin`: `length` digits).
-/// `separator`/`capitalize` only affect words mode. Omitted values keep the historical defaults:
-/// separator `-` (`'.'` when symbols are off), no capitalization.
-pub fn generate(length: usize, symbols: bool, digits: bool, words: bool, pin: bool, separator: Option<char>, capitalize: Option<bool>) -> Result<String, String> {
-    let separator = match separator {
-        None => if symbols { '-' } else { '.' },
-        Some(c) if WORD_SEPARATORS.contains(&c) => c,
-        Some(c) => return Err(format!("invalid word separator {c:?}: use one of -, ., _, space")),
-    };
-    // The desktop app and the browser host have always floored character passwords at 8.
-    let length = if words || pin { length } else { length.max(8) };
-    Ok(gitpass_core::generate::generate(&gitpass_core::generate::Options {
-        length, symbols, digits, words, pin,
-        separator,
-        capitalize: capitalize.unwrap_or(false),
-    }))
+/// Generate a password (`Words`: `length` words from a 128-word list joined by `separator`, ~7 bits/word;
+/// `Pin`: `length` digits). Defaults, limits and the separator rule come from gitpass-core (an omitted
+/// separator is `-`, or `.` with symbols off); an out-of-range length or an unoffered separator is an error.
+pub fn generate(r: &gitpass_core::generate::Request) -> Result<String> {
+    if let Some(c) = r.separator {
+        if !WORD_SEPARATORS.contains(&c) {
+            anyhow::bail!("invalid word separator {c:?}: use one of -, ., _, space");
+        }
+    }
+    let opts = gitpass_core::generate::Options::for_request(r).map_err(|m| anyhow::anyhow!(m))?;
+    Ok(gitpass_core::generate::generate(&opts))
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<String> {

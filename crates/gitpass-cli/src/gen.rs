@@ -1,6 +1,6 @@
 //! `gitpass gen`: shared password/passphrase/PIN generation plus an optional concealed pasteboard copy.
 use anyhow::{bail, Result};
-use gitpass_core::generate::{generate, Options};
+use gitpass_core::generate::{generate, Mode, Options, Request};
 use gitpass_pasteboard::PasteboardMarkers;
 use std::io::Write;
 use std::time::Duration;
@@ -49,16 +49,16 @@ pub fn options(a: &Args) -> Result<Options> {
     if a.no_digits && a.pin.is_some() {
         bail!("--no-digits cannot be combined with --pin (a PIN is always digits)");
     }
-    let words = a.words.is_some();
-    Ok(Options {
-        length: a.words.or(a.pin).or(a.len).unwrap_or(DEFAULT_LENGTH),
+    let mode = if a.pin.is_some() { Mode::Pin } else if a.words.is_some() { Mode::Words } else { Mode::Random };
+    Options::for_request(&Request {
+        mode,
+        length: Some(a.words.or(a.pin).or(a.len).unwrap_or(DEFAULT_LENGTH)),
         symbols: !a.no_symbols,
         digits: !a.no_digits,
-        words,
-        pin: a.pin.is_some(),
-        separator: a.separator.unwrap_or(if a.no_symbols { '.' } else { '-' }),
+        separator: a.separator,
         capitalize: a.capitalize,
     })
+    .map_err(|m| anyhow::anyhow!(m))
 }
 
 /// Generate the password string according to the given options.

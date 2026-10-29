@@ -22,7 +22,15 @@ fn categories_summaries_and_detail() {
     assert_eq!(by("Me")["category"], "identity");
     assert_eq!(by("Me")["subtitle"], "Test Person");
     assert_eq!(by("Wifi notes")["category"], "secure_note");
-    assert!(!all.to_string().contains("FAKE-gh-pw") && !all.to_string().contains("4111"));
+    // Leak check uses the full card number (spaced and unspaced): the short
+    // "4111" prefix also matches random ids/timestamps in the list output,
+    // which made this assertion fail at random (see #206).
+    let list = all.to_string();
+    assert!(
+        !list.contains("FAKE-gh-pw")
+            && !list.contains("4111 1111 1111 1234")
+            && !list.contains("4111111111111234")
+    );
 
     let cards = ok(&mut f.host, json!({"cmd":"list_items","category":"credit_card"}));
     assert_eq!(cards["items"].as_array().unwrap().len(), 1);
@@ -39,7 +47,11 @@ fn categories_summaries_and_detail() {
     assert_eq!(num["concealed"], true);
     assert_eq!(num["kind"], "card_number");
     assert!(num.get("value").is_none());
-    assert!(!d.to_string().contains("4111") && !d.to_string().contains("\"123\""));
+    assert!(
+        !d.to_string().contains("4111 1111 1111 1234")
+            && !d.to_string().contains("4111111111111234")
+            && !d.to_string().contains("\"123\"")
+    );
     let exp = d["fields"].as_array().unwrap().iter().find(|x| x["name"] == "expiry").unwrap();
     assert_eq!(exp["value"], "12/30");
     assert_eq!(exp["kind"], "date");
@@ -174,6 +186,17 @@ fn fill_totp_save_update_vaults_generate() {
     assert!(g.chars().all(|c| c.is_ascii_digit()), "{g}");
     assert_eq!(err(&mut f.host, json!({"cmd":"generate","len":2,"pin":true})).0, "bad_request");
     assert_eq!(err(&mut f.host, json!({"cmd":"generate","len":25,"words":true})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"generate","len":7})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"generate","len":129})).0, "bad_request");
+
+    // Parity with the desktop app and CLI: a passphrase with symbols off joins words with '.', not '-'.
+    let g = ok(&mut f.host, json!({"cmd":"generate","len":4,"words":true,"symbols":false,"digits":false}))["password"].as_str().unwrap().to_string();
+    assert_eq!(g.split('.').count(), 4, "{g}");
+    assert!(!g.contains('-'), "{g}");
+    // Defaults per mode when `len` is absent.
+    assert_eq!(ok(&mut f.host, json!({"cmd":"generate"}))["password"].as_str().unwrap().len(), 20);
+    assert_eq!(ok(&mut f.host, json!({"cmd":"generate","pin":true}))["password"].as_str().unwrap().len(), 6);
+    assert_eq!(ok(&mut f.host, json!({"cmd":"generate","words":true}))["password"].as_str().unwrap().split('-').count(), 5);
 
     let st = ok(&mut f.host, json!({"cmd":"status"}));
     assert_eq!(st["app_running"], false);

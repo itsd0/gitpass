@@ -180,11 +180,10 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
 fn visible(r: &ItemRecord) -> bool { r.deleted_at.is_none() && !r.archived }
 
 /// Password generator: characters (`digits`, `symbols`), words (`words`) or a PIN (`pin`).
-/// Delegates to gitpass-core so the host, CLI and desktop app produce the same shapes.
-pub fn generate(len: usize, digits: bool, symbols: bool, words: bool, pin: bool) -> String {
-    gitpass_core::generate::generate(&gitpass_core::generate::Options {
-        length: len, symbols, digits, words, pin, separator: '-', capitalize: false,
-    })
+/// The defaults, limits and separator come from gitpass-core, so the host, CLI and desktop app agree.
+pub fn generate(r: &gitpass_core::generate::Request) -> Result<String> {
+    let opts = gitpass_core::generate::Options::for_request(r).map_err(|m| coded(code::BAD_REQUEST, m))?;
+    Ok(gitpass_core::generate::generate(&opts))
 }
 
 /// Site password rules sent by the extension (already parsed from `passwordrules` / `maxlength`):
@@ -653,19 +652,23 @@ impl Host {
                 Ok(json!({"favorite": fav}))
             }
             "generate" => {
-                use gitpass_core::generate::{MAX_LENGTH, MAX_PIN, MAX_WORDS, MIN_PIN, MIN_WORDS};
-                let words = req.get("words").and_then(Value::as_bool).unwrap_or(false);
-                let pin = req.get("pin").and_then(Value::as_bool).unwrap_or(false);
-                let (min, max, default) = if pin { (MIN_PIN, MAX_PIN, 6) } else if words { (MIN_WORDS, MAX_WORDS, 5) } else { (8, MAX_LENGTH, 20) };
-                let len = req.get("len").and_then(Value::as_u64).map_or(default, |v| v as usize);
-                if !(min..=max).contains(&len) { return Err(coded(code::BAD_REQUEST, format!("len must be {min}..={max}"))); }
-                let digits = req.get("digits").and_then(Value::as_bool).unwrap_or(true);
-                let symbols = req.get("symbols").and_then(Value::as_bool).unwrap_or(true);
+                use gitpass_core::generate::{Mode, Request};
+                let flag = |k: &str, default: bool| req.get(k).and_then(Value::as_bool).unwrap_or(default);
+                let (words, pin) = (flag("words", false), flag("pin", false));
+                let r = Request {
+                    mode: if pin { Mode::Pin } else if words { Mode::Words } else { Mode::Random },
+                    length: req.get("len").and_then(Value::as_u64).map(|v| v as usize),
+                    symbols: flag("symbols", true),
+                    digits: flag("digits", true),
+                    separator: None,
+                    capitalize: false,
+                };
                 if let Some(rules) = req.get("rules").filter(|r| !r.is_null()) {
                     if words || pin { return Err(coded(code::BAD_REQUEST, "rules apply to random passwords only")); }
+                    let len = gitpass_core::generate::Options::for_request(&r).map_err(|m| coded(code::BAD_REQUEST, m))?.length;
                     return Ok(json!({"password": generate_for_rules(len, rules)?}));
                 }
-                Ok(json!({"password": generate(len, digits, symbols, words, pin)}))
+                Ok(json!({"password": generate(&r)?}))
             }
             "record_generated_password" => {
                 let pw = arg_str(req, "password")?;

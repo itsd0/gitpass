@@ -21,6 +21,7 @@
     "scripts": [
       "lib/policy.js",
       "lib/password-rules.js",
+      "lib/banner.js",
       "bg-page.js",
       "bg-command.js",
       "background.js",
