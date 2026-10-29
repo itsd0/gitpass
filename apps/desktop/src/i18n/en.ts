@@ -164,7 +164,8 @@ export const en = {
   'about.version': 'Version', 'about.repo': 'Source code', 'about.issues': 'Report an issue', 'about.license': 'Open-source password manager built on git.',
   // palette
   'palette.placeholder': 'Search items or type a command…', 'palette.commands': 'Commands', 'palette.items': 'Items', 'palette.empty': 'No results for “{q}”',
-  'palette.label': 'Command palette', 'cmd.newItem': 'New item', 'cmd.lock': 'Lock gitpass', 'cmd.watchtower': 'Go to Watchtower', 'cmd.settings': 'Go to Settings', 'cmd.people': 'Go to People',
+  'palette.label': 'Command palette', 'palette.actions': 'Actions', 'palette.actionsFor': 'Actions for {title}', 'palette.openItem': 'Open item', 'palette.run': 'Run', 'palette.back': 'Back',
+  'cmd.newItem': 'New item', 'cmd.lock': 'Lock gitpass', 'cmd.watchtower': 'Go to Watchtower', 'cmd.settings': 'Go to Settings', 'cmd.people': 'Go to People',
   'cmd.toggleTheme': 'Toggle theme', 'cmd.sync': 'Sync now', 'cmd.shortcuts': 'Keyboard shortcuts', 'cmd.home': 'Go to Home',
   'cmd.showLargeType': 'Show password in large type',
   // large type view
