@@ -4,10 +4,11 @@ import { api } from '../../api/client';
 import type { Field, FieldKind, ItemDetail, ItemInput, Section, VaultInfo } from '../../api/types';
 import { useApp } from '../../lib/store';
 import { useT } from '../../i18n';
-import { Button, Input, Textarea, toast } from '../../ui';
+import { Button, Input, toast } from '../../ui';
 import { ItemIcon } from './categories';
 import { StrengthMeter } from './FieldView';
 import { PasswordGenerator } from '../new-item/PasswordGenerator';
+import { NotesEditorField } from './NotesEditorField';
 import { errText } from './actions';
 
 const KINDS: FieldKind[] = ['text', 'concealed', 'url', 'email', 'phone', 'date', 'month_year', 'totp', 'multiline'];
@@ -23,6 +24,7 @@ export function normalizeInput(i: ItemInput): ItemInput {
 }
 
 export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: VaultInfo[] }) {
+  const t = useT();
   const { setEditing, refreshItems } = useApp();
   const [draft, setDraft] = useState<ItemInput>(() => toInput(detail));
   const [tagText, setTagText] = useState(detail.tags.join(', '));
@@ -83,7 +85,7 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
 
           <label className="block text-xs text-muted">Website<Input className="mt-1" value={draft.url ?? ''} onChange={(e) => upd({ url: e.target.value || null })} placeholder="https://" /></label>
           <label className="block text-xs text-muted">Tags (comma separated)<Input className="mt-1" value={tagText} onChange={(e) => setTagText(e.target.value)} /></label>
-          <label className="block text-xs text-muted">Notes<Textarea className="mt-1" rows={4} value={draft.notes ?? ''} onChange={(e) => upd({ notes: e.target.value || null })} /></label>
+          <NotesEditorField label={t('detail.notes')} value={draft.notes ?? ''} onChange={(notes) => upd({ notes: notes || null })} rows={4} />
         </div>
       </div>
     </div>
@@ -118,7 +120,15 @@ function FieldEditor({ field, onChange, onRemove }: { field: Field; onChange: (p
       <div className="relative mt-1.5">
         <div className="flex items-center gap-1">
           {field.kind === 'multiline' ? (
-            <Textarea aria-label={`${field.label} value`} rows={3} value={field.value ?? ''} onChange={(e) => onChange({ value: e.target.value })} />
+            <div className="w-full">
+              <NotesEditorField
+                label={`${field.label} value`}
+                hideHeaderLabel
+                rows={3}
+                value={field.value ?? ''}
+                onChange={(v) => onChange({ value: v })}
+              />
+            </div>
           ) : (
             <Input ref={fieldInputRef} aria-label={`${field.label} value`} type={secret && !show ? 'password' : field.kind === 'date' ? 'date' : 'text'} autoComplete="off"
               placeholder={secret && field.value === null ? 'Unchanged — type to replace' : ''} value={field.value ?? ''} onChange={(e) => onChange({ value: e.target.value })}
