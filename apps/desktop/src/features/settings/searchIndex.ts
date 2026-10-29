@@ -33,6 +33,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     descriptionKey: 'settings.quickAccessHotkeyHelp',
     keywords: ['quick access', 'shortcut', 'hotkey', 'global', 'space', 'command'],
   },
+  {
+    id: 'setting-setup-guide',
+    tab: 'general',
+    labelKey: 'settings.showSetupGuide',
+    descriptionKey: 'settings.showSetupGuideHelp',
+    keywords: ['onboarding', 'checklist', 'welcome', 'guide', 'get started', 'setup'],
+  },
   // Security
   {
     id: 'setting-autolock',

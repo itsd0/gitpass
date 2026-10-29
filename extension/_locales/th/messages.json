@@ -735,6 +735,87 @@
     "message": "เติมข้อมูลเข้าสู่ระบบที่ตรงที่สุดในหน้าปัจจุบันโดยไม่ต้องเปิดป๊อปอัป",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "watchtowerWarnings": {
+    "message": "คำเตือน Watchtower"
+  },
+  "watchtowerWarning": {
+    "message": "คำเตือนความปลอดภัย"
+  },
+  "watchtowerWeak": {
+    "message": "รหัสผ่านไม่ปลอดภัย"
+  },
+  "watchtowerReused": {
+    "message": "รหัสผ่านที่ใช้ซ้ำ"
+  },
+  "watchtowerReusedN": {
+    "message": "ใช้ซ้ำใน $1 รายการ",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerPwned": {
+    "message": "พบในข้อมูลรั่วไหล"
+  },
+  "watchtowerOld": {
+    "message": "รหัสผ่านเก่า"
+  },
+  "watchtowerOld1Yr": {
+    "message": "ไม่ได้เปลี่ยนมา 1 ปี"
+  },
+  "watchtowerOldNYrs": {
+    "message": "ไม่ได้เปลี่ยนมา $1 ปี",
+    "placeholders": {
+      "years": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerOldNDays": {
+    "message": "ไม่ได้เปลี่ยนมา $1 วัน",
+    "placeholders": {
+      "days": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerInsecureUrl": {
+    "message": "เว็บไซต์ไม่ปลอดภัย (HTTP)"
+  },
+  "watchtowerMissingTotp": {
+    "message": "ยังไม่ได้ตั้งค่า 2FA"
+  },
+  "watchtowerTotpAvailable": {
+    "message": "เว็บไซต์รองรับ 2FA"
+  },
+  "watchtowerPasskeyAvailable": {
+    "message": "รองรับ Passkey"
+  },
+  "watchtowerExpired": {
+    "message": "หมดอายุแล้ว"
+  },
+  "watchtowerExpiringSoon": {
+    "message": "ใกล้หมดอายุ"
+  },
+  "watchtowerDuplicate": {
+    "message": "ข้อมูลเข้าสู่ระบบซ้ำ"
+  },
+  "generateAndUpdate": {
+    "message": "สร้างและอัปเดต"
+  },
+  "changeOnSite": {
+    "message": "เปลี่ยนที่เว็บไซต์"
+  },
+  "openInGitpass": {
+    "message": "เปิดใน gitpass"
+  },
+  "passwordUpdated": {
+    "message": "อัปเดตรหัสผ่านแล้ว"
+  },
+  "updatePassword": {
+    "message": "อัปเดตรหัสผ่าน"
+    },
   "sortBy": {
     "message": "เรียงตาม"
   },

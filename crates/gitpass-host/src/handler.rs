@@ -9,6 +9,8 @@ use gitpass_core::crypto::{KdfParams, SecretKey};
 use gitpass_core::item::{Category, Field, FieldKind, Section};
 use gitpass_core::merge::ItemRecord;
 use gitpass_core::store::{self, Item, Session};
+use gitpass_core::audit::Finding;
+use std::sync::Arc;
 use serde_json::{json, Map, Value};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
@@ -61,6 +63,7 @@ pub struct Host {
     session: Option<Session>,
     last_activity: Instant,
     last_activity_wall: SystemTime,
+    audit_cache: Option<Arc<gitpass_core::audit::AuditReport>>,
 }
 
 fn arg_str<'a>(req: &'a Value, k: &str) -> Result<&'a str> {
@@ -245,7 +248,7 @@ fn apply_websites(r: &mut ItemRecord, urls: Vec<String>) {
 }
 
 impl Host {
-    pub fn new(cfg: HostConfig) -> Self { Host { cfg, session: None, last_activity: Instant::now(), last_activity_wall: SystemTime::now() } }
+    pub fn new(cfg: HostConfig) -> Self { Host { cfg, session: None, last_activity: Instant::now(), last_activity_wall: SystemTime::now(), audit_cache: None } }
 
     pub fn is_unlocked(&self) -> bool { self.session.is_some() }
 
@@ -255,6 +258,7 @@ impl Host {
         let idle_by_wall = SystemTime::now().duration_since(self.last_activity_wall).map(|d| d >= self.cfg.idle_timeout).unwrap_or(false);
         if self.session.is_some() && (idle_by_instant || idle_by_wall) {
             self.session = None;
+            self.audit_cache = None;
             return true;
         }
         false
@@ -272,7 +276,7 @@ impl Host {
     }
 
     /// Drop the in-memory session (e.g. when the desktop app takes over).
-    pub fn lock(&mut self) { self.session = None; }
+    pub fn lock(&mut self) { self.session = None; self.audit_cache = None; }
 
     pub fn handle(&mut self, req: &Value) -> Value {
         let id = req.get("id").cloned().unwrap_or(Value::Null);
@@ -311,6 +315,25 @@ impl Host {
             }
         }
         Ok(out)
+    }
+
+    fn get_audit_report(&mut self) -> Result<Arc<gitpass_core::audit::AuditReport>> {
+        if let Some(cached) = &self.audit_cache {
+            return Ok(Arc::clone(cached));
+        }
+        let records = self.all_records(None)?;
+        let passkey_sites: std::collections::BTreeSet<String> = records.iter()
+            .filter(|(_, _, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
+            .filter_map(|(_, _, _, r)| r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value))
+            .collect();
+        let items: Vec<(String, String, ItemRecord)> = records.into_iter()
+            .filter(|(_, _, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
+            .map(|(vid, _, iid, r)| (vid, iid, r))
+            .collect();
+        let rep = gitpass_core::audit::audit_with_passkeys(&items, &passkey_sites, &gitpass_core::audit::AuditOpts::default(), None)?;
+        let rep = Arc::new(rep);
+        self.audit_cache = Some(Arc::clone(&rep));
+        Ok(rep)
     }
 
     /// `{name, vault_count?}`; the name is never the account UUID (see `remote::display_name`).
@@ -360,6 +383,7 @@ impl Host {
                 let s = Session::reopen_verify(root, &pw, &sk, false).map_err(|e| coded(code::DENIED, format!("{e:#}")))?;
                 if s.device_revoked { return Err(coded(code::DENIED, "this device is revoked")); }
                 self.session = Some(s);
+                self.audit_cache = None;
                 self.last_activity = Instant::now();
                 self.last_activity_wall = SystemTime::now();
                 Ok(json!({"unlocked": true}))
@@ -482,6 +506,7 @@ impl Host {
                 let item = Item { title, username: Some(username.into()), password: Some(password.into()),
                     url: Some(origin.into()), notes: None, totp: None, updated_at: String::new() };
                 let iid = s.add_record(&vid, ItemRecord::new(item))?;
+                self.audit_cache = None;
                 Ok(json!({"item_id": format!("{vid}:{iid}")}))
             }
             "create_item" => {
@@ -495,6 +520,7 @@ impl Host {
                 };
                 let title = rec.item.title.clone();
                 let iid = s.add_record(&vid, rec)?;
+                self.audit_cache = None;
                 Ok(json!({"item_id": format!("{vid}:{iid}"), "title": title}))
             }
             "update_login" => {
@@ -506,6 +532,7 @@ impl Host {
                 let (vid, iid, mut r) = self.record(arg_str(req, "item_id")?)?;
                 apply_login_update(&mut r, req)?;
                 self.sess()?.update_record(&vid, &iid, r)?;
+                self.audit_cache = None;
                 Ok(json!({"ok": true}))
             }
             "update_password" => {
@@ -519,6 +546,7 @@ impl Host {
                     }
                 }
                 self.sess()?.update_record(&vid, &iid, r)?;
+                self.audit_cache = None;
                 Ok(json!({"ok": true}))
             }
             "set_favorite" => {
@@ -526,6 +554,7 @@ impl Host {
                 let (vid, iid, mut r) = self.record(arg_str(req, "item_id")?)?;
                 r.favorite = fav;
                 self.sess()?.update_record(&vid, &iid, r)?;
+                self.audit_cache = None;
                 Ok(json!({"favorite": fav}))
             }
             "generate" => {
@@ -555,7 +584,48 @@ impl Host {
             "passkey_create" | "passkey_get" => {
                 if !crate::passkey::popup_approved(req) { return Err(coded(code::DENIED, format!("{cmd} needs approval in the gitpass popup"))); }
                 let s = self.sess()?;
-                if cmd == "passkey_create" { crate::passkey::create(s, req) } else { crate::passkey::get(s, req) }
+                if cmd == "passkey_create" {
+                    let res = crate::passkey::create(s, req);
+                    // A new passkey changes Watchtower's passkey-available sites.
+                    if res.is_ok() { self.audit_cache = None; }
+                    res
+                } else { crate::passkey::get(s, req) }
+            }
+            "item_findings" => {
+                let item_id_str = arg_str(req, "item_id")?;
+                let (vid, iid) = split_id(item_id_str)?;
+                let (_, _, rec) = self.record(item_id_str)?;
+                let report = self.get_audit_report()?;
+                let item_finding = report.per_item.iter().find(|f| f.vault == vid && f.id == iid);
+                let change_pw_url = rec.item.url.as_deref().and_then(gitpass_core::audit::change_password_url);
+                let mut kinds = vec![];
+                let mut reused_count = None;
+                let mut pwned_count = None;
+                let mut old_days = None;
+                let mut expiring_days = None;
+                let mut insecure_url_host = None;
+
+                if let Some(f) = item_finding {
+                    for finding in &f.findings {
+                        kinds.push(finding.kind().to_string());
+                        match finding {
+                            Finding::Reused { others, .. } => reused_count = Some(others + 1),
+                            Finding::Pwned { count } => pwned_count = Some(*count),
+                            Finding::Old { days } => old_days = Some(*days),
+                            Finding::ExpiringSoon { days, .. } => expiring_days = Some(*days),
+                            Finding::InsecureUrl { url_host } => insecure_url_host = Some(url_host.clone()),
+                            _ => {}
+                        }
+                    }
+                }
+                let mut out = json!({ "kinds": kinds });
+                if let Some(c) = reused_count { out["reused_count"] = json!(c); }
+                if let Some(c) = pwned_count { out["pwned_count"] = json!(c); }
+                if let Some(d) = old_days { out["old_days"] = json!(d); }
+                if let Some(d) = expiring_days { out["expiring_days"] = json!(d); }
+                if let Some(h) = insecure_url_host { out["insecure_url_host"] = json!(h); }
+                if let Some(u) = change_pw_url { out["change_password_url"] = json!(u); }
+                Ok(out)
             }
             "open_in_app" => {
                 crate::agent::launch_app().map_err(|e| coded(code::APP_NOT_RUNNING, format!("could not launch the gitpass app: {e:#}")))?;
