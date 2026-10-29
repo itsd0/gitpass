@@ -31,6 +31,7 @@ gitpass audit --json               # machine-readable report (counts + per-item 
 | `expired` / `expiring_soon` | any item with an expiry field (cards, API credentials, …) | Expired / Expiring soon | no |
 | `insecure_url` | items whose URL is plain `http://` on a public host | Insecure URLs | no |
 | `duplicate` | Login items with the same site and username in one vault | Duplicates | no |
+| `weak_ssh_key` | SSH key items with an RSA key under 3072 bits | Weak SSH keys | no |
 
 ## What gets audited
 
@@ -172,6 +173,13 @@ addresses (`127.0.0.0/8`, `::1`) and private IPv4 ranges (`10/8`, `172.16/12`, `
 carries only the lowercased host: userinfo, password, port, path, query and fragment are stripped, so
 nothing secret from the URL ends up in a report. It is shown in the desktop but **does not change the
 score**.
+
+## Weak SSH keys
+
+`weak_ssh_key`: an SSH key item using an RSA key of under 3072 bits (e.g. 2048-bit RSA). While gitpass
+accepts RSA keys of 2048+ bits on import, modern recommendations (such as NIST SP 800-57) favor at least
+3072-bit RSA or modern Ed25519 keys for security. It is shown in the desktop under "Weak SSH keys" but
+**does not change the score**.
 
 ## Duplicates
 

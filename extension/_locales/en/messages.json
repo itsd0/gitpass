@@ -859,5 +859,29 @@
   },
   "badgeAppNotRunning": {
     "message": "gitpass app not running"
+  },
+  "optAutoSubmit": {
+    "message": "Submit the form after filling a login"
+  },
+  "optAutoSubmitBody": {
+    "message": "Only for logins you explicitly fill, and only when the form has exactly one submit button. Off unless you turn it on."
+  },
+  "optNeverAutoSubmit": {
+    "message": "Never auto-submit on these sites"
+  },
+  "optNeverAutoSubmitBody": {
+    "message": "gitpass will fill logins on these sites but will never submit the form for you."
+  },
+  "optNeverAutoSubmitEmpty": {
+    "message": "No sites excluded from auto-submit"
+  },
+  "optNeverAutoSubmitEmptyBody": {
+    "message": "Sites you add here will appear in this list."
+  },
+  "optNeverAutoSubmitAdd": {
+    "message": "Add a site"
+  },
+  "watchtowerWeakSshKey": {
+    "message": "Weak SSH key"
   }
 }

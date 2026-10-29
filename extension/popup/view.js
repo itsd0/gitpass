@@ -362,6 +362,8 @@
         return t('watchtowerExpiringSoon', 'Expiring soon');
       case 'duplicate':
         return t('watchtowerDuplicate', 'Duplicate login');
+      case 'weak_ssh_key':
+        return t('watchtowerWeakSshKey', 'Weak SSH key');
       default:
         return String(kind);
     }

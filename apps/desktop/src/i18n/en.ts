@@ -311,6 +311,8 @@ export const en = {
   "watchtower.expiringSoonDesc": "Items expiring within 30 days.",
   "watchtower.insecureUrls": "Unsecured websites",
   "watchtower.insecureUrlsDesc": "Logins saved with unencrypted http:// addresses. Update them to HTTPS.",
+  "watchtower.weakSshKey": "Weak SSH keys",
+  "watchtower.weakSshKeyDesc": "RSA keys under 3072 bits. Upgrade to 3072+ bits or Ed25519.",
   "watchtower.openHttps": "Open HTTPS version",
   "watchtower.editUrl": "Edit URL",
   "watchtower.duplicates": "Duplicate logins",
