@@ -1,5 +1,72 @@
 # Changelog
 
+## 0.6.4 — 2026-10-29
+
+### Desktop
+- Render notes as safe Markdown with an edit/preview toggle (#207).
+- Hide gitpass windows from screen recording and sharing (#210).
+- Keyboard shortcuts for the selected item (#209).
+- Wi-Fi items show a QR code to join the network (#202).
+- Generator: words-mode separator and capitalize options (#197); generator popover on the item editor password
+  field (#191); one shared generator request with common defaults and limits across core, CLI, desktop and host (#199).
+- Drag items onto sidebar vaults and tags to move or tag them (#152).
+- Website icons for logins with a monogram fallback (#164).
+- Global hotkey registration and a settings recorder for Quick Access (#178).
+- Lock the vault on Mac sleep, screen lock and user switch (#156).
+- Encrypted password generator history (core, CLI, desktop, extension) (#198).
+- Large type view for passwords and concealed secrets (#69).
+- Restore a previous item version with a diff view (core, CLI, desktop) (#109).
+- Add and remove attachments on any item (core, CLI, desktop) (#139).
+- Track item usage with a "Recently used" sort and sections (core, CLI, desktop, extension) (#168).
+- Watchtower: track password change time (#146), flag passwords containing the username or site name (#110),
+  "Change password" action for findings (#102).
+- Import LastPass and Proton Pass CSV (#163) and Apple Passwords / Safari CSV with OTPAuth (#119); import wizard
+  polish with native picker, drag-and-drop, auto-detect and localized steps (#96).
+- Search across all settings with a consistent section layout (#104); highlight item search matches with a localized
+  result count (#120).
+- Distinct styling for multi-select and a separate checkbox column (#169); polished localized empty states (#91);
+  merged new-vault dialogs (#136).
+- gitpass orange as the accent colour in desktop and extension (#130).
+- Localized Home vault cards, Watchtower gauge and vault dialogs (#179), item detail strength meter, URL action and
+  TOTP ring (#187), and unlock, create-vault and sidebar strings (#114) (en/my/th).
+- Fixes: scrolling on Home and setup guide dismiss with undo (#175); keep the active settings section mounted (#115).
+
+### CLI
+- `gitpass add --category` for API credentials, secure notes and credit cards (#183).
+- Search ranking deduplicated with `rank_by` (#141).
+
+### Extension
+- Offer to save a credit card after checkout (#203).
+- Inline menu search for any login with a cross-site confirm (#127).
+- Honor `passwordrules`/`maxlength` when suggesting a password (#194).
+- Offer the one-time code on the next page after a login fill (#186).
+- Show Watchtower warnings on logins in the popup (#161).
+- Edit a login inline in the popup (#150); editable title, vault picker, "Save as new" and focus/saving states in the
+  save banner (#153).
+- Keyboard shortcuts: ⌘⇧L fills the best match without opening the popup (#131); ⌘⇧U copy username, ⌘O open
+  website and a shortcuts sheet (#145).
+- Password generator view with words/PIN via the host (#105).
+- Polished options page, theme and desktop status card (#103).
+- Highlighted search matches, keyboard hint footer and row aria attributes (#121); loading skeletons, request
+  timeouts and inline error/retry states (#100).
+- Right-click gitpass context menu (#215).
+- Toolbar icon shows a locked state and a match-count badge (#221).
+- Popup lists every item, with API secret preview and a sort menu (#174).
+
+### Security
+- Bump zip to 9.1.3 (GHSA-m665-v7pm-7grj) (#172); clear zip 4.6.1 from the desktop lockfile and enforce
+  `cargo audit` in CI (#190).
+- Use the full card number in fallback leak checks (#208).
+
+### Tests / repo
+- Extension user guide (docs/EXTENSION.md) (#223).
+- Unit tests for fsutil crash safety, backup exclusions and locking (#151); e2e test for cancelling the in-page
+  passkey prompt (#122); flaky test fixes (#113, #185).
+- Removed unused locale keys with a locale parity test (#157), unused ScrollArea wrapper (#173) and unused
+  `@playwright/test` (#162).
+- Docs: complete CLI reference and CHANGELOG fixes (#140), audit findings documented (#132), README and AGENTS.md
+  refreshed (#123).
+
 ## 0.6.3 — 2026-10-28
 
 ### Desktop
