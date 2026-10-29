@@ -454,6 +454,22 @@ kbd {
   color: var(--fg);
 }
 
+.text-input {
+  background: var(--card);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  font-size: 13px;
+  min-width: 0;
+}
+
+.text-input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .empty-state {
   padding: 24px 16px 12px;
   text-align: center;

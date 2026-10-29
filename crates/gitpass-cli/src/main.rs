@@ -437,7 +437,7 @@ enum Cmd {
     ///
     /// Finding kinds: weak (incl. passwords containing the username or site name), reused, old,
     /// pwned (only with --hibp), duplicate, expired, expiring_soon, insecure_url, missing_totp,
-    /// totp_available, passkey_available. Findings you ignored in the app are counted but only
+    /// totp_available, passkey_available, weak_ssh_key. Findings you ignored in the app are counted but only
     /// listed with --include-ignored. See docs/WATCHTOWER.md.
     Audit {
         /// Vault (default: all vaults)
@@ -2409,9 +2409,10 @@ fn run() -> Result<()> {
                 return Ok(());
             }
             println!("audited {} item(s) in {} vault(s){}", r.items_checked, vids.len(), if *hibp { " (with HIBP)" } else { "" });
-            println!("  weak: {}  reused: {} ({} group(s))  duplicates: {}  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}  ignored: {}",
+            println!("  weak: {}  reused: {} ({} group(s))  duplicates: {}  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}  weak SSH keys: {}  ignored: {}",
                 r.weak, r.reused, r.reused_groups, r.duplicates, r.old, r.expired, r.expiring_soon, r.insecure_urls, r.missing_totp, r.totp_available, r.passkey_available,
                 if *hibp { format!("  pwned: {}", r.pwned) } else { String::new() },
+                r.weak_ssh_keys,
                 r.ignored);
             for f in &r.per_item {
                 println!("\n[{}] {} ({})", f.vault, f.title, &f.id[..f.id.len().min(8)]);

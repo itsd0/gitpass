@@ -1382,6 +1382,25 @@ fn settings_system_lock_toggles_default_on_and_backward_compatibility() {
 }
 
 #[test]
+fn settings_show_menu_bar_icon_defaults_on_and_backward_compatibility() {
+    let s = Settings::default();
+    assert!(s.show_menu_bar_icon);
+
+    // Legacy JSON without the showMenuBarIcon field
+    let legacy_json = r#"{"autoLockMinutes":5,"clipboardClearSecs":90,"theme":"dark","language":"en","biometricUnlock":false,"quickAccessHotkey":"X"}"#;
+    let parsed: Settings = serde_json::from_str(legacy_json).unwrap();
+    assert!(parsed.show_menu_bar_icon);
+
+    // Roundtrip with the setting disabled
+    let mut custom = s;
+    custom.show_menu_bar_icon = false;
+    let serialized = serde_json::to_string(&custom).unwrap();
+    assert!(serialized.contains(r#""showMenuBarIcon":false"#));
+    let deserialized: Settings = serde_json::from_str(&serialized).unwrap();
+    assert!(!deserialized.show_menu_bar_icon);
+}
+
+#[test]
 fn settings_hide_from_screen_recording_defaults_on_and_backward_compatibility() {
     let s = Settings::default();
     assert!(s.hide_from_screen_recording);

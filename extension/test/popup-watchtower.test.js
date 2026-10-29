@@ -144,13 +144,14 @@ test('popup detail: renders warning strip with chips and action buttons for logi
   assert.ok(actions, 'action bar must exist');
 
   const buttons = actions.querySelectorAll('button');
-  assert.strictEqual(buttons.length, 3, 'must render 3 action buttons');
+  assert.strictEqual(buttons.length, 4, 'must render 4 action buttons');
 
-  const [genBtn, siteBtn, appBtn] = buttons;
+  const [genBtn, siteBtn, wtBtn, appBtn] = buttons;
   assert.strictEqual(genBtn.textContent.trim(), 'Generate & update');
   assert.ok(genBtn.classList.contains('btn-primary'), 'primary button has orange accent');
 
   assert.strictEqual(siteBtn.textContent.trim(), 'Change on site');
+  assert.strictEqual(wtBtn.textContent.trim(), 'Open Watchtower');
   assert.strictEqual(appBtn.textContent.trim(), 'Open in gitpass');
 
   // Test Change on site click
@@ -158,6 +159,10 @@ test('popup detail: renders warning strip with chips and action buttons for logi
   assert.strictEqual(createdTabs.length, 1);
   assert.strictEqual(createdTabs[0].url, 'https://github.com/.well-known/change-password');
   assert.strictEqual(createdTabs[0].active, true);
+
+  // Test Open Watchtower click
+  wtBtn.click();
+  assert.ok(sent.some((m) => m.type === 'popup:open_in_app' && m.view === 'watchtower'));
 
   // Test Open in gitpass click
   appBtn.click();

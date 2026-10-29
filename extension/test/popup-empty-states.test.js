@@ -44,7 +44,7 @@ const q = (w, sel) => w.document.querySelector(sel);
 const settle = async () => { await sleep(30); await sleep(30); };
 const emptyText = (w) => { const e = q(w, '#listInner .empty'); return e ? e.textContent : ''; };
 const buttons = (w) => [...w.document.querySelectorAll('#listInner .empty button')];
-const chooseFilter = (w, id) => { const s = q(w, '#filter'); s.value = id; s.dispatchEvent(new w.Event('change', { bubbles: true })); };
+const chooseFilter = (w, id) => { const c = q(w, `#filterChips [data-filter-id="${id}"]`); assert.ok(c, `expected filter chip ${id}`); c.click(); };
 const form = (w) => {
   const sel = q(w, '#panel select');
   const title = q(w, '#panel [data-field=title]');
@@ -112,18 +112,18 @@ test('Show all items switches an empty Suggested filter to All Items', async () 
   const all = buttons(w).find((x) => x.textContent === 'Show all items');
   assert.ok(all);
   all.click();
-  assert.strictEqual(q(w, '#filter').value, 'all');
+  assert.strictEqual(q(w, '#filterChips [aria-selected="true"]').dataset.filterId, 'all');
   assert.strictEqual(w.document.querySelectorAll('#listInner .row').length, ITEMS.length);
   await settle();
   dom.window.close();
 });
 
-test('a non-https page keeps Open an https page to fill and only offers Show all items', async () => {
+test('a non-https page has no Suggested chip (no current site) and lists all items', async () => {
   const { dom, w } = popup({ items: ITEMS, suggested: [], origin: null });
   await settle();
-  chooseFilter(w, 'suggested');
-  assert.match(emptyText(w), /Open an https page to fill/);
-  assert.deepStrictEqual(buttons(w).map((b) => b.textContent), ['Show all items']);
+  assert.strictEqual(q(w, '#filterChips [data-filter-id="suggested"]'), null);
+  assert.strictEqual(q(w, '#filterChips [aria-selected="true"]').dataset.filterId, 'all');
+  assert.strictEqual(w.document.querySelectorAll('#listInner .row').length, ITEMS.length);
   await settle();
   dom.window.close();
 });

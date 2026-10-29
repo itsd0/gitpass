@@ -89,6 +89,14 @@ function restoreDomain(list, domain, index) {
   return current;
 }
 
+/**
+ * Pure function to normalize a domain for the exception lists: trim, lowercase, strip a
+ * leading www. (matches the save banner's siteName()).
+ */
+function normalizeDomain(domain) {
+  return (domain || '').trim().toLowerCase().replace(/^www\./, '');
+}
+
 // Browser DOM logic
 const $ = (id) => (typeof document !== 'undefined' ? document.getElementById(id) : null);
 const t = (k, f, subs) => (globalThis.GitpassI18n ? GitpassI18n.t(k, f, subs) : f);
@@ -215,6 +223,69 @@ async function renderNeverSave() {
   }
 }
 
+async function renderNeverAutoSubmit() {
+  const listEl = $('never-auto-submit-list');
+  const emptyEl = $('never-auto-submit-empty');
+  const emptyDescEl = $('never-auto-submit-empty-desc');
+  if (!listEl || !emptyEl) return;
+
+  const domains = await GitpassOnboard.getNeverAutoSubmit();
+  listEl.textContent = '';
+
+  if (!domains.length) {
+    emptyEl.style.display = 'block';
+    if (emptyDescEl) emptyDescEl.classList.remove('hidden');
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  if (emptyDescEl) emptyDescEl.classList.add('hidden');
+
+  for (const domain of domains) {
+    const row = document.createElement('div');
+    row.className = 't setting-row never-save-row';
+
+    const info = document.createElement('div');
+    info.className = 'never-save-info';
+    const b = document.createElement('b');
+    b.className = 'domain-name';
+    b.textContent = domain;
+    info.append(b);
+
+    const actions = document.createElement('div');
+    actions.className = 'setting-control';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sec sec';
+    btn.type = 'button';
+    btn.setAttribute('data-domain', domain);
+    btn.textContent = t('remove', 'Remove');
+    btn.onclick = async () => {
+      const current = await GitpassOnboard.getNeverAutoSubmit();
+      await GitpassOnboard.setNeverAutoSubmit(removeDomain(current, domain));
+      showToast(t('saved', 'Saved'));
+      await renderNeverAutoSubmit();
+    };
+
+    actions.append(btn);
+    row.append(info, actions);
+    listEl.append(row);
+  }
+}
+
+async function onAddNeverAutoSubmit() {
+  const input = $('never-auto-submit-add');
+  if (!input) return;
+  const domain = normalizeDomain(input.value);
+  if (!domain) return;
+  const current = await GitpassOnboard.getNeverAutoSubmit();
+  if (!current.some((d) => (d || '').toLowerCase() === domain)) {
+    await GitpassOnboard.setNeverAutoSubmit([...current, domain]);
+  }
+  input.value = '';
+  showToast(t('saved', 'Saved'));
+  await renderNeverAutoSubmit();
+}
+
 async function checkStatus() {
   const card = $('connection-card');
   const dot = $('status-dot');
@@ -306,6 +377,11 @@ async function init() {
   await initSettings();
   await renderShortcut();
   await renderNeverSave();
+  await renderNeverAutoSubmit();
+  const addBtn = $('never-auto-submit-add-btn');
+  if (addBtn) addBtn.onclick = () => onAddNeverAutoSubmit();
+  const addInput = $('never-auto-submit-add');
+  if (addInput) addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); onAddNeverAutoSubmit(); } });
   await checkStatus();
 
   // Live status updates from host/lock events without ever querying or showing item data
@@ -332,9 +408,12 @@ if (typeof module !== 'undefined' && module.exports) {
     connectionState,
     removeDomain,
     restoreDomain,
+    normalizeDomain,
     checkStatus,
     renderNeverSave,
+    renderNeverAutoSubmit,
     onRemoveDomain,
     onUndoRemove,
+    onAddNeverAutoSubmit,
   };
 }

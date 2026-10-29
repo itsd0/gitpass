@@ -16,6 +16,31 @@ test('buildFilters has suggestions, all, favorites, 11 categories and vaults', (
   assert.deepStrictEqual(f.filter((x) => x.group === 'vault').map((x) => x.id), ['vault:v1', 'vault:v2']);
 });
 
+test('buildFilterChips: suggested only with a site, categories only with items, vaults menu only with several vaults', () => {
+  const vaults = [{ id: 'v1', name: 'Personal' }, { id: 'v2', name: 'Work' }];
+  const chips = V.buildFilterChips(items, vaults, { origin: 'https://github.com/x', currentFilter: 'all' });
+  assert.deepStrictEqual(chips.map((x) => x.id), ['suggested', 'all', 'favorites', 'cat:login', 'cat:credit_card', 'cat:wifi', 'vaults']);
+  assert.strictEqual(chips[0].host, 'github.com');
+  assert.deepStrictEqual(chips.at(-1).vaults.map((v) => v.id), ['vault:v1', 'vault:v2']);
+  // No site, one vault: no suggested chip, no vaults menu.
+  const single = V.buildFilterChips(items, [vaults[0]], { origin: null, currentFilter: 'all' });
+  assert.deepStrictEqual(single.map((x) => x.id), ['all', 'favorites', 'cat:login', 'cat:credit_card', 'cat:wifi']);
+  // The active filter is always kept, even when it would otherwise be hidden.
+  const kept = V.buildFilterChips(items, [vaults[0]], { origin: null, currentFilter: 'vault:v1' });
+  assert.ok(kept.some((x) => x.id === 'vaults'));
+  const keptCat = V.buildFilterChips([], [vaults[0]], { origin: null, currentFilter: 'cat:passkey' });
+  assert.deepStrictEqual(keptCat.map((x) => x.id), ['all', 'favorites', 'cat:passkey']);
+});
+
+test('chipNavIndex moves with wrap-around, Home and End', () => {
+  assert.strictEqual(V.chipNavIndex(0, 'ArrowLeft', 4), 3);
+  assert.strictEqual(V.chipNavIndex(3, 'ArrowRight', 4), 0);
+  assert.strictEqual(V.chipNavIndex(1, 'ArrowRight', 4), 2);
+  assert.strictEqual(V.chipNavIndex(2, 'Home', 4), 0);
+  assert.strictEqual(V.chipNavIndex(0, 'End', 4), 3);
+  assert.strictEqual(V.chipNavIndex(0, 'ArrowRight', 0), -1);
+});
+
 test('filterItems by filter, query, favorites first', () => {
   assert.deepStrictEqual(V.filterItems(items, [], 'all', '').map((i) => i.id), ['v1:b', 'v2:c', 'v1:a', 'v2:d']);
   assert.deepStrictEqual(V.filterItems(items, [], 'cat:login', '').map((i) => i.id), ['v2:c', 'v1:a']);
