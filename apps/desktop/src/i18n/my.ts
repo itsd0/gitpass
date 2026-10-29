@@ -383,6 +383,7 @@ export const my: Partial<Record<Key, string>> = {
   "items.sortTitle": "ခေါင်းစဉ်",
   "items.ariaLabel": "Item များ",
   "items.selectItem": "{title} ကို ရွေးပါ",
+  "items.deselectItem": "{title} ကို ရွေးချယ်မှုမှ ပယ်ဖျက်ပါ",
   "items.search.resultCount": "ရလဒ် {count} ခု",
   "items.search.resultOne": "ရလဒ် ၁ ခု",
   // category labels
