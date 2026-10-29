@@ -1079,6 +1079,7 @@ dependencies = [
  "p256 0.14.0",
  "proptest",
  "rand 0.8.8",
+ "rsa",
  "serde",
  "serde_json",
  "sha1",
@@ -2545,6 +2546,7 @@ checksum = "3b86f5297f0f04d08cabaa0f6bff7cb6aec4d9c3b49d87990d63da9d9156a8c3"
 dependencies = [
  "bcrypt-pbkdf",
  "ed25519-dalek",
+ "num-bigint-dig",
  "p256 0.13.2",
  "p384",
  "p521",

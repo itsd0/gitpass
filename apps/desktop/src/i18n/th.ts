@@ -295,6 +295,8 @@ export const th: Partial<Record<Key, string>> = {
   "watchtower.expiringSoonDesc": "รายการที่จะหมดอายุภายใน 30 วัน",
   "watchtower.insecureUrls": "เว็บไซต์ที่ไม่ปลอดภัย",
   "watchtower.insecureUrlsDesc": "ข้อมูลเข้าสู่ระบบที่บันทึกด้วยที่อยู่ http:// ที่ไม่ได้เข้ารหัส อัปเดตเป็น HTTPS",
+  "watchtower.weakSshKey": "คีย์ SSH ที่ไม่ปลอดภัย",
+  "watchtower.weakSshKeyDesc": "คีย์ RSA ที่มีขนาดต่ำกว่า 3072 บิต อัปเกรดเป็น 3072+ บิต หรือ Ed25519",
   "watchtower.openHttps": "เปิดเวอร์ชัน HTTPS",
   "watchtower.editUrl": "แก้ไข URL",
   "watchtower.duplicates": "ข้อมูลเข้าสู่ระบบที่ซ้ำกัน",

@@ -150,6 +150,7 @@ pub struct WatchtowerReport {
     pub expired: Vec<String>, pub expiring_soon: Vec<String>,
     pub insecure_urls: Vec<String>,
     pub duplicates: Vec<Vec<String>>,
+    pub weak_ssh_keys: Vec<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub weak_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1191,6 +1192,7 @@ impl App {
                 totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
                 insecure_urls: vec![],
                 duplicates: vec![],
+                weak_ssh_keys: vec![],
                 weak_reasons: HashMap::new(),
                 ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
@@ -1213,6 +1215,7 @@ impl App {
                         Finding::ExpiringSoon { .. } => out.expiring_soon.push(f.id.clone()),
                         Finding::InsecureUrl { .. } => out.insecure_urls.push(f.id.clone()),
                         Finding::Duplicate { group } => dup_groups.entry(group.clone()).or_default().push(f.id.clone()),
+                        Finding::WeakSshKey { .. } => out.weak_ssh_keys.push(f.id.clone()),
                     }
                 }
             }

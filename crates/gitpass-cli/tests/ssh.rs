@@ -80,13 +80,13 @@ fn request_identities(s: &mut UnixStream) -> Vec<(Vec<u8>, String)> {
     out
 }
 
-fn sign_request(s: &mut UnixStream, blob: &[u8], data: &[u8]) -> Result<Vec<u8>, u8> {
+fn sign_request_flags(s: &mut UnixStream, blob: &[u8], data: &[u8], flags: u32) -> Result<Vec<u8>, u8> {
     let mut body = vec![gitpass_core::ssh::SSH_AGENTC_SIGN_REQUEST];
     body.extend_from_slice(&(blob.len() as u32).to_be_bytes());
     body.extend_from_slice(blob);
     body.extend_from_slice(&(data.len() as u32).to_be_bytes());
     body.extend_from_slice(data);
-    body.extend_from_slice(&0u32.to_be_bytes()); // flags
+    body.extend_from_slice(&flags.to_be_bytes()); // flags
 
     let len = (body.len() as u32).to_be_bytes();
     s.write_all(&len).unwrap();
@@ -105,6 +105,10 @@ fn sign_request(s: &mut UnixStream, blob: &[u8], data: &[u8]) -> Result<Vec<u8>,
     } else {
         Err(resp[0])
     }
+}
+
+fn sign_request(s: &mut UnixStream, blob: &[u8], data: &[u8]) -> Result<Vec<u8>, u8> {
+    sign_request_flags(s, blob, data, 0)
 }
 
 #[test]
@@ -191,6 +195,29 @@ fn ssh_cli_lifecycle_and_agent_socket() {
     assert!(list_out.contains("Deploy Key"));
     assert!(list_out.contains("Imported Key"));
 
+    // Import 2048-bit RSA key
+    let rsa_file = d.path().join("id_rsa_2048");
+    assert!(Command::new("ssh-keygen").args(["-q", "-t", "rsa", "-b", "2048", "-N", "", "-C", "rsa@example.invalid", "-f"]).arg(&rsa_file).status().unwrap().success());
+    let o = gp(
+        &root,
+        &[
+            "ssh",
+            "import",
+            "Dev",
+            rsa_file.to_str().unwrap(),
+            "--title",
+            "Deploy RSA",
+        ],
+    );
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+
+    // Get reveals bit length
+    let o = gp(&root, &["get", "Dev", "Deploy RSA"]);
+    assert!(o.status.success());
+    let get_out = String::from_utf8_lossy(&o.stdout);
+    assert!(get_out.contains("key type: ssh-rsa"), "{get_out}");
+    assert!(get_out.contains("bit length: 2048"), "{get_out}");
+
     // 7. Run `gitpass ssh agent --socket <sock>` as background process
     let mut child = Command::new(bin())
         .args(["ssh", "agent", "--socket", sock.to_str().unwrap()])
@@ -209,9 +236,9 @@ fn ssh_cli_lifecycle_and_agent_socket() {
 
     // Request identities over the socket
     let ids = request_identities(&mut stream);
-    assert_eq!(ids.len(), 2, "agent should advertise both vault keys");
+    assert_eq!(ids.len(), 3, "agent should advertise all 3 vault keys");
     let titles: Vec<&str> = ids.iter().map(|(_, c)| c.as_str()).collect();
-    assert!(titles.contains(&"Deploy Key") && titles.contains(&"Imported Key"));
+    assert!(titles.contains(&"Deploy Key") && titles.contains(&"Imported Key") && titles.contains(&"Deploy RSA"));
 
     // Sign request over the socket
     let deploy_blob = ids.iter().find(|(_, c)| c == "Deploy Key").unwrap().0.clone();
@@ -225,6 +252,21 @@ fn ssh_cli_lifecycle_and_agent_socket() {
         sign_request(&mut stream, b"bogus-blob", payload),
         Err(gitpass_core::ssh::SSH_AGENT_FAILURE)
     );
+
+    // RSA signing over the agent socket
+    let rsa_blob = ids.iter().find(|(_, c)| c == "Deploy RSA").unwrap().0.clone();
+    // Flags=0 on RSA is REFUSED by agent (plain SHA-1 ssh-rsa)
+    assert_eq!(
+        sign_request_flags(&mut stream, &rsa_blob, payload, 0),
+        Err(gitpass_core::ssh::SSH_AGENT_FAILURE)
+    );
+    // Flags=SSH_AGENT_RSA_SHA2_256 succeeds
+    let rsa_sig256 = sign_request_flags(&mut stream, &rsa_blob, payload, gitpass_core::ssh::SSH_AGENT_RSA_SHA2_256).expect("sign RSA sha256");
+    assert!(gitpass_core::ssh::verify_blob(&rsa_blob, payload, &rsa_sig256).is_ok());
+
+    // Flags=SSH_AGENT_RSA_SHA2_512 succeeds
+    let rsa_sig512 = sign_request_flags(&mut stream, &rsa_blob, payload, gitpass_core::ssh::SSH_AGENT_RSA_SHA2_512).expect("sign RSA sha512");
+    assert!(gitpass_core::ssh::verify_blob(&rsa_blob, payload, &rsa_sig512).is_ok());
 
     // Drop agent process
     drop(_guard);

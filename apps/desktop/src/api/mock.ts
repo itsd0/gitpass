@@ -634,6 +634,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       expiringSoon: activeExpiringSoon,
       insecureUrls: activeInsecureUrls,
       duplicates,
+      weakSshKeys: [],
       weakReasons: Object.fromEntries(activeWeak.map((id) => [id, "contains the username"])),
       ignored: ignoredList,
       checkedAt: new Date().toISOString(),
