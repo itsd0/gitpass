@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, ChevronRight, Copy, Download, ExternalLink, Eye, EyeOff, FolderInput, MoreVertical, Paperclip, Pencil, Plus, QrCode, RotateCcw, Share2, ShieldAlert, Star, Trash2, Users } from 'lucide-react';
+import { Archive, ArchiveRestore, ChevronRight, Copy, Download, ExternalLink, Eye, EyeOff, FolderInput, GitBranch, MoreVertical, Paperclip, Pencil, Plus, QrCode, RotateCcw, Share2, ShieldAlert, Star, Trash2, Users } from 'lucide-react';
 import { api } from '../../api/client';
 import type { ItemDetail as Detail, VaultInfo } from '../../api/types';
 import { useApp } from '../../lib/store';
@@ -14,6 +14,7 @@ import { ItemEditor } from './ItemEditor';
 import { SafeMarkdown } from './SafeMarkdown';
 import { useSettings } from '../settings/useSettings';
 import { WifiQrDialog } from './WifiQrDialog';
+import { GitSigningDialog } from './GitSigningDialog';
 import { extractWifiFields } from './wifiQr';
 import { errText } from './actions';
 import { EmptyIllustration } from './EmptyIllustration';
@@ -91,6 +92,8 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
   const dropPaneRef = useRef<HTMLDivElement>(null);
   const [showWifiQr, setShowWifiQr] = useState(false);
   const wifiQrBtnRef = useRef<HTMLButtonElement>(null);
+  const [showGitSigning, setShowGitSigning] = useState(false);
+  const gitSigningBtnRef = useRef<HTMLButtonElement>(null);
   const moreActionsBtnRef = useRef<HTMLButtonElement>(null);
   const lastTriggerRef = useRef<HTMLElement | null>(null);
 
@@ -234,6 +237,21 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
               </Tooltip>
             )
           )}
+          {detail.category === 'ssh_key' && (
+            <Button
+              ref={gitSigningBtnRef}
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                lastTriggerRef.current = gitSigningBtnRef.current;
+                setShowGitSigning(true);
+              }}
+              aria-label={t('ssh.useForGitSigning')}
+              data-testid="use-for-git-signing-btn"
+            >
+              <GitBranch size={14} />{t('ssh.useForGitSigning')}
+            </Button>
+          )}
           <Button variant="ghost" size="sm" onClick={() => useApp.getState().openModal('people', { vaultId: detail.vaultId })}><Share2 size={14} />{t('detail.share')}</Button>
           <Button variant="ghost" size="sm" onClick={() => setEditing(true)}><Pencil size={14} />{t('detail.edit')}</Button>
         </>}
@@ -274,6 +292,17 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
                     <QrCode size={14} />{t('wifi.showQrCode')}
                   </DropdownMenuItem>
                 )
+              )}
+              {detail.category === 'ssh_key' && (
+                <DropdownMenuItem
+                  data-testid="menu-use-for-git-signing"
+                  onSelect={() => {
+                    lastTriggerRef.current = moreActionsBtnRef.current;
+                    setShowGitSigning(true);
+                  }}
+                >
+                  <GitBranch size={14} />{t('ssh.useForGitSigning')}
+                </DropdownMenuItem>
               )}
               <DropdownMenuItem onSelect={() => run(api.setFavorite({ ...ctx, favorite: !detail.favorite }), detail.favorite ? t('bulk.toast.unfavorite') : t('bulk.toast.favorite'))}><Star size={14} />{detail.favorite ? t('bulk.unfavorite') : t('bulk.favorite')}</DropdownMenuItem>
               <DropdownMenuSub>
@@ -561,6 +590,15 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
         <WifiQrDialog
           open={showWifiQr}
           onOpenChange={setShowWifiQr}
+          detail={detail}
+          triggerRef={lastTriggerRef}
+        />
+      )}
+
+      {showGitSigning && (
+        <GitSigningDialog
+          open={showGitSigning}
+          onOpenChange={setShowGitSigning}
           detail={detail}
           triggerRef={lastTriggerRef}
         />

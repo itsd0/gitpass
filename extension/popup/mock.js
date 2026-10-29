@@ -30,6 +30,9 @@
     url: url || undefined, favicon_host: url ? new URL(url).hostname : undefined, has_totp, favorite, updated_at: now - i * 3600e3,
   }));
   for (const v of V) v.item_count = items.filter((i) => i.vault_id === v.id).length;
+  const trashed = new Set();
+  const liveItems = () => items.filter((i) => !trashed.has(i.id));
+  const liveItem = (id) => items.find((i) => i.id === id && !trashed.has(i.id));
   const F = (name, label, kind, value, concealed) => ({ name, label, kind, concealed: !!concealed, value: concealed ? undefined : value });
   const secrets = {};
   function detail(it) {
@@ -70,11 +73,14 @@
         return err('not_found');
       }
       case 'list_vaults': return ok({ vaults: V });
-      case 'list_items': return ok({ items });
-      case 'match_active': return ok({ origin: 'https://github.com', items: items.filter((i) => i.favicon_host === 'github.com') });
-      case 'get_item': return ok({ item: detail(items.find((i) => i.id === msg.item_id)) });
+      case 'list_items': return ok({ items: liveItems() });
+      case 'match_active': return ok({ origin: 'https://github.com', items: liveItems().filter((i) => i.favicon_host === 'github.com') });
+      case 'get_item': {
+        const it = liveItem(msg.item_id);
+        return it ? ok({ item: detail(it) }) : err('not_found');
+      }
       case 'item_findings': {
-        const it = items.find((i) => i.id === msg.item_id);
+        const it = liveItem(msg.item_id);
         if (!it) return err('not_found');
         if (it.id === 'v1:i0') {
           return ok({
@@ -85,7 +91,7 @@
         }
         return ok({ kinds: [] });
       }
-      case 'reveal': detail(items.find((i) => i.id === msg.item_id)); return ok({ value: secrets[msg.field] || '' });
+      case 'reveal': { const it = liveItem(msg.item_id); if (!it) return err('not_found'); detail(it); return ok({ value: secrets[msg.field] || '' }); }
       case 'totp': { const s = Math.floor(Date.now() / 1000); return ok({ code: String(100000 + (Math.floor(s / 30) * 7919) % 900000), remaining: 30 - (s % 30), period: 30 }); }
       case 'generate': return ok({ password: 'Xk7#pQ2m-Vr9!tLz4wNb' });
       case 'generator_history': {
@@ -109,7 +115,18 @@
         return ok({ ok: true });
       }
       case 'create_item': { const id = 'v1:new' + items.length; items.unshift({ id, vault_id: 'v1', title: msg.item.title, subtitle: '', category: msg.item.category, favorite: false }); return ok({ item_id: id, title: msg.item.title }); }
-      case 'set_favorite': { const it = items.find((i) => i.id === msg.item_id); it.favorite = !!msg.favorite; return ok({ ok: true }); }
+      case 'set_favorite': { const it = items.find((i) => i.id === msg.item_id); if (!it) return err('not_found'); it.favorite = !!msg.favorite; return ok({ ok: true }); }
+      case 'trash_item': {
+        const it = liveItem(msg.item_id);
+        if (!it) return err('not_found');
+        trashed.add(it.id);
+        return ok({ ok: true });
+      }
+      case 'restore_item': {
+        if (!items.some((x) => x.id === msg.item_id)) return err('not_found');
+        trashed.delete(msg.item_id);
+        return ok({ ok: true });
+      }
       case 'open_fill': case 'fill_active': return ok(true);
     }
     return err('bad_request');
