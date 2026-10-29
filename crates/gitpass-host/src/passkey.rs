@@ -53,16 +53,23 @@ pub fn query(s: &Session, q: &Value) -> Result<Value> {
     let origin = req(q, "origin")?;
     let rp = check_rp(origin, opt(q, "rp_id"))?;
     let allow = b64_list(q, "allow_credentials");
-    let c: Vec<_> = find(s, &rp)?.into_iter()
+    let vaults: std::collections::HashMap<_, _> = s.list_vaults()?.into_iter().map(|(id, m)| (id, m.name.clone())).collect();
+    let mut c: Vec<_> = find(s, &rp)?.into_iter()
         .filter(|(_, _, p)| allow.is_empty() || allow.contains(&p.credential_id))
-        .map(|(_, _, p)| {
-            json!({
+        .map(|(vid, iid, p)| {
+            let last_used = s.last_used(&iid).unwrap_or(0);
+            let vault_name = vaults.get(&vid).cloned().unwrap_or_default();
+            (last_used, json!({
                 "credential_id": b64(&p.credential_id),
                 "user_name": p.user_name,
                 "user_handle": b64(&p.user_handle),
-            })
+                "vault_name": vault_name,
+                "last_used": last_used,
+            }))
         }).collect();
-    Ok(json!({ "rp_id": rp, "matching": c }))
+    c.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| a.1["user_name"].as_str().cmp(&b.1["user_name"].as_str())));
+    let matching: Vec<Value> = c.into_iter().map(|(_, val)| val).collect();
+    Ok(json!({ "rp_id": rp, "matching": matching }))
 }
 
 /// `passkey_create {origin, rp_id?, rp_name?, challenge, user_id, user_name, user_display_name?, exclude_credentials?, algorithms?, vault_id?}`
@@ -105,7 +112,10 @@ pub fn get(s: &Session, q: &Value) -> Result<Value> {
     let challenge = req(q, "challenge")?;
     unb64(challenge).map_err(|_| coded(code::BAD_REQUEST, "challenge must be base64url"))?;
     let allow = b64_list(q, "allow_credentials");
-    let chosen = opt(q, "credential_id").and_then(|c| unb64(c).ok());
+    let chosen = match opt(q, "credential_id") {
+        Some(c) => Some(unb64(c).map_err(|_| coded(code::BAD_REQUEST, "credential_id must be base64url"))?),
+        None => None,
+    };
     let mut c: Vec<_> = find(s, &rp)?.into_iter()
         .filter(|(_, _, p)| allow.is_empty() || allow.contains(&p.credential_id))
         .filter(|(_, _, p)| chosen.as_ref().is_none_or(|c| *c == p.credential_id)).collect();
@@ -115,6 +125,7 @@ pub fn get(s: &Session, q: &Value) -> Result<Value> {
     let (_, mut r) = s.read_record(&vid, &iid)?;
     Passkey::set_sign_count(&mut r, pk.sign_count);
     s.update_record(&vid, &iid, r)?;
+    let _ = s.touch_item_used(&iid);
     let ad = pk.auth_data(false);
     let cdj = client_data("webauthn.get", challenge, origin);
     let sig = pk.sign_assertion(&ad, &cdj);

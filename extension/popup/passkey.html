@@ -1,13 +1,39 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><title>gitpass passkey</title>
 <link rel="stylesheet" href="popup.css">
-<style>body{width:auto;min-height:0;padding:20px}.pk dl{margin:12px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px}.pk dt{opacity:.7}.pk dd{margin:0;word-break:break-all}.pk .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}</style>
+<style>
+body{width:auto;min-height:0;padding:20px}
+.pk dl{margin:12px 0;display:grid;grid-template-columns:auto 1fr;gap:4px 12px}
+.pk dt{opacity:.7}
+.pk dd{margin:0;word-break:break-all}
+.pk .row{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+.pk-list-header{display:flex;justify-content:space-between;align-items:center;margin-top:10px;margin-bottom:6px;font-size:12px;font-weight:600}
+.pk-list-count{font-size:11px;font-weight:normal;color:rgb(var(--muted))}
+.pk-list{list-style:none;margin:0 0 10px 0;padding:0;max-height:200px;overflow-y:auto;border:1px solid rgb(var(--border));border-radius:8px;background:rgb(var(--card))}
+.pk-item{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-bottom:1px solid rgb(var(--border));outline:none;user-select:none;transition:background .1s}
+.pk-item:last-child{border-bottom:none}
+.pk-item:hover{background:rgb(var(--hover))}
+.pk-item.selected{background:rgb(var(--active));box-shadow:inset 3px 0 0 rgb(var(--accent))}
+.pk-item:focus-visible{outline:2px solid rgb(var(--accent));outline-offset:-2px}
+.pk-item-info{min-width:0;flex:1;display:flex;flex-direction:column;gap:1px}
+.pk-item-user{font-weight:600;color:rgb(var(--fg));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk-item.selected .pk-item-user{color:rgb(var(--accent))}
+.pk-item-vault{font-size:11px;color:rgb(var(--muted));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+</style>
 </head><body class="pk">
 <img src="../icons/logo64.png" alt="" width="40" height="40">
 <h1 id="title" style="font-size:16px;margin:8px 0"></h1>
-<dl><dt data-i18n="pkSite">Site</dt><dd id="site"></dd><dt data-i18n="pkAccount">Account</dt><dd id="account"></dd></dl>
+<dl id="meta"><dt data-i18n="pkSite">Site</dt><dd id="site"></dd><dt data-i18n="pkAccount" id="account-label">Account</dt><dd id="account"></dd></dl>
+<div id="account-choice" style="display:none;margin:12px 0">
+  <div class="pk-list-header">
+    <span data-i18n="pkChooseAccount">Choose an account</span>
+    <span id="passkeys-count" class="pk-list-count"></span>
+  </div>
+  <div id="account-list" class="pk-list" role="listbox"></div>
+</div>
 <p id="msg" class="muted" role="status"></p>
 <div class="row"><button id="deny" class="btn" data-i18n="pkDeny">Cancel</button><button id="approve" class="btn btn-primary" data-i18n="pkApprove">Continue</button></div>
 <script src="../lib/i18n.js"></script>
+<script src="../lib/icons.js"></script>
 <script src="passkey.js"></script>
 </body></html>

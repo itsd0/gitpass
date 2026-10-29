@@ -77,6 +77,18 @@
   .pk-field{display:flex;justify-content:space-between;align-items:center;font-size:12px}
   .pk-label{color:var(--gp-muted)}
   .pk-val{font-weight:600;color:var(--gp-fg);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pk-list-header{display:flex;justify-content:space-between;align-items:center;margin-top:10px;margin-bottom:6px;font-size:12px;font-weight:600;color:var(--gp-fg)}
+  .pk-list-count{font-size:11px;font-weight:normal;color:var(--gp-muted)}
+  .pk-list{list-style:none;margin:0 0 10px 0;padding:0;max-height:220px;overflow-y:auto;border:1px solid var(--gp-border);border-radius:8px;background:var(--gp-field)}
+  .pk-item{display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer;border-bottom:1px solid var(--gp-border);outline:none;user-select:none;transition:background .1s}
+  .pk-item:last-child{border-bottom:none}
+  .pk-item:hover{background:var(--gp-hover)}
+  .pk-item.selected{background:var(--gp-active);box-shadow:inset 3px 0 0 var(--gp-accent)}
+  .pk-item:focus-visible{outline:2px solid var(--gp-accent);outline-offset:-2px}
+  .pk-item-info{min-width:0;flex:1;display:flex;flex-direction:column;gap:1px}
+  .pk-item-user{font-weight:600;color:var(--gp-fg);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pk-item.selected .pk-item-user{color:var(--gp-accent-text)}
+  .pk-item-vault{font-size:11px;color:var(--gp-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .pk-acts{display:flex;justify-content:flex-end;gap:10px;margin-top:16px;flex-wrap:wrap}
   .pk-status{font-size:12px;margin-top:4px;color:var(--gp-muted);white-space:pre-wrap;word-break:break-word}
   .pk-status.err{color:var(--gp-danger)}
@@ -1026,9 +1038,118 @@
     const meta = el('div', 'pk-meta');
     const siteRow = el('div', 'pk-field');
     siteRow.append(el('span', 'pk-label', t('pkSite', 'Site:')), el('span', 'pk-val', msg.rpId));
-    const userRow = el('div', 'pk-field');
-    userRow.append(el('span', 'pk-label', t('pkAccount', 'Account:')), el('span', 'pk-val', msg.userName || '—'));
-    meta.append(siteRow, userRow);
+    meta.append(siteRow);
+
+    const matching = Array.isArray(msg.matching) ? msg.matching : [];
+    const isMultiChoice = msg.kind === 'get' && matching.length >= 2;
+
+    let selectedCredId = matching[0] ? matching[0].credential_id : null;
+    let selectedIndex = 0;
+    let listHeader = null;
+    let listEl = null;
+    let rowEls = [];
+
+    if (!isMultiChoice) {
+      const userRow = el('div', 'pk-field');
+      userRow.append(el('span', 'pk-label', t('pkAccount', 'Account:')), el('span', 'pk-val', msg.userName || '—'));
+      meta.append(userRow);
+    } else {
+      const vaultNames = new Set(matching.map((m) => m.vault_name).filter(Boolean));
+      const showVaultName = vaultNames.size > 1;
+
+      listHeader = el('div', 'pk-list-header');
+      const labelSpan = el('span', 'pk-list-label', t('pkChooseAccount', 'Choose an account'));
+      const countText = t('pkPasskeysCount', '{n} passkeys for this site').replace('{n}', matching.length);
+      const countSpan = el('span', 'pk-list-count', countText);
+      listHeader.append(labelSpan, countSpan);
+
+      listEl = el('div', 'pk-list');
+      listEl.setAttribute('role', 'listbox');
+      listEl.setAttribute('aria-label', t('pkChooseAccount', 'Choose an account'));
+
+      function selectAccount(idx, shouldFocus = true) {
+        if (idx < 0 || idx >= matching.length) return;
+        selectedIndex = idx;
+        selectedCredId = matching[idx].credential_id;
+        rowEls.forEach((r, idx2) => {
+          const isSel = idx2 === selectedIndex;
+          r.classList.toggle('selected', isSel);
+          r.setAttribute('aria-selected', isSel ? 'true' : 'false');
+          r.setAttribute('tabindex', isSel ? '0' : '-1');
+        });
+        listEl.setAttribute('aria-activedescendant', `pk-opt-${selectedIndex}`);
+        const activeRow = rowEls[selectedIndex];
+        if (activeRow) {
+          activeRow.scrollIntoView({ block: 'nearest' });
+          if (shouldFocus) activeRow.focus();
+        }
+      }
+
+      rowEls = matching.map((m, idx) => {
+        const itemEl = el('div', 'pk-item' + (idx === 0 ? ' selected' : ''));
+        itemEl.setAttribute('role', 'option');
+        itemEl.setAttribute('id', `pk-opt-${idx}`);
+        itemEl.setAttribute('aria-selected', idx === 0 ? 'true' : 'false');
+        itemEl.setAttribute('tabindex', idx === 0 ? '0' : '-1');
+
+        const titleText = m.user_name || '—';
+        itemEl.title = m.user_name || '';
+
+        const iconObj = itemIcon({ category: 'login', favicon_host: msg.rpId, url: 'https://' + msg.rpId, title: m.user_name || msg.rpId });
+        const iconWrap = el('div', 'ic');
+        if (iconObj && iconObj.dom) iconWrap.appendChild(iconObj.dom);
+
+        const infoEl = el('div', 'pk-item-info');
+        const userSpan = el('span', 'pk-item-user', titleText);
+        userSpan.title = m.user_name || '';
+        infoEl.appendChild(userSpan);
+
+        if (showVaultName && m.vault_name) {
+          const vaultSpan = el('span', 'pk-item-vault', m.vault_name);
+          infoEl.appendChild(vaultSpan);
+        }
+
+        itemEl.append(iconWrap, infoEl);
+
+        itemEl.addEventListener('click', (e) => {
+          if (!e.isTrusted) return;
+          selectAccount(idx, true);
+        });
+        itemEl.addEventListener('dblclick', (e) => {
+          if (!e.isTrusted || !armed()) return;
+          selectAccount(idx, true);
+          finish(true);
+        });
+
+        return itemEl;
+      });
+
+      rowEls.forEach((r) => listEl.appendChild(r));
+
+      listEl.addEventListener('keydown', (e) => {
+        if (!e.isTrusted) return;
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          selectAccount(Math.min(matching.length - 1, selectedIndex + 1));
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          selectAccount(Math.max(0, selectedIndex - 1));
+        } else if (e.key === 'Home') {
+          e.preventDefault();
+          selectAccount(0);
+        } else if (e.key === 'End') {
+          e.preventDefault();
+          selectAccount(matching.length - 1);
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (!armed()) return;
+          finish(true);
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          finish(false);
+        }
+      });
+    }
 
     const acts = el('div', 'pk-acts');
     const cancelBtn = el('button', 'btn', t('pkCancel', 'Cancel')); cancelBtn.type = 'button';
@@ -1059,7 +1180,7 @@
           acts.textContent = ''; acts.append(c);
         }, 45000);
       } else closePkPrompt();
-      try { sendResponse({ approved }); } catch (_) {}
+      try { sendResponse({ approved, credential_id: selectedCredId, credentialId: selectedCredId }); } catch (_) {}
     };
 
     cancelBtn.addEventListener('click', (e) => { if (!e.isTrusted) return; finish(false); });
@@ -1067,7 +1188,11 @@
     overlay.addEventListener('keydown', (e) => { if (!e.isTrusted || e.key !== 'Escape') return; if (pkPrompt && pkPrompt.onEscape) pkPrompt.onEscape(e); else finish(false); });
 
     acts.append(cancelBtn, okBtn);
-    card.append(row, meta, status, acts);
+    if (isMultiChoice) {
+      card.append(row, meta, listHeader, listEl, status, acts);
+    } else {
+      card.append(row, meta, status, acts);
+    }
     overlay.append(card);
     root.append(overlay);
     // Outcome from the background after the host call.
@@ -1100,7 +1225,14 @@
       pkPrompt.onEscape = pick('close');
     };
     pkPrompt = { host, finish, reqId: msg.reqId, showResult };
-    setTimeout(() => okBtn.focus(), 50);
+    if (isMultiChoice) {
+      setTimeout(() => {
+        if (rowEls[0]) rowEls[0].focus();
+        else okBtn.focus();
+      }, 50);
+    } else {
+      setTimeout(() => okBtn.focus(), 50);
+    }
   }
 
   // Right-click target for the context menu's "Suggest strong password" (#213):
