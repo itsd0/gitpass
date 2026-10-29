@@ -35,6 +35,12 @@ export interface ExportRequest { vaultId?: string; items?: ItemRef[]; format: 'g
 export interface ExportResult { path: string; items: number; format: string; encrypted: boolean; }
 export interface SshKeyCreated { item: ItemSummary; publicKey: string; fingerprint: string; keyType: string; }
 export interface SshAgentInfo { socketPath: string; configLine: string; running: boolean; approveEachUse: boolean; }
+export type SshActivityResult = 'signed' | 'denied' | 'refused';
+/** One SSH agent sign request (metadata only; never the signed data). */
+export interface SshActivityEntry {
+  time: string; keyTitle: string; fingerprint: string; keyType: string; algorithm: string;
+  result: SshActivityResult; client?: string; pid?: number;
+}
 
 export interface ItemRef { vaultId: string; itemId: string }
 export type BulkAction = 'trash' | 'restore' | 'purge' | 'archive' | 'unarchive' | 'favorite' | 'unfavorite' | 'add_tag' | 'remove_tag' | 'move' | 'copy';

@@ -117,6 +117,11 @@ let mockGeneratorHistory: T.GeneratorHistoryEntry[] = [
   { id: "gh-1", value: "FAKE-mock-pw-1", createdAt: Math.floor(Date.now() / 1000) - 300, source: "desktop", host: null },
   { id: "gh-2", value: "FAKE-mock-pw-2", createdAt: Math.floor(Date.now() / 1000) - 7200, source: "extension", host: "github.com" },
 ];
+let mockSshActivity: T.SshActivityEntry[] = [
+  { time: new Date(Date.now() - 45_000).toISOString(), keyTitle: 'Deploy key (demo server)', fingerprint: 'SHA256:FAKE0', keyType: 'ssh-ed25519', algorithm: 'ed25519', result: 'signed', client: 'git-upload-pack', pid: 4242 },
+  { time: new Date(Date.now() - 8 * 60_000).toISOString(), keyTitle: 'Personal laptop key', fingerprint: 'SHA256:FAKE1', keyType: 'ssh-rsa', algorithm: 'rsa-sha2-256', result: 'signed', client: 'ssh', pid: 4177 },
+  { time: new Date(Date.now() - 42 * 60_000).toISOString(), keyTitle: 'Personal laptop key', fingerprint: 'SHA256:FAKE1', keyType: 'ssh-rsa', algorithm: 'ssh-rsa', result: 'refused', client: 'ssh', pid: 4102 },
+];
 let onboarding: T.Onboarding = { extensionInstalled: false, emergencyKitSaved: false, repoConnected: true, imported: false, dismissed: false };
 let unlocked = false;
 const devices: T.DeviceInfo[] = [
@@ -657,6 +662,8 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     return mock.ssh_generate({ vaultId: a.vaultId, title: a.title || 'Imported key', comment: 'imported' });
   },
   ssh_agent_info: () => delay<T.SshAgentInfo>({ socketPath: '/Users/demo/Library/Application Support/gitpass/ssh-agent.sock', configLine: 'Host *\n  IdentityAgent "~/Library/Application Support/gitpass/ssh-agent.sock"', running: true, approveEachUse: !!settings.sshApproveEachUse }),
+  ssh_agent_activity: () => delay<T.SshActivityEntry[]>(mockSshActivity),
+  clear_ssh_agent_activity: () => { mockSshActivity = []; return delay<void>(undefined); },
   identity: () => delay<T.Identity>({ publicKey: SELF_KEY, fingerprint: SELF.fingerprint }),
   fingerprint_of: (a: { publicKey: string }) => (PUB_RE.test(a.publicKey.trim()) ? delay(mockFingerprint(a.publicKey), 20) : Promise.reject(new Error('public key is not valid base64'))),
   list_members: (a: { vaultId: string }) => delay(vaults.find((v) => v.id === a.vaultId)?.members ?? []),
