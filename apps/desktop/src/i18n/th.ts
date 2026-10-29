@@ -92,6 +92,7 @@ export const th: Partial<Record<Key, string>> = {
   'settings.lockOnSleep': 'ล็อกเมื่อ Mac เข้าสู่โหมดพักผ่อน', 'settings.lockOnSleepHelp': 'ล็อกห้องนิรภัยทันทีเมื่อ Mac ของคุณเข้าสู่โหมดพักผ่อน',
   'settings.lockOnScreenLock': 'ล็อกเมื่อล็อกหน้าจอ', 'settings.lockOnScreenLockHelp': 'ล็อกห้องนิรภัยเมื่อล็อกหน้าจอ (⌃⌘Q หรือ hot corner)',
   'settings.lockOnUserSwitch': 'ล็อกเมื่อสลับผู้ใช้', 'settings.lockOnUserSwitchHelp': 'ล็อกห้องนิรภัยเมื่อสลับบัญชีผู้ใช้ macOS',
+  'settings.hideFromScreenRecording': 'ซ่อน gitpass จากการบันทึกหน้าจอและการแชร์หน้าจอ', 'settings.hideFromScreenRecordingHelp': 'ภาพหน้าจอและการแชร์หน้าจอจะแสดงหน้าต่างว่างเปล่าขณะที่เปิดอยู่ ปิดได้สำหรับการสาธิต',
   'settings.biometricUnsupported': 'อุปกรณ์นี้ยังไม่รองรับการปลดล็อกด้วยไบโอเมตริกซ์',
   'settings.changePassword': 'เปลี่ยนรหัสผ่านหลัก', 'settings.currentPassword': 'รหัสผ่านปัจจุบัน', 'settings.newPassword': 'รหัสผ่านใหม่', 'settings.confirmPassword': 'ยืนยันรหัสผ่านใหม่',
   'settings.passwordMismatch': 'รหัสผ่านไม่ตรงกัน', 'settings.passwordShort': 'ใช้อย่างน้อย 10 ตัวอักษร', 'settings.passwordChanged': 'เปลี่ยนรหัสผ่านหลักแล้ว',

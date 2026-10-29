@@ -1382,6 +1382,25 @@ fn settings_system_lock_toggles_default_on_and_backward_compatibility() {
 }
 
 #[test]
+fn settings_hide_from_screen_recording_defaults_on_and_backward_compatibility() {
+    let s = Settings::default();
+    assert!(s.hide_from_screen_recording);
+
+    // Legacy JSON without the hideFromScreenRecording field
+    let legacy_json = r#"{"autoLockMinutes":5,"clipboardClearSecs":90,"theme":"dark","language":"en","biometricUnlock":false,"quickAccessHotkey":"X"}"#;
+    let parsed: Settings = serde_json::from_str(legacy_json).unwrap();
+    assert!(parsed.hide_from_screen_recording);
+
+    // Roundtrip with the setting disabled
+    let mut custom = s;
+    custom.hide_from_screen_recording = false;
+    let serialized = serde_json::to_string(&custom).unwrap();
+    assert!(serialized.contains("\"hideFromScreenRecording\":false"));
+    let deserialized: Settings = serde_json::from_str(&serialized).unwrap();
+    assert!(!deserialized.hide_from_screen_recording);
+}
+
+#[test]
 fn system_lock_event_dispatch_enabled_and_disabled() {
     let e = env();
     let path = e.app.status().unwrap().vault_path;
