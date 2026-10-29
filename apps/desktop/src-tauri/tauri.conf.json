@@ -17,7 +17,8 @@
         "width": 1100,
         "height": 720,
         "minWidth": 800,
-        "minHeight": 500
+        "minHeight": 500,
+        "contentProtected": true
       },
       {
         "label": "quick-access",
@@ -30,7 +31,8 @@
         "decorations": false,
         "alwaysOnTop": true,
         "center": true,
-        "skipTaskbar": true
+        "skipTaskbar": true,
+        "contentProtected": true
       }
     ],
     "security": {

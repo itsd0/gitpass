@@ -8,6 +8,7 @@ mod system_events;
 mod updater_tests;
 use commands as c;
 use std::sync::Arc;
+use tauri::Manager;
 
 /// Apps launched from Finder get a minimal PATH; add the usual git / gh / credential-helper locations so
 /// `git push` can use the same credentials as the user's Terminal (SSH agent, osxkeychain, `gh auth git-credential`).
@@ -45,6 +46,13 @@ fn main() {
             agent_ui::start(h.handle());
             hotkey::register_startup_hotkey(h.handle());
             c::setup_menu(h)?;
+            // Windows are created content-protected by tauri.conf.json; re-apply the saved
+            // setting at startup so a user who turned it off is not protected by default.
+            {
+                let handle = h.handle().clone();
+                let on = handle.state::<c::App>().get_settings().hide_from_screen_recording;
+                c::apply_content_protection(&handle, on);
+            }
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
