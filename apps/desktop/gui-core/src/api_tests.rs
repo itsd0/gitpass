@@ -670,6 +670,16 @@ fn devices_settings_onboarding_favicon() {
     let o = e.app.set_onboarding(OnboardingPatch { emergency_kit_saved: Some(true), ..Default::default() }).unwrap();
     assert!(o.emergency_kit_saved && !o.dismissed);
     assert_eq!(e.app.onboarding(), o);
+    // onboarding dismissed persists across restart in backend
+    let o_dismiss = e.app.set_onboarding(OnboardingPatch { dismissed: Some(true), ..Default::default() }).unwrap();
+    assert!(o_dismiss.dismissed);
+    assert!(e.app.onboarding().dismissed);
+    let app2 = App::new(e._cfg.path().to_path_buf(), e.clip.clone());
+    assert!(app2.onboarding().dismissed);
+    let o_restore = app2.set_onboarding(OnboardingPatch { dismissed: Some(false), ..Default::default() }).unwrap();
+    assert!(!o_restore.dismissed);
+    let app3 = App::new(e._cfg.path().to_path_buf(), e.clip.clone());
+    assert!(!app3.onboarding().dismissed);
     // settings file has no secrets
     let raw = std::fs::read_to_string(e._cfg.path().join(SETTINGS_FILE)).unwrap();
     assert!(!raw.contains("correct horse") && !raw.contains(&e.sk));
