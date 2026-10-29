@@ -498,6 +498,8 @@ export const en = {
   "category.document": "Document",
   "category.ssh_key": "SSH Key",
   "category.wifi": "Wi-Fi",
+  "category.bank_account": "Bank Account",
+  "category.server": "Server",
   "category.passkey": "Passkey",
   // Wi-Fi QR code
   "wifi.showQrCode": "Show QR code",

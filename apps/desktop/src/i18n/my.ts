@@ -489,6 +489,8 @@ export const my: Partial<Record<Key, string>> = {
   "category.document": "စာရွက်စာတမ်း",
   "category.ssh_key": "SSH Key",
   "category.wifi": "Wi-Fi",
+  "category.bank_account": "ဘဏ်အကောင့်",
+  "category.server": "ဆာဗာ",
   "category.passkey": "Passkey",
   // Wi-Fi QR code
   "wifi.showQrCode": "QR ကုဒ် ပြရန်",

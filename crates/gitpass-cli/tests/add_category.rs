@@ -339,3 +339,183 @@ fn invalid_flags_and_categories_rejected() {
     assert!(!out9.status.success());
     assert!(String::from_utf8_lossy(&out9.stderr).contains("invalid card expiry month"));
 }
+
+#[test]
+fn add_bank_account_prompts_stdin_and_list_category_filter() {
+    let v = setup_vault();
+    const ACCT_NUM: &str = "987654321098";
+    const PIN: &str = "4321";
+
+    // 1. Add bank-account via env prompts
+    let out_add = gp_env(
+        &v.root,
+        &[
+            "add",
+            "Personal",
+            "--category",
+            "bank-account",
+            "--title",
+            "Chase Checking",
+            "--bank",
+            "JPMorgan Chase",
+            "--holder",
+            "Alice Example",
+            "--account-type",
+            "checking",
+            "--routing",
+            "021000021",
+            "--branch-phone",
+            "+1 800 935 9935",
+            "--branch-address",
+            "123 Main St, New York, NY",
+            "--notes",
+            "Primary checking account",
+        ],
+        None,
+        &[("GITPASS_BANK_ACCOUNT_NUMBER", ACCT_NUM), ("GITPASS_BANK_PIN", PIN)],
+    );
+    assert!(out_add.status.success(), "add failed: {}", String::from_utf8_lossy(&out_add.stderr));
+
+    // 2. Add another item of a different category
+    let out_add2 = gp(
+        &v.root,
+        &["add", "Personal", "--category", "secure-note", "--title", "My Note", "--notes", "Hello world"],
+        None,
+    );
+    assert!(out_add2.status.success());
+
+    // 3. list --category filters by category
+    let out_list_bank = gp(&v.root, &["list", "Personal", "--category", "bank-account", "--json"], None);
+    assert!(out_list_bank.status.success());
+    let bank_items: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_list_bank.stdout)).unwrap();
+    assert_eq!(bank_items.as_array().unwrap().len(), 1);
+    assert_eq!(bank_items[0]["title"], "Chase Checking");
+    assert_eq!(bank_items[0]["category"], "bank_account");
+
+    let out_list_note = gp(&v.root, &["list", "Personal", "--category", "secure-note", "--json"], None);
+    assert!(out_list_note.status.success());
+    let note_items: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_list_note.stdout)).unwrap();
+    assert_eq!(note_items.as_array().unwrap().len(), 1);
+    assert_eq!(note_items[0]["title"], "My Note");
+
+    // 4. get without --reveal masks account number and PIN
+    let out_get = gp(&v.root, &["get", "Personal", "Chase Checking"], None);
+    assert!(out_get.status.success());
+    let text = String::from_utf8_lossy(&out_get.stdout);
+    assert!(text.contains("category: bank_account"));
+    assert!(text.contains("bank name: JPMorgan Chase"));
+    assert!(text.contains("account holder: Alice Example"));
+    assert!(text.contains("account type: checking"));
+    assert!(text.contains("account number: ••••••••"));
+    assert!(text.contains("routing / SWIFT / IBAN: 021000021"));
+    assert!(text.contains("PIN: ••••••••"));
+    assert!(!text.contains(ACCT_NUM));
+    assert!(!text.contains(PIN));
+
+    // 5. get with --reveal reveals both
+    let out_rev = gp(&v.root, &["get", "Personal", "Chase Checking", "--reveal"], None);
+    assert!(out_rev.status.success());
+    let text_rev = String::from_utf8_lossy(&out_rev.stdout);
+    assert!(text_rev.contains(&format!("account number: {ACCT_NUM}")));
+    assert!(text_rev.contains(&format!("PIN: {PIN}")));
+
+    // 6. get --json masks unless --reveal
+    let out_json = gp(&v.root, &["get", "Personal", "Chase Checking", "--json"], None);
+    assert!(out_json.status.success());
+    let val: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_json.stdout)).unwrap();
+    assert_eq!(val["category"], "bank_account");
+    let fields = val["fields"].as_array().unwrap();
+    let acct_f = fields.iter().find(|f| f["label"] == "account number").unwrap();
+    assert_eq!(acct_f["kind"], "concealed");
+    assert_eq!(acct_f["value"], serde_json::Value::Null);
+
+    // 7. Test stdin flag for account number
+    let out_stdin = gp_env(
+        &v.root,
+        &["add", "Personal", "--category", "bank_account", "--title", "Savings Account", "--account-number-stdin"],
+        Some("555544443333\n"),
+        &[("GITPASS_BANK_PIN", "9999")],
+    );
+    assert!(out_stdin.status.success(), "stdin add failed: {}", String::from_utf8_lossy(&out_stdin.stderr));
+    let out_stdin_get = gp(&v.root, &["get", "Personal", "Savings Account", "--reveal"], None);
+    assert!(out_stdin_get.status.success());
+    assert!(String::from_utf8_lossy(&out_stdin_get.stdout).contains("account number: 555544443333"));
+}
+
+#[test]
+fn add_server_prompts_stdin_generate_and_get() {
+    let v = setup_vault();
+    const SRV_PASS: &str = "SecretSrvP@ssw0rd999!";
+
+    // 1. Add server via hidden prompt
+    let out_add = gp_env(
+        &v.root,
+        &[
+            "add",
+            "Personal",
+            "--category",
+            "server",
+            "--title",
+            "Production Web Node",
+            "--url",
+            "192.168.1.50",
+            "--username",
+            "ubuntu",
+            "--admin-url",
+            "https://aws.amazon.com/console",
+            "--provider",
+            "Amazon Web Services",
+            "--notes",
+            "Nginx proxy host",
+        ],
+        None,
+        &[("GITPASS_ITEM_PASSWORD", SRV_PASS)],
+    );
+    assert!(out_add.status.success(), "add failed: {}", String::from_utf8_lossy(&out_add.stderr));
+
+    // 2. list --category server returns it
+    let out_list = gp(&v.root, &["list", "Personal", "--category", "server", "--json"], None);
+    assert!(out_list.status.success());
+    let list_json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_list.stdout)).unwrap();
+    let srv = list_json.as_array().unwrap().iter().find(|i| i["title"] == "Production Web Node").unwrap();
+    assert_eq!(srv["category"], "server");
+    assert_eq!(srv["username"], "ubuntu");
+    assert_eq!(srv["url"], "192.168.1.50");
+
+    // 3. get shows it with password masked unless --reveal
+    let out_get = gp(&v.root, &["get", "Personal", "Production Web Node"], None);
+    assert!(out_get.status.success());
+    let text = String::from_utf8_lossy(&out_get.stdout);
+    assert!(text.contains("category: server"));
+    assert!(text.contains("URL or hostname: 192.168.1.50"));
+    assert!(text.contains("username: ubuntu"));
+    assert!(text.contains("password: ••••••••"));
+    assert!(text.contains("admin console URL: https://aws.amazon.com/console"));
+    assert!(text.contains("hosting provider: Amazon Web Services"));
+    assert!(!text.contains(SRV_PASS));
+
+    // 4. get --password-only prints the password
+    let out_pw_only = gp(&v.root, &["get", "Personal", "Production Web Node", "--password-only"], None);
+    assert!(out_pw_only.status.success());
+    assert_eq!(String::from_utf8_lossy(&out_pw_only.stdout).trim(), SRV_PASS);
+
+    // 5. Add server with --password-stdin
+    let out_stdin = gp(
+        &v.root,
+        &["add", "Personal", "--category", "server", "--title", "DB Node", "--url", "db.internal", "--password-stdin"],
+        Some("StdinDbPass!"),
+    );
+    assert!(out_stdin.status.success());
+    let out_stdin_get = gp(&v.root, &["get", "Personal", "DB Node", "--password-only"], None);
+    assert_eq!(String::from_utf8_lossy(&out_stdin_get.stdout).trim(), "StdinDbPass!");
+
+    // 6. Add server with --generate
+    let out_gen = gp(
+        &v.root,
+        &["add", "Personal", "--category", "server", "--title", "Generated Node", "--url", "gen.internal", "--generate", "32"],
+        None,
+    );
+    assert!(out_gen.status.success());
+    let out_gen_get = gp(&v.root, &["get", "Personal", "Generated Node", "--password-only"], None);
+    assert_eq!(String::from_utf8_lossy(&out_gen_get.stdout).trim().len(), 32);
+}

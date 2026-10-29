@@ -69,12 +69,16 @@ gitpass add Personal --title Bank                  # prompts for the item passwo
 gitpass add Personal --category api-credential --title "OpenAI API" --url https://api.openai.com --expires 2028-06-30
 gitpass add Personal --category secure-note --title "Recovery Guide" --notes-stdin < recovery.txt
 gitpass add Personal --category credit-card --title "Bank Visa" --holder "Alice Doe" --expiry 11/30
+gitpass add Personal --category bank-account --title "Chase Checking" --bank "Chase" --holder "Alice Doe" --account-type checking --routing 021000021
+gitpass add Personal --category server --title "Production Web" --url 192.168.1.50 --username ubuntu --admin-url https://aws.amazon.com/console
 gitpass get Personal github
 gitpass get Personal github --password-only
 gitpass get Personal github --json --reveal
 gitpass get Personal github --copy --field password --clear-secs 30
 gitpass copy Personal github --field username
 gitpass list Personal
+gitpass list Personal --category bank-account  # filter by category
+gitpass list Personal --category server
 gitpass list Personal --sort recent   # title (default) or recent; ignored with --query
 gitpass list Personal --query git --json
 gitpass find Personal "git hub"
@@ -87,9 +91,10 @@ gitpass restore github --version 3
 ```
 
 - `add` creates an item in the vault. `--category` (alias `--type`) chooses the category:
-  `login` (default), `api-credential`, `secure-note`, or `credit-card`. Secrets are never
-  accepted as command-line arguments to avoid shell-history leaks; `add` prompts without echo,
-  or accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`).
+  `login` (default), `api-credential`, `secure-note`, `credit-card`, `bank-account`, or `server`.
+  Secrets are never accepted as command-line arguments to avoid shell-history leaks; `add` prompts
+  without echo, or accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`,
+  `--account-number-stdin`, `--pin-stdin`).
 - `get` prints the item, or only the password with `--password-only`. `--json` prints the
   item with concealed values set to `null` unless `--reveal` is also passed; see the
   README section "Scripting with --json".
@@ -281,6 +286,8 @@ alias. Setup details for each shell are in the README "Shell completions" sectio
 | `GITPASS_ITEM_CREDENTIAL` | API credential secret for `add --category api-credential` |
 | `GITPASS_CARD_NUMBER` | Card number for `add --category credit-card` |
 | `GITPASS_CARD_CVV` | Verification code (CVV) for `add --category credit-card` |
+| `GITPASS_BANK_ACCOUNT_NUMBER` | Account number for `add --category bank-account` |
+| `GITPASS_BANK_PIN` | PIN for `add --category bank-account` |
 | `GITPASS_SECRET_KEY` | Secret Key, read before `<path>/secret.key` |
 | `GITPASS_SSH_PASSPHRASE` | Passphrase for `ssh import` |
 | `GITPASS_EXPORT_PASSPHRASE` | Passphrase for encrypted `import` / `export` |

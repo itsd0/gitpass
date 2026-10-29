@@ -481,6 +481,8 @@ export const th: Partial<Record<Key, string>> = {
   "category.document": "เอกสาร",
   "category.ssh_key": "คีย์ SSH",
   "category.wifi": "Wi-Fi",
+  "category.bank_account": "บัญชีธนาคาร",
+  "category.server": "เซิร์ฟเวอร์",
   "category.passkey": "พาสคีย์",
   // Wi-Fi QR code
   "wifi.showQrCode": "แสดงรหัส QR",

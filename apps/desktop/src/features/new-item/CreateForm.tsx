@@ -47,7 +47,7 @@ function TemplateForm({ category, initial, vaultId: initialVault, onBack, onDone
     try {
       const v = { ...values }; if (totpKey && v[totpKey]) v[totpKey] = normaliseTotp(v[totpKey])!;
       if (category === 'credit_card' && !v['main.type'] && brand !== 'unknown') v['main.type'] = brandLabel[brand];
-      const item = await api.createItem({ input: { vaultId, category, title: title.trim(), sections: buildSections(category, v), notes: notes.trim() || null, url: v['main.website'] || v['main.hostname'] || null } });
+      const item = await api.createItem({ input: { vaultId, category, title: title.trim(), sections: buildSections(category, v), notes: notes.trim() || null, url: v['main.website'] || v['main.hostname'] || v['main.url'] || null } });
       if (category === 'document') await api.addAttachment({ vaultId, itemId: item.id, path: docPath.trim() });
       setRoute({ name: 'items', filter: { kind: 'vault', vaultId } }); selectItem(item.id); onDone();
     } catch (e) { setErr(String(e)); } finally { setBusy(false); }

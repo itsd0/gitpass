@@ -954,6 +954,7 @@
   "badgeAppNotRunning": {
     "message": "gitpass အက်ပ် မလုပ်ဆောင်နေပါ"
   },
+
   "optAutoSubmit": {
     "message": "လော့ဂ်အင်ဖြည့်ပြီးနောက် ဖောင်ကို တင်သွင်းပါ"
   },
@@ -983,6 +984,12 @@
   },
   "pkPasskeysCount": {
     "message": "ဤဆိုက်အတွက် passkey {n} ခု"
+  },
+  "catBankAccount": {
+    "message": "ဘဏ်အကောင့်များ"
+  },
+  "catServer": {
+    "message": "ဆာဗာများ"
   },
   "genRecent": {
     "message": "မကြာသေးမီ"
