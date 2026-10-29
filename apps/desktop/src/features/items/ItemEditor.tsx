@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Dices, Eye, EyeOff, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../api/client';
 import type { Field, FieldKind, ItemDetail, ItemInput, Section, VaultInfo } from '../../api/types';
 import { useApp } from '../../lib/store';
+import { useT } from '../../i18n';
 import { Button, Input, Textarea, toast } from '../../ui';
 import { ItemIcon } from './categories';
 import { StrengthMeter } from './FieldView';
+import { PasswordGenerator } from '../new-item/PasswordGenerator';
 import { errText } from './actions';
 
 const KINDS: FieldKind[] = ['text', 'concealed', 'url', 'email', 'phone', 'date', 'month_year', 'totp', 'multiline'];
@@ -30,7 +32,7 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
   const updField = (si: number, fi: number, p: Partial<Field>) => updSection(si, { fields: draft.sections[si].fields.map((f, i) => (i === fi ? { ...f, ...p } : f)) });
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setEditing(false); if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); void save(); } };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { if ((e.target as HTMLElement | null)?.closest?.('[data-generator-popover]')) return; setEditing(false); } if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); void save(); } };
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
   });
 
@@ -89,9 +91,17 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
 }
 
 function FieldEditor({ field, onChange, onRemove }: { field: Field; onChange: (p: Partial<Field>) => void; onRemove: () => void }) {
+  const t = useT();
   const secret = field.kind === 'concealed' || field.kind === 'totp';
   const [show, setShow] = useState(false);
   const [score, setScore] = useState<number | null>(null);
+  const [genOpen, setGenOpen] = useState(false);
+  const fieldInputRef = useRef<HTMLInputElement>(null);
+  const closeGen = () => { setGenOpen(false); fieldInputRef.current?.focus(); };
+  const onFieldKeyDown = (e: React.KeyboardEvent) => {
+    // ⌥⌘G (or ⌥Ctrl+G) while the password field is focused opens the popover.
+    if (e.altKey && (e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'g') { e.preventDefault(); setGenOpen(true); }
+  };
   useEffect(() => {
     if (field.kind !== 'concealed' || !field.value) { setScore(null); return; }
     let on = true; api.passwordStrength({ password: field.value }).then((s) => on && setScore(s)).catch(() => {}); return () => { on = false; };
@@ -105,15 +115,25 @@ function FieldEditor({ field, onChange, onRemove }: { field: Field; onChange: (p
         </select>
         <Button variant="ghost" size="iconSm" aria-label="Remove field" onClick={onRemove}><Trash2 size={13} /></Button>
       </div>
-      <div className="mt-1.5 flex items-center gap-1">
-        {field.kind === 'multiline' ? (
-          <Textarea aria-label={`${field.label} value`} rows={3} value={field.value ?? ''} onChange={(e) => onChange({ value: e.target.value })} />
-        ) : (
-          <Input aria-label={`${field.label} value`} type={secret && !show ? 'password' : field.kind === 'date' ? 'date' : 'text'} autoComplete="off"
-            placeholder={secret && field.value === null ? 'Unchanged — type to replace' : ''} value={field.value ?? ''} onChange={(e) => onChange({ value: e.target.value })} />
+      <div className="relative mt-1.5">
+        <div className="flex items-center gap-1">
+          {field.kind === 'multiline' ? (
+            <Textarea aria-label={`${field.label} value`} rows={3} value={field.value ?? ''} onChange={(e) => onChange({ value: e.target.value })} />
+          ) : (
+            <Input ref={fieldInputRef} aria-label={`${field.label} value`} type={secret && !show ? 'password' : field.kind === 'date' ? 'date' : 'text'} autoComplete="off"
+              placeholder={secret && field.value === null ? 'Unchanged — type to replace' : ''} value={field.value ?? ''} onChange={(e) => onChange({ value: e.target.value })}
+              onKeyDown={field.kind === 'concealed' ? onFieldKeyDown : undefined} />
+          )}
+          {secret && <Button variant="ghost" size="iconSm" aria-label={show ? 'Hide' : 'Show'} onClick={() => setShow(!show)}>{show ? <EyeOff size={13} /> : <Eye size={13} />}</Button>}
+          {field.kind === 'concealed' && <Button variant="ghost" size="iconSm" aria-label={t('generator.generatePassword')} onClick={() => setGenOpen((o) => !o)}><Dices size={13} /></Button>}
+        </div>
+        {field.kind === 'concealed' && (
+          <PasswordGenerator
+            open={genOpen}
+            onOpenChange={(o) => { if (o) setGenOpen(true); else closeGen(); }}
+            onUse={(pw) => { onChange({ value: pw }); setShow(true); }}
+          />
         )}
-        {secret && <Button variant="ghost" size="iconSm" aria-label={show ? 'Hide' : 'Show'} onClick={() => setShow(!show)}>{show ? <EyeOff size={13} /> : <Eye size={13} />}</Button>}
-        {field.kind === 'concealed' && <Button variant="ghost" size="iconSm" aria-label="Generate password" onClick={() => api.generatePassword({ length: 20, symbols: true, digits: true }).then((v) => { onChange({ value: v }); setShow(true); })}><Dices size={13} /></Button>}
       </div>
       {score !== null && <StrengthMeter score={score} />}
     </div>

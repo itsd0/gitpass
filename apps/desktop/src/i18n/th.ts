@@ -47,6 +47,8 @@ export const th: Partial<Record<Key, string>> = {
   'generator.includeDigits': 'ตัวเลข (0-9)',
   'generator.includeSymbols': 'สัญลักษณ์ (!@#$)',
   'generator.regenerate': 'สร้างใหม่',
+  'generator.usePassword': 'ใช้รหัสผ่านนี้',
+  'generator.generatePassword': 'สร้างรหัสผ่าน',
   'generator.saveAsLogin': 'บันทึกเป็นรายการเข้าสู่ระบบใหม่…',
   'generator.copied': 'คัดลอกรหัสผ่านไปยังคลิปบอร์ดแล้ว',
   'cmd.generatePassword': 'สร้างรหัสผ่าน',
