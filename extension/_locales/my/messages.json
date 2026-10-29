@@ -679,6 +679,9 @@
   "shortcutNav": {
     "message": "စာရင်းကို ရွေးချယ်ရန်"
   },
+  "shortcutFilterChips": {
+    "message": "စစ်ထုတ်ခြင်း ချစ်ပ်များကြား ရွှေ့ရန်"
+  },
   "shortcutFill": {
     "message": "အရာကို ဖြည့်သွင်းရန်"
   },

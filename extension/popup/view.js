@@ -57,6 +57,40 @@
     return f;
   }
 
+  /** Filter chips for the popup row: suggestions (only with a current site, or
+   *  when already selected), all, favorites, one per category that actually
+   *  has items, and a single Vaults menu chip when there is more than one
+   *  vault (or a vault filter is already selected). The active filter is
+   *  always present so re-rendering never drops the selection. */
+  function buildFilterChips(items, vaults, opts = {}) {
+    const present = new Set((items || []).map((i) => i.category));
+    const current = opts.currentFilter || '';
+    const chips = [];
+    if (opts.origin || current === 'suggested') {
+      chips.push({ id: 'suggested', key: 'filterSuggested', label: 'Suggestions for this site', host: opts.origin ? hostOfUrl(opts.origin) : null });
+    }
+    chips.push({ id: 'all', key: 'filterAll', label: 'All Items' });
+    chips.push({ id: 'favorites', key: 'filterFavorites', label: 'Favorites' });
+    for (const c of CATEGORIES) {
+      if (present.has(c) || current === 'cat:' + c) chips.push({ id: 'cat:' + c, key: CAT_KEY[c], label: CAT_LABEL[c], category: c });
+    }
+    const vs = vaults || [];
+    if (vs.length > 1 || current.startsWith('vault:')) {
+      chips.push({ id: 'vaults', kind: 'vaults', key: 'vaults', label: 'Vaults', vaults: vs.map((v) => ({ id: 'vault:' + v.id, label: v.name })) });
+    }
+    return chips;
+  }
+
+  /** Next chip index for roving-tabindex arrow keys (wraps around). */
+  function chipNavIndex(idx, key, count) {
+    if (!count) return -1;
+    if (key === 'Home') return 0;
+    if (key === 'End') return count - 1;
+    if (key === 'ArrowRight') return (idx + 1 + count) % count;
+    if (key === 'ArrowLeft') return (idx - 1 + count) % count;
+    return idx;
+  }
+
   function matchesQuery(it, q) {
     if (!q) return true;
     const s = q.toLowerCase();
@@ -408,7 +442,7 @@
     return Boolean(res && Array.isArray(res.kinds));
   }
 
-  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache };
+  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
