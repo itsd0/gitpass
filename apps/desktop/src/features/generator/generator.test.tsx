@@ -61,6 +61,7 @@ describe('Standalone Password Generator', () => {
       return curSettings;
     });
     vi.spyOn(api, 'passwordStrength').mockResolvedValue(85);
+    vi.spyOn(api, 'getGeneratorHistory').mockResolvedValue([]);
 
     act(() => {
       useApp.setState({
