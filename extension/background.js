@@ -23,6 +23,8 @@ let contextMenuApi = null; // set by the install at the bottom; host events rebu
 let port = null;
 let nextId = 1;
 const pending = new Map();
+const siteIconCache = new Map();
+globalThis.GitpassSiteIconCache = siteIconCache;
 
 function connect() {
   if (port) return port;
@@ -30,6 +32,7 @@ function connect() {
   port.onMessage.addListener((msg) => {
     // App lock/unlock events (forwarded by the host) -> open popups. No popup open is fine.
     if (msg && msg.event && msg.id == null) {
+      if (msg.event === 'lock') siteIconCache.clear();
       if (msg.event === 'lock' || msg.event === 'unlock' || msg.event === 'changed') {
         chrome.runtime.sendMessage({ type: 'popup:event', event: msg.event }).catch(() => {});
         if (contextMenuApi) contextMenuApi.rebuild(); // locked menu vs full menu (#213)
@@ -63,6 +66,7 @@ function host(cmd, args = {}) {
 if (typeof chrome !== 'undefined' && chrome.idle && chrome.idle.onStateChanged) {
   chrome.idle.onStateChanged.addListener((state) => {
     if (state === 'locked') {
+      siteIconCache.clear();
       host('lock').catch(() => {});
       chrome.runtime.sendMessage({ type: 'popup:event', event: 'lock', reason: 'screen' }).catch(() => {});
       if (globalThis.gitpassBadge) globalThis.gitpassBadge.onHostEvent('lock');
@@ -117,7 +121,10 @@ async function popupRoute(msg) {
       if (typeof msg.secret_key === 'string' && msg.secret_key.trim()) args.secret_key = msg.secret_key.trim();
       return host('unlock', args);
     }
-    case 'lock': return host('lock');
+    case 'lock': {
+      siteIconCache.clear();
+      return host('lock');
+    }
     case 'list_vaults': return host('list_vaults');
     case 'list_items': {
       const a = {}; for (const k of ['vault_id', 'category', 'query', 'limit', 'offset']) if (msg[k] != null) a[k] = msg[k];
@@ -155,6 +162,28 @@ async function popupRoute(msg) {
         if (msg.section) p.section = msg.section;
       }
       return host('open_in_app', p);
+    }
+    case 'site_icon': {
+      const h = String(msg.host || '').trim().toLowerCase();
+      if (!h) throw Object.assign(new Error('empty host'), { code: 'bad_request' });
+      if (siteIconCache.has(h)) {
+        const cached = siteIconCache.get(h);
+        if (!cached) throw Object.assign(new Error('not found'), { code: 'not_found' });
+        return { data_url: cached };
+      }
+      try {
+        const res = await host('site_icon', { host: h });
+        if (res && res.data_url) {
+          siteIconCache.set(h, res.data_url);
+          return res;
+        }
+      } catch (e) {
+        if (e && (e.code === 'not_found' || String(e.message).includes('not_found') || String(e.message).includes('not cached'))) {
+          siteIconCache.set(h, null);
+        }
+        throw e;
+      }
+      throw Object.assign(new Error('not found'), { code: 'not_found' });
     }
     case 'can_fill_generated': return canFillGenerated();
     case 'fill_generated': return fillGenerated(msg.password);

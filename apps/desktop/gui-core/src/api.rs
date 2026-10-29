@@ -590,7 +590,7 @@ impl App {
     pub fn read_local(&self) -> LocalFile {
         std::fs::read(self.settings_path()).ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or_default()
     }
-    fn update_local<T>(&self, f: impl FnOnce(&mut LocalFile) -> T) -> Result<T> {
+    pub(crate) fn update_local<T>(&self, f: impl FnOnce(&mut LocalFile) -> T) -> Result<T> {
         let _g = self.file_lock.lock().map_err(|_| anyhow!("poisoned"))?;
         let mut l = self.read_local();
         let r = f(&mut l);
@@ -1500,6 +1500,10 @@ impl App {
         }
         let cache_dir = self.favicon_cache_dir.lock().unwrap().clone().unwrap_or_else(crate::favicon::default_favicon_cache_dir);
         crate::favicon::fetch_and_cache(url, &cache_dir, false).ok().flatten()
+    }
+
+    pub fn favicon_cache_dir(&self) -> PathBuf {
+        self.favicon_cache_dir.lock().unwrap().clone().unwrap_or_else(crate::favicon::default_favicon_cache_dir)
     }
 
     pub fn set_favicon_cache_dir(&self, dir: PathBuf) {

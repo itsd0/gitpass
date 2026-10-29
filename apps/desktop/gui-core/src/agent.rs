@@ -554,6 +554,31 @@ impl Agent {
                 if let Some(u) = change_pw_url { out["change_password_url"] = json!(u); }
                 Ok(out)
             }
+            "site_icon" => {
+                let host = req("host")?.trim().to_lowercase();
+                if host.is_empty() { return Err(err("bad_request", "empty host")); }
+                if !self.app.get_settings().show_website_icons && !self.app.read_local().allow_favicons {
+                    return Err(err("denied", "website icons are disabled"));
+                }
+                let live_records = self.records()?;
+                let allowed = live_records.iter().any(|(_, _, _, r)| {
+                    if let Some(h) = r.item.url.as_deref().and_then(url_host) {
+                        if h.eq_ignore_ascii_case(&host) { return true; }
+                    }
+                    r.sections.iter().flat_map(|s| &s.fields).any(|f| {
+                        f.kind == gitpass_core::item::FieldKind::Url
+                            && f.value.as_deref().and_then(url_host).is_some_and(|h| h.eq_ignore_ascii_case(&host))
+                    })
+                });
+                if !allowed {
+                    return Err(err("denied", format!("refusing host '{host}' not in any item")));
+                }
+                let cache_dir = self.app.favicon_cache_dir();
+                match crate::favicon::get_cached_icon(&cache_dir, &host) {
+                    Some(data_url) => Ok(json!({ "data_url": data_url })),
+                    None => Err(err("not_found", "site icon not cached")),
+                }
+            }
             "open_in_app" => {
                 let view_opt = s("view").filter(|v| !v.is_empty());
                 if let Some(ref v) = view_opt {
