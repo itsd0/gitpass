@@ -857,7 +857,7 @@
   },
   "updatePassword": {
     "message": "စကားဝှက် အသစ်ပြင်ဆင်ရန်"
-    },
+  },
   "sortBy": {
     "message": "စီရန်"
   },
@@ -926,5 +926,14 @@
   },
   "ctxUnlockGitpass": {
     "message": "gitpass ကို သော့ဖွင့်ရန်…"
+  },
+  "optBadge": {
+    "message": "ကိရိယာဘားအိုင်ကွန်တွင် ကိုက်ညီမှုအရေအတွက် ပြရန်"
+  },
+  "optBadgeBody": {
+    "message": "လက်ရှိဝဘ်ဆိုက်နှင့် ကိုက်ညီသော လော့ဂ်အင်များ၏ အရေအတွက်ကို ပြပါ။ နံပါတ်သာ ပြသည်။"
+  },
+  "badgeAppNotRunning": {
+    "message": "gitpass အက်ပ် မလုပ်ဆောင်နေပါ"
   }
 }

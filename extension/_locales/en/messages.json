@@ -782,7 +782,7 @@
   },
   "updatePassword": {
     "message": "Update password"
-    },
+  },
   "sortBy": {
     "message": "Sort by"
   },
@@ -847,5 +847,14 @@
   },
   "ctxUnlockGitpass": {
     "message": "Unlock gitpass…"
+  },
+  "optBadge": {
+    "message": "Show match count on the toolbar icon"
+  },
+  "optBadgeBody": {
+    "message": "Show how many logins match the current site. Only the number is shown."
+  },
+  "badgeAppNotRunning": {
+    "message": "gitpass app not running"
   }
 }
