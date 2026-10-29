@@ -773,7 +773,9 @@ impl App {
                     FilterKind::Tag => live && !r.archived && filter.tag.as_ref().is_some_and(|t| r.tags.contains(t)),
                     FilterKind::Category => live && !r.archived && Some(r.category) == filter.category,
                 };
-                keep
+                // The item-type picker narrows every view (Recently deleted, Archive,
+                // Favorites, a vault, a tag), not only the Category sidebar entry.
+                keep && filter.category.is_none_or(|c| r.category == c)
             }).map(|(vid, iid, r)| (summary(vid, iid, r, usage.get(iid).copied()), r.created_at.unwrap_or(0)))
               .filter(|(s, _)| q.is_empty() || [s.title.as_str(), s.subtitle.as_str(), s.url.as_deref().unwrap_or("")].iter().any(|x| x.to_lowercase().contains(&q))
                     || s.tags.iter().any(|t| t.to_lowercase().contains(&q)))

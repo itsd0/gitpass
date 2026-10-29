@@ -189,6 +189,18 @@ fn match_fill_reveal_origin_rules_and_categories() {
     assert!(!cd.to_string().contains("4111 1111"));
     assert_eq!(c.ok("list_items", json!({"query": "exam", "limit": 5}))["items"].as_array().unwrap().len(), 2);
     assert_eq!(c.ok("list_items", json!({"limit": 1}))["items"].as_array().unwrap().len(), 1);
+    // Paging (the popup fetches pages of 500 and follows next_offset): every item comes back exactly once.
+    let total = all.as_array().unwrap().len();
+    let p1 = c.ok("list_items", json!({"limit": 1}));
+    assert_eq!(p1["total"], json!(total)); assert_eq!(p1["next_offset"], json!(1));
+    let mut seen = vec![]; let mut off = 0u64;
+    loop {
+        let p = c.ok("list_items", json!({"limit": 1, "offset": off}));
+        for i in p["items"].as_array().unwrap() { seen.push(i["id"].clone()); }
+        match p["next_offset"].as_u64() { Some(n) => off = n, None => break }
+    }
+    assert_eq!(seen.len(), total);
+    assert_eq!(seen, all.as_array().unwrap().iter().map(|i| i["id"].clone()).collect::<Vec<_>>());
 
     // fill_card: popup or in-page click only
     assert_eq!(c.err("fill_card", json!({"item_id": card})), "denied");
