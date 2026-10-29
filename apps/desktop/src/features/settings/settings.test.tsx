@@ -101,4 +101,19 @@ describe('settings', () => {
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(spy.mock.calls[spy.mock.calls.length - 1]![0].settings.lockOnUserSwitch).toBe(false);
   });
+  it('toggles show setup guide switch in General tab', async () => {
+    const onb = { extensionInstalled: false, emergencyKitSaved: false, repoConnected: true, imported: false, dismissed: false };
+    vi.spyOn(api, 'onboarding').mockResolvedValue(onb);
+    const patchSpy = vi.spyOn(api, 'setOnboarding').mockImplementation(async ({ patch }) => ({ ...onb, ...patch }));
+    const u = userEvent.setup();
+    render(<SettingsPage initialTab="general" />);
+
+    const setupSwitch = await screen.findByTestId('setup-guide-switch');
+    expect(setupSwitch).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('Show setup guide')).toBeTruthy();
+    expect(screen.getByText('Display the setup checklist on the Home page')).toBeTruthy();
+
+    await u.click(setupSwitch);
+    await waitFor(() => expect(patchSpy).toHaveBeenCalledWith({ patch: { dismissed: true } }));
+  });
 });
