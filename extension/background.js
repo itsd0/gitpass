@@ -13,8 +13,11 @@ if (typeof importScripts === 'function') importScripts('bg-onboard.js');
 if (typeof importScripts === 'function' && !globalThis.GitpassPasskey) importScripts('bg-passkey.js');
 // ⌘⇧L / Ctrl+Shift+L "fill-login" command (#124)
 if (typeof importScripts === 'function' && !globalThis.GitpassCommand) importScripts('bg-command.js');
+// Right-click context menu (#213); installed at the bottom once the helpers exist.
+if (typeof importScripts === 'function' && !globalThis.GitpassContextMenu) importScripts('bg-context.js');
 
 const HOST = 'com.gitpass.host';
+let contextMenuApi = null; // set by the install at the bottom; host events rebuild the menu
 let port = null;
 let nextId = 1;
 const pending = new Map();
@@ -25,7 +28,10 @@ function connect() {
   port.onMessage.addListener((msg) => {
     // App lock/unlock events (forwarded by the host) -> open popups. No popup open is fine.
     if (msg && msg.event && msg.id == null) {
-      if (msg.event === 'lock' || msg.event === 'unlock' || msg.event === 'changed') chrome.runtime.sendMessage({ type: 'popup:event', event: msg.event }).catch(() => {});
+      if (msg.event === 'lock' || msg.event === 'unlock' || msg.event === 'changed') {
+        chrome.runtime.sendMessage({ type: 'popup:event', event: msg.event }).catch(() => {});
+        if (contextMenuApi) contextMenuApi.rebuild(); // locked menu vs full menu (#213)
+      }
       return;
     }
     const p = pending.get(msg.id);
@@ -73,7 +79,12 @@ async function fillTab(tabId, origin, itemId, extra) {
   const creds = await host('fill', { item_id: itemId, origin }); // host enforces origin match
   const via = extra && extra.via === 'command' ? { via: 'command' } : {};
   if (globalThis.GitpassPage) GitpassPage.rememberFilled(tabId, origin, itemId); // ids only: offers the one-time code on the next page
-  await chrome.tabs.sendMessage(tabId, { type: 'gitpass-fill', origin, username: creds.username, password: creds.password, ...via }, { frameId: 0 });
+  // The frame is the caller's choice: popup/command fills use the top frame (0),
+  // the context menu (#213) passes the frame that was right-clicked. Never
+  // default a subframe click to the top frame: filling the wrong frame's form
+  // would be worse than failing closed with no receiver there.
+  const frameId = extra && Number.isInteger(extra.frameId) ? extra.frameId : 0;
+  await chrome.tabs.sendMessage(tabId, { type: 'gitpass-fill', origin, username: creds.username, password: creds.password, ...via }, { frameId });
   return true;
 }
 
@@ -221,3 +232,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   })().then((r) => sendResponse({ ok: true, result: r }), (e) => sendResponse({ ok: false, error: String(e.message || e), code: e.code || null }));
   return true; // async
 });
+
+// Right-click context menu (#213). Installed once, after host/fillTab exist;
+// bg-context.js only defines the factory, so on Firefox (background.scripts)
+// it must be listed before background.js in manifest.firefox.json.
+if (typeof chrome !== 'undefined' && chrome.contextMenus && globalThis.GitpassContextMenu) {
+  contextMenuApi = GitpassContextMenu.install({
+    chrome,
+    host,
+    activeTab,
+    fillTab,
+    sendToTab: (tabId, msg, frameId) => chrome.tabs.sendMessage(tabId, msg, { frameId }),
+    fillPaymentFrames: (tabId, fields) => GitpassPage.fillPaymentFrames(tabId, fields),
+    openPopup: () => { if (chrome.action && chrome.action.openPopup) chrome.action.openPopup().catch(() => {}); },
+    originOf: (url) => GitpassPolicy.originOf(url),
+    isFillableOrigin: (origin) => GitpassPolicy.isFillableOrigin(origin),
+    t: (key, fallback) => {
+      try { const m = chrome.i18n && chrome.i18n.getMessage(key); if (m) return m; } catch (_) {}
+      return fallback;
+    },
+  });
+}
