@@ -840,6 +840,11 @@ impl Host {
                 Err(coded(code::NOT_FOUND, "site icon not cached"))
             }
             "open_in_app" => {
+                if let Some(v) = req.get("view").and_then(Value::as_str).filter(|v| !v.is_empty()) {
+                    if !matches!(v, "generator_history" | "watchtower" | "settings") {
+                        return Err(coded(code::BAD_REQUEST, format!("unknown view '{v}'")));
+                    }
+                }
                 crate::agent::launch_app().map_err(|e| coded(code::APP_NOT_RUNNING, format!("could not launch the gitpass app: {e:#}")))?;
                 Ok(json!({"launched": true}))
             }

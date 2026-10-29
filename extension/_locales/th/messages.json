@@ -679,6 +679,9 @@
   "shortcutNav": {
     "message": "เลื่อนรายการ"
   },
+  "shortcutFilterChips": {
+    "message": "เลื่อนระหว่างชิปตัวกรอง"
+  },
   "shortcutFill": {
     "message": "เติมข้อมูลรายการ"
   },
@@ -848,6 +851,9 @@
   },
   "changeOnSite": {
     "message": "เปลี่ยนที่เว็บไซต์"
+  },
+  "openWatchtower": {
+    "message": "เปิด Watchtower"
   },
   "openInGitpass": {
     "message": "เปิดใน gitpass"
