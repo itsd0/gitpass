@@ -31,7 +31,7 @@ fn shell_completions_for_all_supported_shells() {
                 "completions for {shell} missing subcommand '{subcmd}'"
             );
         }
-        for flag in ["copy", "clear-secs"] {
+        for flag in ["copy", "clear-secs", "category"] {
             let has_flag = match shell {
                 "fish" => stdout.contains(&format!("-l {flag}")),
                 _ => stdout.contains(&format!("--{flag}")),

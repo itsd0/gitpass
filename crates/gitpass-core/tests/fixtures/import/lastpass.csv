@@ -1,0 +1,7 @@
+url,username,password,totp,extra,name,grouping,fav
+https://mail.example.com/login,alice@example.com,"Fake-P@ss, ""quoted""",otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example,"Line one, with comma
+Line ""two""",Example Mail,Work,1
+http://sn,,,,"Server rack combination: 12-34-56",Server Notes,Infrastructure,0
+https://bank.example.mm,မောင်မောင်,ပစ်စကား123,,မြန်မာစာ မှတ်စု,ဘဏ် အကောင့်,မိသားစု,0
+https://empty.example.com,,,,,,(none),0
+https://mail.example.com/login,alice@example.com,dup,,,Example Mail,Work,1

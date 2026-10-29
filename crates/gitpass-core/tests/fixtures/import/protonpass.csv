@@ -1,0 +1,8 @@
+type,name,url,email,username,password,note,totp,createTime,modifyTime,vault
+login,Example Mail,https://mail.example.com/login,alice@example.com,alice@example.com,"Fake-P@ss, ""quoted""","Line one, with comma
+Line ""two""",otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example,1700000000,1700001000,Work
+login,Fallback Email,https://fallback.example.com,bob@example.com,,secret-pass,"Note with empty username",,1700002000,1700003000,Personal
+login,Empty Credentials,https://empty.example.com,,,,Note on empty login,,1700004000,1700005000,Personal
+note,Wi-Fi Credentials,,,,"wifi-password-fake","Router in the basement",,1700006000,1700007000,Home
+login,ဘဏ် အကောင့်,https://bank.example.mm,mm@example.mm,မောင်မောင်,ပစ်စကား123,မြန်မာစာ မှတ်စု,,1700008000,1700009000,မိသားစု
+login,Example Mail,https://mail.example.com/login,alice@example.com,alice@example.com,dup,,,1700010000,1700011000,Work

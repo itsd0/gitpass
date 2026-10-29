@@ -88,6 +88,15 @@ describe('i18n', () => {
     expect(translate('my', 'home.vault.items', { count: 3 })).toBe('item 3 ခု');
     expect(translate('th', 'watchtower.score.aria', { score: 71, label: 'ดี' })).toBe('คะแนนความปลอดภัย 71 จาก 100, ดี');
   });
+  it("covers all strength.*, field.* and totp.* strings in my and th", () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith("strength.") || k.startsWith("field.") || k.startsWith("totp."));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const d of [dictionaries.my, dictionaries.th]) {
+      for (const k of keys) {
+        expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+      }
+    }
+  });
   it("covers all vault.* strings in my and th", () => {
     const keys = Object.keys(en).filter((k) => k.startsWith("vault."));
     expect(keys.length).toBeGreaterThan(0);

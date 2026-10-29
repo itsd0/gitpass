@@ -69,6 +69,7 @@
         "lib/i18n.js",
         "lib/icons.js",
         "lib/banner.js",
+        "lib/totp-chip.js",
         "content.js"
       ],
       "all_frames": false,

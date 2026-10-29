@@ -66,6 +66,9 @@ member already copied.
 ```sh
 gitpass add Personal --title GitHub --username me --url https://github.com --generate 24
 gitpass add Personal --title Bank                  # prompts for the item password
+gitpass add Personal --category api-credential --title "OpenAI API" --url https://api.openai.com --expires 2028-06-30
+gitpass add Personal --category secure-note --title "Recovery Guide" --notes-stdin < recovery.txt
+gitpass add Personal --category credit-card --title "Bank Visa" --holder "Alice Doe" --expiry 11/30
 gitpass get Personal github
 gitpass get Personal github --password-only
 gitpass get Personal github --json --reveal
@@ -82,6 +85,10 @@ gitpass history github --vault Personal --json
 gitpass restore github --version 3
 ```
 
+- `add` creates an item in the vault. `--category` (alias `--type`) chooses the category:
+  `login` (default), `api-credential`, `secure-note`, or `credit-card`. Secrets are never
+  accepted as command-line arguments to avoid shell-history leaks; `add` prompts without echo,
+  or accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`).
 - `get` prints the item, or only the password with `--password-only`. `--json` prints the
   item with concealed values set to `null` unless `--reveal` is also passed; see the
   README section "Scripting with --json".
@@ -171,7 +178,8 @@ gitpass export Personal --format csv --out backup.csv --yes
 ```
 
 `--from` accepts `bitwarden-json`, `bitwarden-csv`, `1password-csv`, `1password-1pux`
-(alias `1pux`), `keepass-csv` (alias `keepassxc-csv`), `chrome-csv` and `gitpass-json`.
+(alias `1pux`), `keepass-csv` (alias `keepassxc-csv`), `chrome-csv`, `lastpass-csv`
+(alias `lastpass`), `protonpass-csv` (alias `protonpass`) and `gitpass-json`.
 Duplicates (same title+username+url) are skipped unless `--allow-duplicates` is given;
 `--dry-run` writes nothing. An encrypted `gitpass-json` export prompts for the passphrase
 (or reads `GITPASS_EXPORT_PASSPHRASE`).
@@ -253,6 +261,9 @@ alias. Setup details for each shell are in the README "Shell completions" sectio
 | `GITPASS_PASSWORD` | Master password prompts (unlock, and the new password for `init` / `rotate-secret-key`) |
 | `GITPASS_NEW_PASSWORD` | New master password for `passwd` and `device revoke --rotate-credentials` |
 | `GITPASS_ITEM_PASSWORD` | Item password for `add` and `edit --password` |
+| `GITPASS_ITEM_CREDENTIAL` | API credential secret for `add --category api-credential` |
+| `GITPASS_CARD_NUMBER` | Card number for `add --category credit-card` |
+| `GITPASS_CARD_CVV` | Verification code (CVV) for `add --category credit-card` |
 | `GITPASS_SECRET_KEY` | Secret Key, read before `<path>/secret.key` |
 | `GITPASS_SSH_PASSPHRASE` | Passphrase for `ssh import` |
 | `GITPASS_EXPORT_PASSPHRASE` | Passphrase for encrypted `import` / `export` |

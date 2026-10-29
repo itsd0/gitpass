@@ -120,8 +120,8 @@ fn open_external(url: &str) -> R<()> {
     let pw = password.map(Zeroizing::new);
     s.emergency_kit_data(pw.as_deref().map(|x| x.as_str())).map_err(e)
 }
-/// Always null in v0.5.0 (no network favicon fetch; avoids leaking which sites are in the vault).
-#[tauri::command] pub fn favicon_url(s: State<App>, url: String) -> Option<String> { s.favicon_url(&url) }
+/// Favicon URL (null when showWebsiteIcons setting is off or fetch fails).
+#[tauri::command(async)] pub fn favicon_url(s: State<'_, App>, url: String) -> Option<String> { s.favicon_url(&url) }
 /// Not in the contract: resets the idle timer (harmless extra; the contract UI may ignore it).
 #[tauri::command] pub fn touch(s: State<App>) { s.state.touch() }
 
