@@ -17,7 +17,7 @@ function page(html, url = 'https://shop.example/checkout') {
   return w;
 }
 const load = (w, files) => { for (const f of files) w.eval(fs.readFileSync(path.join(root, f), 'utf8')); };
-const CONTENT = ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'content.js'];
+const CONTENT = ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js', 'content.js'];
 const decorated = (w) => [...w.document.querySelectorAll('[data-gitpass-decorated]')].map((e) => e.id);
 
 const STRIPE_CHECKOUT = `<!doctype html><html><body><form id="pay">

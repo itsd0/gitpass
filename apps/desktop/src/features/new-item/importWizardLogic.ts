@@ -1,16 +1,32 @@
 import type { ImportResult } from '../../api/types';
+import type { Key } from '../../i18n';
+
+export interface ImportFormatOption {
+  readonly id: string;
+  readonly label: string;
+  readonly labelKey: Key;
+  readonly ext: string;
+  readonly hintKey?: Key;
+}
 
 export const IMPORT_FORMATS = [
-  { id: 'bitwarden-json', label: 'Bitwarden (.json)', ext: 'json' },
-  { id: 'bitwarden-csv', label: 'Bitwarden (.csv)', ext: 'csv' },
-  { id: '1password-csv', label: '1Password 8 (.csv)', ext: 'csv' },
-  { id: '1password-1pux', label: '1Password (.1pux)', ext: '1pux' },
-  { id: 'keepass-csv', label: 'KeePass (.csv)', ext: 'csv' },
-  { id: 'chrome-csv', label: 'Chrome / Chromium (.csv)', ext: 'csv' },
-  { id: 'lastpass-csv', label: 'LastPass (.csv)', ext: 'csv' },
-  { id: 'protonpass-csv', label: 'Proton Pass (.csv)', ext: 'csv' },
-  { id: 'gitpass-json', label: 'gitpass (.json)', ext: 'json' },
-] as const;
+  {
+    id: 'apple-passwords-csv',
+    label: 'Apple Passwords / Safari (.csv)',
+    labelKey: 'import.formatApplePasswords',
+    ext: 'csv',
+    hintKey: 'import.hintApplePasswords',
+  },
+  { id: 'bitwarden-json', label: 'Bitwarden (.json)', labelKey: 'import.formatBitwardenJson', ext: 'json' },
+  { id: 'bitwarden-csv', label: 'Bitwarden (.csv)', labelKey: 'import.formatBitwardenCsv', ext: 'csv' },
+  { id: '1password-csv', label: '1Password 8 (.csv)', labelKey: 'import.format1PasswordCsv', ext: 'csv' },
+  { id: '1password-1pux', label: '1Password (.1pux)', labelKey: 'import.format1Password1pux', ext: '1pux' },
+  { id: 'keepass-csv', label: 'KeePass (.csv)', labelKey: 'import.formatKeepassCsv', ext: 'csv' },
+  { id: 'chrome-csv', label: 'Chrome / Chromium (.csv)', labelKey: 'import.formatChromeCsv', ext: 'csv' },
+  { id: 'lastpass-csv', label: 'LastPass (.csv)', labelKey: 'import.formatLastpass', ext: 'csv' },
+  { id: 'protonpass-csv', label: 'Proton Pass (.csv)', labelKey: 'import.formatProtonPass', ext: 'csv' },
+  { id: 'gitpass-json', label: 'gitpass (.json)', labelKey: 'import.formatGitpassJson', ext: 'json' },
+] as const satisfies readonly ImportFormatOption[];
 
 export type ImportFormatId = (typeof IMPORT_FORMATS)[number]['id'];
 
@@ -114,6 +130,17 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
         return 'keepass-csv';
       }
 
+      // Apple Passwords / Safari CSV vs 1Password 8 CSV:
+      // Apple Passwords: Title,URL,Username,Password,Notes,OTPAuth (no Favorite/Archived/Tags)
+      // 1Password 8:     Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
+      if (
+        cols.includes('otpauth') &&
+        cols.includes('title') &&
+        !cols.some((c) => ['favorite', 'archived', 'tags', 'notesplain'].includes(c))
+      ) {
+        return 'apple-passwords-csv';
+      }
+
       // 1Password CSV distinctive headers
       if (cols.some((c) => ['otpauth', 'archived', 'tags'].includes(c)) || (cols.includes('title') && cols.includes('favorite'))) {
         return '1password-csv';
@@ -131,6 +158,15 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
     if (lowerName.includes('keepass')) return 'keepass-csv';
     if (lowerName.includes('chrome') || lowerName.includes('chromium')) return 'chrome-csv';
     if (lowerName.includes('1password') || lowerName.includes('onepassword')) return '1password-csv';
+    // Only look at the basename: folders such as iCloud Drive (com~apple~CloudDocs)
+    // or a "Safari" directory must not force the Apple mapping on unrelated CSVs.
+    const baseName = lowerName.split(/[\/\\]/).pop() ?? lowerName;
+    if (
+      baseName.endsWith('.csv') &&
+      (baseName.includes('apple') || baseName.includes('safari') || baseName === 'passwords.csv')
+    ) {
+      return 'apple-passwords-csv';
+    }
     if (lowerName.endsWith('.csv')) return '1password-csv';
   }
 

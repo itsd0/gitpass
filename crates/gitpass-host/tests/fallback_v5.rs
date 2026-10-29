@@ -113,6 +113,17 @@ fn fill_totp_save_update_vaults_generate() {
     ok(&mut f.host, json!({"cmd":"update_password","item_id":new_id,"password":"FAKE-newer"}));
     assert_eq!(ok(&mut f.host, json!({"cmd":"fill","item_id":new_id,"origin":"https://example.com"}))["password"], "FAKE-newer");
 
+    // The banner's vault picker: save_login honors a non-default vault and rejects an unknown one.
+    let s2 = ok(&mut f.host, json!({"cmd":"save_login","origin":"https://work.example.com","title":"Work login","username":"w","password":"FAKE-work","vault_id":f.vid2}));
+    let work_id = s2["item_id"].as_str().unwrap().to_string();
+    assert!(work_id.starts_with(&format!("{}:", f.vid2)), "{work_id}");
+    let work = ok(&mut f.host, json!({"cmd":"list_items","vault_id":f.vid2}));
+    assert_eq!(work["items"].as_array().unwrap().len(), 1);
+    assert_eq!(work["items"][0]["title"], "Work login");
+    let personal = ok(&mut f.host, json!({"cmd":"list_items","vault_id":f.vid}));
+    assert!(!personal["items"].as_array().unwrap().iter().any(|i| i["title"] == "Work login"));
+    assert_eq!(err(&mut f.host, json!({"cmd":"save_login","origin":"https://x.example.com","username":"u","password":"p","vault_id":"nope"})).0, "not_found");
+
     let v = ok(&mut f.host, json!({"cmd":"list_vaults"}));
     assert_eq!(v["vaults"][0]["name"], "Personal");
     assert_eq!(v["vaults"][0]["item_count"], 5);

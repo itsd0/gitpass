@@ -729,7 +729,7 @@ impl App {
     }
 
     // ---------------- items
-    fn all_records(s: &Session) -> Result<Vec<(String, String, ItemRecord)>> {
+    pub(crate) fn all_records(s: &Session) -> Result<Vec<(String, String, ItemRecord)>> {
         let mut out = vec![];
         for (vid, _) in s.list_vaults()? { for (iid, _, r) in s.list_records(&vid)? { out.push((vid.clone(), iid, r)); } }
         Ok(out)

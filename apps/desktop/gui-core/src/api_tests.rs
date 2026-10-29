@@ -521,6 +521,24 @@ fn import_file_dry_run_and_real() {
 }
 
 #[test]
+fn import_file_apple_passwords_csv() {
+    let e = env();
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("apple.csv");
+    std::fs::write(&f, "Title,URL,Username,Password,Notes,OTPAuth\nApple Service,https://apple.example.invalid,alice,FAKE1,Notes line,otpauth://totp/Apple:alice?secret=JBSWY3DPEHPK3PXP\n").unwrap();
+    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), true).unwrap();
+    assert_eq!((r.parsed, r.added, r.duplicates), (1, 1, 0));
+    assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 0);
+    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), false).unwrap();
+    assert_eq!(r.added, 1);
+    let items = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: Some(e.vault.clone()), tag: None, category: None, query: None, sort: None }).unwrap();
+    let it = items.iter().find(|i| i.title == "Apple Service").unwrap();
+    assert_eq!(it.category, Category::Login);
+    let d = e.app.get_item(&e.vault, &it.id).unwrap();
+    assert!(d.has_totp);
+}
+
+#[test]
 fn export_vault_round_trip_and_errors() {
     let e = env();
     let _l = login(&e, "Export Login", "alice@example.invalid", "FAKE-Strong-Export-1!");
@@ -649,6 +667,16 @@ fn devices_settings_onboarding_favicon() {
     let o = e.app.set_onboarding(OnboardingPatch { emergency_kit_saved: Some(true), ..Default::default() }).unwrap();
     assert!(o.emergency_kit_saved && !o.dismissed);
     assert_eq!(e.app.onboarding(), o);
+    // onboarding dismissed persists across restart in backend
+    let o_dismiss = e.app.set_onboarding(OnboardingPatch { dismissed: Some(true), ..Default::default() }).unwrap();
+    assert!(o_dismiss.dismissed);
+    assert!(e.app.onboarding().dismissed);
+    let app2 = App::new(e._cfg.path().to_path_buf(), e.clip.clone());
+    assert!(app2.onboarding().dismissed);
+    let o_restore = app2.set_onboarding(OnboardingPatch { dismissed: Some(false), ..Default::default() }).unwrap();
+    assert!(!o_restore.dismissed);
+    let app3 = App::new(e._cfg.path().to_path_buf(), e.clip.clone());
+    assert!(!app3.onboarding().dismissed);
     // settings file has no secrets
     let raw = std::fs::read_to_string(e._cfg.path().join(SETTINGS_FILE)).unwrap();
     assert!(!raw.contains("correct horse") && !raw.contains(&e.sk));

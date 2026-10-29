@@ -231,7 +231,7 @@ enum Cmd {
     /// Import items from another password manager's export file
     Import {
         vault: String,
-        /// bitwarden-json | bitwarden-csv | 1password-csv | 1password-1pux | keepass-csv | chrome-csv | lastpass-csv | protonpass-csv | gitpass-json
+        /// bitwarden-json | bitwarden-csv | 1password-csv | 1password-1pux | keepass-csv | chrome-csv | apple-passwords-csv | lastpass-csv | protonpass-csv | gitpass-json
         #[arg(long = "from")] from: String,
         file: PathBuf,
         /// Parse and count only; write nothing
