@@ -91,6 +91,8 @@ export const api = {
   openNewRepoPage: () => call<void>('open_new_repo_page'),
   /** Opens the item's `https://<host>/.well-known/change-password` page in the default browser (URL derived in Rust). */
   openChangePassword: (a:{vaultId:string; itemId:string}) => call<void>('open_change_password', a),
+  /** Opens the passkey's `https://<rp_id>` site in the default browser (URL derived in Rust). */
+  openPasskeySite: (a:{vaultId:string; itemId:string}) => call<void>('open_passkey_site', a),
   onboarding: () => call<T.Onboarding>('onboarding'),
   setOnboarding: (a:{patch:Partial<T.Onboarding>}) => call<T.Onboarding>('set_onboarding', a),
   emergencyKit: () => call<string>('emergency_kit'),
