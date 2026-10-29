@@ -83,6 +83,7 @@ export const en = {
   'settings.lockOnSleep': 'Lock when Mac sleeps', 'settings.lockOnSleepHelp': 'Lock the vault immediately when your Mac goes to sleep',
   'settings.lockOnScreenLock': 'Lock when screen locks', 'settings.lockOnScreenLockHelp': 'Lock the vault when the screen is locked (⌃⌘Q or hot corner)',
   'settings.lockOnUserSwitch': 'Lock when switching users', 'settings.lockOnUserSwitchHelp': 'Lock the vault when switching between macOS user accounts',
+  'settings.hideFromScreenRecording': 'Hide gitpass from screen recording and sharing', 'settings.hideFromScreenRecordingHelp': 'Screenshots and screen shares show a blank window while this is on; turn it off for demos',
   'settings.biometricUnsupported': 'Biometric unlock is not supported yet on this device.',
   'settings.changePassword': 'Change master password', 'settings.currentPassword': 'Current password', 'settings.newPassword': 'New password', 'settings.confirmPassword': 'Confirm new password',
   'settings.passwordMismatch': 'Passwords do not match', 'settings.passwordShort': 'Use at least 10 characters', 'settings.passwordChanged': 'Master password changed',

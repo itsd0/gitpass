@@ -89,6 +89,7 @@ export const my: Partial<Record<Key, string>> = {
   'settings.lockOnSleep': 'Mac အိပ်စက်ချိန်တွင် လော့ခ်ချရန်', 'settings.lockOnSleepHelp': 'သင့် Mac အိပ်စက်သွားသည်နှင့် ချက်ချင်း လော့ခ်ချပါ',
   'settings.lockOnScreenLock': 'မျက်နှာပြင် လော့ခ်ကျချိန်တွင် လော့ခ်ချရန်', 'settings.lockOnScreenLockHelp': 'မျက်နှာပြင် လော့ခ်ကျသည့်အခါ (⌃⌘Q သို့မဟုတ် hot corner) လော့ခ်ချပါ',
   'settings.lockOnUserSwitch': 'အသုံးပြုသူ ပြောင်းလဲချိန်တွင် လော့ခ်ချရန်', 'settings.lockOnUserSwitchHelp': 'macOS အသုံးပြုသူ အကောင့်များ ပြောင်းလဲသည့်အခါ လော့ခ်ချပါ',
+  'settings.hideFromScreenRecording': 'မျက်နှာပြင် မှတ်တမ်းတင်ခြင်းနှင့် မျှဝေခြင်းမှ gitpass ကို ဖျောက်ထားရန်', 'settings.hideFromScreenRecordingHelp': 'ဤသည်ဖွင့်ထားစဉ် မျက်နှာပြင်ပုံရိပ်များနှင့် မျှဝေမှုများတွင် ဝင်းဒိုးအလွတ်သာ ပြမည်၊ ပြသမှုများအတွက် ပိတ်ထားနိုင်သည်',
   'settings.biometricUnsupported': 'ဤစက်တွင် ဇီဝမက်ထရစ်ဖြင့် သော့ဖွင့်ခြင်းကို မပံ့ပိုးသေးပါ။',
   'settings.changePassword': 'မာစတာ စကားဝှက် ပြောင်းရန်', 'settings.currentPassword': 'လက်ရှိ စကားဝှက်', 'settings.newPassword': 'စကားဝှက်အသစ်', 'settings.confirmPassword': 'စကားဝှက်အသစ်ကို အတည်ပြုပါ',
   'settings.passwordMismatch': 'စကားဝှက်များ မတူပါ', 'settings.passwordShort': 'အနည်းဆုံး စာလုံး ၁၀ လုံး သုံးပါ', 'settings.passwordChanged': 'မာစတာ စကားဝှက် ပြောင်းပြီးပါပြီ',

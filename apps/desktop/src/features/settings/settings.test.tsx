@@ -112,6 +112,19 @@ describe('settings', () => {
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(spy.mock.calls[spy.mock.calls.length - 1]![0].settings.lockOnUserSwitch).toBe(false);
   });
+  it('toggles hide from screen recording', async () => {
+    const spy = vi.spyOn(api, 'setSettings').mockResolvedValue(undefined as any);
+    const u = userEvent.setup();
+    render(<SettingsPage initialTab="security" />);
+
+    const hideSwitch = await screen.findByTestId('hide-screen-recording-switch');
+    expect(hideSwitch).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('Hide gitpass from screen recording and sharing')).toBeTruthy();
+    expect(screen.getByText('Screenshots and screen shares show a blank window while this is on; turn it off for demos')).toBeTruthy();
+    await u.click(hideSwitch);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[spy.mock.calls.length - 1]![0].settings.hideFromScreenRecording).toBe(false);
+  });
   it('toggles show setup guide switch in General tab', async () => {
     const onb = { extensionInstalled: false, emergencyKitSaved: false, repoConnected: true, imported: false, dismissed: false };
     vi.spyOn(api, 'onboarding').mockResolvedValue(onb);
