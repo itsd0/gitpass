@@ -115,7 +115,7 @@ fn onepassword_csv_fixture() {
 #[test]
 fn onepassword_1pux_fixture() {
     let (rep, recs) = import_fixture(ImportFormat::OnePassword1pux, "1password.1pux");
-    assert_eq!((rep.parsed, rep.added, rep.duplicates.len()), (11, 10, 1));
+    assert_eq!((rep.parsed, rep.added, rep.duplicates.len()), (13, 12, 1));
     check_common(&recs, false);
     let m = by(&recs, "Example Mail");
     assert!(m.favorite);
@@ -153,6 +153,44 @@ fn onepassword_1pux_fixture() {
     let d = by(&recs, "Passport scan");
     assert_eq!(d.category, Category::Document);
     assert!(d.item.notes.as_deref().unwrap().contains("fake-passport.pdf"));
+    let b = by(&recs, "Primary Checking");
+    assert_eq!(b.category, Category::BankAccount);
+    assert_eq!(field(b, "bank_name").as_deref(), Some("First National Bank"));
+    assert_eq!(field(b, "account_holder").as_deref(), Some("Alice Example"));
+    assert_eq!(field(b, "account_number").as_deref(), Some("9876543210"));
+    assert_eq!(field(b, "routing_number").as_deref(), Some("123456789"));
+    assert_eq!(field(b, "pin").as_deref(), Some("5555"));
+    assert_eq!(b.tags, vec!["Private", "Finances"]);
+
+    let srv = by(&recs, "Web1 Server");
+    assert_eq!(srv.category, Category::Server);
+    assert_eq!(field(srv, "url").as_deref(), Some("https://web1.example.invalid"));
+    assert_eq!(field(srv, "username").as_deref(), Some("ubuntu"));
+    assert_eq!(field(srv, "password").as_deref(), Some("SecretServerPass123!"));
+    assert_eq!(field(srv, "admin_console_url").as_deref(), Some("https://aws.amazon.com/console"));
+    assert_eq!(field(srv, "hosting_provider").as_deref(), Some("AWS EC2"));
+    assert_eq!(srv.tags, vec!["Private", "Infra"]);
+}
+
+#[test]
+fn onepassword_csv_bank_account_and_server() {
+    let csv = "Title,Type,Username,Password,Url,Notes\n\
+               Chase Checking,Bank Account,Alice Example,1234567890,,Monthly bills\n\
+               Web Production,Server,ubuntu,SrvSecretPass123!,https://web.prod.invalid,Node 1\n";
+    let parsed = import::parse_bytes(ImportFormat::OnePasswordCsv, csv.as_bytes(), None).unwrap();
+    assert_eq!(parsed.items.len(), 2);
+    let bank = &parsed.items[0];
+    assert_eq!(bank.category, Category::BankAccount);
+    assert_eq!(bank.item.title, "Chase Checking");
+    assert_eq!(field(bank, "account_holder").as_deref(), Some("Alice Example"));
+    assert_eq!(field(bank, "account_number").as_deref(), Some("1234567890"));
+
+    let srv = &parsed.items[1];
+    assert_eq!(srv.category, Category::Server);
+    assert_eq!(srv.item.title, "Web Production");
+    assert_eq!(field(srv, "username").as_deref(), Some("ubuntu"));
+    assert_eq!(field(srv, "password").as_deref(), Some("SrvSecretPass123!"));
+    assert_eq!(field(srv, "url").as_deref(), Some("https://web.prod.invalid"));
 }
 
 #[test]

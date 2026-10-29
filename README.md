@@ -191,7 +191,12 @@ Reference a field as `gp://<vault>/<item>/<field>`. `<item>` is an item id, an e
 (`%20`) and `%` (`%25`) inside a segment.
 
 ```sh
-# .env.gitpass (dotenv syntax; `#` comments, optional quotes, `export ` prefix allowed)
+# Inherited environment variables
+export GITHUB_TOKEN=gp://Personal/GitHub/token
+gitpass run -- gh repo list
+
+# Or dotenv syntax via --env-file (optional; overrides inherited variables of the same name)
+# .env.gitpass (`#` comments, optional quotes, `export ` prefix allowed)
 DB_PASSWORD=gp://Dev/Postgres/password
 DATABASE_URL="postgres://{{ gp://Dev/Postgres/username }}:{{ gp://Dev/Postgres/password }}@db:5432/app"
 LOG_LEVEL=info
@@ -199,6 +204,11 @@ LOG_LEVEL=info
 gitpass run --env-file .env.gitpass -- ./server --port 8080
 ```
 
+* `--env-file` is optional. If omitted, `gitpass run` scans inherited environment variables and
+  resolves any variable whose value is (or contains) a `gp://` reference. Values from `--env-file`
+  override inherited environment variables for the same name. If no `--env-file` is given and no
+  inherited variable contains a `gp://` reference, gitpass exits non-zero with an error instead of
+  running the command unchanged.
 * A value that is a whole `gp://` reference is resolved; references embedded in other text must be
   wrapped as `{{ gp://... }}` (an unwrapped embedded reference is an error).
 * Resolved values go **only** into the child's environment; nothing is written to disk. Any
