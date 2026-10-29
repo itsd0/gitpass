@@ -710,6 +710,25 @@ impl Host {
                 self.audit_cache = None;
                 Ok(json!({"favorite": fav}))
             }
+            // Same soft delete as the desktop's Recently Deleted (deleted_at + 30-day purge).
+            // Destructive write: popup only, never a content script.
+            "trash_item" | "restore_item" => {
+                if req.get("source").and_then(Value::as_str) != Some("popup") {
+                    return Err(coded(code::DENIED, format!("{cmd} is allowed only from the popup")));
+                }
+                let (vid, iid) = split_id(arg_str(req, "item_id")?)?;
+                let s = self.sess()?;
+                // Restore must see the deleted record, so read it directly instead of `record()`.
+                let (_, r) = s.read_record(vid, iid).map_err(|e| coded(code::NOT_FOUND, format!("item not found: {e:#}")))?;
+                if cmd == "trash_item" {
+                    if r.deleted_at.is_some() { return Err(coded(code::NOT_FOUND, "item not found")); }
+                    s.soft_delete(vid, iid)?;
+                } else {
+                    s.restore(vid, iid)?;
+                }
+                self.audit_cache = None;
+                Ok(json!({"ok": true}))
+            }
             "generate" => {
                 use gitpass_core::generate::{Mode, Request};
                 let flag = |k: &str, default: bool| req.get(k).and_then(Value::as_bool).unwrap_or(default);
