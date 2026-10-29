@@ -679,6 +679,9 @@
   "shortcutNav": {
     "message": "เลื่อนรายการ"
   },
+  "shortcutFilterChips": {
+    "message": "เลื่อนระหว่างชิปตัวกรอง"
+  },
   "shortcutFill": {
     "message": "เติมข้อมูลรายการ"
   },

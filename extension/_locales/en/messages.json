@@ -610,6 +610,9 @@
   "shortcutNav": {
     "message": "Navigate list"
   },
+  "shortcutFilterChips": {
+    "message": "Move between filter chips"
+  },
   "shortcutFill": {
     "message": "Fill item"
   },

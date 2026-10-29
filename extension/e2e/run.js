@@ -868,7 +868,7 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       await sleep(300); // the mock host polls control.json every 100 ms
       const emptyPop = await openRealPopup(ctx, sw, page, EXT);
       const loaded = await until(async () => /Localhost Test Login/.test(await emptyPop.text()), T(8000));
-      await emptyPop.eval(`(() => { const s = document.getElementById('filter'); s.value = 'suggested'; s.dispatchEvent(new Event('change', { bubbles: true })); return s.value; })()`);
+      await emptyPop.eval(`(() => { const c = document.querySelector('#filterChips [data-filter-id="suggested"]'); if (!c) return null; c.click(); return c.getAttribute('aria-selected'); })()`);
       const emptyTxt = await until(async () => { const x = await emptyPop.text(); return /No saved logins for this site/.test(x) && x; }, T(5000));
       rec('popup empty state: no saved logins offers Save a login for localhost',
         !!loaded && !!emptyTxt && /Save a login for localhost/.test(emptyTxt),
