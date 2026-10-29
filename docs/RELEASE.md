@@ -61,6 +61,73 @@ Without it the tag-triggered `build + publish` step fails; `workflow_dispatch` b
 2. `git tag vX.Y.Z && git push origin vX.Y.Z` (on `itsd0/gitpass`).
 3. Review the draft on `itsd0/gitpass-releases`, then publish it (non-prerelease) so the updater sees it.
 
+### Writing release notes
+
+Start from `.github/release-notes-template.md` and paste it into the draft
+release body; do not reuse the old one-line body ("See CHANGELOG.md. …").
+The template is the contract for what a release page contains:
+
+- A short, human-written intro paragraph (what this release is about).
+- Themed `##` sections — **Highlights**, **Desktop app**, **Browser
+  extension**, **CLI**, **Security**, **Fixes**, **Docs & maintenance** —
+  each bullet with a **bold lead-in** and a PR link
+  (`([#N](https://github.com/itsd0/gitpass/pull/N))`). Delete any section
+  with no entries; empty sections must not ship.
+- A **What's Changed** list: on the draft release page, click "Generate
+  release notes" and paste the result there. Generation uses
+  `.github/release.yml` in the repo where the release is created — so while
+  drafts are created on `itsd0/gitpass-releases`, copy that file there (same
+  path) for its drafts to pick it up; once #292 moves release hosting to
+  `itsd0/gitpass`, the copy in this repo takes effect directly.
+- **Install / Upgrade** notes: Apple Silicon (`aarch64` DMG) vs Intel (`x64`
+  DMG), auto-update via Settings → About → Check for updates, any required
+  user action (e.g. re-sharing, re-enabling Touch ID — omit the line when
+  there is none), and the self-signed / not-notarized Gatekeeper note. The
+  updater files (`*.app.tar.gz`, `.sig`, `latest.json`) are described as
+  auto-update files the user does not need to download.
+- A **Full Changelog** link:
+  `https://github.com/itsd0/gitpass/compare/vPREV...vX.Y.Z` (tags live in
+  `itsd0/gitpass`, so this link is correct whichever repo hosts the release
+  page, per #292).
+- For UI-facing releases, an optional Highlights screenshot or GIF.
+
+`CHANGELOG.md` stays the source material for the themed sections (it already
+uses themed sections with PR numbers), but it is not a substitute for the
+release page: link the changelog sections, do not paste the whole file.
+
+#### PR labels for release notes (manual convention for now)
+
+`.github/release.yml` categorises PRs by label, so every PR merged into a
+release should carry one conventional label (in addition to its `agent:*`
+and `area:*` labels):
+
+| PR title prefix | Label | Release-notes section |
+|---|---|---|
+| `feat` | `feat` (or existing `enhancement`) | Features |
+| `fix` | `fix` (or existing `bug`) | Fixes |
+| `perf` | `perf` | Performance |
+| `security` | `security` | Security |
+| `docs` | `docs` (or existing `documentation`) | Docs |
+| `chore` | `chore` (or existing `dependencies`) | Maintenance |
+| `chore(release)` | `release` | Excluded from the notes |
+| any PR to leave out | `skip-changelog` | Excluded from the notes |
+
+Until an owner-only labeler workflow lands, labels are applied by hand when
+a PR is opened or merged — that workflow, if added, must run on
+GitHub-hosted runners (never the self-hosted Mac for PR-triggered work),
+use `pull_request_target` only without checking out or running PR code, and
+carry minimal permissions (`pull-requests: write` only). It must not expose
+secrets to fork PRs.
+
+#### Still owner-only (not in this change)
+
+Renaming the DMGs to arch-obvious names (e.g.
+`gitpass_X.Y.Z_macos_apple-silicon.dmg` / `_intel.dmg`) and attaching a
+`SHA256SUMS.txt` to every release both need a `release.yml` workflow change,
+which agents must not make. Until the owner lands those, the template
+documents the current asset names and carries a commented-out SHA256SUMS
+placeholder instead of claiming the file exists.
+
 ### Self-hosted Mac runner (since v0.6.1)
 
 CI, the iOS workflow and the macOS release builds run on a repo-level self-hosted runner on the
