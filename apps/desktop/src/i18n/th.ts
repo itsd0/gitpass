@@ -422,6 +422,18 @@ export const th: Partial<Record<Key, string>> = {
   'largetype.close': 'ปิด',
   'largetype.label': 'มุมมองตัวอักษรขนาดใหญ่',
   'largetype.title': 'มุมมองตัวอักษรขนาดใหญ่',
+  // password strength meter (item detail + item editor)
+  'strength.terrible': 'แย่มาก',
+  'strength.weak': 'อ่อนแอ',
+  'strength.fair': 'พอใช้',
+  'strength.good': 'ดี',
+  'strength.excellent': 'ยอดเยี่ยม',
+  'strength.label': 'ความแข็งแกร่งของรหัสผ่าน: {label}',
+  // item detail field actions
+  'field.open': 'เปิด',
+  'field.openLink': 'เปิดลิงก์',
+  // one-time password countdown
+  'totp.remaining': 'เหลืออีก {n} วินาที',
   'cmd.showLargeType': 'แสดงรหัสผ่านด้วยตัวอักษรขนาดใหญ่',
 
   // TODO(i18n-review): unlock and sidebar strings

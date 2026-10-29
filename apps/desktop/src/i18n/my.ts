@@ -429,6 +429,18 @@ export const my: Partial<Record<Key, string>> = {
   'largetype.close': 'ပိတ်ရန်',
   'largetype.label': 'စာလုံးကြီးမြင်ကွင်း',
   'largetype.title': 'စာလုံးကြီးမြင်ကွင်း',
+  // password strength meter (item detail + item editor)
+  'strength.terrible': 'အလွန်ညံ့ဖျင်း',
+  'strength.weak': 'အားနည်း',
+  'strength.fair': 'အသင့်အတင့်',
+  'strength.good': 'ကောင်း',
+  'strength.excellent': 'အလွန်ကောင်း',
+  'strength.label': 'စကားဝှက် အားကောင်းမှု: {label}',
+  // item detail field actions
+  'field.open': 'ဖွင့်ရန်',
+  'field.openLink': 'လင့်ခ်ဖွင့်ရန်',
+  // one-time password countdown
+  'totp.remaining': '{n} စက္ကန့် ကျန်သေးသည်',
   'cmd.showLargeType': 'စကားဝှက်ကို စာလုံးကြီးဖြင့် ကြည့်ရန်',
 
   // TODO(i18n-review): unlock and sidebar strings
