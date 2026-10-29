@@ -4,6 +4,7 @@
 
 ### Desktop
 - Render notes as safe Markdown with an edit/preview toggle (#207).
+- Hide gitpass windows from screen recording and sharing (#210).
 - Wi-Fi items show a QR code to join the network (#202).
 - Generator: words-mode separator and capitalize options (#197); generator popover on the item editor password
   field (#191); one shared generator request with common defaults and limits across core, CLI, desktop and host (#199).
