@@ -1693,7 +1693,6 @@ dependencies = [
  "objc2-foundation",
  "objc2-local-authentication",
  "security-framework",
- "serde",
  "serde_json",
  "tauri",
  "tauri-build",
@@ -1728,14 +1727,11 @@ name = "gitpass-host"
 version = "0.6.5"
 dependencies = [
  "anyhow",
- "base64 0.22.1",
  "dirs 5.0.1",
  "gitpass-core",
  "psl",
- "rand",
  "serde",
  "serde_json",
- "sha2 0.10.9",
  "url",
  "zeroize",
 ]

@@ -81,6 +81,11 @@ jobs:
           cargo test --workspace --locked
       - name: cargo clippy (gating, -D warnings)
         run: cargo clippy --workspace --locked --all-targets -- -D warnings
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-machete
+      - name: cargo machete (unused dependencies)
+        run: cargo machete
 
   frontend:
     name: desktop UI + extension
