@@ -774,6 +774,9 @@
   "changeOnSite": {
     "message": "Change on site"
   },
+  "openWatchtower": {
+    "message": "Open Watchtower"
+  },
   "openInGitpass": {
     "message": "Open in gitpass"
   },

@@ -236,3 +236,22 @@ fn item_findings_contract_and_security() {
     assert!(!kinds1_after.contains(&"weak"), "ignored finding must be hidden: {f1_after:?}");
     assert!(kinds1_after.contains(&"reused"), "non-ignored finding must still be visible");
 }
+
+#[test]
+fn open_in_app_standalone_validation() {
+    let mut f = setup();
+
+    // Unknown view rejected with bad_request
+    let e1 = err(&mut f.host, json!({"cmd": "open_in_app", "view": "invalid_screen"}));
+    assert!(e1.starts_with("bad_request"), "unknown view must return bad_request: {e1}");
+
+    // Valid views pass validation (not bad_request)
+    for v in ["generator_history", "watchtower", "settings"] {
+        let r = call(&mut f.host, json!({"cmd": "open_in_app", "view": v}));
+        if r["ok"] == false {
+            assert_eq!(r["error"], "app_not_running", "expected app_not_running if app uninstalled, got: {r}");
+        } else {
+            assert_eq!(r["result"]["launched"], true);
+        }
+    }
+}

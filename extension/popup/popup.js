@@ -916,6 +916,13 @@ function renderDetail(d) {
       warnActs.append(siteBtn);
     }
 
+    const wtBtn = el('button', 'btn btn-link warn-action', t('openWatchtower', 'Open Watchtower'));
+    wtBtn.type = 'button';
+    wtBtn.onclick = () => {
+      send({ type: 'popup:open_in_app', view: 'watchtower' }).catch(showErr);
+    };
+    warnActs.append(wtBtn);
+
     const appBtn = el('button', 'btn btn-link warn-action', t('openInGitpass', 'Open in gitpass'));
     appBtn.type = 'button';
     appBtn.onclick = () => {
