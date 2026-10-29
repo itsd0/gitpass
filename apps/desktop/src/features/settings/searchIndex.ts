@@ -34,6 +34,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['favicon', 'website icons', 'site icons', 'icons', 'logos', 'monogram'],
   },
   {
+    id: 'setting-render-notes-markdown',
+    tab: 'general',
+    labelKey: 'settings.renderNotesMarkdown',
+    descriptionKey: 'settings.renderNotesMarkdownHelp',
+    keywords: ['notes', 'markdown', 'formatting', 'preview', 'rich text', 'code block', 'checklist'],
+  },
+  {
     id: 'setting-quick-access-hotkey',
     tab: 'general',
     labelKey: 'settings.quickAccessHotkey',

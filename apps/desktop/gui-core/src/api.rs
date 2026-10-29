@@ -203,6 +203,8 @@ pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_capitalize: Option<bool>,
     /// Privacy: Settings → Appearance gets a toggle, "Show website icons" (off by default, because fetching tells each site you have a login there).
     #[serde(default)] pub show_website_icons: bool,
+    /// Display: render notes and secure notes as safe Markdown (default on).
+    #[serde(default = "default_true")] pub render_notes_markdown: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -212,7 +214,7 @@ impl Default for Settings {
             hide_from_screen_recording: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
-            show_website_icons: false }
+            show_website_icons: false, render_notes_markdown: true }
     }
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
