@@ -484,6 +484,19 @@ impl Agent {
                 let recorded = self.app.record_generated_password(pw, source, host).map_err(host_err)?.is_some();
                 Ok(json!({"ok": true, "recorded": recorded}))
             }
+            "generator_history" => {
+                // Read-only, popup-facing: newest first, never logged. Refused while locked.
+                let limit = gitpass_host::handler::history_limit(q);
+                let mut entries = self.app.get_generator_history().map_err(host_err)?; // errors while locked
+                if !self.app.get_settings().remember_generated_passwords {
+                    return Ok(json!({"enabled": false, "entries": []}));
+                }
+                entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                let out: Vec<Value> = entries.iter().take(limit).map(|e| json!({
+                    "id": e.id, "value": e.value, "created_at": e.created_at, "source": e.source, "host": e.host,
+                })).collect();
+                Ok(json!({"enabled": true, "entries": out}))
+            }
             "passkey_query" => {
                 self.app.state.with(|x| {
                     gitpass_host::passkey::query(&x.session, q)

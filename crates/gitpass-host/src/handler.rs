@@ -40,6 +40,11 @@ fn remember_generated_passwords(vault_path: &std::path::Path) -> bool {
 }
 
 
+/// `limit` of the `generator_history` command: default 10, clamped to 1..=100.
+pub fn history_limit(req: &Value) -> usize {
+    req.get("limit").and_then(Value::as_u64).map(|n| n.clamp(1, 100) as usize).unwrap_or(10)
+}
+
 /// Contract error codes.
 pub mod code {
     pub const LOCKED: &str = "locked";
@@ -732,6 +737,21 @@ impl Host {
                 }
                 self.sess()?.record_generated_password(pw, source, host)?;
                 Ok(json!({"ok": true, "recorded": true}))
+            }
+            "generator_history" => {
+                // Read-only, popup-facing: newest first, never logged. Refused while locked (`sess()`).
+                let limit = history_limit(req);
+                let sess = self.sess()?;
+                // Same setting as `record_generated_password`: when off, the popup gets no values.
+                if !remember_generated_passwords(&self.cfg.vault_path) {
+                    return Ok(json!({"enabled": false, "entries": []}));
+                }
+                let mut entries = sess.read_generator_history()?.entries;
+                entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                let out: Vec<Value> = entries.iter().take(limit).map(|e| json!({
+                    "id": e.id, "value": e.value, "created_at": e.created_at, "source": e.source, "host": e.host,
+                })).collect();
+                Ok(json!({"enabled": true, "entries": out}))
             }
             "list_vaults" => {
                 let s = self.sess()?;

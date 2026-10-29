@@ -38,6 +38,7 @@ query?, limit?}`, `match {origin}`, `get_item {item_id}`, `reveal {item_id, fiel
 `source:"popup"` or `source:"inpage_click"`) → `{<field id>: value}`, `totp` → `{code, remaining, period}`,
 `save_login {origin, title?, username, password, vault_id?}` → `{item_id}`, `update_password`, `item_findings {item_id}`,
 `record_generated_password {password, source?, origin?}` → `{ok: true, recorded: bool}` (skips recording and returns `recorded: false` when `settings.rememberGeneratedPasswords` in `.gitpass-settings.json` is false), `site_icon {host}`,
+`generator_history {limit?}` → `{enabled, entries:[{id, value, created_at, source, host?}]}` (read-only, newest first, default 10, max 100; popup only),
 `generate {len, digits, symbols}`, `list_vaults`, `open_in_app {item_id?, view?, section?}` (`view`: `"generator_history" | "watchtower" | "settings"`, `item_id` wins). Standalone-only: `unlock`; 0.5 compat: `search`,
 `match {url}`.
 
