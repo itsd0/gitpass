@@ -447,23 +447,91 @@ async function loadData() {
   }
 }
 
+let vaultMenuOpen = false;
+function closeVaultMenu() {
+  vaultMenuOpen = false;
+  const m = $('vaultMenu');
+  if (m) { m.classList.add('hidden'); m.textContent = ''; }
+  const chip = document.querySelector('#filterChips [data-filter-id="vaults"]');
+  if (chip) chip.setAttribute('aria-expanded', 'false');
+}
+document.addEventListener('click', (e) => {
+  if (!vaultMenuOpen) return;
+  if (e.target && e.target.closest && e.target.closest('.filter-chips-row')) return;
+  closeVaultMenu();
+});
 function renderFilter() {
-  const s = $('filter'); s.textContent = '';
-  let group = null, parent = s;
-  for (const f of V.buildFilters(S.vaults)) {
-    if (f.group !== group) { group = f.group; parent = group ? Object.assign(el('optgroup'), { label: group === 'category' ? t('categories', 'Categories') : t('vaults', 'Vaults') }) : s; if (group) s.append(parent); }
-    const o = el('option', null, f.key ? t(f.key, f.label) : f.label); o.value = f.id;
-    if (f.id === 'suggested' && S.origin) o.textContent += ' · ' + V.hostOfUrl(S.origin);
-    parent.append(o);
+  const wrap = $('filterChips'); if (!wrap) return;
+  const prev = document.activeElement;
+  const hadChipFocus = !!(prev && prev.classList && prev.classList.contains('filter-chip'));
+  const focusId = hadChipFocus ? prev.dataset.filterId : null;
+  wrap.textContent = '';
+  closeVaultMenu();
+  const chips = V.buildFilterChips(S.all, S.vaults, { origin: S.origin, currentFilter: S.filter });
+  const setRoving = (focused) => {
+    for (const c of wrap.querySelectorAll('.filter-chip')) c.tabIndex = c === focused ? 0 : -1;
+  };
+  for (const f of chips) {
+    const active = f.kind === 'vaults' ? S.filter.startsWith('vault:') : S.filter === f.id;
+    const b = el('button', 'filter-chip'); b.type = 'button';
+    b.dataset.filterId = f.id;
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-selected', active ? 'true' : 'false');
+    b.tabIndex = active ? 0 : -1;
+    if (f.category && typeof categoryIcon === 'function') {
+      const ic = el('span', 'ic'); ic.innerHTML = categoryIcon(f.category, 14); b.append(ic);
+      b.append(document.createTextNode(t(f.key, f.label)));
+    } else if (f.id === 'suggested' && f.host) {
+      b.textContent = t(f.key, f.label) + ' · ' + f.host;
+    } else if (f.kind === 'vaults') {
+      b.textContent = t(f.key, f.label) + ' ▾';
+      b.setAttribute('aria-haspopup', 'menu');
+      b.setAttribute('aria-expanded', 'false');
+    } else {
+      b.textContent = f.key ? t(f.key, f.label) : f.label;
+    }
+    b.onclick = () => {
+      if (f.kind === 'vaults') {
+        vaultMenuOpen = !vaultMenuOpen;
+        b.setAttribute('aria-expanded', vaultMenuOpen ? 'true' : 'false');
+        const m = $('vaultMenu'); m.textContent = '';
+        if (vaultMenuOpen) {
+          for (const v of f.vaults) {
+            const item = el('button', null, v.label); item.type = 'button';
+            item.setAttribute('role', 'menuitem');
+            item.setAttribute('aria-selected', S.filter === v.id ? 'true' : 'false');
+            item.onclick = (ev) => { ev.stopPropagation(); S.filter = v.id; renderFilter(); applyFilter(true); const vc = document.querySelector('#filterChips [data-filter-id="vaults"]'); if (vc) vc.focus(); };
+            item.onkeydown = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeVaultMenu(); const vc = document.querySelector('#filterChips [data-filter-id="vaults"]'); if (vc) vc.focus(); } };
+            m.append(item);
+          }
+          m.classList.remove('hidden');
+        } else { m.classList.add('hidden'); }
+        return;
+      }
+      S.filter = f.id; renderFilter(); applyFilter(true);
+    };
+    b.onkeydown = (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft' || e.key === 'Home' || e.key === 'End') {
+        e.preventDefault();
+        const all = [...wrap.querySelectorAll('.filter-chip')];
+        const next = all[V.chipNavIndex(all.indexOf(b), e.key, all.length)];
+        if (next) { setRoving(next); next.focus(); }
+      } else if (e.key === 'Escape' && vaultMenuOpen) {
+        e.stopPropagation(); closeVaultMenu(); b.focus();
+      }
+    };
+    wrap.append(b);
   }
-  s.value = S.filter;
+  if (focusId) {
+    const restore = wrap.querySelector(`[data-filter-id="${focusId}"]`);
+    if (restore) { setRoving(restore); restore.focus(); }
+  }
   const noteEl = $('siteExceptedNote');
   if (noteEl) {
     const showNote = S.filter === 'suggested' && isSiteExcepted();
     noteEl.classList.toggle('hidden', !showNote);
   }
 }
-$('filter').onchange = () => { S.filter = $('filter').value; applyFilter(true); };
 
 // Sort menu (#165): newest edit first by default; the choice is kept in extension storage.
 const SORT_LABELS = { updated: ['sortUpdated', 'Last edited'], created: ['sortCreated', 'Date created'], title: ['sortTitle', 'Title'] };
@@ -993,6 +1061,13 @@ function renderDetail(d) {
       warnActs.append(siteBtn);
     }
 
+    const wtBtn = el('button', 'btn btn-link warn-action', t('openWatchtower', 'Open Watchtower'));
+    wtBtn.type = 'button';
+    wtBtn.onclick = () => {
+      send({ type: 'popup:open_in_app', view: 'watchtower' }).catch(showErr);
+    };
+    warnActs.append(wtBtn);
+
     const appBtn = el('button', 'btn btn-link warn-action', t('openInGitpass', 'Open in gitpass'));
     appBtn.type = 'button';
     appBtn.onclick = () => {
@@ -1389,6 +1464,7 @@ function openShortcuts() {
 
   const shortcuts = [
     { keys: ['↑', '↓'], label: t('shortcutNav', 'Navigate list') },
+    { keys: ['←', '→'], label: t('shortcutFilterChips', 'Move between filter chips') },
     { keys: [isMac ? '↵' : 'Enter'], label: t('shortcutFill', 'Fill item') },
     { keys: [`${cmd}C`], label: t('shortcutCopyPw', 'Copy password') },
     { keys: [`${cmd}${shift}C`], label: t('shortcutCopyTotp', 'Copy one-time code (TOTP)') },

@@ -150,6 +150,7 @@ pub struct WatchtowerReport {
     pub expired: Vec<String>, pub expiring_soon: Vec<String>,
     pub insecure_urls: Vec<String>,
     pub duplicates: Vec<Vec<String>>,
+    pub weak_ssh_keys: Vec<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub weak_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -205,6 +206,8 @@ pub struct Settings {
     #[serde(default)] pub show_website_icons: bool,
     /// Display: render notes and secure notes as safe Markdown (default on).
     #[serde(default = "default_true")] pub render_notes_markdown: bool,
+    /// Menu bar: Show gitpass in the macOS menu bar (default on).
+    #[serde(default = "default_true")] pub show_menu_bar_icon: bool,
     /// Remember generated passwords in an encrypted vault history (default on).
     #[serde(default = "default_true")] pub remember_generated_passwords: bool,
 }
@@ -216,7 +219,7 @@ impl Default for Settings {
             hide_from_screen_recording: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
-            show_website_icons: false, render_notes_markdown: true, remember_generated_passwords: true }
+            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, remember_generated_passwords: true }
     }
 }
 
@@ -1189,6 +1192,7 @@ impl App {
                 totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
                 insecure_urls: vec![],
                 duplicates: vec![],
+                weak_ssh_keys: vec![],
                 weak_reasons: HashMap::new(),
                 ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
@@ -1211,6 +1215,7 @@ impl App {
                         Finding::ExpiringSoon { .. } => out.expiring_soon.push(f.id.clone()),
                         Finding::InsecureUrl { .. } => out.insecure_urls.push(f.id.clone()),
                         Finding::Duplicate { group } => dup_groups.entry(group.clone()).or_default().push(f.id.clone()),
+                        Finding::WeakSshKey { .. } => out.weak_ssh_keys.push(f.id.clone()),
                     }
                 }
             }

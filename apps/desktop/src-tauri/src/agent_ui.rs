@@ -56,6 +56,18 @@ impl AgentUi for TauriUi {
             }
         });
     }
+    fn open_view(&self, view: &str, section: Option<&str>) {
+        let h = self.h.clone();
+        let p = serde_json::json!({"view": view, "section": section});
+        let _ = self.h.run_on_main_thread(move || {
+            let w = focus_main(&h);
+            let _ = h.emit("open-view", p.clone());
+            if let Some(w) = w {
+                let js = format!("window.dispatchEvent(new CustomEvent('gitpass:open-view', {{ detail: {p} }}))");
+                let _ = w.eval(&js);
+            }
+        });
+    }
 }
 
 fn applescript_str(s: &str) -> String { format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\"")) }

@@ -679,6 +679,9 @@
   "shortcutNav": {
     "message": "เลื่อนรายการ"
   },
+  "shortcutFilterChips": {
+    "message": "เลื่อนระหว่างชิปตัวกรอง"
+  },
   "shortcutFill": {
     "message": "เติมข้อมูลรายการ"
   },
@@ -849,6 +852,9 @@
   "changeOnSite": {
     "message": "เปลี่ยนที่เว็บไซต์"
   },
+  "openWatchtower": {
+    "message": "เปิด Watchtower"
+  },
   "openInGitpass": {
     "message": "เปิดใน gitpass"
   },
@@ -956,6 +962,9 @@
   },
   "optNeverAutoSubmitAdd": {
     "message": "เพิ่มไซต์"
+  },
+  "watchtowerWeakSshKey": {
+    "message": "คีย์ SSH ที่ไม่ปลอดภัย"
   },
   "genRecent": {
     "message": "ล่าสุด"

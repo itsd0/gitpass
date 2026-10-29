@@ -26,10 +26,11 @@ pub enum Finding {
     /// Saved with an unencrypted HTTP URL (public host only; no secrets/paths/queries).
     InsecureUrl { url_host: String },
     Duplicate { group: String },
+    WeakSshKey { bits: usize },
 }
 
 /// Every [`Finding::kind`] string, in declaration order (docs and `gitpass audit --help` list these).
-pub const FINDING_KINDS: &[&str] = &["weak", "reused", "old", "missing_totp", "totp_available", "passkey_available", "pwned", "expired", "expiring_soon", "insecure_url", "duplicate"];
+pub const FINDING_KINDS: &[&str] = &["weak", "reused", "old", "missing_totp", "totp_available", "passkey_available", "pwned", "expired", "expiring_soon", "insecure_url", "duplicate", "weak_ssh_key"];
 
 impl Finding {
     pub fn kind(&self) -> &'static str {
@@ -45,6 +46,7 @@ impl Finding {
             Finding::ExpiringSoon { .. } => "expiring_soon",
             Finding::InsecureUrl { .. } => "insecure_url",
             Finding::Duplicate { .. } => "duplicate",
+            Finding::WeakSshKey { .. } => "weak_ssh_key",
         }
     }
 }
@@ -76,6 +78,7 @@ pub struct AuditReport {
     pub totp_available: usize, pub passkey_available: usize,
     pub expired: usize, pub expiring_soon: usize,
     pub insecure_urls: usize,
+    pub weak_ssh_keys: usize,
     pub ignored: usize,
     pub per_item: Vec<ItemFindings>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -688,6 +691,33 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
             }
         }
 
+        if rec.category == crate::item::Category::SshKey && !rec.archived && rec.deleted_at.is_none() {
+            let bits = if let Ok(ssh_key) = crate::ssh::SshKey::from_record(rec) {
+                if ssh_key.key.algorithm().is_rsa() {
+                    ssh_key.bit_length()
+                } else {
+                    None
+                }
+            } else if let Some(pub_line) = rec.find_field(crate::ssh::F_PUBLIC).and_then(|f| f.value) {
+                if let Ok(info) = crate::ssh::public_info(&pub_line) {
+                    if info.key_type == "ssh-rsa" {
+                        info.bit_length
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            if let Some(bits) = bits {
+                if bits < 3072 {
+                    record_finding(Finding::WeakSshKey { bits }, &mut r.weak_ssh_keys);
+                }
+            }
+        }
+
         let change_pw_url = url.and_then(change_password_url);
         if !f.is_empty() { r.per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), change_password_url: change_pw_url.clone(), findings: f }); }
         if !f_ignored.is_empty() { r.ignored_per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), change_password_url: change_pw_url, findings: f_ignored }); }
@@ -727,6 +757,7 @@ impl std::fmt::Display for Finding {
             Finding::ExpiringSoon { on, days } => write!(f, "expires in {days} days (on {on})"),
             Finding::InsecureUrl { url_host } => write!(f, "saved with unencrypted HTTP URL ({url_host})"),
             Finding::Duplicate { group } => write!(f, "duplicate login for {group}"),
+            Finding::WeakSshKey { bits } => write!(f, "weak SSH key: {bits}-bit RSA (recommend 3072+ bits or Ed25519)"),
         }
     }
 }
@@ -866,7 +897,7 @@ mod tests {
             Finding::Weak { reason: String::new() }, Finding::Reused { group: 1, others: 1 }, Finding::Old { days: 1 },
             Finding::MissingTotp, Finding::TotpAvailable { site: String::new() }, Finding::PasskeyAvailable { site: String::new() },
             Finding::Pwned { count: 1 }, Finding::Expired { on: String::new() }, Finding::ExpiringSoon { on: String::new(), days: 1 },
-            Finding::InsecureUrl { url_host: String::new() }, Finding::Duplicate { group: String::new() },
+            Finding::InsecureUrl { url_host: String::new() }, Finding::Duplicate { group: String::new() }, Finding::WeakSshKey { bits: 2048 },
         ];
         let kinds: Vec<&str> = all.iter().map(Finding::kind).collect();
         assert_eq!(kinds, FINDING_KINDS);
@@ -1506,5 +1537,47 @@ mod tests {
             snapshot: Snapshot { item: fresh.item.clone(), category: fresh.category, sections: vec![], tags: vec![] },
         });
         assert_eq!(fresh.password_changed_at(), Some(created));
+    }
+    #[test]
+    fn test_weak_ssh_key_audit_and_ignore() {
+        use crate::ssh::SshKey;
+        use ssh_key::private::{KeypairData, RsaKeypair};
+        use ssh_key::LineEnding;
+
+        // 1. 2048-bit RSA key: weak (< 3072)
+        let rsa2048 = RsaKeypair::random(&mut rand::rngs::OsRng, 2048).unwrap();
+        let k2048 = SshKey::import_openssh(&ssh_key::PrivateKey::new(KeypairData::Rsa(rsa2048), "test2048").unwrap().to_openssh(LineEnding::LF).unwrap(), None).unwrap();
+        let rec2048 = k2048.to_record("RSA 2048 Key").unwrap();
+
+        // 2. 3072-bit RSA key: not weak (>= 3072)
+        let rsa3072 = RsaKeypair::random(&mut rand::rngs::OsRng, 3072).unwrap();
+        let k3072 = SshKey::import_openssh(&ssh_key::PrivateKey::new(KeypairData::Rsa(rsa3072), "test3072").unwrap().to_openssh(LineEnding::LF).unwrap(), None).unwrap();
+        let rec3072 = k3072.to_record("RSA 3072 Key").unwrap();
+
+        // 3. Ed25519 key: not weak
+        let ed = SshKey::generate_ed25519("ed@test").unwrap();
+        let rec_ed = ed.to_record("Ed25519 Key").unwrap();
+
+        let items = vec![
+            ("v".into(), "id1".into(), rec2048.clone()),
+            ("v".into(), "id2".into(), rec3072),
+            ("v".into(), "id3".into(), rec_ed),
+        ];
+
+        let rep = audit(&items, &AuditOpts::default(), None).unwrap();
+        assert_eq!(rep.weak_ssh_keys, 1);
+        let id1_f = rep.per_item.iter().find(|i| i.id == "id1").unwrap();
+        assert!(id1_f.findings.contains(&Finding::WeakSshKey { bits: 2048 }));
+        assert!(!rep.per_item.iter().any(|i| i.id == "id2"));
+        assert!(!rep.per_item.iter().any(|i| i.id == "id3"));
+
+        // Ignored weak_ssh_key
+        let mut rec_ignored = rec2048;
+        rec_ignored.ignore_finding("weak_ssh_key");
+        let rep_ign = audit(&[("v".into(), "id1".into(), rec_ignored)], &AuditOpts::default(), None).unwrap();
+        assert_eq!(rep_ign.weak_ssh_keys, 0);
+        assert_eq!(rep_ign.ignored, 1);
+        assert_eq!(rep_ign.ignored_per_item.len(), 1);
+        assert!(rep_ign.ignored_per_item[0].findings.contains(&Finding::WeakSshKey { bits: 2048 }));
     }
 }
