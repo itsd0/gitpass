@@ -438,3 +438,48 @@ fn item_findings_agent_contract_and_security() {
     e.app.lock();
     assert_eq!(c.err("item_findings", json!({"item_id": id1})), "locked");
 }
+
+#[test]
+fn site_icon_agent_contract_and_security() {
+    let e = env();
+    let cache_dir = tempfile::tempdir().unwrap();
+    e.app.set_favicon_cache_dir(cache_dir.path().to_path_buf());
+    let (mut c, _) = Client::connect(&e);
+
+    // 1. Refused when the setting is off (default is false)
+    assert_eq!(c.err("site_icon", json!({"host": "github.com"})), "denied");
+
+    // Enable show_website_icons
+    let mut s = e.app.get_settings();
+    s.show_website_icons = true;
+    e.app.set_settings(s).unwrap();
+
+    // 2. Refused for a host not in any item
+    assert_eq!(c.err("site_icon", json!({"host": "evil.invalid"})), "denied");
+
+    // Add an item with github.com
+    c.ok("save_login", json!({
+        "source": "popup",
+        "origin": "https://github.com",
+        "username": "alice",
+        "password": "secret123"
+    }));
+
+    // 3. not_found when uncached
+    assert_eq!(c.err("site_icon", json!({"host": "github.com"})), "not_found");
+
+    // 4. Returns cached icon
+    let fake_data_url = "data:image/png;base64,FAKEICON";
+    crate::favicon::save_cached(cache_dir.path(), "github.com", Some(fake_data_url.to_string())).unwrap();
+
+    let res = c.ok("site_icon", json!({"host": "github.com"}));
+    assert_eq!(res["data_url"], fake_data_url);
+
+    // Case-insensitive host
+    let res_caps = c.ok("site_icon", json!({"host": "GitHub.com"}));
+    assert_eq!(res_caps["data_url"], fake_data_url);
+
+    // 5. Refused when locked
+    e.app.lock();
+    assert_eq!(c.err("site_icon", json!({"host": "github.com"})), "locked");
+}

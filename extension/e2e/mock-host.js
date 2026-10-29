@@ -67,6 +67,26 @@ function handle(m) {
     case 'get_item': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
       const fields = i.fields ? i.fields : (i._u ? [{ name: 'username', label: 'username', value: i._u, concealed: false, kind: 'text' }, { name: 'password', label: 'password', concealed: true, kind: 'password' }] : []);
       return { item: { ...pub(i), fields, tags: i.tags || [], created_at: i.created_at || now } }; }
+    case 'site_icon': { needUnlock();
+      const ctrl = readJson(CTRL, {});
+      if (ctrl.website_icons === false) {
+        throw Object.assign(new Error('website icons are disabled'), { code: 'denied' });
+      }
+      const hostArg = (m.host || '').trim().toLowerCase();
+      if (!hostArg) throw Object.assign(new Error('empty host'), { code: 'bad_request' });
+      const items = getItems();
+      const belongs = items.some((i) => {
+        const u = i.url ? host(i.url).toLowerCase() : '';
+        return u === hostArg || (i.extra_urls && i.extra_urls.some((eu) => host(eu).toLowerCase() === hostArg));
+      });
+      if (!belongs) throw Object.assign(new Error('host does not belong to any item'), { code: 'denied' });
+      const customIcons = ctrl.site_icons || {};
+      if (customIcons[hostArg]) return { data_url: customIcons[hostArg] };
+      if (hostArg === 'github.com' || hostArg === 'localhost') {
+        return { data_url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiiciHI9IjEwIiBmaWxsPSIjZjI4YzI4Ii8+PC9zdmc+' };
+      }
+      throw Object.assign(new Error('site icon not cached'), { code: 'not_found' });
+    }
     case 'item_findings': { needUnlock();
       const i = getItems().find((x) => x.id === m.item_id);
       if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });

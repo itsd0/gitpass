@@ -50,7 +50,11 @@ fn get_cached(cache_dir: &Path, host: &str) -> Option<Option<String>> {
     }
 }
 
-fn save_cached(cache_dir: &Path, host: &str, data_url: Option<String>) -> Result<()> {
+pub fn get_cached_icon(cache_dir: &Path, host: &str) -> Option<String> {
+    get_cached(cache_dir, host).flatten()
+}
+
+pub fn save_cached(cache_dir: &Path, host: &str, data_url: Option<String>) -> Result<()> {
     std::fs::create_dir_all(cache_dir)?;
     let p = cache_file_path(cache_dir, host);
     let entry = CachedFavicon {

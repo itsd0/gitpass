@@ -782,7 +782,7 @@
   },
   "updatePassword": {
     "message": "Update password"
-    },
+  },
   "sortBy": {
     "message": "Sort by"
   },
@@ -823,5 +823,11 @@
   },
   "csRulesTooShort": {
     "message": "This site's password rules are too short for a strong password"
+  },
+  "optWebsiteIcons": {
+    "message": "Website icons"
+  },
+  "optWebsiteIconsBody": {
+    "message": "Website icons and monograms are displayed in the popup and autofill menu. To enable or disable icon downloads, use 'Show website icons' in the gitpass desktop app settings."
   }
 }

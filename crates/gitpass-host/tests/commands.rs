@@ -236,3 +236,55 @@ fn item_findings_contract_and_security() {
     assert!(!kinds1_after.contains(&"weak"), "ignored finding must be hidden: {f1_after:?}");
     assert!(kinds1_after.contains(&"reused"), "non-ignored finding must still be visible");
 }
+
+#[test]
+fn site_icon_contract_and_security() {
+    let mut f = setup();
+    let cache_dir = tempfile::tempdir().unwrap();
+    f.host.set_favicon_cache_dir(cache_dir.path().to_path_buf());
+
+    // 1. Refused when locked
+    assert!(err(&mut f.host, json!({"cmd": "site_icon", "host": "github.com"})).contains("locked"));
+
+    // Unlock
+    ok(&mut f.host, json!({"cmd": "unlock", "password": PW}));
+
+    // 2. Refused when the setting is off (default)
+    assert!(err(&mut f.host, json!({"cmd": "site_icon", "host": "github.com"})).contains("denied"));
+
+    // Enable setting via .gitpass-settings.json
+    let settings_path = f.host.cfg.vault_path.join(".gitpass-settings.json");
+    std::fs::write(&settings_path, serde_json::to_string(&json!({"show_website_icons": true})).unwrap()).unwrap();
+
+    // 3. Refused for a host not in any item
+    assert!(err(&mut f.host, json!({"cmd": "site_icon", "host": "evil.invalid"})).contains("denied"));
+
+    // Save a login item with github.com
+    ok(&mut f.host, json!({
+        "cmd": "save_login",
+        "origin": "https://github.com",
+        "username": "alice",
+        "password": "fake-pw-123",
+        "title": "GitHub Login"
+    }));
+
+    // 4. not_found when uncached
+    let err_uncached = err(&mut f.host, json!({"cmd": "site_icon", "host": "github.com"}));
+    assert!(err_uncached.contains("not_found") || err_uncached.contains("not cached"));
+
+    // 5. Returns cached icon
+    let fake_data_url = "data:image/png;base64,FAKEICON";
+    let host_hash = gitpass_core::store::hash_bytes("github.com".as_bytes());
+    let entry = json!({
+        "ts": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs(),
+        "data_url": fake_data_url
+    });
+    std::fs::write(cache_dir.path().join(format!("{host_hash}.json")), serde_json::to_vec(&entry).unwrap()).unwrap();
+
+    let res = ok(&mut f.host, json!({"cmd": "site_icon", "host": "github.com"}));
+    assert_eq!(res["data_url"], fake_data_url);
+
+    // Case insensitive host check
+    let res_caps = ok(&mut f.host, json!({"cmd": "site_icon", "host": "GitHub.com"}));
+    assert_eq!(res_caps["data_url"], fake_data_url);
+}

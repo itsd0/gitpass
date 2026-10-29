@@ -1437,6 +1437,10 @@ impl App {
         crate::favicon::fetch_and_cache(url, &cache_dir, false).ok().flatten()
     }
 
+    pub fn favicon_cache_dir(&self) -> PathBuf {
+        self.favicon_cache_dir.lock().unwrap().clone().unwrap_or_else(crate::favicon::default_favicon_cache_dir)
+    }
+
     pub fn set_favicon_cache_dir(&self, dir: PathBuf) {
         *self.favicon_cache_dir.lock().unwrap() = Some(dir);
     }
