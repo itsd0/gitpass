@@ -38,6 +38,13 @@ Open it from the toolbar icon, or with the keyboard command below.
   clipboard after 30 seconds.
 - **TOTP codes.** Items with a one-time code show a live code chip in the
   list; the code counts down to its expiry and refreshes automatically.
+- **Large type.** A password or one-time code can be shown in large
+  characters, one per cell with index numbers, from the field's large-type
+  button or with ⌘⌥L / Ctrl+Alt+L. Esc closes the view and puts focus back
+  on the button that opened it; locking the popup clears it.
+- **Recently Deleted.** The detail's More menu moves an item to Recently
+  Deleted — the same 30-day trash the desktop app shows. A toast with Undo
+  appears for a few seconds and restores it with one click.
 - **New item.** Create a login (and other item types) from the popup
   without opening the desktop app.
 - **Generator.** Generate a strong password from the popup and use it in
