@@ -196,6 +196,7 @@ pub fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         "id": format!("{vid}:{iid}"), "vault_id": vid, "vault_name": vname,
         "category": r.category.as_str(), "title": r.item.title, "subtitle": subtitle(r),
         "url": url, "favicon_host": url.and_then(url_host), "has_totp": has_totp(r),
+        "has_attachments": !r.attachments.is_empty(),
         "favorite": r.favorite, "updated_at": r.item.updated_at, "created_at": r.created_at,
     })
 }
@@ -226,6 +227,15 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
     }
     let m = v.as_object_mut().unwrap();
     m.insert("fields".into(), json!(fields));
+    let attachments: Vec<Value> = r.attachments.iter().map(|a| {
+        json!({
+            "id": a.id,
+            "name": a.name,
+            "size": a.size,
+            "mime": a.mime,
+        })
+    }).collect();
+    m.insert("attachments".into(), json!(attachments));
     m.insert("notes".into(), json!(nonempty(&r.item.notes)));
     m.insert("tags".into(), json!(r.tags));
     m.insert("created_at".into(), json!(r.created_at));

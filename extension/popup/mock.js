@@ -27,7 +27,8 @@
   for (let i = 1; i <= 30; i++) raw.push(['v1', 'login', 'Demo site ' + i, 'user' + i + '@example.com', 'https://demo' + i + '.example', false, false]);
   const items = raw.map(([v, category, title, subtitle, url, favorite, has_totp], i) => ({
     id: v + ':i' + i, vault_id: v, vault_name: V.find((x) => x.id === v).name, category, title, subtitle,
-    url: url || undefined, favicon_host: url ? new URL(url).hostname : undefined, has_totp, favorite, updated_at: now - i * 3600e3,
+    url: url || undefined, favicon_host: url ? new URL(url).hostname : undefined, has_totp,
+    has_attachments: category === 'document' || i === 0, favorite, updated_at: now - i * 3600e3,
   }));
   for (const v of V) v.item_count = items.filter((i) => i.vault_id === v.id).length;
   const F = (name, label, kind, value, concealed) => ({ name, label, kind, concealed: !!concealed, value: concealed ? undefined : value });
@@ -46,7 +47,10 @@
       case 'ssh_key': fields = [F('public', 'public key', 'text', 'ssh-ed25519 AAAAC3Nza…demo naing@mac'), F('private', 'private key', 'password', null, true), F('fp', 'fingerprint', 'text', 'SHA256:x2Tq…9fA')]; secrets.private = '-----BEGIN OPENSSH PRIVATE KEY-----demo'; break;
       case 'wifi': fields = [F('ssid', 'network name', 'text', 'NaingHome-5G'), F('password', 'wireless password', 'password', null, true), F('security', 'security', 'text', 'WPA3')]; secrets.password = 'wifi-demo-pass'; break;
     }
-    return { ...it, fields, notes: it.notes != null ? it.notes : (it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : ''), tags: ['demo'], created_at: now - 864e5 * 30 };
+    const attachments = (it && it.has_attachments) ? [
+      { id: 'att-1', name: 'passport-scan.pdf', size: 1258291, mime: 'application/pdf' },
+    ] : [];
+    return { ...it, fields, attachments, notes: it.notes != null ? it.notes : (it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : ''), tags: ['demo'], created_at: now - 864e5 * 30 };
   }
   let unlocked = !['locked', 'appdown', 'nohost'].includes(P.get('view'));
   const appRunning = P.get('view') !== 'appdown';

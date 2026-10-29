@@ -43,8 +43,8 @@ query?, limit?}`, `match {origin}`, `get_item {item_id}`, `reveal {item_id, fiel
 `match {url}`.
 
 ItemSummary: `{id:"<vault>:<item>", vault_id, vault_name, category, title, subtitle, url?, favicon_host?, has_totp,
-favorite, updated_at}`; `category` is the real v5 type (`login|secure_note|credit_card|identity|api_credential|
-document|ssh_key|wifi`). ItemDetail adds `fields:[{name,label,value?,concealed,kind}]`, `notes?`, `tags`,
+has_attachments, favorite, updated_at}`; `category` is the real v5 type (`login|secure_note|credit_card|identity|api_credential|
+document|ssh_key|wifi`). ItemDetail adds `fields:[{name,label,value?,concealed,kind}]`, `attachments:[{id,name,size,mime}]`, `notes?`, `tags`,
 `created_at`; secret fields (concealed / TOTP) never carry a value — use `reveal`. Archived and deleted items are hidden.
 
 **Origin checks in both modes:** `match`, `fill` and `save_login` origins must be https (or http on loopback) or

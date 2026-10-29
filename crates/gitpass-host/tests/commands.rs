@@ -431,3 +431,46 @@ fn record_generated_password_respects_settings_and_returns_recorded_flag() {
     let bytes_after_r4 = std::fs::read(&history_file).unwrap();
     assert_ne!(bytes_after_r1, bytes_after_r4, "history file must be updated when setting is re-enabled");
 }
+
+#[test]
+fn get_item_attachments_metadata_only_no_file_bytes() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    std::fs::create_dir_all(&root).unwrap();
+    let sk = store::init(&root, PW, fast()).unwrap();
+    let skf = d.path().join("secret.key");
+    std::fs::write(&skf, format!("{}\n", sk.encode())).unwrap();
+
+    let s = Session::unlock_with(&root, PW, &sk, &UnlockOpts { accept_rollback: false, target_kdf: fast() }).unwrap();
+    let vid = s.create_vault("personal").unwrap();
+    let iid = s.add_item(&vid, &item("Secure File Item", "alice", "https://example.com", None)).unwrap();
+    let secret_payload = b"TOP-SECRET-BINARY-ATTACHMENT-CONTENT-DO-NOT-LEAK";
+    s.add_attachment(&vid, &iid, "confidential.pdf", "application/pdf", secret_payload).unwrap();
+    drop(s);
+
+    let mut host = Host::new(HostConfig { vault_path: root, secret_key_path: skf, idle_timeout: Duration::from_secs(300), target_kdf: fast() });
+    ok(&mut host, json!({"cmd": "unlock", "password": PW}));
+
+    // 1. list_items: item with attachment has has_attachments: true
+    let list_res = ok(&mut host, json!({"cmd": "list_items"}));
+    let items = list_res["items"].as_array().unwrap();
+    let found = items.iter().find(|i| i["title"] == "Secure File Item").expect("item in list");
+    assert_eq!(found["has_attachments"], true);
+
+    // 2. get_item: item detail includes attachment metadata only
+    let item_id = format!("{vid}:{iid}");
+    let get_res = ok(&mut host, json!({"cmd": "get_item", "item_id": item_id}));
+    let detail = &get_res["item"];
+    assert_eq!(detail["has_attachments"], true);
+
+    let atts = detail["attachments"].as_array().expect("attachments array");
+    assert_eq!(atts.len(), 1);
+    assert_eq!(atts[0]["name"], "confidential.pdf");
+    assert_eq!(atts[0]["size"], secret_payload.len() as u64);
+    assert_eq!(atts[0]["mime"], "application/pdf");
+    assert!(atts[0]["id"].as_str().is_some_and(|id| !id.is_empty()));
+
+    // 3. Verify no file bytes or contents are sent in the JSON response
+    let raw_json = serde_json::to_string(&get_res).unwrap();
+    assert!(!raw_json.contains("TOP-SECRET-BINARY-ATTACHMENT-CONTENT-DO-NOT-LEAK"));
+}

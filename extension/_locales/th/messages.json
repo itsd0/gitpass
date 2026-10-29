@@ -1032,5 +1032,19 @@
         "content": "$1"
       }
     }
+  },
+  "attachments": {
+    "message": "ไฟล์แนบ"
+  },
+  "hasAttachments": {
+    "message": "มีไฟล์แนบ"
+  },
+  "openAttachmentInGitpass": {
+    "message": "เปิด $1 ใน gitpass",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
   }
 }

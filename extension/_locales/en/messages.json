@@ -953,5 +953,19 @@
         "content": "$1"
       }
     }
+  },
+  "attachments": {
+    "message": "Attachments"
+  },
+  "hasAttachments": {
+    "message": "Has attachments"
+  },
+  "openAttachmentInGitpass": {
+    "message": "Open $1 in gitpass",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
   }
 }
