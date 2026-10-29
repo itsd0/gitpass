@@ -15,6 +15,8 @@ if (typeof importScripts === 'function' && !globalThis.GitpassPasskey) importScr
 if (typeof importScripts === 'function' && !globalThis.GitpassCommand) importScripts('bg-command.js');
 // Right-click context menu (#213); installed at the bottom once the helpers exist.
 if (typeof importScripts === 'function' && !globalThis.GitpassContextMenu) importScripts('bg-context.js');
+// Toolbar icon state + match-count badge (#218)
+if (typeof importScripts === 'function' && !globalThis.GitpassBadge) importScripts('bg-badge.js');
 
 const HOST = 'com.gitpass.host';
 let contextMenuApi = null; // set by the install at the bottom; host events rebuild the menu
@@ -31,6 +33,7 @@ function connect() {
       if (msg.event === 'lock' || msg.event === 'unlock' || msg.event === 'changed') {
         chrome.runtime.sendMessage({ type: 'popup:event', event: msg.event }).catch(() => {});
         if (contextMenuApi) contextMenuApi.rebuild(); // locked menu vs full menu (#213)
+        if (globalThis.gitpassBadge) globalThis.gitpassBadge.onHostEvent(msg.event);
       }
       return;
     }
@@ -62,6 +65,7 @@ if (typeof chrome !== 'undefined' && chrome.idle && chrome.idle.onStateChanged) 
     if (state === 'locked') {
       host('lock').catch(() => {});
       chrome.runtime.sendMessage({ type: 'popup:event', event: 'lock', reason: 'screen' }).catch(() => {});
+      if (globalThis.gitpassBadge) globalThis.gitpassBadge.onHostEvent('lock');
     } else if (state === 'idle') {
       host('status').catch(() => {});
     }
@@ -220,6 +224,9 @@ globalThis.gitpassFillLoginCommand = fillLoginCommand; // e2e drives the command
 if (chrome.commands && chrome.commands.onCommand) {
   chrome.commands.onCommand.addListener((cmd) => { if (cmd === GitpassCommand.COMMAND) fillLoginCommand().catch(() => {}); });
 }
+
+// Toolbar icon: locked / not running variant, and the count of logins for the active tab (#218).
+if (globalThis.GitpassBadge) globalThis.gitpassBadge = GitpassBadge.install({ host });
 
 // Messages from the popup (extension pages) and content scripts.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {

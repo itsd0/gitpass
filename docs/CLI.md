@@ -189,9 +189,13 @@ gitpass export Personal --format gitpass-json --out backup.json --encrypted
 gitpass export Personal --format csv --out backup.csv --yes
 ```
 
-`--from` accepts `bitwarden-json`, `bitwarden-csv`, `1password-csv`, `1password-1pux`
-(alias `1pux`), `keepass-csv` (alias `keepassxc-csv`), `chrome-csv`, `lastpass-csv`
-(alias `lastpass`), `protonpass-csv` (alias `protonpass`) and `gitpass-json`.
+`--from` accepts every format and alias in `crates/gitpass-core/src/import.rs`
+(`ImportFormat`): `bitwarden-json`, `bitwarden-csv`, `1password-csv`,
+`1password-1pux` (alias `1pux`), `keepass-csv` (alias `keepassxc-csv`),
+`chrome-csv`, `apple-passwords-csv` (aliases `apple-passwords`, `apple-csv`,
+`apple`, `safari-csv`, `safari`), `lastpass-csv` (alias `lastpass`),
+`protonpass-csv` (aliases `proton-pass-csv`, `protonpass`, `proton-pass`) and
+`gitpass-json`.
 Duplicates (same title+username+url) are skipped unless `--allow-duplicates` is given;
 `--dry-run` writes nothing. An encrypted `gitpass-json` export prompts for the passphrase
 (or reads `GITPASS_EXPORT_PASSPHRASE`).
