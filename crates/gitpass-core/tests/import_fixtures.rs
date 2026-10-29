@@ -9,6 +9,8 @@ use std::path::PathBuf;
 
 fn fast() -> KdfParams { KdfParams { alg: "argon2id".into(), m_kib: 8192, t: 1, p: 1 } }
 fn fixture(name: &str) -> Vec<u8> { std::fs::read(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/import").join(name)).unwrap() }
+fn fixture_str(name: &str) -> String { std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/import").join(name)).unwrap() }
+
 
 /// Import `file` as `fmt` into a fresh vault; returns (report, stored records).
 fn import_fixture(fmt: ImportFormat, file: &str) -> (import::ImportReport, Vec<ItemRecord>) {
@@ -252,6 +254,8 @@ fn malformed_files_error_cleanly() {
     assert!(import::parse_bytes(ImportFormat::OnePassword1pux, &fixture("1password.csv"), None).is_err());
     // wrong format picked: a CSV fed to the JSON importer
     assert!(import::parse_bytes(ImportFormat::BitwardenJson, &fixture("chrome.csv"), None).is_err());
+    assert!(import::parse_bytes(ImportFormat::LastpassCsv, &fixture("malformed.csv"), None).is_err());
+    assert!(import::parse_bytes(ImportFormat::ProtonPassCsv, &fixture("malformed.csv"), None).is_err());
 }
 
 #[test]
@@ -275,4 +279,109 @@ fn gitpass_json_roundtrip_keeps_categories_tags_and_flags() {
     let enc = import::export_records_encrypted(&recs, "fake export passphrase", &fast()).unwrap();
     let p = import::parse(ImportFormat::GitpassJson, &enc, Some("fake export passphrase")).unwrap();
     assert_eq!(p.items.len(), recs.len());
+}
+
+#[test]
+fn lastpass_csv_fixture() {
+    let (rep, recs) = import_fixture(ImportFormat::LastpassCsv, "lastpass.csv");
+    assert_eq!((rep.parsed, rep.added, rep.duplicates.len()), (5, 4, 1));
+    check_common(&recs, false);
+    let m = by(&recs, "Example Mail");
+    assert!(m.favorite);
+    assert_eq!(m.tags, vec!["Work"]);
+    assert_eq!(m.category, Category::Login);
+
+    // Note row with url http://sn mapped to SecureNote, with url None, and tag
+    let sn = by(&recs, "Server Notes");
+    assert_eq!(sn.category, Category::SecureNote);
+    assert!(sn.item.url.is_none());
+    assert_eq!(sn.item.notes.as_deref(), Some("Server rack combination: 12-34-56"));
+    assert_eq!(sn.tags, vec!["Infrastructure"]);
+    assert!(!sn.favorite);
+
+    // Grouping "(none)" produces no tag
+    let empty = by(&recs, "https://empty.example.com");
+    assert!(empty.tags.is_empty());
+    assert!(empty.item.username.is_none());
+    assert!(empty.item.password.is_none());
+}
+
+#[test]
+fn protonpass_csv_fixture() {
+    let (rep, recs) = import_fixture(ImportFormat::ProtonPassCsv, "protonpass.csv");
+    assert_eq!((rep.parsed, rep.added, rep.duplicates.len()), (6, 5, 1));
+    check_common(&recs, false);
+    let m = by(&recs, "Example Mail");
+    assert_eq!(m.tags, vec!["Work"]);
+    assert_eq!(m.created_at, Some(1700000000));
+    assert_eq!(m.item.updated_at, "1700001000");
+
+    // Fallback email when username is empty
+    let fb = by(&recs, "Fallback Email");
+    assert_eq!(fb.item.username.as_deref(), Some("bob@example.com"));
+    assert_eq!(fb.item.password.as_deref(), Some("secret-pass"));
+    assert_eq!(fb.item.url.as_deref(), Some("https://fallback.example.com"));
+    assert_eq!(fb.item.notes.as_deref(), Some("Note with empty username"));
+    assert_eq!(fb.tags, vec!["Personal"]);
+
+    // Both username and email empty
+    let ec = by(&recs, "Empty Credentials");
+    assert!(ec.item.username.is_none());
+    assert!(ec.item.password.is_none());
+    assert_eq!(ec.item.notes.as_deref(), Some("Note on empty login"));
+
+    // Secure note row (type = note)
+    let n = by(&recs, "Wi-Fi Credentials");
+    assert_eq!(n.category, Category::SecureNote);
+    assert_eq!(n.tags, vec!["Home"]);
+    assert_eq!(n.item.notes.as_deref(), Some("Router in the basement"));
+    assert_eq!(field(n, "password"), Some("wifi-password-fake".to_string()));
+}
+
+#[test]
+fn detect_format_coverage() {
+    assert_eq!(import::detect_format(&fixture_str("bitwarden.json")), Some(ImportFormat::BitwardenJson));
+    assert_eq!(import::detect_format(&fixture_str("bitwarden.csv")), Some(ImportFormat::BitwardenCsv));
+    assert_eq!(import::detect_format(&fixture_str("1password.csv")), Some(ImportFormat::OnePasswordCsv));
+    assert_eq!(import::detect_format(&fixture_str("chrome.csv")), Some(ImportFormat::ChromeCsv));
+    assert_eq!(import::detect_format(&fixture_str("keepass.csv")), Some(ImportFormat::KeepassCsv));
+    assert_eq!(import::detect_format(&fixture_str("lastpass.csv")), Some(ImportFormat::LastpassCsv));
+    assert_eq!(import::detect_format(&fixture_str("protonpass.csv")), Some(ImportFormat::ProtonPassCsv));
+    assert_eq!(import::detect_format_bytes(&fixture("1password.1pux")), Some(ImportFormat::OnePassword1pux));
+}
+
+#[test]
+fn lastpass_group_rows_are_skipped() {
+    let csv = "url,username,password,totp,extra,name,grouping,fav\n\
+               http://group,,,,,Empty Folder,Work,0\n\
+               https://a.example.invalid,alice,FAKE-pw,,,Login A,Work,0\n";
+    let p = import::parse(ImportFormat::LastpassCsv, csv, None).unwrap();
+    assert_eq!(p.items.len(), 1);
+    assert_eq!(p.items[0].item.title, "Login A");
+}
+
+#[test]
+fn protonpass_multi_url_is_split() {
+    let csv = "type,name,url,email,username,password,note,totp,createTime,modifyTime,vault\n\
+               login,Multi,\"https://a.example.invalid, https://b.example.invalid, https://c.example.invalid\",,alice,FAKE-pw,,,,,Work\n";
+    let p = import::parse(ImportFormat::ProtonPassCsv, csv, None).unwrap();
+    let r = &p.items[0];
+    assert_eq!(r.item.url.as_deref(), Some("https://a.example.invalid"));
+    assert_eq!(field(r, "url2").as_deref(), Some("https://b.example.invalid"));
+    assert_eq!(kind(r, "url2"), FieldKind::Url);
+    assert_eq!(field(r, "url3").as_deref(), Some("https://c.example.invalid"));
+}
+
+#[test]
+fn protonpass_distinct_email_is_kept() {
+    let csv = "type,name,url,email,username,password,note,totp,createTime,modifyTime,vault\n\
+               login,Both,https://a.example.invalid,alice@example.invalid,alice_user,FAKE-pw,,,,,Work\n\
+               login,Same,https://b.example.invalid,bob@example.invalid,bob@example.invalid,FAKE-pw,,,,,Work\n";
+    let p = import::parse(ImportFormat::ProtonPassCsv, csv, None).unwrap();
+    let both = p.items.iter().find(|r| r.item.title == "Both").unwrap();
+    assert_eq!(both.item.username.as_deref(), Some("alice_user"));
+    assert_eq!(field(both, "email").as_deref(), Some("alice@example.invalid"));
+    let same = p.items.iter().find(|r| r.item.title == "Same").unwrap();
+    assert_eq!(same.item.username.as_deref(), Some("bob@example.invalid"));
+    assert!(same.find_field("email").is_none());
 }

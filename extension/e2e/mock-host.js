@@ -147,6 +147,16 @@ function handle(m) {
       const len = Math.max(4, m.len || 20);
       if (m.pin) return { password: Array.from({ length: len }, (_, i) => String(i % 10)).join('') };
       if (m.words) return { password: Array.from({ length: len }, (_, i) => ['amber', 'coral', 'lunar', 'ivory', 'ocean'][i % 5]).join('-') };
+      if (m.rules) { // site password rules (#188): same contract as the real host's generate_for_rules
+        const SETS = { lower: 'abcdefghijkmnopqrstuvwxyz', upper: 'ABCDEFGHJKLMNPQRSTUVWXYZ', digit: '23456789', special: '!@#$%^&*-_=+?' };
+        const classes = (m.rules.classes || []).map((c) => ({ chars: c.kind === 'special' && c.chars ? c.chars : SETS[c.kind], required: c.required === true }));
+        if (!classes.length || classes.some((c) => !c.chars) || classes.filter((c) => c.required).length > len) throw Object.assign(new Error('password rules cannot be satisfied'), { code: 'bad_request' });
+        const pool = classes.flatMap((c) => [...c.chars]);
+        const pick = (s) => s[Math.floor(Math.random() * s.length)];
+        const out = classes.filter((c) => c.required).map((c) => pick(c.chars));
+        while (out.length < len) out.push(pick(pool));
+        return { password: out.sort(() => Math.random() - 0.5).join('') };
+      }
       return { password: 'Gen-' + 'x'.repeat(Math.max(4, (m.len || 20) - 4)) };
     }
     case 'list_vaults': needUnlock(); return { vaults: [V, V2].map((v) => ({ ...v, item_count: getItems().filter((i) => i.vault_id === v.id).length })) };

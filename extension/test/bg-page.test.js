@@ -449,3 +449,30 @@ test('sameSite', () => {
   assert.ok(!GitpassPolicy.sameSite('https://a.com', 'http://a.com'));
   assert.ok(!GitpassPolicy.sameSite('https://a.com', 'https://b.com'));
 });
+
+test('page:generate without rules keeps the 20-character default', async () => {
+  const h = fakeHost([]);
+  const r = await B.handle({ type: 'page:generate' }, tab('https://site.example/signup'), h);
+  assert.strictEqual(r.origin, 'https://site.example');
+  assert.deepStrictEqual(h.calls[0], ['generate', { len: 20, digits: true, symbols: true }]);
+});
+
+test('page:generate clamps site rules and sends only validated classes to the host (#188)', async () => {
+  const h = fakeHost([]);
+  await B.handle({ type: 'page:generate', rules: { maxlength: 16, minlength: 3, entries: [{ kind: 'lower', required: true }, { kind: 'emoji' }, { kind: 'special', chars: '-_ a9', required: false }], junk: '<html>' } }, tab('https://site.example/signup'), h);
+  assert.deepStrictEqual(h.calls[0], ['generate', { len: 16, rules: { classes: [{ kind: 'lower', required: true }, { kind: 'special', required: false, chars: '-_' }] } }]);
+});
+
+test('page:generate rejects rules that cannot hold a strong password', async () => {
+  for (const rules of [{ maxlength: 4 }, { minlength: 200 }, { minlength: 30, maxlength: 12 }]) {
+    const h = fakeHost([]);
+    await assert.rejects(B.handle({ type: 'page:generate', rules }, tab('https://site.example/signup'), h), /password rules/);
+    assert.strictEqual(h.calls.length, 0, 'the host is never asked');
+  }
+});
+
+test('page:generate ignores a non-object rules value instead of crashing', async () => {
+  const h = fakeHost([]);
+  await B.handle({ type: 'page:generate', rules: 'maxlength: 4' }, tab('https://site.example/signup'), h);
+  assert.deepStrictEqual(h.calls[0], ['generate', { len: 20, rules: { classes: [{ kind: 'lower', required: false }, { kind: 'upper', required: false }, { kind: 'digit', required: true }, { kind: 'special', required: true }] } }]);
+});

@@ -150,6 +150,7 @@ fn match_fill_reveal_origin_rules_and_categories() {
 
     let f = c.ok("fill", json!({"item_id": gh, "origin": "https://github.com"}));
     assert_eq!((f["username"].clone(), f["password"].clone()), (json!("octo"), json!("pw-gh")));
+    assert!(c.ok("get_item", json!({"item_id": gh}))["item"]["last_used"].as_u64().is_some());
     assert_eq!(c.err("fill", json!({"item_id": gh, "origin": "https://github.com.evil.io"})), "origin_mismatch");
     assert_eq!(c.err("fill", json!({"item_id": gh, "origin": "https://example.org"})), "origin_mismatch");
     assert_eq!(c.err("fill", json!({"item_id": gh, "origin": "https://example.org", "confirm": true})), "origin_mismatch");

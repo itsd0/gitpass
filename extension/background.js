@@ -3,6 +3,7 @@
 'use strict';
 if (typeof importScripts === 'function' && !globalThis.GitpassPolicy) importScripts('lib/policy.js');
 // ws4 (in-page): page:* routing lives in bg-page.js
+if (typeof importScripts === 'function' && !globalThis.GitpassPasswordRules) importScripts('lib/password-rules.js');
 if (typeof importScripts === 'function' && !globalThis.GitpassPage) importScripts('bg-page.js');
 // onboarding (welcome/options/commands); Firefox loads it via manifest.firefox.json background.scripts
 if (typeof importScripts === 'function') importScripts('bg-onboard.js');
@@ -69,6 +70,7 @@ async function fillTab(tabId, origin, itemId, extra) {
   if (!GitpassPolicy.isFillableOrigin(origin)) throw new Error('refusing to fill: page is not https');
   const creds = await host('fill', { item_id: itemId, origin }); // host enforces origin match
   const via = extra && extra.via === 'command' ? { via: 'command' } : {};
+  if (globalThis.GitpassPage) GitpassPage.rememberFilled(tabId, origin, itemId); // ids only: offers the one-time code on the next page
   await chrome.tabs.sendMessage(tabId, { type: 'gitpass-fill', origin, username: creds.username, password: creds.password, ...via }, { frameId: 0 });
   return true;
 }

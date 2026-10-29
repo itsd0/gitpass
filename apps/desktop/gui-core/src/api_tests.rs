@@ -325,14 +325,36 @@ fn attachments_via_paths() {
 }
 
 #[test]
+fn generate_words_separator_capitalize_and_rejection() {
+    // Explicit separator joins the words; capitalize upper-cases each word's first letter.
+    let p = generate(5, true, false, true, false, Some('_'), Some(true)).unwrap();
+    let words: Vec<&str> = p.split('_').collect();
+    assert_eq!(words.len(), 5);
+    assert!(words.iter().all(|w| w.chars().next().unwrap().is_ascii_uppercase()
+        && w[1..].chars().all(|c| c.is_ascii_lowercase())), "{p}");
+    let spaced = generate(4, true, false, true, false, Some(' '), None).unwrap();
+    assert_eq!(spaced.split(' ').count(), 4);
+    // Omitted values keep the historical defaults: '-' with symbols, '.' without, no capitalization.
+    assert_eq!(generate(3, true, false, true, false, None, None).unwrap().split('-').count(), 3);
+    let dotted = generate(3, false, false, true, false, None, None).unwrap();
+    assert_eq!(dotted.split('.').count(), 3);
+    assert!(dotted.chars().all(|c| c.is_ascii_lowercase() || c == '.'));
+    // Anything outside the offered separators is a bad request.
+    assert!(generate(3, true, false, true, false, Some('!'), None).is_err());
+    assert!(generate(3, true, false, true, false, Some('/'), None).is_err());
+    // Separator/capitalize do not change the random-mode shape (still 20 characters).
+    assert_eq!(generate(20, true, true, false, false, Some('_'), Some(true)).unwrap().len(), 20);
+}
+
+#[test]
 fn tools_generate_strength_watchtower_hibp() {
     let e = env();
-    let p = e.app.generate_password(24, true, true, false, false);
+    let p = generate(24, true, true, false, false, None, None).unwrap();
     assert_eq!(p.len(), 24);
     assert!(p.chars().any(|c| c.is_ascii_digit()) && p.chars().any(|c| "!@#$%^&*-_=+?".contains(c)));
-    assert!(e.app.generate_password(20, false, false, false, false).chars().all(|c| c.is_ascii_alphabetic()));
-    assert_eq!(e.app.generate_password(5, true, false, true, false).split('-').count(), 5);
-    let pin = e.app.generate_password(6, false, false, false, true);
+    assert!(generate(20, false, false, false, false, None, None).unwrap().chars().all(|c| c.is_ascii_alphabetic()));
+    assert_eq!(generate(5, true, false, true, false, None, None).unwrap().split('-').count(), 5);
+    let pin = generate(6, false, false, false, true, None, None).unwrap();
     assert_eq!(pin.len(), 6);
     assert!(pin.chars().all(|c| c.is_ascii_digit()));
     assert!(e.app.password_strength("password") <= 10);
@@ -791,7 +813,8 @@ fn item_summary_carries_expiry_for_card_and_api_credential_only() {
     // 3. Serialized JSON contains expiry, and NO secret values (password, card number, CVV, credential)
     for (item, secret_values) in [
         (&l, vec!["super-secret-login-password"]),
-        (&c, vec!["4111 1111 1111 1111", "123"]),
+        // CVV is matched as a whole JSON string: a bare "123" also appears in random ids/timestamps.
+        (&c, vec!["4111 1111 1111 1111", "\"123\""]),
         (&a, vec!["sk_live_FAKE_SECRET_KEY_12345678"]),
     ] {
         let json_str = serde_json::to_string(item).unwrap();
@@ -1379,6 +1402,297 @@ fn system_lock_event_dispatch_enabled_and_disabled() {
     assert!(e.app.handle_system_lock_event(LockTrigger::UserSwitch));
     assert!(!e.app.status().unwrap().unlocked);
     assert_eq!(e.clip.get_text().as_deref(), Some(""));
+}
+
+#[test]
+fn last_used_tracking_and_sort_recent() {
+    let e = env();
+    let l1 = login(&e, "Beta App", "u1", "FAKE-pw1");
+    let l2 = login(&e, "Alpha App", "u2", "FAKE-pw2");
+    let l3 = login(&e, "Gamma App", "u3", "FAKE-pw3");
+
+    // 1. Initial items have no last_used
+    let detail1 = e.app.get_item(&e.vault, &l1.id).unwrap();
+    assert_eq!(detail1.summary.last_used, None);
+
+    // 2. Revealing l1 updates last_used
+    let _ = e.app.reveal_field(&e.vault, &l1.id, "password").unwrap();
+    let detail1_after = e.app.get_item(&e.vault, &l1.id).unwrap();
+    let t1 = detail1_after.summary.last_used.expect("l1 should have last_used after reveal");
+    assert!(t1 > 0);
+
+    // 3. Copying field on l3 updates last_used
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    e.app.copy_field(&e.vault, &l3.id, "password").unwrap();
+    let detail3_after = e.app.get_item(&e.vault, &l3.id).unwrap();
+    let t3 = detail3_after.summary.last_used.expect("l3 should have last_used after copy");
+    assert!(t3 >= t1);
+
+    // 4. Sort::Recent returns l3, l1, then l2 (never used)
+    let recent_items = e.app.list_items(&Filter {
+        kind: FilterKind::All,
+        vault_id: None,
+        tag: None,
+        category: None,
+        query: None,
+        sort: Some(Sort::Recent),
+    }).unwrap();
+    assert_eq!(recent_items[0].id, l3.id);
+    assert_eq!(recent_items[1].id, l1.id);
+    assert_eq!(recent_items[2].id, l2.id);
+
+    // 5. Sort::Title returns Alpha, Beta, Gamma
+    let title_items = e.app.list_items(&Filter {
+        kind: FilterKind::All,
+        vault_id: None,
+        tag: None,
+        category: None,
+        query: None,
+        sort: Some(Sort::Title),
+    }).unwrap();
+    assert_eq!(title_items[0].id, l2.id);
+    assert_eq!(title_items[1].id, l1.id);
+    assert_eq!(title_items[2].id, l3.id);
+}
+
+struct LocalMockHttp {
+    addr: std::net::SocketAddr,
+    shutdown: std::sync::Arc<std::sync::atomic::AtomicBool>,
+    handle: Option<std::thread::JoinHandle<()>>,
+    requests: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+impl LocalMockHttp {
+    fn start<F>(handler: F) -> Self
+    where
+        F: Fn(&str) -> (u16, &'static str, Vec<u8>) + Send + Sync + 'static,
+    {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::{Arc, Mutex};
+        use std::thread;
+
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind mock port");
+        let addr = listener.local_addr().unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let handler = Arc::new(handler);
+        let s_clone = shutdown.clone();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let r_clone = requests.clone();
+
+        let handle = thread::spawn(move || {
+            while !s_clone.load(Ordering::SeqCst) {
+                match listener.accept() {
+                    Ok((mut stream, _)) => {
+                        let mut buf = [0u8; 4096];
+                        if let Ok(n) = stream.read(&mut buf) {
+                            if n > 0 {
+                                let req = String::from_utf8_lossy(&buf[..n]);
+                                let path = req.lines().next().and_then(|l| l.split_whitespace().nth(1)).unwrap_or("/").to_string();
+                                r_clone.lock().unwrap().push(path.clone());
+                                let (status, ct, body) = handler(&path);
+                                let status_text = match status {
+                                    200 => "OK",
+                                    404 => "Not Found",
+                                    _ => "Custom",
+                                };
+                                let resp = format!(
+                                    "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                                    status, status_text, ct, body.len()
+                                );
+                                let _ = stream.write_all(resp.as_bytes());
+                                let _ = stream.write_all(&body);
+                                let _ = stream.flush();
+                            }
+                        }
+                    }
+                    Err(ref e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(std::time::Duration::from_millis(5));
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+
+        Self {
+            addr,
+            shutdown,
+            handle: Some(handle),
+            requests,
+        }
+    }
+
+    fn url(&self) -> String {
+        format!("http://{}", self.addr)
+    }
+}
+
+impl Drop for LocalMockHttp {
+    fn drop(&mut self) {
+        self.shutdown.store(true, std::sync::atomic::Ordering::SeqCst);
+        if let Some(h) = self.handle.take() {
+            let _ = h.join();
+        }
+    }
+}
+
+#[test]
+fn test_favicon_fetcher_non_https_refused() {
+    let tmp = tempfile::tempdir().unwrap();
+    let res = crate::favicon::fetch_and_cache("http://example.invalid/favicon.ico", tmp.path(), false);
+    assert!(res.is_err(), "non-HTTPS URL must be refused");
+    let err = res.err().unwrap().to_string();
+    assert!(err.contains("non-HTTPS refused"), "err: {}", err);
+}
+
+#[test]
+fn test_favicon_fetcher_size_cap() {
+    let tmp = tempfile::tempdir().unwrap();
+    // Return > 100 KB
+    let huge = vec![0x89; 105 * 1024];
+    let server = LocalMockHttp::start(move |_path| (200, "image/png", huge.clone()));
+
+    let res = crate::favicon::fetch_and_cache(&server.url(), tmp.path(), true).unwrap();
+    assert_eq!(res, None, "oversize responses must be rejected");
+}
+
+#[test]
+fn test_favicon_fetcher_caching_ttl_and_clear() {
+    let tmp = tempfile::tempdir().unwrap();
+    let png_bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D];
+    let p_clone = png_bytes.clone();
+    let server = LocalMockHttp::start(move |path| {
+        if path == "/favicon.ico" {
+            (200, "image/png", p_clone.clone())
+        } else {
+            (404, "text/plain", b"not found".to_vec())
+        }
+    });
+
+    // 1. Initial fetch -> hits server and caches
+    let res1 = crate::favicon::fetch_and_cache(&server.url(), tmp.path(), true).unwrap();
+    assert!(res1.is_some());
+    let url1 = res1.unwrap();
+    assert!(url1.starts_with("data:image/png;base64,"));
+    assert_eq!(server.requests.lock().unwrap().len(), 1);
+
+    // 2. Second fetch -> cache hit, no server call
+    let res2 = crate::favicon::fetch_and_cache(&server.url(), tmp.path(), true).unwrap();
+    assert_eq!(res2, Some(url1.clone()));
+    assert_eq!(server.requests.lock().unwrap().len(), 1, "must be served from cache");
+
+    // 3. TTL test: artificially expire the cache entry (31 days ago)
+    let host_hash = crate::favicon::host_hash(&server.addr.ip().to_string());
+    let cache_file = tmp.path().join(format!("{}.json", host_hash));
+    assert!(cache_file.exists());
+    let expired_entry = serde_json::json!({
+        "ts": crate::favicon::now_unix_secs() - (31 * 24 * 60 * 60),
+        "data_url": url1,
+    });
+    std::fs::write(&cache_file, serde_json::to_vec(&expired_entry).unwrap()).unwrap();
+
+    // Third fetch -> cache expired, re-fetches from server
+    let res3 = crate::favicon::fetch_and_cache(&server.url(), tmp.path(), true).unwrap();
+    assert!(res3.is_some());
+    assert_eq!(server.requests.lock().unwrap().len(), 2, "expired cache must trigger re-fetch");
+
+    // 4. Clear cache test
+    crate::favicon::clear_favicon_cache(tmp.path()).unwrap();
+    assert!(!cache_file.exists(), "cache file must be deleted");
+
+    // Fourth fetch -> re-fetches after cache clear
+    let res4 = crate::favicon::fetch_and_cache(&server.url(), tmp.path(), true).unwrap();
+    assert!(res4.is_some());
+    assert_eq!(server.requests.lock().unwrap().len(), 3, "cleared cache must trigger re-fetch");
+}
+
+#[test]
+fn test_favicon_fetcher_html_link_rel_icon() {
+    let tmp = tempfile::tempdir().unwrap();
+    let png_bytes = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01, 0x02];
+    let p_clone = png_bytes.clone();
+    let server = LocalMockHttp::start(move |path| {
+        match path {
+            "/favicon.ico" => (404, "text/plain", b"not found".to_vec()),
+            "/" => (
+                200,
+                "text/html",
+                b"<html><head><link rel=\"icon\" href=\"/assets/icon.png\"></head><body>hello</body></html>".to_vec(),
+            ),
+            "/assets/icon.png" => (200, "image/png", p_clone.clone()),
+            _ => (404, "text/plain", b"not found".to_vec()),
+        }
+    });
+
+    let res = crate::favicon::fetch_and_cache(&server.url(), tmp.path(), true).unwrap();
+    assert!(res.is_some());
+    let url = res.unwrap();
+    assert!(url.starts_with("data:image/png;base64,"));
+}
+
+#[test]
+fn test_favicon_fetcher_never_follows_redirects() {
+    // The site redirects /favicon.ico and / to a cleartext loopback target that serves a valid PNG.
+    // The fetcher must not follow either redirect (target sees no request) and must return no icon.
+    let tmp = tempfile::tempdir().unwrap();
+    let target = LocalMockHttp::start(|_path| (200, "image/png", vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
+    let loc: &'static str = Box::leak(format!("text/plain\r\nLocation: http://127.0.0.1:{}/favicon.ico", target.addr.port()).into_boxed_str());
+    let site = LocalMockHttp::start(move |_path| (302, loc, Vec::new()));
+    let res = crate::favicon::fetch_and_cache(&site.url(), tmp.path(), true).unwrap();
+    assert_eq!(res, None, "redirects must not be followed");
+    assert!(!site.requests.lock().unwrap().is_empty(), "the site itself was asked");
+    assert_eq!(target.requests.lock().unwrap().len(), 0, "redirect target must never be contacted");
+}
+
+#[test]
+fn test_favicon_icon_href_to_private_ip_refused() {
+    // Private addresses refused (production policy for addresses), http allowed only so the page can be served:
+    // the page lives on loopback too, so it must not even be fetched; and a page pointing at a private-IP href
+    // cannot make the fetcher connect there.
+    let tmp = tempfile::tempdir().unwrap();
+    let icon = LocalMockHttp::start(|_path| (200, "image/png", vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
+    let html: &'static str = Box::leak(format!("<html><head><link rel=\"icon\" href=\"http://127.0.0.1:{}/i.png\"></head></html>", icon.addr.port()).into_boxed_str());
+    let page = LocalMockHttp::start(move |path| if path == "/" { (200, "text/html", html.as_bytes().to_vec()) } else { (404, "text/plain", Vec::new()) });
+    let res = crate::favicon::fetch_and_cache_with(&page.url(), tmp.path(), true, false).unwrap();
+    assert_eq!(res, None);
+    assert_eq!(page.requests.lock().unwrap().len(), 0, "loopback page must not be contacted");
+    assert_eq!(icon.requests.lock().unwrap().len(), 0, "private-IP icon href must not be contacted");
+}
+
+#[test]
+fn test_favicon_toggle_off_makes_no_network_calls_and_toggle_off_clears_cache() {
+    let e = env();
+    let cache_dir = tempfile::tempdir().unwrap();
+    e.app.set_favicon_cache_dir(cache_dir.path().to_path_buf());
+
+    let server = LocalMockHttp::start(|_path| (200, "image/png", vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
+
+    // By default, show_website_icons is false
+    assert!(!e.app.get_settings().show_website_icons);
+
+    // favicon_url must return None immediately and make 0 network calls
+    let res = e.app.favicon_url(&format!("https://{}", server.addr));
+    assert_eq!(res, None);
+    assert_eq!(server.requests.lock().unwrap().len(), 0, "no network calls when toggle is off");
+
+    // Enable toggle
+    let mut s = e.app.get_settings();
+    s.show_website_icons = true;
+    e.app.set_settings(s.clone()).unwrap();
+    assert!(e.app.get_settings().show_website_icons);
+
+    // Artificially populate a cache file in the cache directory
+    let host_hash = crate::favicon::host_hash(&server.addr.ip().to_string());
+    let cached_file = cache_dir.path().join(format!("{}.json", host_hash));
+    std::fs::write(&cached_file, b"{\"ts\":1234,\"data_url\":\"data:image/png;base64,abc\"}").unwrap();
+    assert!(cached_file.exists());
+
+    // Disable toggle -> must clear cache
+    s.show_website_icons = false;
+    e.app.set_settings(s).unwrap();
+    assert!(!cached_file.exists(), "turning toggle off must clear the favicon cache");
 }
 
 #[test]

@@ -766,6 +766,9 @@
     "message": "เติมข้อมูลเข้าสู่ระบบที่ตรงที่สุดในหน้าปัจจุบันโดยไม่ต้องเปิดป๊อปอัป",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "recentlyUsed": {
+    "message": "ใช้งานล่าสุด"
+  },
   "watchtowerWarnings": {
     "message": "คำเตือน Watchtower"
   },
@@ -858,5 +861,38 @@
   },
   "sortTitle": {
     "message": "ชื่อ"
+  },
+  "csTotpOffer": {
+    "message": "กรอกรหัสใช้ครั้งเดียว"
+  },
+  "csTotpDismiss": {
+    "message": "ปิด"
+  },
+  "optAutoTotp": {
+    "message": "กรอกรหัสใช้ครั้งเดียวอัตโนมัติ"
+  },
+  "optAutoTotpBody": {
+    "message": "หลังจาก gitpass กรอกข้อมูลเข้าสู่ระบบแล้ว ให้กรอกรหัสใช้ครั้งเดียวในหน้าถัดไปโดยไม่ต้องถาม"
+  },
+  "csRulesLen": {
+    "message": "$len$ ตัวอักษร",
+    "placeholders": {
+      "len": {
+        "content": "$1"
+      }
+    },
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csRulesNoSymbols": {
+    "message": "ไม่มีสัญลักษณ์",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csRulesFewSymbols": {
+    "message": "สัญลักษณ์จำกัด",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csRulesTooShort": {
+    "message": "กฎรหัสผ่านของเว็บไซต์นี้สั้นเกินไปสำหรับรหัสผ่านที่รัดกุม",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   }
 }

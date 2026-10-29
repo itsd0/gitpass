@@ -105,6 +105,7 @@ gitpass vault create personal
 gitpass vault list
 gitpass add personal --title GitHub --username me --url https://github.com --generate 24
 gitpass add personal --title Bank                 # prompts for the item password
+gitpass add personal --category api-credential --title "OpenAI API" --url https://api.openai.com
 gitpass list personal
 gitpass get personal github [--password-only]     # query = id, id prefix or title substring
 gitpass edit personal <id|query> --notes "..." [--password | --generate 20]

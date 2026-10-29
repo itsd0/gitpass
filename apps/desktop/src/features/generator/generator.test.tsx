@@ -308,4 +308,71 @@ describe('Standalone Password Generator', () => {
     fireEvent.change(numInput, { target: { value: '4' } });
     expect(slider.value).toBe('4');
   });
+
+  it('shows separator and capitalize controls only in Memorable mode', async () => {
+    vi.spyOn(api, 'generatePassword').mockResolvedValue('apple-river-stone');
+    renderWithTooltip(<PasswordGenerator standalone />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('colored-password').textContent).toBe('apple-river-stone');
+    });
+
+    // Random mode: no words-mode controls
+    expect(screen.queryByRole('radiogroup', { name: /Separator/i })).toBeNull();
+    expect(screen.queryByRole('checkbox', { name: /Capitalize words/i })).toBeNull();
+
+    // Memorable mode: both controls appear
+    fireEvent.click(screen.getByRole('tab', { name: /Memorable/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('radiogroup', { name: /Separator/i })).toBeTruthy();
+    });
+    expect(screen.getByRole('checkbox', { name: /Capitalize words/i })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: '-' })).toHaveAttribute('aria-checked', 'true');
+
+    // PIN mode: controls disappear again
+    fireEvent.click(screen.getByRole('tab', { name: /PIN/i }));
+    await waitFor(() => {
+      expect(screen.queryByRole('radiogroup', { name: /Separator/i })).toBeNull();
+    });
+    expect(screen.queryByRole('checkbox', { name: /Capitalize words/i })).toBeNull();
+  });
+
+  it('regenerates with the chosen separator and capitalize, and persists both', async () => {
+    const genSpy = vi.spyOn(api, 'generatePassword').mockResolvedValue('apple-river-stone');
+    const saveSpy = vi.spyOn(useSettings.getState(), 'save');
+
+    renderWithTooltip(<PasswordGenerator standalone />);
+    await waitFor(() => {
+      expect(screen.getByTestId('colored-password').textContent).toBe('apple-river-stone');
+    });
+
+    fireEvent.click(screen.getByRole('tab', { name: /Memorable/i }));
+    await waitFor(() => {
+      expect(screen.getByRole('radiogroup', { name: /Separator/i })).toBeTruthy();
+    });
+
+    // Pick '_' then enable Capitalize: each change regenerates immediately.
+    fireEvent.click(screen.getByRole('radio', { name: '_' }));
+    await waitFor(() => {
+      expect(genSpy).toHaveBeenCalledWith(expect.objectContaining({ words: true, separator: '_', capitalize: false }));
+    });
+    fireEvent.click(screen.getByRole('checkbox', { name: /Capitalize words/i }));
+    await waitFor(() => {
+      expect(genSpy).toHaveBeenCalledWith(expect.objectContaining({ words: true, separator: '_', capitalize: true }));
+    });
+
+    // ArrowRight on the segmented control moves to the next separator (space).
+    const group = screen.getByRole('radiogroup', { name: /Separator/i });
+    fireEvent.keyDown(group, { key: 'ArrowRight' });
+    await waitFor(() => {
+      expect(genSpy).toHaveBeenCalledWith(expect.objectContaining({ separator: ' ' }));
+    });
+
+    // Debounced persist carries both new settings.
+    await waitFor(() => {
+      const lastCall = saveSpy.mock.calls[saveSpy.mock.calls.length - 1][0];
+      expect(lastCall).toHaveProperty('generatorSeparator', ' ');
+      expect(lastCall).toHaveProperty('generatorCapitalize', true);
+    });
+  });
 });

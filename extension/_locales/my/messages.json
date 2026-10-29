@@ -766,6 +766,9 @@
     "message": "popup မဖွင့်ဘဲ လက်ရှိစာမျက်နှာအတွက် အကိုက်ညီဆုံး လော့ဂ်အင်ကို ဖြည့်ပါသည်။",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "recentlyUsed": {
+    "message": "မကြာသေးမီက သုံးခဲ့သည်"
+  },
   "watchtowerWarnings": {
     "message": "Watchtower သတိပေးချက်များ"
   },
@@ -858,5 +861,38 @@
   },
   "sortTitle": {
     "message": "ခေါင်းစဉ်"
+  },
+  "csTotpOffer": {
+    "message": "တစ်ကြိမ်သုံးကုဒ် ဖြည့်ရန်"
+  },
+  "csTotpDismiss": {
+    "message": "ပိတ်ရန်"
+  },
+  "optAutoTotp": {
+    "message": "တစ်ကြိမ်သုံးကုဒ်များကို အလိုအလျောက် ဖြည့်ရန်"
+  },
+  "optAutoTotpBody": {
+    "message": "gitpass က လော့ဂ်အင်ကို ဖြည့်ပြီးနောက် နောက်စာမျက်နှာရှိ တစ်ကြိမ်သုံးကုဒ်ကို မမေးဘဲ ဖြည့်ပေးပါ။"
+  },
+  "csRulesLen": {
+    "message": "အက္ခရာ $len$ လုံး",
+    "placeholders": {
+      "len": {
+        "content": "$1"
+      }
+    },
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csRulesNoSymbols": {
+    "message": "သင်္ကေတ မပါ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csRulesFewSymbols": {
+    "message": "သင်္ကေတ အကန့်အသတ်ရှိ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csRulesTooShort": {
+    "message": "ဤဝက်ဘ်ဆိုက်၏ စကားဝှက်စည်းမျဉ်းများသည် ခိုင်မာသော စကားဝှက်အတွက် တိုလွန်းပါသည်",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   }
 }

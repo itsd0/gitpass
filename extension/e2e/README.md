@@ -23,6 +23,8 @@ What it does (nothing outside a fresh `$TMPDIR/gitpass-e2e-*` is touched):
    that `save_login` carries the step-1 username plus the step-2 password exactly once.
    The checkout card form checks exactly one icon per logical card group, attached to the card number input
    (name/expiry/CVC are not decorated), and that clicking that icon's dropdown fills every card field.
+   After a login fill (here the fill-login command), a code field on the next page of the same site gets the
+   “Fill one-time code” chip and clicking it fills the code; the same page on another host gets no chip.
    The popup New item form creates one API Key / Credential, Credit Card and Secure Note through the UI and
    checks each sends exactly one `create_item` with the desktop template's category/section/field ids and
    kinds (card `number` concealed, note `note` multiline, …); an empty credential and a card number that

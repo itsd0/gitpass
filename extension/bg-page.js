@@ -12,8 +12,10 @@
   'use strict';
   const TTL_MS = 5 * 60 * 1000;
   const SHORT_TTL_MS = 60 * 1000; // 60 s for crossSiteApprovals, addUrlApprovals, searchActive, and pendingConfirms
+  const OFFER_TTL_MS = 2 * 60 * 1000; // how long a filled login may offer its one-time code (#181)
   const pendingSaves = new Map(); // tabId -> { origin, kind, username, password, item_id, prompt, ts }
   const lastUsername = new Map(); // tabId -> { origin, username, ts }  (multi-step logins: step 1 value, 5 min TTL)
+  const lastFilled = new Map(); // tabId -> { origin, item_id, ts }  (just-filled login; offers its one-time code on the next page)
   const lastSaved = new Map(); // tabId -> { origin, item_id, ts }  ("Open in gitpass" after a banner save)
   const inflightDecisions = new Map(); // tabId -> promise settled when the write ends (no replay, see waitInflight)
   const searchActive = new Map(); // tabId -> { origin, ts } (active while search mode is open)
@@ -99,10 +101,10 @@
     return origin;
   }
 
-  function fresh(map, tabId, origin, sameSiteOk, ttlMs = TTL_MS) {
+  function fresh(map, tabId, origin, sameSiteOk, ttl) {
     const p = map.get(tabId);
     if (!p) return null;
-    if (Date.now() - p.ts > ttlMs) { map.delete(tabId); return null; }
+    if (Date.now() - p.ts > (ttl || TTL_MS)) { map.delete(tabId); return null; }
     if (p.origin !== origin && !(sameSiteOk && GitpassPolicy.sameSite(p.origin, origin))) return null;
     return p;
   }
@@ -141,6 +143,11 @@
     const r = await host('list_vaults');
     if (!((r && r.vaults) || []).some((x) => x && x.id === v)) throw err('not_found', 'vault not found');
     return v;
+  }
+
+  /** Remember (id only, never a secret) which login gitpass just filled in this tab. */
+  function rememberFilled(tabId, origin, itemId) {
+    if (typeof tabId === 'number' && origin && typeof itemId === 'string' && itemId) lastFilled.set(tabId, { origin, item_id: itemId, ts: Date.now() });
   }
 
   function rememberSaved(tabId, origin, itemId) {
@@ -299,7 +306,8 @@
         if (isApproved) {
           fillArgs.user_confirm = true;
         }
-        const c = await host('fill', fillArgs);
+        const c = await host('fill', fillArgs); // host enforces the origin match unless user_confirm
+        rememberFilled(tabId, origin, a.item_id);
         if (isApproved) {
           addUrlApprovals.set(approvalKey, { ts: Date.now() });
         }
@@ -330,7 +338,18 @@
           addUrlApprovals.set(approvalKey, { ts: Date.now() });
         }
         const t = await host('totp', { item_id: a.item_id });
+        const lf = lastFilled.get(tabId);
+        if (lf && lf.item_id === a.item_id) lastFilled.delete(tabId); // the code is used: stop offering it
         return { origin, code: t.code, remaining: t.remaining };
+      }
+      case 'page:totp_offer': {
+        // The login gitpass filled in this tab within OFFER_TTL_MS on the same registrable domain, and only
+        // if it still matches this page's origin and has a one-time code. Returns ids and a title, no code.
+        const lf = fresh(lastFilled, tabId, origin, true, OFFER_TTL_MS);
+        if (!lf) return { origin, offer: null };
+        const it = (await matchItems(host, origin)).find((i) => i.id === lf.item_id && i.has_totp && (!i.category || i.category === 'login'));
+        if (!it) return { origin, offer: null };
+        return { origin, offer: { item_id: it.id, title: typeof it.title === 'string' ? it.title : '', expires_in_ms: Math.max(0, OFFER_TTL_MS - (Date.now() - lf.ts)) } };
       }
       case 'page:fill_card':
       case 'page:fill_identity': {
@@ -343,7 +362,15 @@
         return { origin, fields };
       }
       case 'page:generate': {
-        const r = await host('generate', { len: 20, digits: true, symbols: true });
+        // Optional site rules (#188): parsed constraints only, validated and clamped here before the host sees them.
+        const PR = root.GitpassPasswordRules || (typeof require === 'function' ? require('./lib/password-rules.js') : null);
+        if (a.rules == null || !PR) {
+          const r = await host('generate', { len: 20, digits: true, symbols: true });
+          return { origin, password: r.password };
+        }
+        const s = PR.sanitize(a.rules);
+        if (!s.ok) throw err('bad_request', 'password rules ' + s.reason);
+        const r = await host('generate', { len: s.len, rules: { classes: s.classes } });
         return { origin, password: r.password };
       }
       case 'page:request_unlock': return host('request_unlock', { reason: 'Fill on ' + new URL(origin).host });
@@ -486,6 +513,7 @@
     pendingSaves.delete(tabId);
     lastUsername.delete(tabId);
     lastSaved.delete(tabId);
+    lastFilled.delete(tabId);
     inflightDecisions.delete(tabId);
     searchActive.delete(tabId);
     for (const k of crossSiteApprovals.keys()) {
@@ -537,6 +565,7 @@
   const api = {
     handle,
     forgetTab,
+    rememberFilled,
     fillPaymentFrames,
     fromConfirmUi,
     isConfirmUiSender,
@@ -544,6 +573,8 @@
     _crossSiteApprovals: crossSiteApprovals,
     _addUrlApprovals: addUrlApprovals,
     _pendingConfirms: pendingConfirms,
+    OFFER_TTL_MS,
+    _lastFilled: lastFilled,
     _pendingSaves: pendingSaves,
     _neverSaveFallback: neverSaveFallback,
     _getNeverSave: getNeverSave,

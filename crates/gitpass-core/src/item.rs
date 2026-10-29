@@ -40,6 +40,22 @@ impl std::str::FromStr for Category {
     }
 }
 
+/// Card brand from the BIN (leading digits). None when unknown.
+pub fn card_brand(d: &str) -> Option<&'static str> {
+    let digits: String = d.chars().filter(|c| c.is_ascii_digit()).collect();
+    let p = |n: usize| digits.get(..n).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    Some(match () {
+        _ if digits.starts_with('4') => "Visa",
+        _ if (51..=55).contains(&p(2)) || (2221..=2720).contains(&p(4)) => "Mastercard",
+        _ if p(2) == 34 || p(2) == 37 => "Amex",
+        _ if p(4) == 6011 || p(2) == 65 || (644..=649).contains(&p(3)) => "Discover",
+        _ if (3528..=3589).contains(&p(4)) => "JCB",
+        _ if p(2) == 36 || p(2) == 38 || (300..=305).contains(&p(3)) => "Diners Club",
+        _ if p(2) == 62 => "UnionPay",
+        _ => return None,
+    })
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum FieldKind { #[default] Text, Concealed, Url, Email, Phone, Date, MonthYear, Totp, Multiline }

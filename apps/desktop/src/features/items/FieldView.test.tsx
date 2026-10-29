@@ -1,9 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { TooltipProvider } from '../../ui';
 import { FieldRow, REVEAL_MS } from './FieldView';
 import { api } from '../../api/client';
 import { useApp } from '../../lib/store';
+import { useI18n } from '../../i18n';
 import type { Field } from '../../api/types';
 
 const SECRET = 'super-secret-FAKE';
@@ -278,5 +279,77 @@ describe('FieldRow', () => {
       </TooltipProvider>
     );
     expect(screen.queryByTestId("password-changed-at")).toBeNull();
+  });
+});
+
+describe('FieldRow i18n + a11y (#182)', () => {
+  beforeEach(() => { vi.restoreAllMocks(); });
+  afterEach(() => { useI18n.getState().setLang('en'); });
+
+  it('strength meter localizes label and accessible name in Burmese', () => {
+    useI18n.getState().setLang('my');
+    const { container } = render(
+      <TooltipProvider><FieldRow field={{ id: 'f_pw', label: 'password', kind: 'concealed', value: null }} ctx={ctx} strength={85} /></TooltipProvider>
+    );
+    const meter = screen.getByRole('meter');
+    expect(meter).toHaveAttribute('aria-valuenow', '85');
+    expect(meter).toHaveAttribute('aria-label', 'စကားဝှက် အားကောင်းမှု: အလွန်ကောင်း');
+    expect(meter.textContent).toContain('အလွန်ကောင်း');
+    // Same bar layout and colours: all 5 bars lit bg-ok for the top bucket.
+    expect(meter.querySelectorAll('.bg-ok')).toHaveLength(5);
+    expect(container.querySelector('[data-testid="strength-meter"]')).toBe(meter);
+  });
+
+  it('strength meter localizes label and accessible name in Thai', () => {
+    useI18n.getState().setLang('th');
+    render(
+      <TooltipProvider><FieldRow field={{ id: 'f_pw', label: 'password', kind: 'concealed', value: null }} ctx={ctx} strength={65} /></TooltipProvider>
+    );
+    const meter = screen.getByRole('meter');
+    expect(meter).toHaveAttribute('aria-valuenow', '65');
+    expect(meter).toHaveAttribute('aria-label', 'ความแข็งแกร่งของรหัสผ่าน: ดี');
+    expect(meter.textContent).toContain('ดี');
+    // 4 of 5 bars lit for the Good bucket; the last bar stays bg-active.
+    expect(meter.querySelectorAll('.bg-ok')).toHaveLength(4);
+    expect(meter.querySelectorAll('.bg-active')).toHaveLength(1);
+  });
+
+  it('URL open action localizes its accessible name in Burmese and Thai', () => {
+    useI18n.getState().setLang('my');
+    const { unmount } = render(
+      <TooltipProvider><FieldRow field={{ id: 'f_url', label: 'website', kind: 'url', value: 'https://example.invalid' }} ctx={ctx} /></TooltipProvider>
+    );
+    expect(screen.getByLabelText('လင့်ခ်ဖွင့်ရန်')).toHaveAttribute('href', 'https://example.invalid');
+    unmount();
+    useI18n.getState().setLang('th');
+    render(
+      <TooltipProvider><FieldRow field={{ id: 'f_url', label: 'website', kind: 'url', value: 'https://example.invalid' }} ctx={ctx} /></TooltipProvider>
+    );
+    expect(screen.getByLabelText('เปิดลิงก์')).toHaveAttribute('href', 'https://example.invalid');
+  });
+
+  it('TOTP ring is aria-hidden and the remaining seconds are exposed once on the code, localized', async () => {
+    vi.spyOn(api, 'totpNow').mockResolvedValue({ code: '123456', remaining: 25, period: 30 });
+    useI18n.getState().setLang('my');
+    const { container } = render(
+      <TooltipProvider><FieldRow field={{ id: 'f_totp', label: 'one-time password', kind: 'totp', value: null }} ctx={ctx} /></TooltipProvider>
+    );
+    const code = await screen.findByLabelText('123456 25 စက္ကန့် ကျန်သေးသည်');
+    expect(code.textContent).toBe('123 456');
+    // Ring and ticking seconds text are hidden from assistive tech: no live announcements.
+    expect(container.querySelector('svg')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByText('25s')).toHaveAttribute('aria-hidden', 'true');
+    expect(container.querySelector('[aria-live]')).toBeNull();
+    expect(container.querySelector('[aria-label$="seconds remaining"]')).toBeNull();
+  });
+
+  it('TOTP remaining label localizes in Thai', async () => {
+    vi.spyOn(api, 'totpNow').mockResolvedValue({ code: '123456', remaining: 12, period: 30 });
+    useI18n.getState().setLang('th');
+    render(
+      <TooltipProvider><FieldRow field={{ id: 'f_totp', label: 'one-time password', kind: 'totp', value: null }} ctx={ctx} /></TooltipProvider>
+    );
+    const code = await screen.findByLabelText('123456 เหลืออีก 12 วินาที');
+    expect(code.textContent).toBe('123 456');
   });
 });

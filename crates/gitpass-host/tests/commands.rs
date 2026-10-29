@@ -74,6 +74,8 @@ fn match_fill_totp_generate_lock() {
     let r = ok(&mut f.host, json!({"cmd":"fill","item_id":f.paypal,"origin":"https://www.paypal.com"}));
     assert_eq!(r["username"], "leeky@pp");
     assert_eq!(r["password"], "PayPal-pw");
+    let item_resp = ok(&mut f.host, json!({"cmd":"get_item","item_id":f.paypal}));
+    assert!(item_resp["item"]["last_used"].as_u64().is_some(), "fill must update last_used");
     assert!(err(&mut f.host, json!({"cmd":"fill","item_id":f.paypal,"origin":"https://paypal.com.evil.io"})).contains("refused"));
     assert!(err(&mut f.host, json!({"cmd":"fill","item_id":f.paypal,"origin":"http://paypal.com"})).contains("refused"));
     assert!(err(&mut f.host, json!({"cmd":"match","url":"http://paypal.com"})).contains("refused"));
@@ -90,6 +92,27 @@ fn match_fill_totp_generate_lock() {
     let g = ok(&mut f.host, json!({"cmd":"generate","len":32}));
     assert_eq!(g["password"].as_str().unwrap().chars().count(), 32);
     err(&mut f.host, json!({"cmd":"generate","len":4}));
+
+    // Site password rules (extension `page:generate`): required classes present, only allowed symbols.
+    let rules = json!({"classes":[
+        {"kind":"lower","required":true},{"kind":"upper","required":true},{"kind":"digit","required":true},
+        {"kind":"special","required":false,"chars":"-_"}]});
+    for _ in 0..30 {
+        let g = ok(&mut f.host, json!({"cmd":"generate","len":16,"rules":rules}));
+        let p = g["password"].as_str().unwrap();
+        assert_eq!(p.chars().count(), 16, "{p}");
+        assert!(p.chars().any(|c| c.is_ascii_lowercase()) && p.chars().any(|c| c.is_ascii_uppercase()) && p.chars().any(|c| c.is_ascii_digit()), "{p}");
+        assert!(p.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'), "{p}");
+    }
+    for bad in [
+        json!({"classes":[]}),
+        json!({"classes":[{"kind":"emoji","required":true}]}),
+        json!({"classes":[{"kind":"special","chars":"a1 "}]}),
+        json!({"classes":[{"kind":"special","chars":"é"}]}),
+    ] {
+        err(&mut f.host, json!({"cmd":"generate","len":16,"rules":bad}));
+    }
+    err(&mut f.host, json!({"cmd":"generate","len":16,"words":true,"rules":rules}));
 
     ok(&mut f.host, json!({"cmd":"lock"}));
     assert!(err(&mut f.host, json!({"cmd":"fill","item_id":f.paypal,"origin":"https://paypal.com"})).contains("locked"));

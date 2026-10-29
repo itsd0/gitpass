@@ -1,7 +1,8 @@
 use anyhow::{bail, Context, Result};
 use clap::{Parser, Subcommand};
 use gitpass_core::crypto::{generate_password, KdfParams, SecretKey};
-use gitpass_core::item::{Category, FieldKind};
+use gitpass_core::item::{Category, FieldKind, Section};
+use std::io::Read;
 use gitpass_core::merge::ItemRecord;
 use gitpass_core::store::{self, Item, Session, UnlockOpts};
 use gitpass_pasteboard::PasteboardMarkers;
@@ -28,6 +29,29 @@ struct Cli {
     cmd: Cmd,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+enum AddCategory {
+    #[default]
+    Login,
+    ApiCredential,
+    SecureNote,
+    CreditCard,
+}
+
+impl clap::ValueEnum for AddCategory {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Login, Self::ApiCredential, Self::SecureNote, Self::CreditCard]
+    }
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        Some(match self {
+            Self::Login => clap::builder::PossibleValue::new("login"),
+            Self::ApiCredential => clap::builder::PossibleValue::new("api-credential").alias("api_credential"),
+            Self::SecureNote => clap::builder::PossibleValue::new("secure-note").alias("secure_note"),
+            Self::CreditCard => clap::builder::PossibleValue::new("credit-card").alias("credit_card"),
+        })
+    }
+}
+
 #[derive(Subcommand)]
 enum Cmd {
     /// Create a new account: master password + generated Secret Key
@@ -42,17 +66,61 @@ enum Cmd {
     Vault { #[command(subcommand)] cmd: VaultCmd },
     /// Manage attachments on an item
     Attach { #[command(subcommand)] cmd: AttachCmd },
-    /// Add an item
+    /// Add an item (login, API credential, secure note, or credit card)
     Add {
         vault: String,
-        #[arg(long)] title: String,
-        #[arg(long)] username: Option<String>,
-        #[arg(long)] url: Option<String>,
-        #[arg(long)] notes: Option<String>,
-        #[arg(long)] totp: Option<String>,
+        /// Item category / type: login (default), api-credential, secure-note, credit-card
+        #[arg(long, alias = "type", default_value = "login")]
+        category: AddCategory,
+        /// Item title
+        #[arg(long)]
+        title: String,
+
+        // Login & API Credential fields
+        /// Username
+        #[arg(long)]
+        username: Option<String>,
+        /// Website URL or API hostname
+        #[arg(long, alias = "host")]
+        url: Option<String>,
+
+        // Login specific fields
+        /// One-time password (TOTP) seed or otpauth:// URI
+        #[arg(long)]
+        totp: Option<String>,
         /// Generate a password (optional length, default 24) instead of prompting
         #[arg(long, num_args = 0..=1, default_missing_value = "24")]
         generate: Option<usize>,
+        /// Read login password from stdin instead of prompting
+        #[arg(long)]
+        password_stdin: bool,
+
+        // API Credential specific fields
+        /// Read API credential secret from stdin instead of prompting
+        #[arg(long)]
+        credential_stdin: bool,
+        /// Expiration date for API credential (YYYY-MM-DD)
+        #[arg(long)]
+        expires: Option<String>,
+        /// Hidden alias for prompting
+        #[arg(long, hide = true)]
+        credential: bool,
+
+        // Secure Note & general notes
+        /// Notes (plain text)
+        #[arg(long)]
+        notes: Option<String>,
+        /// Read note text from stdin (multi-line)
+        #[arg(long)]
+        notes_stdin: bool,
+
+        // Credit Card specific fields
+        /// Cardholder name
+        #[arg(long)]
+        holder: Option<String>,
+        /// Card expiration date (MM/YY)
+        #[arg(long)]
+        expiry: Option<String>,
     },
     /// Decrypt and print an item (query = id, id prefix, or fuzzy match on title/username/url)
     Get {
@@ -113,6 +181,10 @@ enum Cmd {
         /// Fuzzy filter (ranked)
         #[arg(long, short = 'q')]
         query: Option<String>,
+        /// Sort order: `title` (default) or `recent` (most recently used on this device first).
+        /// Ignored when `-q/--query` is given: results are then ranked by match quality.
+        #[arg(long, value_enum, value_name = "ORDER")]
+        sort: Option<ListSort>,
         /// Output JSON
         #[arg(long)]
         json: bool,
@@ -233,7 +305,7 @@ enum Cmd {
     /// Import items from another password manager's export file
     Import {
         vault: String,
-        /// bitwarden-json | bitwarden-csv | 1password-csv | 1password-1pux | keepass-csv | chrome-csv | apple-passwords-csv | gitpass-json
+        /// bitwarden-json | bitwarden-csv | 1password-csv | 1password-1pux | keepass-csv | chrome-csv | apple-passwords-csv | lastpass-csv | protonpass-csv | gitpass-json
         #[arg(long = "from")] from: String,
         file: PathBuf,
         /// Parse and count only; write nothing
@@ -310,6 +382,9 @@ fn print_completions(shell: ShellTarget) {
 
 #[derive(Clone, Copy, PartialEq, clap::ValueEnum)]
 enum ExportFmt { GitpassJson, Csv }
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, clap::ValueEnum)]
+enum ListSort { Title, Recent }
 
 struct UreqHibp(ureq::Agent);
 impl gitpass_core::audit::PwnedRangeClient for UreqHibp {
@@ -536,19 +611,227 @@ fn print_kit(root: &Path, enc: &str) {
     println!("===============================================================");
 }
 
-fn print_item(id: &str, r: &ItemRecord) {
-    let it = &r.item;
-    println!("id:       {id}\ntitle:    {}", it.title);
-    if let Some(v) = &it.username { println!("username: {v}"); }
-    if let Some(v) = &it.password {
-        println!("password: {v}");
-        if let Some(t) = r.password_changed_at() {
-            println!("password changed: {}", gitpass_core::device::iso8601(t as i64));
+fn validate_date_iso(val: &str) -> Result<()> {
+    let parts: Vec<&str> = val.split('-').collect();
+    if parts.len() != 3 || parts[0].len() != 4 || parts[1].len() != 2 || parts[2].len() != 2 {
+        bail!("invalid expires date format '{val}', expected YYYY-MM-DD");
+    }
+    let (_y, m, d): (i32, u32, u32) = match (parts[0].parse(), parts[1].parse(), parts[2].parse()) {
+        (Ok(y), Ok(m), Ok(d)) => (y, m, d),
+        _ => bail!("invalid expires date format '{val}', expected YYYY-MM-DD"),
+    };
+    if !(1..=12).contains(&m) || !(1..=31).contains(&d) {
+        bail!("invalid expires date '{val}': month must be 01-12, day 01-31");
+    }
+    Ok(())
+}
+
+fn validate_card_expiry(val: &str) -> Result<()> {
+    let parts: Vec<&str> = val.split('/').collect();
+    if parts.len() != 2 {
+        bail!("invalid card expiry '{val}', expected MM/YY");
+    }
+    let (m, _y): (u32, u32) = match (parts[0].parse(), parts[1].parse()) {
+        (Ok(m), Ok(y)) => (m, y),
+        _ => bail!("invalid card expiry '{val}', expected MM/YY"),
+    };
+    if !(1..=12).contains(&m) {
+        bail!("invalid card expiry month in '{val}', expected 01-12");
+    }
+    if !(parts[1].len() == 2 || parts[1].len() == 4) {
+        bail!("invalid card expiry year in '{val}', expected 2 or 4 digits (MM/YY)");
+    }
+    Ok(())
+}
+
+struct AddFlags<'a> {
+    category: AddCategory,
+    username: &'a Option<String>,
+    url: &'a Option<String>,
+    totp: &'a Option<String>,
+    generate: &'a Option<usize>,
+    password_stdin: bool,
+    credential_stdin: bool,
+    expires: &'a Option<String>,
+    notes: &'a Option<String>,
+    notes_stdin: bool,
+    holder: &'a Option<String>,
+    expiry: &'a Option<String>,
+}
+
+fn validate_add_flags(flags: &AddFlags) -> Result<()> {
+    match flags.category {
+        AddCategory::Login => {
+            if flags.password_stdin && flags.generate.is_some() {
+                bail!("cannot combine --generate and --password-stdin");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is only valid for api-credential items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is only valid for api-credential items");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is only valid for secure-note items");
+            }
+            if flags.holder.is_some() {
+                bail!("--holder is only valid for credit-card items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is only valid for credit-card items");
+            }
+        }
+        AddCategory::ApiCredential => {
+            if flags.totp.is_some() {
+                bail!("--totp is only valid for login items");
+            }
+            if flags.generate.is_some() {
+                bail!("--generate is only valid for login items");
+            }
+            if flags.password_stdin {
+                bail!("--password-stdin is only valid for login items (use --credential-stdin for API credentials)");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is only valid for secure-note items");
+            }
+            if flags.holder.is_some() {
+                bail!("--holder is only valid for credit-card items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is only valid for credit-card items (use --expires for API credentials)");
+            }
+            if let Some(exp) = flags.expires {
+                validate_date_iso(exp)?;
+            }
+        }
+        AddCategory::SecureNote => {
+            if flags.username.is_some() {
+                bail!("--username is not supported for secure-note items");
+            }
+            if flags.url.is_some() {
+                bail!("--url/--host is not supported for secure-note items");
+            }
+            if flags.totp.is_some() {
+                bail!("--totp is not supported for secure-note items");
+            }
+            if flags.generate.is_some() {
+                bail!("--generate is not supported for secure-note items");
+            }
+            if flags.password_stdin {
+                bail!("--password-stdin is not supported for secure-note items");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is not supported for secure-note items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is not supported for secure-note items");
+            }
+            if flags.holder.is_some() {
+                bail!("--holder is not supported for secure-note items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is not supported for secure-note items");
+            }
+            if flags.notes.is_some() && flags.notes_stdin {
+                bail!("cannot combine --notes and --notes-stdin");
+            }
+        }
+        AddCategory::CreditCard => {
+            if flags.username.is_some() {
+                bail!("--username is not supported for credit-card items (use --holder for cardholder name)");
+            }
+            if flags.url.is_some() {
+                bail!("--url/--host is not supported for credit-card items");
+            }
+            if flags.totp.is_some() {
+                bail!("--totp is not supported for credit-card items");
+            }
+            if flags.generate.is_some() {
+                bail!("--generate is not supported for credit-card items");
+            }
+            if flags.password_stdin {
+                bail!("--password-stdin is not supported for credit-card items");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is not supported for credit-card items");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is not supported for credit-card items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is only valid for api-credential items (use --expiry for credit cards)");
+            }
+            if let Some(exp) = flags.expiry {
+                validate_card_expiry(exp)?;
+            }
         }
     }
-    if let Some(v) = &it.url { println!("url:      {v}"); }
-    if let Some(v) = &it.totp { println!("totp:     {v}"); }
-    if let Some(v) = &it.notes { println!("notes:    {v}"); }
+    Ok(())
+}
+fn print_item(id: &str, r: &ItemRecord, reveal: bool) {
+    let it = &r.item;
+    println!("id:       {id}");
+    println!("title:    {}", it.title);
+    if r.category != Category::Login {
+        println!("category: {}", r.category.as_str());
+    }
+    if r.category == Category::Login {
+        if let Some(v) = &it.username { println!("username: {v}"); }
+        if let Some(v) = &it.password {
+            let p = if reveal { v.as_str() } else { "••••••••" };
+            println!("password: {p}");
+            if let Some(t) = r.password_changed_at() {
+                println!("password changed: {}", gitpass_core::device::iso8601(t as i64));
+            }
+        }
+        if let Some(v) = &it.url { println!("url:      {v}"); }
+        if let Some(v) = &it.totp {
+            let t = if reveal { v.as_str() } else { "••••••••" };
+            println!("totp:     {t}");
+        }
+        if let Some(v) = &it.notes { println!("notes:    {v}"); }
+        for s in &r.sections {
+            for f in &s.fields {
+                if f.removed { continue; }
+                if let Some(v) = &f.value {
+                    let val = if f.kind.is_secret() {
+                        if reveal { v.as_str() } else { "••••••••" }
+                    } else {
+                        v.as_str()
+                    };
+                    println!("{}: {val}", f.label);
+                }
+            }
+        }
+    } else {
+        for s in r.view_sections() {
+            if let Some(t) = &s.title {
+                println!("[{t}]");
+            }
+            for f in s.fields {
+                if let Some(v) = &f.value {
+                    let val = if f.kind.is_secret() {
+                        if reveal { v.as_str() } else { "••••••••" }
+                    } else {
+                        v.as_str()
+                    };
+                    println!("{}: {val}", f.label);
+                }
+            }
+        }
+        if let Some(v) = &it.url {
+            let has_url = r.view_sections().iter().any(|s| s.fields.iter().any(|f| f.kind == FieldKind::Url));
+            if !has_url {
+                println!("url:      {v}");
+            }
+        }
+        if let Some(v) = &it.notes {
+            let has_note = r.view_sections().iter().any(|s| s.fields.iter().any(|f| f.id == "note" || f.id == "notes"));
+            if !has_note {
+                println!("notes:    {v}");
+            }
+        }
+    }
 }
 
 fn field_value(it: &Item, f: Field) -> Result<Zeroizing<String>> {
@@ -570,6 +853,8 @@ struct CliItemSummary {
     tags: Vec<String>,
     favorite: bool,
     updated_at: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_used: Option<u64>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -596,6 +881,8 @@ struct CliItemDetail {
     updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     password_changed_at: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_used_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     notes: Option<String>,
     fields: Vec<CliField>,
@@ -673,15 +960,30 @@ fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
         id: id.to_string(),
         title: r.item.title.clone(),
         category: r.category,
-        username: r.item.username.clone().filter(|u| !u.trim().is_empty()),
-        url: r.item.url.clone().filter(|u| !u.trim().is_empty()),
+        username: r.item.username.clone().filter(|u| !u.trim().is_empty()).or_else(|| {
+            r.view_sections()
+                .into_iter()
+                .flat_map(|s| s.fields)
+                .find(|f| f.id == "username" && f.kind == FieldKind::Text)
+                .and_then(|f| f.value)
+                .filter(|u| !u.trim().is_empty())
+        }),
+        url: r.item.url.clone().filter(|u| !u.trim().is_empty()).or_else(|| {
+            r.view_sections()
+                .into_iter()
+                .flat_map(|s| s.fields)
+                .find(|f| (f.id == "hostname" || f.id == "url") && f.kind == FieldKind::Url)
+                .and_then(|f| f.value)
+                .filter(|u| !u.trim().is_empty())
+        }),
         tags: r.tags.clone(),
         favorite: r.favorite,
         updated_at: ts(&r.item.updated_at),
+        last_used: None,
     }
 }
 
-fn item_detail(id: &str, r: &ItemRecord, reveal: bool) -> CliItemDetail {
+fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<String>) -> CliItemDetail {
     let mut fields = Vec::new();
     for section in r.view_sections() {
         for f in section.fields {
@@ -710,6 +1012,7 @@ fn item_detail(id: &str, r: &ItemRecord, reveal: bool) -> CliItemDetail {
         created_at: r.created_at.map(|c| gitpass_core::device::iso8601(c as i64)),
         updated_at: ts(&r.item.updated_at),
         password_changed_at: r.password_changed_at().map(|t| gitpass_core::device::iso8601(t as i64)),
+        last_used_at,
         notes: r.item.notes.clone().filter(|n| !n.trim().is_empty()),
         fields,
     }
@@ -976,19 +1279,241 @@ fn run() -> Result<()> {
                 match &m.description { Some(d) => println!("{id}  {}  ({d})", m.name), None => println!("{id}  {}", m.name) }
             }
         }
-        Cmd::Add { vault, title, username, url, notes, totp, generate } => {
+        Cmd::Add {
+            vault,
+            category,
+            title,
+            username,
+            url,
+            totp,
+            generate,
+            password_stdin,
+            credential_stdin,
+            expires,
+            notes,
+            notes_stdin,
+            holder,
+            expiry,
+            credential: _,
+        } => {
+            if title.trim().is_empty() {
+                bail!("title cannot be empty");
+            }
+            validate_add_flags(&AddFlags {
+                category: *category,
+                username,
+                url,
+                totp,
+                generate,
+                password_stdin: *password_stdin,
+                credential_stdin: *credential_stdin,
+                expires,
+                notes,
+                notes_stdin: *notes_stdin,
+                holder,
+                expiry,
+            })?;
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            let password = match generate {
-                Some(n) => Some(generate_password(*n)),
-                None => {
-                    let p = prompt_secret("GITPASS_ITEM_PASSWORD", "Item password (empty for none): ")?;
-                    if p.is_empty() { None } else { Some(p.to_string()) }
+
+            let rec = match category {
+                AddCategory::Login => {
+                    let password = if *password_stdin {
+                        let mut p = String::new();
+                        std::io::stdin().read_line(&mut p)?;
+                        let p = p.trim_end_matches(['\r', '\n']).to_string();
+                        if p.is_empty() { None } else { Some(p) }
+                    } else if let Some(n) = generate {
+                        Some(generate_password(*n))
+                    } else {
+                        let p = prompt_secret("GITPASS_ITEM_PASSWORD", "Item password (empty for none): ")?;
+                        if p.is_empty() { None } else { Some(p.to_string()) }
+                    };
+                    let it = Item {
+                        title: title.clone(),
+                        username: username.clone(),
+                        password,
+                        url: url.clone(),
+                        notes: notes.clone(),
+                        totp: totp.clone(),
+                        updated_at: store::now(),
+                    };
+                    ItemRecord::new(it)
+                }
+                AddCategory::ApiCredential => {
+                    let cred_val = if *credential_stdin {
+                        let mut c = String::new();
+                        std::io::stdin().read_line(&mut c)?;
+                        let c = c.trim_end_matches(['\r', '\n']).to_string();
+                        if c.is_empty() {
+                            bail!("credential from stdin cannot be empty");
+                        }
+                        c
+                    } else {
+                        let p = prompt_secret("GITPASS_ITEM_CREDENTIAL", "API credential: ")?;
+                        if p.is_empty() {
+                            bail!("credential cannot be empty");
+                        }
+                        p.to_string()
+                    };
+                    let it = Item {
+                        title: title.clone(),
+                        username: None,
+                        password: None,
+                        url: url.clone(),
+                        notes: notes.clone(),
+                        totp: None,
+                        updated_at: store::now(),
+                    };
+                    let mut fields = Vec::new();
+                    if let Some(u) = username.as_ref().filter(|u| !u.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "username".into(),
+                            label: "username".into(),
+                            kind: FieldKind::Text,
+                            value: Some(u.clone()),
+                            removed: false,
+                        });
+                    }
+                    fields.push(gitpass_core::item::Field {
+                        id: "credential".into(),
+                        label: "credential".into(),
+                        kind: FieldKind::Concealed,
+                        value: Some(cred_val),
+                        removed: false,
+                    });
+                    if let Some(u) = url.as_ref().filter(|u| !u.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "hostname".into(),
+                            label: "hostname".into(),
+                            kind: FieldKind::Url,
+                            value: Some(u.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(exp) = expires.as_ref().filter(|e| !e.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "expires".into(),
+                            label: "expires".into(),
+                            kind: FieldKind::Date,
+                            value: Some(exp.clone()),
+                            removed: false,
+                        });
+                    }
+                    let mut r = ItemRecord::new(it);
+                    r.category = Category::ApiCredential;
+                    r.sections = vec![Section {
+                        id: "main".into(),
+                        title: None,
+                        fields,
+                    }];
+                    r
+                }
+                AddCategory::SecureNote => {
+                    let note_text = if *notes_stdin {
+                        let mut buf = String::new();
+                        std::io::stdin().read_to_string(&mut buf)?;
+                        buf.trim_end_matches(['\r', '\n']).to_string()
+                    } else if let Some(n) = notes {
+                        n.clone()
+                    } else {
+                        String::new()
+                    };
+                    let it = Item {
+                        title: title.clone(),
+                        username: None,
+                        password: None,
+                        url: None,
+                        notes: None,
+                        totp: None,
+                        updated_at: store::now(),
+                    };
+                    let mut r = ItemRecord::new(it);
+                    r.category = Category::SecureNote;
+                    r.sections = vec![Section {
+                        id: "main".into(),
+                        title: None,
+                        fields: vec![gitpass_core::item::Field {
+                            id: "note".into(),
+                            label: "note".into(),
+                            kind: FieldKind::Multiline,
+                            value: Some(note_text),
+                            removed: false,
+                        }],
+                    }];
+                    r
+                }
+                AddCategory::CreditCard => {
+                    let num = prompt_secret("GITPASS_CARD_NUMBER", "Card number: ")?;
+                    if num.trim().is_empty() {
+                        bail!("card number cannot be empty");
+                    }
+                    let cvv = prompt_secret("GITPASS_CARD_CVV", "Card CVV / verification code (empty for none): ")?;
+                    let brand = gitpass_core::item::card_brand(&num);
+                    let it = Item {
+                        title: title.clone(),
+                        username: None,
+                        password: None,
+                        url: None,
+                        notes: notes.clone(),
+                        totp: None,
+                        updated_at: store::now(),
+                    };
+                    let mut fields = Vec::new();
+                    if let Some(h) = holder.as_ref().filter(|h| !h.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "cardholder".into(),
+                            label: "cardholder name".into(),
+                            kind: FieldKind::Text,
+                            value: Some(h.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(b) = brand {
+                        fields.push(gitpass_core::item::Field {
+                            id: "type".into(),
+                            label: "type".into(),
+                            kind: FieldKind::Text,
+                            value: Some(b.to_string()),
+                            removed: false,
+                        });
+                    }
+                    fields.push(gitpass_core::item::Field {
+                        id: "number".into(),
+                        label: "number".into(),
+                        kind: FieldKind::Concealed,
+                        value: Some(num.to_string()),
+                        removed: false,
+                    });
+                    if !cvv.trim().is_empty() {
+                        fields.push(gitpass_core::item::Field {
+                            id: "cvv".into(),
+                            label: "verification number".into(),
+                            kind: FieldKind::Concealed,
+                            value: Some(cvv.to_string()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(exp) = expiry.as_ref().filter(|e| !e.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "expiry".into(),
+                            label: "expiry date".into(),
+                            kind: FieldKind::MonthYear,
+                            value: Some(exp.clone()),
+                            removed: false,
+                        });
+                    }
+                    let mut r = ItemRecord::new(it);
+                    r.category = Category::CreditCard;
+                    r.sections = vec![Section {
+                        id: "main".into(),
+                        title: None,
+                        fields,
+                    }];
+                    r
                 }
             };
-            let it = Item { title: title.clone(), username: username.clone(), password, url: url.clone(),
-                notes: notes.clone(), totp: totp.clone(), updated_at: store::now() };
-            println!("added {}", s.add_item(&vid, &it)?);
+            println!("added {}", s.add_record(&vid, rec)?);
         }
         Cmd::Get { vault, query, password_only, pick, copy, field, clear_secs, quiet, json, reveal, include_archived } => {
             if *json && *password_only {
@@ -1001,30 +1526,47 @@ fn run() -> Result<()> {
             let vid = s.resolve_vault(vault)?;
             let (id, rec) = pick_record(&s, &vid, query, *pick, *include_archived)?;
             if *json {
-                let detail = item_detail(&id, &rec, *reveal);
+                if *reveal {
+                    let _ = s.touch_item_used(&id);
+                }
+                let last_used_at = s.last_used(&id).map(|t| gitpass_core::device::iso8601(t as i64));
+                let detail = item_detail(&id, &rec, *reveal, last_used_at);
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else if *copy {
+                let _ = s.touch_item_used(&id);
                 do_copy(&field_value(&rec.item, *field)?, *clear_secs, *quiet, "field", field_markers(*field))?;
             } else if *password_only {
-                println!("{}", rec.item.password.clone().unwrap_or_default());
+                let _ = s.touch_item_used(&id);
+                let secret = rec.item.password.clone().or_else(|| {
+                    rec.view_sections()
+                        .into_iter()
+                        .flat_map(|s| s.fields)
+                        .find(|f| f.kind.is_secret() && f.value.is_some())
+                        .and_then(|f| f.value)
+                }).unwrap_or_default();
+                println!("{secret}");
             } else {
-                print_item(&id, &rec);
+                print_item(&id, &rec, *reveal);
             }
         }
         Cmd::Copy { vault, query, field, pick, clear_secs, quiet } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            let (_, it) = pick_item(&s, &vid, query, *pick)?;
+            let (id, it) = pick_item(&s, &vid, query, *pick)?;
+            let _ = s.touch_item_used(&id);
             do_copy(&field_value(&it, *field)?, *clear_secs, *quiet, &format!("'{}'", it.title), field_markers(*field))?;
         }
         Cmd::Totp { vault, query, pick, copy, clear_secs } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
-            let (_, it) = pick_item(&s, &vid, query, *pick)?;
+            let (id, it) = pick_item(&s, &vid, query, *pick)?;
             let t = it.totp.as_deref().ok_or_else(|| anyhow::anyhow!("item '{}' has no TOTP secret", it.title))?;
             let (code, rem) = gitpass_core::totp::code_now(&gitpass_core::totp::parse(t)?);
             println!("{code}  ({rem}s remaining)");
-            if *copy { do_copy(&code, *clear_secs, true, "TOTP code", Some(PasteboardMarkers::SECRET))?; }
+            if *copy {
+                let _ = s.touch_item_used(&id);
+                do_copy(&code, *clear_secs, true, "TOTP code", Some(PasteboardMarkers::SECRET))?;
+            }
         }
         Cmd::Find { vault, query, json, include_archived } => {
             let s = unlock(&cli, &root)?;
@@ -1033,13 +1575,18 @@ fn run() -> Result<()> {
             if !include_archived {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
+            let usage = s.all_last_used();
             let ranked = gitpass_core::search::rank_by(
                 query,
                 recs.into_iter().map(|(id, _, rec)| (id, rec)),
                 |r| &r.item,
             );
             if *json {
-                let summaries: Vec<CliItemSummary> = ranked.iter().map(|(_, id, rec)| item_summary(id, rec)).collect();
+                let summaries: Vec<CliItemSummary> = ranked.iter().map(|(_, id, rec)| {
+                    let mut sum = item_summary(id, rec);
+                    sum.last_used = usage.get(id).copied();
+                    sum
+                }).collect();
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
             } else {
                 for (sc, id, rec) in ranked {
@@ -1047,13 +1594,14 @@ fn run() -> Result<()> {
                 }
             }
         }
-        Cmd::List { vault, query, json, include_archived } => {
+        Cmd::List { vault, query, sort, json, include_archived } => {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
             let mut recs = s.list_records(&vid)?;
             if !include_archived {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
+            let usage = s.all_last_used();
             let items: Vec<(String, ItemRecord)> = match query {
                 Some(q) => gitpass_core::search::rank_by(
                     q,
@@ -1064,12 +1612,24 @@ fn run() -> Result<()> {
                 .map(|(_, id, rec)| (id, rec))
                 .collect(),
                 None => {
-                    recs.sort_by(|a, b| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()));
+                    if *sort == Some(ListSort::Recent) {
+                        recs.sort_by(|a, b| {
+                            let a_u = usage.get(&a.0).copied().unwrap_or(0);
+                            let b_u = usage.get(&b.0).copied().unwrap_or(0);
+                            b_u.cmp(&a_u).then_with(|| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()))
+                        });
+                    } else {
+                        recs.sort_by(|a, b| a.2.item.title.to_lowercase().cmp(&b.2.item.title.to_lowercase()));
+                    }
                     recs.into_iter().map(|(id, _, rec)| (id, rec)).collect()
                 }
             };
             if *json {
-                let summaries: Vec<CliItemSummary> = items.iter().map(|(id, rec)| item_summary(id, rec)).collect();
+                let summaries: Vec<CliItemSummary> = items.iter().map(|(id, rec)| {
+                    let mut sum = item_summary(id, rec);
+                    sum.last_used = usage.get(id).copied();
+                    sum
+                }).collect();
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
             } else {
                 for (id, rec) in items {

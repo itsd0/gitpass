@@ -52,6 +52,20 @@
   .btn.pri{background:var(--gp-accent);border-color:var(--gp-accent);color:var(--gp-accent-fg);font-weight:600}
   .btn.ter{border:0;background:transparent;color:var(--gp-muted);font-size:12px;padding:6px 8px;cursor:pointer}
   .btn.ter:hover{color:var(--gp-fg);text-decoration:underline}
+  .tc{display:flex;align-items:stretch;width:300px;background:var(--gp-bg);color:var(--gp-fg);border:1px solid var(--gp-border);border-radius:10px;box-shadow:var(--gp-shadow);font:13px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","Noto Sans Myanmar","Noto Sans Thai",sans-serif;overflow:hidden}
+  .tc-fill{all:unset;box-sizing:border-box;flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:8px 10px;cursor:pointer}
+  .tc-fill:hover{background:var(--gp-hover)}
+  .tc-fill img{width:20px;height:20px;border-radius:5px;flex-shrink:0}
+  .tc .ti{display:block;font-weight:600;color:var(--gp-accent-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tc .u{display:block;font-size:12px;color:var(--gp-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tc-ring{width:20px;height:20px;flex-shrink:0;transform:rotate(-90deg)}
+  .tc-track{stroke:var(--gp-border)}
+  .tc-arc{stroke:var(--gp-accent);stroke-dashoffset:0;animation:gp-ring linear forwards}
+  @keyframes gp-ring{to{stroke-dashoffset:50.27}}
+  .tc-x{all:unset;box-sizing:border-box;width:32px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--gp-muted);font-size:16px;border-left:1px solid var(--gp-border)}
+  .tc-x:hover{background:var(--gp-hover);color:var(--gp-fg)}
+  .tc-fill:focus-visible,.tc-x:focus-visible{outline:2px solid var(--gp-accent);outline-offset:-2px}
+  @media (prefers-reduced-motion:reduce){.tc-arc{animation:none}}
   .pk-overlay{position:fixed;inset:0;background:var(--gp-overlay);display:flex;align-items:center;justify-content:center;z-index:2147483647;backdrop-filter:blur(2px)}
   .pk-card{width:360px;background:var(--gp-bg);color:var(--gp-fg);border:1px solid var(--gp-border);border-radius:12px;box-shadow:var(--gp-shadow-lg);font:13px/1.4 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px}
   .pk-row{display:flex;align-items:center;gap:12px;margin-bottom:14px}
@@ -103,7 +117,7 @@
   const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
 
   // ---------- user settings (options page: chrome.storage.local.settings) ----------
-  const SETTINGS = { autofill: true, savePrompts: true, autolockFollowsApp: true };
+  const SETTINGS = { autofill: true, savePrompts: true, autolockFollowsApp: true, autoFillTotp: false };
   try {
     chrome.storage.local.get('settings', (r) => { Object.assign(SETTINGS, (r && r.settings) || {}); rescan(); });
     chrome.storage.onChanged.addListener((ch, area) => { if (area === 'local' && ch.settings) { Object.assign(SETTINGS, ch.settings.newValue || {}); if (!SETTINGS.savePrompts) closeBanner(); rescan(); } });
@@ -174,6 +188,7 @@
       if (!live.has(field) || !field.isConnected) removeBadge(field);
     }
     placeAll();
+    maybeOfferTotp();
   }
   function ctxFor(field) { return GitpassForms.locate(forms, field); }
 
@@ -199,14 +214,67 @@
       b.host.style.top = (r.top + window.scrollY + (r.height - 22) / 2) + 'px';
     }
     if (dd) placeDropdown();
+    if (totpChip) placeTotpChip();
   }
 
   function bindField(field) {
-    field.addEventListener('focus', (e) => { if (e.isTrusted) openDropdown(field); });
+    field.addEventListener('focus', (e) => { if (e.isTrusted && !(totpChip && totpChip.field === field)) openDropdown(field); }); // the code chip stands in for the menu
     field.addEventListener('blur', () => setTimeout(() => {
       if (dd && dd.field === field && !dd.hovered && !dd.root.activeElement && dd.mode === 'suggested') closeDropdown();
     }, 150));
     field.addEventListener('keydown', onFieldKey, true);
+  }
+
+  // ---------- one-time code on the next page (#181) ----------
+  // After gitpass fills a login that has a one-time code, the background remembers the item id (2 min, same
+  // registrable domain, no secrets). A code field on the next page then gets a chip under it; the code is
+  // only fetched when the user presses it (or right away with the opt-in "Fill one-time codes automatically").
+  let totpChip = null; // { host, ui, field }
+  const totpAsked = new WeakSet();
+  function closeTotpChip() { if (totpChip) { totpChip.ui.close(); totpChip.host.remove(); totpChip = null; } }
+  function placeTotpChip() {
+    const r = totpChip.field.getBoundingClientRect();
+    if (!totpChip.field.isConnected || !r.width || !r.height || (dd && dd.field === totpChip.field)) { totpChip.host.style.display = 'none'; return; }
+    totpChip.host.style.display = '';
+    totpChip.host.style.left = Math.max(4, Math.min(r.left + scrollX, scrollX + innerWidth - 308)) + 'px';
+    totpChip.host.style.top = (r.bottom + scrollY + 4) + 'px';
+  }
+  function maybeOfferTotp() {
+    if (typeof GitpassTotpChip === 'undefined' || totpChip) return;
+    for (const f of forms) {
+      const field = f.kind === 'totp' && f.fields.totp;
+      if (!field || !field.isConnected || totpAsked.has(field)) continue;
+      totpAsked.add(field); // one ask per code field per page load
+      send('page:totp_offer').then((r) => { if (originOk(r) && r.offer && field.isConnected) showTotpChip(f, field, r.offer); }).catch(() => {});
+      return;
+    }
+  }
+  async function fillOffered(form, offer) {
+    const r = await send('page:totp', { item_id: offer.item_id });
+    if (originOk(r)) GitpassForms.fillTotp(freshForm(form), r.code);
+  }
+  function showTotpChip(form, field, offer) {
+    if (!SETTINGS.autofill || totpChip) return;
+    if (SETTINGS.autoFillTotp) { fillOffered(form, offer).catch(() => {}); return; }
+    const { host, root } = shadowHost();
+    host.style.zIndex = '2147483647';
+    const ui = GitpassTotpChip.build(document, {
+      title: offer.title || '', label: t('csTotpOffer', 'Fill one-time code'), dismissLabel: t('csTotpDismiss', 'Dismiss'), logo: LOGO,
+      ttlMs: Math.max(1000, Number(offer.expires_in_ms) || 0),
+      onFill: () => { closeTotpChip(); fillOffered(form, offer).catch(() => {}); },
+      onDismiss: closeTotpChip,
+    });
+    root.append(ui.el);
+    totpChip = { host, ui, field };
+    if (dd && dd.field === field) closeDropdown();
+    placeTotpChip();
+    // Esc on the field dismisses; Tab moves into the chip (it lives at the end of the document), Shift+Tab back.
+    field.addEventListener('keydown', (e) => {
+      if (!e.isTrusted || !totpChip || totpChip.field !== field || dd) return;
+      if (e.key === 'Escape') { e.preventDefault(); closeTotpChip(); }
+      else if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); ui.fill.focus(); }
+    }, true);
+    ui.el.addEventListener('keydown', (e) => { if (e.isTrusted && e.key === 'Tab' && e.shiftKey && root.activeElement === ui.fill) { e.preventDefault(); field.focus(); } });
   }
 
   // ---------- dropdown ----------
@@ -217,6 +285,7 @@
       if (dd.mode === 'search') send('page:search_disable').catch(() => {});
       dd.host.remove();
       dd = null;
+      if (totpChip) placeTotpChip();
     }
   }
   function placeDropdown() {
@@ -293,6 +362,16 @@
     await populate(ctx);
   }
 
+  /** "16 characters, no symbols" for the suggest row when the field states password rules. */
+  function rulesSubtitle(PR, fit) {
+    const s = PR && fit ? PR.summary(fit) : null;
+    if (!s) return '';
+    const parts = [t('csRulesLen', '$1 characters', [String(s.len)])];
+    if (s.noSymbols) parts.push(t('csRulesNoSymbols', 'no symbols'));
+    else if (s.limitedSymbols) parts.push(t('csRulesFewSymbols', 'limited symbols'));
+    return parts.join(', ');
+  }
+
   async function populate(ctx) {
     const mine = dd && dd.seq;
     const live = () => dd && dd.seq === mine;
@@ -310,12 +389,20 @@
       loading.remove();
       dd.matchedIds = new Set((items || []).map((i) => i.id));
       if (form.fields.newPassword && (isNew || form.kind === 'change_password')) {
-        addRow({ text: '✨' }, t('csSuggest', 'Suggest strong password'), t('csSuggestSub', 'gitpass will save it when you submit'), async () => {
-          const r = await send('page:generate');
-          if (!originOk(r)) return;
-          GitpassForms.fillNewPassword(form, r.password); // generated value is not kept after this call
-          closeDropdown();
-        }, { primary: true });
+        // Site rules (#188): maxlength / minlength / passwordrules on the field, sent as parsed constraints only.
+        const PR = globalThis.GitpassPasswordRules;
+        const rules = PR ? PR.fromField(form.fields.newPassword) : null;
+        const fit = rules ? PR.sanitize(rules) : null;
+        if (fit && !fit.ok) {
+          dd.box.append(el('div', 'msg', t('csRulesTooShort', "This site's password rules are too short for a strong password")));
+        } else {
+          addRow({ text: '✨' }, t('csSuggest', 'Suggest strong password'), rulesSubtitle(PR, fit) || t('csSuggestSub', 'gitpass will save it when you submit'), async () => {
+            const r = await send('page:generate', rules ? { rules } : {});
+            if (!originOk(r)) return;
+            GitpassForms.fillNewPassword(form, r.password); // generated value is not kept after this call
+            closeDropdown();
+          }, { primary: true });
+        }
       }
       if (role === 'totp') items = items.filter((i) => i.has_totp);
       for (const it of items) addRow(catIcon(it.category), it.title || '(untitled)', it.subtitle || '', () => selectItem(ctx, it));

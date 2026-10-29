@@ -112,7 +112,7 @@ cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_ca
 { const a = [...db.values()][5].detail; a.archived = true; const b = [...db.values()][22].detail; b.deletedAt = new Date(Date.now() - 29 * 86400000).toISOString(); }
 
 add('v_private', 'passkey', 'webauthn.example.invalid', 'demo@example.invalid', 6, [['site', 'text', 'webauthn.example.invalid'], ['user name', 'text', 'demo@example.invalid'], ['credential id', 'text', 'FAKE-cred-id'], ['private key', 'concealed', 'FAKE'], ['sign count', 'text', '3']]);
-let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true };
+let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false };
 let onboarding: T.Onboarding = { extensionInstalled: false, emergencyKitSaved: false, repoConnected: true, imported: false, dismissed: false };
 let unlocked = false;
 const devices: T.DeviceInfo[] = [
@@ -242,7 +242,7 @@ function mockFindings(id: string): T.FindingInfo[] {
   }
   return out;
 }
-function genPw(length: number, symbols: boolean, digits: boolean, words?: boolean, pin?: boolean) {  const rnd = (n: number) => crypto.getRandomValues(new Uint32Array(1))[0] % n;
+function genPw(length: number, symbols: boolean, digits: boolean, words?: boolean, pin?: boolean, separator?: string, capitalize?: boolean) {  const rnd = (n: number) => crypto.getRandomValues(new Uint32Array(1))[0] % n;
   if (pin) {
     const d = '0123456789';
     return Array.from({ length: Math.max(4, Math.min(16, length)) }, () => d[rnd(d.length)]).join('');
@@ -250,12 +250,15 @@ function genPw(length: number, symbols: boolean, digits: boolean, words?: boolea
   if (words) {
     const w = ['apple', 'river', 'stone', 'cloud', 'tiger', 'maple', 'ocean', 'pixel', 'lunar', 'cedar'];
     const count = Math.max(3, Math.min(20, length));
-    const chosen = Array.from({ length: count }, () => w[rnd(w.length)]);
+    const chosen = Array.from({ length: count }, () => {
+      const word = w[rnd(w.length)];
+      return capitalize ? word.charAt(0).toUpperCase() + word.slice(1) : word;
+    });
     if (digits && chosen.length > 0) {
       const idx = rnd(chosen.length);
       chosen[idx] = chosen[idx] + rnd(10);
     }
-    return chosen.join(symbols ? '-' : '.');
+    return chosen.join(separator ?? (symbols ? '-' : '.'));
   }
   const cs = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ' + (digits ? '23456789' : '') + (symbols ? '!@#$%^&*-_+=' : '');
   return Array.from({ length }, () => cs[rnd(cs.length)]).join('');
@@ -302,17 +305,20 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     if (filter.category) xs = xs.filter((x) => x.category === filter.category);
     if (filter.query) { const q = filter.query.toLowerCase(); xs = xs.filter((x) => `${x.title} ${x.subtitle} ${x.url ?? ''} ${x.tags.join(' ')}`.toLowerCase().includes(q)); }
     const sort = filter.sort ?? 'updated';
-    xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : b.updatedAt.localeCompare(a.updatedAt));
+    xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : sort === 'recent' ? (b.lastUsed ?? 0) - (a.lastUsed ?? 0) || a.title.localeCompare(b.title) : b.updatedAt.localeCompare(a.updatedAt));
     return delay(xs.map(summary));
   },
   get_item: (a: { itemId: string }) => delay({ ...get(a.itemId).detail, findings: mockFindings(a.itemId) }),
   reveal_field: (a: { itemId: string; fieldId: string; version?: number | null }) => {
     const r = get(a.itemId);
+    r.detail.lastUsed = Math.floor(Date.now() / 1000);
     const v = r.secrets[a.fieldId] ?? r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId)?.value;
     return v == null ? Promise.reject(new Error('not a concealed field')) : delay(v);
   },
   copy_field: (a: { itemId: string; fieldId: string }) => {
-    const r = get(a.itemId); const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId);
+    const r = get(a.itemId);
+    r.detail.lastUsed = Math.floor(Date.now() / 1000);
+    const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId);
     const v = r.secrets[a.fieldId] ?? fld?.value ?? '';
     // In Tauri the copy happens in Rust; the browser mock best-effort uses the clipboard API.
     navigator.clipboard?.writeText(v).catch(() => {});
@@ -430,7 +436,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     }
     return delay({ count: items.length, items });
   },
-  generate_password: (a: { length: number; symbols: boolean; digits: boolean; words?: boolean; pin?: boolean }) => delay(genPw(a.length, a.symbols, a.digits, a.words, a.pin), 5),
+  generate_password: (a: { length: number; symbols: boolean; digits: boolean; words?: boolean; pin?: boolean; separator?: string; capitalize?: boolean }) => delay(genPw(a.length, a.symbols, a.digits, a.words, a.pin, a.separator, a.capitalize), 5),
   copy_password: (a: { password: string }) => {
     navigator.clipboard?.writeText(a.password).catch(() => {});
     return delay(undefined);
@@ -679,5 +685,5 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   emergency_kit_data: (a: { password?: string }) => (a?.password !== undefined && a.password !== 'demo-password' ? Promise.reject(new Error('wrong master password'))
     : delay<T.EmergencyKitData>({ accountId: 'acc-demo-0000', vaultPath: '~/.gitpass (mock)', remote: 'git@example.com:demo/vault.git', deviceName: 'Demo Mac', createdAt: '2026-10-26T09:00:00Z', secretKeyAvailable: true, secretKey: a?.password ? 'A3-MOCK00-000000-00000-00000-00000-00000' : null })),
   emergency_kit: () => delay('gitpass Emergency Kit (DEMO)\nAccount: Demo Family\nSecret Key: (not shown — rotate to reveal a new one)'),
-  favicon_url: () => delay(null),
+  favicon_url: (a?: { url?: string }) => delay(settings.showWebsiteIcons && a?.url?.startsWith('https://') ? 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiiciHI9IjEwIiBmaWxsPSIjZjI4YzI4Ii8+PC9zdmc+' : null),
 };
