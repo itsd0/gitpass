@@ -319,6 +319,9 @@ fn attachments_via_paths() {
     let dst = dir.path().join("out.pdf");
     e.app.save_attachment(&e.vault, &n.id, &a.id, &dst.display().to_string()).unwrap();
     assert_eq!(std::fs::read(&dst).unwrap(), b"%PDF-fake");
+    e.app.remove_attachment(&e.vault, &n.id, &a.id).unwrap();
+    assert!(e.app.get_item(&e.vault, &n.id).unwrap().attachments.is_empty());
+    assert!(e.app.remove_attachment(&e.vault, &n.id, &a.id).is_err());
 }
 
 #[test]
@@ -521,6 +524,24 @@ fn import_file_dry_run_and_real() {
 }
 
 #[test]
+fn import_file_apple_passwords_csv() {
+    let e = env();
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("apple.csv");
+    std::fs::write(&f, "Title,URL,Username,Password,Notes,OTPAuth\nApple Service,https://apple.example.invalid,alice,FAKE1,Notes line,otpauth://totp/Apple:alice?secret=JBSWY3DPEHPK3PXP\n").unwrap();
+    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), true).unwrap();
+    assert_eq!((r.parsed, r.added, r.duplicates), (1, 1, 0));
+    assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 0);
+    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), false).unwrap();
+    assert_eq!(r.added, 1);
+    let items = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: Some(e.vault.clone()), tag: None, category: None, query: None, sort: None }).unwrap();
+    let it = items.iter().find(|i| i.title == "Apple Service").unwrap();
+    assert_eq!(it.category, Category::Login);
+    let d = e.app.get_item(&e.vault, &it.id).unwrap();
+    assert!(d.has_totp);
+}
+
+#[test]
 fn export_vault_round_trip_and_errors() {
     let e = env();
     let _l = login(&e, "Export Login", "alice@example.invalid", "FAKE-Strong-Export-1!");
@@ -649,6 +670,16 @@ fn devices_settings_onboarding_favicon() {
     let o = e.app.set_onboarding(OnboardingPatch { emergency_kit_saved: Some(true), ..Default::default() }).unwrap();
     assert!(o.emergency_kit_saved && !o.dismissed);
     assert_eq!(e.app.onboarding(), o);
+    // onboarding dismissed persists across restart in backend
+    let o_dismiss = e.app.set_onboarding(OnboardingPatch { dismissed: Some(true), ..Default::default() }).unwrap();
+    assert!(o_dismiss.dismissed);
+    assert!(e.app.onboarding().dismissed);
+    let app2 = App::new(e._cfg.path().to_path_buf(), e.clip.clone());
+    assert!(app2.onboarding().dismissed);
+    let o_restore = app2.set_onboarding(OnboardingPatch { dismissed: Some(false), ..Default::default() }).unwrap();
+    assert!(!o_restore.dismissed);
+    let app3 = App::new(e._cfg.path().to_path_buf(), e.clip.clone());
+    assert!(!app3.onboarding().dismissed);
     // settings file has no secrets
     let raw = std::fs::read_to_string(e._cfg.path().join(SETTINGS_FILE)).unwrap();
     assert!(!raw.contains("correct horse") && !raw.contains(&e.sk));
@@ -1528,6 +1559,35 @@ fn test_favicon_fetcher_html_link_rel_icon() {
 }
 
 #[test]
+fn test_favicon_fetcher_never_follows_redirects() {
+    // The site redirects /favicon.ico and / to a cleartext loopback target that serves a valid PNG.
+    // The fetcher must not follow either redirect (target sees no request) and must return no icon.
+    let tmp = tempfile::tempdir().unwrap();
+    let target = LocalMockHttp::start(|_path| (200, "image/png", vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
+    let loc: &'static str = Box::leak(format!("text/plain\r\nLocation: http://127.0.0.1:{}/favicon.ico", target.addr.port()).into_boxed_str());
+    let site = LocalMockHttp::start(move |_path| (302, loc, Vec::new()));
+    let res = crate::favicon::fetch_and_cache(&site.url(), tmp.path(), true).unwrap();
+    assert_eq!(res, None, "redirects must not be followed");
+    assert!(!site.requests.lock().unwrap().is_empty(), "the site itself was asked");
+    assert_eq!(target.requests.lock().unwrap().len(), 0, "redirect target must never be contacted");
+}
+
+#[test]
+fn test_favicon_icon_href_to_private_ip_refused() {
+    // Private addresses refused (production policy for addresses), http allowed only so the page can be served:
+    // the page lives on loopback too, so it must not even be fetched; and a page pointing at a private-IP href
+    // cannot make the fetcher connect there.
+    let tmp = tempfile::tempdir().unwrap();
+    let icon = LocalMockHttp::start(|_path| (200, "image/png", vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]));
+    let html: &'static str = Box::leak(format!("<html><head><link rel=\"icon\" href=\"http://127.0.0.1:{}/i.png\"></head></html>", icon.addr.port()).into_boxed_str());
+    let page = LocalMockHttp::start(move |path| if path == "/" { (200, "text/html", html.as_bytes().to_vec()) } else { (404, "text/plain", Vec::new()) });
+    let res = crate::favicon::fetch_and_cache_with(&page.url(), tmp.path(), true, false).unwrap();
+    assert_eq!(res, None);
+    assert_eq!(page.requests.lock().unwrap().len(), 0, "loopback page must not be contacted");
+    assert_eq!(icon.requests.lock().unwrap().len(), 0, "private-IP icon href must not be contacted");
+}
+
+#[test]
 fn test_favicon_toggle_off_makes_no_network_calls_and_toggle_off_clears_cache() {
     let e = env();
     let cache_dir = tempfile::tempdir().unwrap();
@@ -1559,4 +1619,38 @@ fn test_favicon_toggle_off_makes_no_network_calls_and_toggle_off_clears_cache() 
     s.show_website_icons = false;
     e.app.set_settings(s).unwrap();
     assert!(!cached_file.exists(), "turning toggle off must clear the favicon cache");
+}
+
+#[test]
+fn settings_quick_access_hotkey_roundtrip_and_defaults() {
+    let s = Settings::default();
+    assert_eq!(s.quick_access_hotkey, "CommandOrControl+Shift+Space");
+
+    // Legacy JSON without quickAccessHotkey defaults to default combo
+    let legacy_json = r#"{"autoLockMinutes":5,"clipboardClearSecs":90,"theme":"dark","language":"en","biometricUnlock":false}"#;
+    let parsed: Settings = serde_json::from_str(legacy_json).unwrap();
+    assert_eq!(parsed.quick_access_hotkey, "CommandOrControl+Shift+Space");
+
+    // Serialization and deserialization roundtrip with custom combo
+    let mut custom = s;
+    custom.quick_access_hotkey = "CommandOrControl+Alt+K".into();
+    let serialized = serde_json::to_string(&custom).unwrap();
+    assert!(serialized.contains(r#""quickAccessHotkey":"CommandOrControl+Alt+K""#));
+    let deserialized: Settings = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(deserialized.quick_access_hotkey, "CommandOrControl+Alt+K");
+
+    // Roundtrip with disabled/empty hotkey
+    let mut disabled = deserialized;
+    disabled.quick_access_hotkey = "".into();
+    let serialized_disabled = serde_json::to_string(&disabled).unwrap();
+    let deserialized_disabled: Settings = serde_json::from_str(&serialized_disabled).unwrap();
+    assert_eq!(deserialized_disabled.quick_access_hotkey, "");
+
+    // App set_settings and get_settings persistence roundtrip
+    let e = env();
+    let initial = e.app.get_settings();
+    assert_eq!(initial.quick_access_hotkey, "CommandOrControl+Shift+Space");
+    let updated = e.app.set_settings(Settings { quick_access_hotkey: "CommandOrControl+Shift+J".into(), ..initial }).unwrap();
+    assert_eq!(updated.quick_access_hotkey, "CommandOrControl+Shift+J");
+    assert_eq!(e.app.get_settings().quick_access_hotkey, "CommandOrControl+Shift+J");
 }

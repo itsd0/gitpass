@@ -2,6 +2,7 @@ use anyhow::{bail, Result};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
 use serde::{Deserialize, Serialize};
 use std::io::Read;
+use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -96,6 +97,61 @@ pub fn detect_image_format(bytes: &[u8], content_type: Option<&str>) -> Option<&
     None
 }
 
+/// True only for globally routable unicast addresses. Loopback, private (RFC 1918 / ULA), link-local,
+/// CGNAT, unspecified, multicast, broadcast, documentation and IPv4-mapped/compatible forms of any of
+/// those are refused, so a favicon fetch can never reach the local machine or the LAN.
+pub fn is_public_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(v4) => {
+            let o = v4.octets();
+            !(v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                || v4.is_multicast()
+                || v4.is_broadcast()
+                || v4.is_documentation()
+                || o[0] == 0
+                || (o[0] == 100 && (o[1] & 0xC0) == 64) // 100.64.0.0/10 CGNAT
+                || (o[0] == 192 && o[1] == 0 && o[2] == 0) // 192.0.0.0/24 IETF
+                || (o[0] == 198 && (o[1] & 0xFE) == 18) // 198.18.0.0/15 benchmarking
+                || o[0] >= 240)
+        }
+        IpAddr::V6(v6) => {
+            if let Some(v4) = v6.to_ipv4_mapped() {
+                return is_public_ip(IpAddr::V4(v4));
+            }
+            let seg = v6.segments();
+            !(v6.is_loopback()
+                || v6.is_unspecified()
+                || v6.is_multicast()
+                || (seg[0] & 0xFE00) == 0xFC00 // fc00::/7 unique local
+                || (seg[0] & 0xFFC0) == 0xFE80 // fe80::/10 link-local
+                || (seg[0] & 0xFFC0) == 0xFEC0 // fec0::/10 site-local (deprecated)
+                || (seg[0] == 0x2001 && seg[1] == 0x0DB8) // documentation
+                || (seg[0] == 0 && seg[1] == 0 && seg[2] == 0 && seg[3] == 0 && seg[4] == 0 && seg[5] == 0)) // ::/96 IPv4-compatible
+        }
+    }
+}
+
+/// DNS resolver used for every favicon connection (initial URL and `<link rel="icon">` href alike):
+/// it resolves `host:port` and keeps only public addresses, so the address that is checked is the one
+/// that is connected to (no DNS-rebinding gap). Errors when nothing public is left.
+pub fn resolve_public(netloc: &str, allow_private: bool) -> std::io::Result<Vec<SocketAddr>> {
+    let all: Vec<SocketAddr> = netloc.to_socket_addrs()?.collect();
+    if allow_private {
+        return Ok(all);
+    }
+    let public: Vec<SocketAddr> = all.into_iter().filter(|a| is_public_ip(a.ip())).collect();
+    if public.is_empty() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!("refusing non-public address for {netloc}"),
+        ));
+    }
+    Ok(public)
+}
+
 fn read_capped_body(resp: ureq::Response, max_size: usize) -> Result<Vec<u8>> {
     if let Some(len) = resp.header("Content-Length").and_then(|l| l.parse::<usize>().ok()) {
         if len > max_size {
@@ -154,6 +210,19 @@ pub fn fetch_and_cache(
     cache_dir: &Path,
     allow_insecure_for_test: bool,
 ) -> Result<Option<String>> {
+    fetch_and_cache_with(raw_url, cache_dir, allow_insecure_for_test, allow_insecure_for_test)
+}
+
+/// `allow_http` / `allow_private` are only ever true in tests (local mock servers). Production
+/// (`fetch_and_cache(.., false)`) is https-only, never follows redirects, and connects only to
+/// public addresses.
+pub fn fetch_and_cache_with(
+    raw_url: &str,
+    cache_dir: &Path,
+    allow_http: bool,
+    allow_private: bool,
+) -> Result<Option<String>> {
+    let allow_insecure_for_test = allow_http;
     let parsed = if let Ok(u) = url::Url::parse(raw_url) {
         u
     } else if let Ok(u) = url::Url::parse(&format!("https://{}", raw_url)) {
@@ -177,8 +246,12 @@ pub fn fetch_and_cache(
         return Ok(cached);
     }
 
+    // Redirects are never followed (a 3xx just means "no icon"): a hop could otherwise lead to
+    // cleartext or a private address. Every connection goes through `resolve_public`.
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(5))
+        .redirects(0)
+        .resolver(move |netloc: &str| resolve_public(netloc, allow_private))
         .build();
 
     let port_part = parsed.port().map(|p| format!(":{}", p)).unwrap_or_default();
@@ -231,4 +304,40 @@ pub fn fetch_and_cache(
     // Save negative cache to prevent immediate repeated network attempts
     let _ = save_cached(cache_dir, &host, None);
     Ok(None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn non_public_ips_are_refused() {
+        for ip in [
+            "127.0.0.1", "10.1.2.3", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1",
+            "0.0.0.0", "255.255.255.255", "224.0.0.1", "::1", "::", "fc00::1", "fd12::1", "fe80::1",
+            "::ffff:127.0.0.1", "::ffff:10.0.0.1", "::127.0.0.1",
+        ] {
+            assert!(!is_public_ip(ip.parse().unwrap()), "{ip} must be refused");
+        }
+        for ip in ["93.184.216.34", "1.1.1.1", "2606:4700:4700::1111"] {
+            assert!(is_public_ip(ip.parse().unwrap()), "{ip} must be allowed");
+        }
+    }
+
+    #[test]
+    fn resolver_refuses_private_targets() {
+        assert!(resolve_public("127.0.0.1:443", false).is_err());
+        assert!(resolve_public("10.0.0.5:443", false).is_err());
+        assert!(resolve_public("[::1]:443", false).is_err());
+        assert!(resolve_public("localhost:443", false).is_err());
+        assert!(resolve_public("127.0.0.1:443", true).is_ok());
+    }
+
+    #[test]
+    fn https_url_on_private_ip_makes_no_request() {
+        let tmp = tempfile::tempdir().unwrap();
+        // https is allowed, private addresses are not: nothing is fetched and a negative cache entry is written.
+        let res = fetch_and_cache_with("https://127.0.0.1:9/", tmp.path(), false, false).unwrap();
+        assert_eq!(res, None);
+    }
 }

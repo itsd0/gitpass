@@ -17,6 +17,7 @@ use std::io::{ErrorKind, Read, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::collections::BTreeSet;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 use zeroize::Zeroizing;
@@ -137,6 +138,7 @@ pub struct Agent {
     cv: Condvar,
     pub socket_path: PathBuf,
     unlock_timeout: Mutex<Duration>,
+    audit_cache: Mutex<Option<(Option<u64>, Arc<gitpass_core::audit::AuditReport>)>>,
 }
 
 /// Create the dir (0700), write a fresh token (0600), bind the socket (0600).
@@ -172,7 +174,7 @@ impl Agent {
     /// Bind in `dir` and start the accept loop + lock-state watcher threads.
     pub fn start(app: Arc<App>, ui: Arc<dyn AgentUi>, dir: &Path) -> Result<Arc<Agent>> {
         let (l, sp, token) = bind(dir)?;
-        let a = Arc::new(Agent { state: Mutex::new(app.state.is_unlocked()), stamp: Mutex::new(app.state.change_stamp()), app, ui, token, conns: Mutex::new(vec![]), cv: Condvar::new(), socket_path: sp, unlock_timeout: Mutex::new(UNLOCK_TIMEOUT) });
+        let a = Arc::new(Agent { state: Mutex::new(app.state.is_unlocked()), stamp: Mutex::new(app.state.change_stamp()), app, ui, token, conns: Mutex::new(vec![]), cv: Condvar::new(), socket_path: sp, unlock_timeout: Mutex::new(UNLOCK_TIMEOUT), audit_cache: Mutex::new(None) });
         let a2 = a.clone();
         std::thread::spawn(move || for s in l.incoming() { match s { Ok(s) => { let a = a2.clone(); std::thread::spawn(move || a.serve(s)); } Err(_) => continue } });
         let w = Arc::downgrade(&a);
@@ -340,7 +342,13 @@ impl Agent {
                 let username = s("username").unwrap_or_default();
                 let host = u.host_str().unwrap_or_default().to_string();
                 let title = s("title").filter(|t| !t.trim().is_empty()).unwrap_or_else(|| host.trim_start_matches("www.").to_string());
-                let vid = match s("vault_id").filter(|v| !v.is_empty()) { Some(v) => v, None => self.app.list_vaults()?.into_iter().next().map(|v| v.id).ok_or_else(|| err("not_found", "no vault"))? };
+                let vid = match s("vault_id").filter(|v| !v.is_empty()) {
+                    Some(v) => {
+                        if !self.app.list_vaults()?.iter().any(|x| x.id == v) { return Err(err("not_found", "vault not found")); }
+                        v
+                    }
+                    None => self.app.list_vaults()?.into_iter().next().map(|v| v.id).ok_or_else(|| err("not_found", "no vault"))?,
+                };
                 let url = u.origin().ascii_serialization();
                 let iid = self.app.state.with(|x| {
                     crate::GuiState::writable(x).map_err(|e| err("denied", e.to_string()))?;
@@ -434,6 +442,58 @@ impl Agent {
                 }).map_err(host_err)?;
                 if cmd == "passkey_create" { self.poll_state(); }
                 Ok(res)
+            }
+            "item_findings" => {
+                let id = req("item_id")?;
+                let (vid, iid) = split_id(&id)?;
+                let (_, r) = self.record(&vid, &iid)?;
+                // Read the vault stamp *before* computing, so a write during the audit
+                // leaves the cached report under the old stamp and invalidates it.
+                let stamp = self.app.state.change_stamp();
+                let rep = cached_audit(&self.audit_cache, stamp, || {
+                    self.app.state.with(|x| {
+                        let s = &x.session;
+                        let records = App::all_records(s)?;
+                        let passkey_sites: BTreeSet<String> = records.iter()
+                            .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
+                            .filter_map(|(_, _, r)| r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value))
+                            .collect();
+                        let items: Vec<(String, String, ItemRecord)> = records.into_iter()
+                            .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
+                            .collect();
+                        gitpass_core::audit::audit_with_passkeys(&items, &passkey_sites, &gitpass_core::audit::AuditOpts::default(), None)
+                    })
+                })?;
+                let item_finding = rep.per_item.iter().find(|f| f.vault == vid && f.id == iid);
+                let change_pw_url = r.item.url.as_deref().and_then(gitpass_core::audit::change_password_url);
+                let mut kinds = vec![];
+                let mut reused_count = None;
+                let mut pwned_count = None;
+                let mut old_days = None;
+                let mut expiring_days = None;
+                let mut insecure_url_host = None;
+
+                if let Some(f) = item_finding {
+                    for finding in &f.findings {
+                        kinds.push(finding.kind().to_string());
+                        match finding {
+                            gitpass_core::audit::Finding::Reused { others, .. } => reused_count = Some(others + 1),
+                            gitpass_core::audit::Finding::Pwned { count } => pwned_count = Some(*count),
+                            gitpass_core::audit::Finding::Old { days } => old_days = Some(*days),
+                            gitpass_core::audit::Finding::ExpiringSoon { days, .. } => expiring_days = Some(*days),
+                            gitpass_core::audit::Finding::InsecureUrl { url_host } => insecure_url_host = Some(url_host.clone()),
+                            _ => {}
+                        }
+                    }
+                }
+                let mut out = json!({ "kinds": kinds });
+                if let Some(c) = reused_count { out["reused_count"] = json!(c); }
+                if let Some(c) = pwned_count { out["pwned_count"] = json!(c); }
+                if let Some(d) = old_days { out["old_days"] = json!(d); }
+                if let Some(d) = expiring_days { out["expiring_days"] = json!(d); }
+                if let Some(h) = insecure_url_host { out["insecure_url_host"] = json!(h); }
+                if let Some(u) = change_pw_url { out["change_password_url"] = json!(u); }
+                Ok(out)
             }
             "open_in_app" => {
                 match s("item_id").filter(|v| !v.is_empty()) {
@@ -532,4 +592,58 @@ fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
 fn host_err(e: anyhow::Error) -> anyhow::Error {
     if let Some(c) = e.downcast_ref::<gitpass_host::handler::CodedError>() { return err(c.code, c.message.clone()); }
     e
+}
+
+/// Return the cached audit report for `stamp`, or compute it and cache it under `stamp`.
+/// `stamp` must be read before `compute` runs; a `None` stamp (locked/unreadable) is never cached.
+pub(crate) fn cached_audit<T, E>(
+    cache: &Mutex<Option<(Option<u64>, Arc<T>)>>,
+    stamp: Option<u64>,
+    compute: impl FnOnce() -> Result<T, E>,
+) -> Result<Arc<T>, E> {
+    if stamp.is_some() {
+        if let Some((s, rep)) = &*cache.lock().unwrap() {
+            if *s == stamp {
+                return Ok(Arc::clone(rep));
+            }
+        }
+    }
+    let fresh = Arc::new(compute()?);
+    if stamp.is_some() {
+        *cache.lock().unwrap() = Some((stamp, Arc::clone(&fresh)));
+    }
+    Ok(fresh)
+}
+
+#[cfg(test)]
+mod cached_audit_tests {
+    use super::cached_audit;
+    use std::sync::{Arc, Mutex};
+
+    #[test]
+    fn write_during_compute_invalidates_cached_report() {
+        let cache: Mutex<Option<(Option<u64>, Arc<u32>)>> = Mutex::new(None);
+        let mut vault_stamp = 1u64;
+        // Stamp read before compute; a write lands while computing.
+        let before = Some(vault_stamp);
+        let r = cached_audit(&cache, before, || { vault_stamp = 2; Ok::<_, ()>(10) }).unwrap();
+        assert_eq!(*r, 10);
+        // Next lookup sees the new stamp and must recompute, not reuse the stale report.
+        let mut recomputed = false;
+        let r2 = cached_audit(&cache, Some(vault_stamp), || { recomputed = true; Ok::<_, ()>(20) }).unwrap();
+        assert!(recomputed);
+        assert_eq!(*r2, 20);
+        // Same stamp again hits the cache.
+        let r3 = cached_audit(&cache, Some(vault_stamp), || -> Result<u32, ()> { panic!("should be cached") }).unwrap();
+        assert_eq!(*r3, 20);
+    }
+
+    #[test]
+    fn unknown_stamp_and_errors_are_not_cached() {
+        let cache: Mutex<Option<(Option<u64>, Arc<u32>)>> = Mutex::new(None);
+        cached_audit(&cache, None, || Ok::<_, ()>(1)).unwrap();
+        assert!(cache.lock().unwrap().is_none());
+        assert!(cached_audit(&cache, Some(5), || Err::<u32, _>("boom")).is_err());
+        assert!(cache.lock().unwrap().is_none());
+    }
 }

@@ -252,4 +252,22 @@ describe('Settings search and consistent layout', () => {
     expect(row).toBeTruthy();
     expect(row?.className).toContain('ring-accent');
   });
+
+  it('searches for setup guide and highlights the row in General tab', async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage initialTab="security" />);
+    const searchInput = await screen.findByTestId('settings-search-input');
+
+    await user.type(searchInput, 'setup guide');
+    const result = await screen.findByRole('option', { name: /Show setup guide/i });
+    expect(result).toBeTruthy();
+    await user.click(result);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tabpanel', { name: 'General' })).toBeTruthy();
+    });
+    const row = document.getElementById('setting-setup-guide');
+    expect(row).toBeTruthy();
+    expect(row?.className).toContain('ring-accent');
+  });
 });

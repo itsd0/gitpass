@@ -40,6 +40,8 @@ enum Cmd {
     Unlock,
     /// Vault management
     Vault { #[command(subcommand)] cmd: VaultCmd },
+    /// Manage attachments on an item
+    Attach { #[command(subcommand)] cmd: AttachCmd },
     /// Add an item
     Add {
         vault: String,
@@ -231,7 +233,7 @@ enum Cmd {
     /// Import items from another password manager's export file
     Import {
         vault: String,
-        /// bitwarden-json | bitwarden-csv | 1password-csv | 1password-1pux | keepass-csv | chrome-csv | gitpass-json
+        /// bitwarden-json | bitwarden-csv | 1password-csv | 1password-1pux | keepass-csv | chrome-csv | apple-passwords-csv | gitpass-json
         #[arg(long = "from")] from: String,
         file: PathBuf,
         /// Parse and count only; write nothing
@@ -375,6 +377,52 @@ enum SshCmd {
     Config { #[arg(long)] socket: Option<PathBuf> },
     /// Run a foreground SSH agent serving this vault's keys (until Ctrl-C). The desktop app runs its own.
     Agent { #[arg(long)] socket: Option<PathBuf> },
+}
+
+#[derive(Subcommand)]
+enum AttachCmd {
+    /// Add an attachment file to an item
+    Add {
+        vault: String,
+        query: String,
+        file: PathBuf,
+    },
+    /// List attachments on an item
+    Ls {
+        vault: String,
+        query: String,
+        /// Output JSON array of attachments
+        #[arg(long)]
+        json: bool,
+    },
+    /// Decrypt and save an attachment to disk
+    Get {
+        vault: String,
+        query: String,
+        /// Attachment name or id
+        target: String,
+        /// Destination output file path
+        #[arg(short = 'o', long = "out")]
+        out: Option<PathBuf>,
+        /// Overwrite destination file if it already exists
+        #[arg(long)]
+        force: bool,
+    },
+    /// Remove an attachment from an item
+    Rm {
+        vault: String,
+        query: String,
+        /// Attachment name or id
+        target: String,
+    },
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliAttachment {
+    id: String,
+    name: String,
+    size: u64,
+    mime: String,
 }
 
 #[derive(Subcommand)]
@@ -562,6 +610,36 @@ struct CliHistoryEntry {
     version: u64,
     updated_at: String,
     current: bool,
+}
+
+/// Default output file name for `attach get` without `-o`: only the final path component of the
+/// stored name (which comes from synced vault data and must not be trusted), so names like
+/// `../../.ssh/authorized_keys` or `/etc/passwd` can never write outside the current directory.
+fn safe_attachment_filename(name: &str) -> PathBuf {
+    let base = name.rsplit(['/', '\\']).next().unwrap_or("");
+    match std::path::Path::new(base).file_name() {
+        Some(f) if !f.is_empty() => PathBuf::from(f),
+        _ => PathBuf::from("attachment"),
+    }
+}
+
+fn find_attachment<'a>(attachments: &'a [gitpass_core::item::AttachmentMeta], target: &str) -> Result<&'a gitpass_core::item::AttachmentMeta> {
+    if let Some(a) = attachments.iter().find(|a| a.id == target) {
+        return Ok(a);
+    }
+    let by_name: Vec<_> = attachments.iter().filter(|a| a.name == target).collect();
+    match by_name.len() {
+        1 => Ok(by_name[0]),
+        0 => {
+            let by_prefix: Vec<_> = attachments.iter().filter(|a| a.id.starts_with(target)).collect();
+            match by_prefix.len() {
+                1 => Ok(by_prefix[0]),
+                0 => bail!("no attachment matches '{target}'"),
+                n => bail!("{n} attachments match prefix '{target}'; use the full attachment id"),
+            }
+        }
+        n => bail!("{n} attachments named '{target}'; specify the attachment id"),
+    }
 }
 
 fn resolve_item_across_vaults(s: &Session, vault: Option<&str>, item: &str) -> Result<(String, String)> {
@@ -825,6 +903,72 @@ fn run() -> Result<()> {
             println!("public key:  {}", gitpass_core::keys::encode_pub(&pk));
             println!("fingerprint: {fpr}");
             println!("file:        {}", root.join(store::IDENTITY_PUB_FILE).display());
+        }
+        Cmd::Attach { cmd } => match cmd {
+            AttachCmd::Add { vault, query, file } => {
+                if !file.exists() {
+                    bail!("file '{}' does not exist", file.display());
+                }
+                let data = zeroize::Zeroizing::new(std::fs::read(file)?);
+                if data.len() > gitpass_core::item::MAX_ATTACHMENT_BYTES {
+                    bail!("attachment too large ({} bytes exceeds {} MiB limit)", data.len(), gitpass_core::item::MAX_ATTACHMENT_BYTES / (1024 * 1024));
+                }
+                let s = unlock(&cli, &root)?;
+                let vid = s.resolve_vault(vault)?;
+                let (iid, rec) = pick_record(&s, &vid, query, None, false)?;
+                let name = file.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_else(|| "file".to_string());
+                let mime = gitpass_core::item::mime_for(&name);
+                let meta = s.add_attachment(&vid, &iid, &name, mime, &data)?;
+                println!("added attachment '{}' ({}, {} bytes) to '{}'", meta.name, meta.id, meta.size, rec.item.title);
+            }
+            AttachCmd::Ls { vault, query, json } => {
+                let s = unlock(&cli, &root)?;
+                let vid = s.resolve_vault(vault)?;
+                let (_iid, rec) = pick_record(&s, &vid, query, None, false)?;
+                if *json {
+                    let atts: Vec<CliAttachment> = rec.attachments.iter().map(|a| CliAttachment {
+                        id: a.id.clone(),
+                        name: a.name.clone(),
+                        size: a.size,
+                        mime: a.mime.clone(),
+                    }).collect();
+                    println!("{}", serde_json::to_string_pretty(&atts)?);
+                } else if rec.attachments.is_empty() {
+                    println!("no attachments");
+                } else {
+                    for a in &rec.attachments {
+                        println!("{:<36}  {:<10}  {}", a.id, a.size, a.name);
+                    }
+                }
+            }
+            AttachCmd::Get { vault, query, target, out, force } => {
+                let s = unlock(&cli, &root)?;
+                let vid = s.resolve_vault(vault)?;
+                let (iid, rec) = pick_record(&s, &vid, query, None, false)?;
+                let att = find_attachment(&rec.attachments, target)?;
+                let dest = out.clone().unwrap_or_else(|| safe_attachment_filename(&att.name));
+                if dest.exists() && !*force {
+                    bail!("destination '{}' already exists (use --force to overwrite)", dest.display());
+                }
+                let data = zeroize::Zeroizing::new(s.read_attachment(&vid, &iid, &att.id)?);
+                if let Some(p) = dest.parent() {
+                    if !p.as_os_str().is_empty() {
+                        std::fs::create_dir_all(p)?;
+                    }
+                }
+                std::fs::write(&dest, &*data)?;
+                println!("saved attachment '{}' to {}", att.name, dest.display());
+            }
+            AttachCmd::Rm { vault, query, target } => {
+                let s = unlock(&cli, &root)?;
+                let vid = s.resolve_vault(vault)?;
+                let (iid, rec) = pick_record(&s, &vid, query, None, false)?;
+                let att = find_attachment(&rec.attachments, target)?;
+                let att_id = att.id.clone();
+                let att_name = att.name.clone();
+                s.remove_attachment(&vid, &iid, &att_id)?;
+                println!("removed attachment '{}' ({}) from '{}'", att_name, att_id, rec.item.title);
+            }
         }
         Cmd::Vault { cmd: VaultCmd::List } => {
             let s = unlock(&cli, &root)?;
