@@ -281,19 +281,50 @@ pub fn last_epoch(root: &Path, account_id: &str) -> Option<u64> {
     let s: LocalState = read_json(&state_path(root)).ok()?;
     (s.account_id == account_id).then_some(s.epoch)
 }
+/// Read-modify-write `.gitpass-state.json` under an exclusive advisory lock, so the native host, the
+/// desktop agent and the CLI can't lose each other's updates (e.g. a usage write must never put back an
+/// older anti-rollback epoch). The lock is taken on the vault directory itself (stable, unlike the state
+/// file, which is replaced by rename) and is separate from `.gitpass.lock`, so callers that already hold
+/// the vault lock can use it without deadlocking.
+/// `f` gets `None` if the existing file can't be parsed; it returns the state to write, or `None` to skip.
+fn update_state(root: &Path, f: impl FnOnce(Option<LocalState>) -> Option<LocalState>) -> Result<()> {
+    use fs2::FileExt;
+    fs::create_dir_all(root)?;
+    let dir = fs::File::open(root).with_context(|| format!("opening {}", root.display()))?;
+    dir.lock_exclusive().context("locking the vault directory for .gitpass-state.json")?;
+    let p = state_path(root);
+    let cur = match fs::read(&p) {
+        Ok(b) => serde_json::from_slice(&b).ok(),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Some(LocalState::default()),
+        Err(e) => return Err(e).with_context(|| format!("reading {}", p.display())),
+    };
+    let res = match f(cur) { Some(next) => write_json(&p, &next).map(|_| ()), None => Ok(()) };
+    let _ = FileExt::unlock(&dir);
+    res
+}
 fn save_epoch(root: &Path, account_id: &str, epoch: u64) -> Result<()> {
-    let mut s: LocalState = read_json(&state_path(root)).unwrap_or_default();
-    s.account_id = account_id.into();
-    s.epoch = epoch;
-    write_json(&state_path(root), &s).map(|_| ())
+    update_state(root, |cur| {
+        // A corrupt file is replaced: the epoch is what matters for rollback detection.
+        let mut s = cur.unwrap_or_default();
+        if s.account_id == account_id {
+            s.epoch = s.epoch.max(epoch); // never lower the last-seen epoch
+        } else {
+            s.account_id = account_id.into();
+            s.epoch = epoch;
+        }
+        Some(s)
+    })
 }
 
 /// Record that an item was used at timestamp `ts` (seconds since unix epoch).
 /// Stored in `.gitpass-state.json` (local-only, git-ignored) so no git commit or sync conflict is created.
 pub fn touch_item_used(root: &Path, item_id: &str, ts: u64) -> Result<()> {
-    let mut s: LocalState = read_json(&state_path(root)).unwrap_or_default();
-    s.last_used.insert(item_id.into(), ts);
-    write_json(&state_path(root), &s).map(|_| ())
+    update_state(root, |cur| {
+        // Unparseable state: skip the usage write rather than wiping `account_id`/`epoch`.
+        let mut s = cur?;
+        s.last_used.insert(item_id.into(), ts);
+        Some(s)
+    })
 }
 
 /// Retrieve the last used timestamp for an item (None if never used on this device).
@@ -1336,7 +1367,7 @@ impl Session {
         let mut cmp_new = new.snapshot(); cmp_new.item.updated_at.clear();
         let mut cmp_old = old.snapshot(); cmp_old.item.updated_at.clear();
         new.history = old.history.clone();
-        if cmp_new != cmp_old {
+        if cmp_new != cmp_old || old.attachments != new.attachments {
             new.history.push(crate::item::HistoryEntry { version: v, updated_at: old.item.updated_at.clone(), snapshot: old.snapshot() });
             let n = new.history.len();
             if n > crate::item::HISTORY_LIMIT { new.history.drain(..n - crate::item::HISTORY_LIMIT); }
@@ -1345,7 +1376,10 @@ impl Session {
             new.item.updated_at = old.item.updated_at.clone();
         }
         new.created_at = old.created_at.or(new.created_at);
-        if new.attachments.is_empty() { new.attachments = old.attachments.clone(); }
+        if new.removed_attachments.is_empty() { new.removed_attachments = old.removed_attachments.clone(); }
+        if new.attachments.is_empty() {
+            new.attachments = old.attachments.iter().filter(|a| !new.removed_attachments.contains(&a.id)).cloned().collect();
+        }
         new.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &new.item, now));
         merge::stamp_ext(Some(&old), &mut new, now);
         Ok((v + 1, new))
@@ -1523,6 +1557,8 @@ impl Session {
         new.archived = old.archived;
         new.ignored_findings = old.ignored_findings.clone();
         new.attachments = old.attachments.clone();
+        // Keep attachment tombstones so a merge with a stale copy can't resurrect a removed file.
+        new.removed_attachments = old.removed_attachments.clone();
         new.created_at = old.created_at;
         new.history = old.history.clone();
         new.history.push(crate::item::HistoryEntry {
@@ -1569,7 +1605,9 @@ impl Session {
     /// is recorded in the manifest.
     pub fn add_attachment(&self, vid: &str, iid: &str, name: &str, mime: &str, data: &[u8]) -> Result<crate::item::AttachmentMeta> {
         self.ensure_not_revoked()?;
-        if data.len() > crate::item::MAX_ATTACHMENT_BYTES { bail!("attachment too large ({} bytes > {} byte limit)", data.len(), crate::item::MAX_ATTACHMENT_BYTES); }
+        if data.len() > crate::item::MAX_ATTACHMENT_BYTES {
+            bail!("attachment too large ({} bytes exceeds {} MiB limit)", data.len(), crate::item::MAX_ATTACHMENT_BYTES / (1024 * 1024));
+        }
         let (_, mut rec) = self.read_record(vid, iid)?;
         let vk = self.vault_key(vid)?;
         let fid = uuid::Uuid::new_v4().to_string();
@@ -1605,6 +1643,46 @@ impl Session {
         let vk = self.vault_key(vid)?;
         let padded = zeroize::Zeroizing::new(open(&vk, &b.envelope, &file_aad(vid, iid, fid)).context("attachment failed authentication")?);
         unpad(&padded)
+    }
+
+    /// Remove an attachment from item `iid`: deletes the encrypted blob from `files/<fid>.enc`,
+    /// removes the file from the manifest, removes the attachment metadata, and records the prior state
+    /// in the item's history.
+    pub fn remove_attachment(&self, vid: &str, iid: &str, fid: &str) -> Result<()> {
+        self.ensure_not_revoked()?;
+        let (v, old) = self.read_record(vid, iid)?;
+        let idx = old.attachments.iter().position(|a| a.id == fid).ok_or_else(|| anyhow!("item has no attachment {fid}"))?;
+        let now = merge::now_ms();
+        let mut rec = old.clone();
+        rec.attachments.remove(idx);
+        if !rec.removed_attachments.iter().any(|x| x == fid) { rec.removed_attachments.push(fid.to_string()); }
+        rec.history.push(crate::item::HistoryEntry {
+            version: v,
+            updated_at: old.item.updated_at.clone(),
+            snapshot: old.snapshot(),
+        });
+        let n = rec.history.len();
+        if n > crate::item::HISTORY_LIMIT { rec.history.drain(..n - crate::item::HISTORY_LIMIT); }
+        rec.item.updated_at = (now / 1000).to_string();
+        rec.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &rec.item, now));
+        merge::stamp_ext(Some(&old), &mut rec, now);
+        let vk = self.vault_key(vid)?;
+        let d = self.vdir(vid);
+        let fp = d.join(FILES_DIR).join(format!("{fid}.enc"));
+        // One manifest commit: the new record (without the attachment, with its tombstone), the blob
+        // deletion and the manifest `files` entry all land together, like `remove_item`.
+        self.commit(|m| {
+            let ve = m.vaults.get_mut(vid).ok_or_else(|| anyhow!("vault {vid} not in manifest"))?;
+            let hash = Self::write_item_in(&d, &vk, vid, iid, v + 1, &rec)?;
+            ve.items.insert(iid.to_string(), ItemEntry { version: v + 1, hash });
+            if fp.exists() {
+                fs::remove_file(&fp)?;
+                if let Some(parent) = fp.parent() { fsutil::fsync_dir(parent); }
+            }
+            ve.files.remove(fid);
+            Ok(())
+        })?;
+        Ok(())
     }
 }
 
@@ -1750,5 +1828,53 @@ mod share_signature_tests {
         let skc = init(c.path(), "pw-c", fast()).unwrap();
         let sc = unlock_fast(c.path(), "pw-c", &skc);
         assert!(sc.accept_share(&p.member).is_err());
+    }
+}
+
+#[cfg(test)]
+mod local_state_tests {
+    use super::*;
+
+    #[test]
+    fn usage_writes_never_lower_the_epoch() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        save_epoch(root, "acct", 5).unwrap();
+        touch_item_used(root, "item-a", 100).unwrap();
+        assert_eq!(last_epoch(root, "acct"), Some(5));
+        // A stale writer for the same account can't put back an older epoch.
+        save_epoch(root, "acct", 3).unwrap();
+        assert_eq!(last_epoch(root, "acct"), Some(5));
+        assert_eq!(get_item_last_used(root, "item-a"), Some(100));
+        save_epoch(root, "acct", 6).unwrap();
+        assert_eq!(last_epoch(root, "acct"), Some(6));
+    }
+
+    #[test]
+    fn concurrent_usage_and_epoch_writes_keep_the_max_epoch() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().to_path_buf();
+        save_epoch(&root, "acct", 1).unwrap();
+        let hs: Vec<_> = (0..8).map(|t| {
+            let root = root.clone();
+            std::thread::spawn(move || {
+                for i in 0..25u64 {
+                    if t % 2 == 0 { save_epoch(&root, "acct", 2 + i).unwrap(); }
+                    else { touch_item_used(&root, &format!("item-{t}-{i}"), i).unwrap(); }
+                }
+            })
+        }).collect();
+        for h in hs { h.join().unwrap(); }
+        assert_eq!(last_epoch(&root, "acct"), Some(26));
+        assert_eq!(get_all_last_used(&root).len(), 4 * 25, "no usage write may be lost");
+    }
+
+    #[test]
+    fn corrupt_state_is_not_wiped_by_a_usage_write() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        fs::write(state_path(root), b"{not json").unwrap();
+        touch_item_used(root, "item-a", 1).unwrap();
+        assert_eq!(fs::read(state_path(root)).unwrap(), b"{not json");
     }
 }

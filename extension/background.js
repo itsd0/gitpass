@@ -69,6 +69,7 @@ async function fillTab(tabId, origin, itemId, extra) {
   if (!GitpassPolicy.isFillableOrigin(origin)) throw new Error('refusing to fill: page is not https');
   const creds = await host('fill', { item_id: itemId, origin }); // host enforces origin match
   const via = extra && extra.via === 'command' ? { via: 'command' } : {};
+  if (globalThis.GitpassPage) GitpassPage.rememberFilled(tabId, origin, itemId); // ids only: offers the one-time code on the next page
   await chrome.tabs.sendMessage(tabId, { type: 'gitpass-fill', origin, username: creds.username, password: creds.password, ...via }, { frameId: 0 });
   return true;
 }
@@ -101,7 +102,7 @@ async function popupRoute(msg) {
     case 'lock': return host('lock');
     case 'list_vaults': return host('list_vaults');
     case 'list_items': {
-      const a = {}; for (const k of ['vault_id', 'category', 'query', 'limit']) if (msg[k] != null) a[k] = msg[k];
+      const a = {}; for (const k of ['vault_id', 'category', 'query', 'limit', 'offset']) if (msg[k] != null) a[k] = msg[k];
       return host('list_items', a);
     }
     case 'match_active': {
@@ -110,6 +111,7 @@ async function popupRoute(msg) {
       return { ...(await host('match', { origin })), origin };
     }
     case 'get_item': return host('get_item', { item_id: msg.item_id });
+    case 'item_findings': return host('item_findings', { item_id: msg.item_id });
     case 'reveal': return host('reveal', { item_id: msg.item_id, field: msg.field, source: 'popup' });
     case 'totp': return host('totp', { item_id: msg.item_id });
     case 'generate': return host('generate', { len: msg.len, digits: !!msg.digits, symbols: !!msg.symbols, words: !!msg.words, pin: !!msg.pin });
@@ -124,6 +126,7 @@ async function popupRoute(msg) {
       if (Array.isArray(msg.urls)) args.urls = msg.urls.map(String);
       return host('update_login', args);
     }
+    case 'update_password': return host('update_password', { item_id: msg.item_id, password: msg.password, username: msg.username });
     case 'save_login': return host('save_login', { origin: msg.origin, title: msg.title, username: msg.username, password: msg.password, vault_id: msg.vault_id });
     case 'set_favorite': return host('set_favorite', { item_id: msg.item_id, favorite: !!msg.favorite });
     case 'open_in_app': return host('open_in_app', msg.item_id ? { item_id: msg.item_id } : {});

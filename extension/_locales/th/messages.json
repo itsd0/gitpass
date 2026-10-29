@@ -14,29 +14,14 @@
   "masterPassword": {
     "message": "รหัสผ่านหลัก"
   },
-  "secretKey": {
-    "message": "Secret Key"
-  },
-  "skHint": {
-    "message": "ใช้เพื่อปลดล็อกเพียงครั้งเดียว เก็บไว้ในหน่วยความจำขณะปลดล็อกเท่านั้น และไม่บันทึกลงดิสก์"
-  },
   "unlock": {
     "message": "ปลดล็อก"
-  },
-  "touchIdSoon": {
-    "message": "การปลดล็อกด้วย Touch ID จะมาเร็วๆ นี้ Secret Key อยู่ใน Emergency Kit ของคุณ"
   },
   "searchPh": {
     "message": "ค้นหาในห้องนิรภัย"
   },
   "lock": {
     "message": "ล็อก"
-  },
-  "forThisSite": {
-    "message": "สำหรับเว็บไซต์นี้"
-  },
-  "searchResults": {
-    "message": "ผลการค้นหา"
   },
   "generator": {
     "message": "ตัวสร้างรหัสผ่าน"
@@ -116,17 +101,11 @@
   "copyTotp": {
     "message": "คัดลอก TOTP"
   },
-  "totpCopied": {
-    "message": "คัดลอก TOTP แล้ว"
-  },
   "copyTotpCode": {
     "message": "คัดลอกโค้ดใช้ครั้งเดียว"
   },
   "totpUnavailable": {
     "message": "ไม่สามารถแสดงโค้ดได้"
-  },
-  "notHttps": {
-    "message": "ไม่ใช่หน้า https"
   },
   "noMatches": {
     "message": "ไม่มีข้อมูลเข้าสู่ระบบที่บันทึกไว้สำหรับเว็บไซต์นี้"
@@ -148,9 +127,6 @@
   },
   "csNoLogins": {
     "message": "ไม่มีข้อมูลเข้าสู่ระบบ gitpass สำหรับเว็บไซต์นี้"
-  },
-  "csLocked": {
-    "message": "gitpass ถูกล็อกอยู่ ปลดล็อกจากไอคอนบนแถบเครื่องมือ"
   },
   "extDesc": {
     "message": "กรอกข้อมูลอัตโนมัติด้วย gitpass คีย์อยู่ในโปรเซส gitpass-host บนเครื่องนี้เท่านั้น"
@@ -184,9 +160,6 @@
   },
   "newItem": {
     "message": "รายการใหม่"
-  },
-  "newLogin": {
-    "message": "ข้อมูลเข้าสู่ระบบใหม่"
   },
   "filterSuggested": {
     "message": "แนะนำสำหรับเว็บไซต์นี้"
@@ -339,9 +312,6 @@
   "saved": {
     "message": "บันทึกแล้ว"
   },
-  "needUrlPw": {
-    "message": "ต้องระบุเว็บไซต์และรหัสผ่าน"
-  },
   "csSuggest": {
     "message": "แนะนำรหัสผ่านที่รัดกุม",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
@@ -408,6 +378,30 @@
   },
   "csLockedShort": {
     "message": "ปลดล็อก gitpass ก่อน แล้วลองอีกครั้ง",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csSaveAsNew": {
+    "message": "บันทึกเป็นรายการใหม่",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csSaving": {
+    "message": "กำลังบันทึก…",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csUpdating": {
+    "message": "กำลังอัปเดต…",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csSavedNew": {
+    "message": "บันทึกเป็นรายการเข้าสู่ระบบใหม่แล้ว",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csTitleRequired": {
+    "message": "ต้องระบุชื่อรายการ",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csTitleTooLong": {
+    "message": "ชื่อรายการยาวเกินไป (สูงสุด 200 อักขระ)",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "allSet": {
@@ -592,14 +586,6 @@
   "pkGetTitle": {
     "message": "ลงชื่อเข้าใช้ด้วยพาสคีย์ไหม?"
   },
-  "pkFor": {
-    "message": "สำหรับ $SITE$",
-    "placeholders": {
-      "site": {
-        "content": "$1"
-      }
-    }
-  },
   "pkSite": {
     "message": "เว็บไซต์"
   },
@@ -752,7 +738,109 @@
   "recentlyUsed": {
     "message": "ใช้งานล่าสุด"
   },
-  "allItems": {
-    "message": "รายการทั้งหมด"
+  "watchtowerWarnings": {
+    "message": "คำเตือน Watchtower"
+  },
+  "watchtowerWarning": {
+    "message": "คำเตือนความปลอดภัย"
+  },
+  "watchtowerWeak": {
+    "message": "รหัสผ่านไม่ปลอดภัย"
+  },
+  "watchtowerReused": {
+    "message": "รหัสผ่านที่ใช้ซ้ำ"
+  },
+  "watchtowerReusedN": {
+    "message": "ใช้ซ้ำใน $1 รายการ",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerPwned": {
+    "message": "พบในข้อมูลรั่วไหล"
+  },
+  "watchtowerOld": {
+    "message": "รหัสผ่านเก่า"
+  },
+  "watchtowerOld1Yr": {
+    "message": "ไม่ได้เปลี่ยนมา 1 ปี"
+  },
+  "watchtowerOldNYrs": {
+    "message": "ไม่ได้เปลี่ยนมา $1 ปี",
+    "placeholders": {
+      "years": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerOldNDays": {
+    "message": "ไม่ได้เปลี่ยนมา $1 วัน",
+    "placeholders": {
+      "days": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerInsecureUrl": {
+    "message": "เว็บไซต์ไม่ปลอดภัย (HTTP)"
+  },
+  "watchtowerMissingTotp": {
+    "message": "ยังไม่ได้ตั้งค่า 2FA"
+  },
+  "watchtowerTotpAvailable": {
+    "message": "เว็บไซต์รองรับ 2FA"
+  },
+  "watchtowerPasskeyAvailable": {
+    "message": "รองรับ Passkey"
+  },
+  "watchtowerExpired": {
+    "message": "หมดอายุแล้ว"
+  },
+  "watchtowerExpiringSoon": {
+    "message": "ใกล้หมดอายุ"
+  },
+  "watchtowerDuplicate": {
+    "message": "ข้อมูลเข้าสู่ระบบซ้ำ"
+  },
+  "generateAndUpdate": {
+    "message": "สร้างและอัปเดต"
+  },
+  "changeOnSite": {
+    "message": "เปลี่ยนที่เว็บไซต์"
+  },
+  "openInGitpass": {
+    "message": "เปิดใน gitpass"
+  },
+  "passwordUpdated": {
+    "message": "อัปเดตรหัสผ่านแล้ว"
+  },
+  "updatePassword": {
+    "message": "อัปเดตรหัสผ่าน"
+    },
+  "sortBy": {
+    "message": "เรียงตาม"
+  },
+  "sortUpdated": {
+    "message": "แก้ไขล่าสุด"
+  },
+  "sortCreated": {
+    "message": "วันที่สร้าง"
+  },
+  "sortTitle": {
+    "message": "ชื่อ"
+  },
+  "csTotpOffer": {
+    "message": "กรอกรหัสใช้ครั้งเดียว"
+  },
+  "csTotpDismiss": {
+    "message": "ปิด"
+  },
+  "optAutoTotp": {
+    "message": "กรอกรหัสใช้ครั้งเดียวอัตโนมัติ"
+  },
+  "optAutoTotpBody": {
+    "message": "หลังจาก gitpass กรอกข้อมูลเข้าสู่ระบบแล้ว ให้กรอกรหัสใช้ครั้งเดียวในหน้าถัดไปโดยไม่ต้องถาม"
   }
 }

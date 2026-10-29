@@ -62,6 +62,7 @@ input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 
 .panes { flex: 1; display: flex; min-height: 0; }
 .left { width: 280px; display: flex; flex-direction: column; border-right: 1px solid rgb(var(--border)); background: rgb(var(--panel)); }
 .filter-wrap { padding: 8px; border-bottom: 1px solid rgb(var(--border)); }
+.sort-select { margin-top: 6px; }
 .excepted-note { margin-top: 6px; font-size: 12px; color: rgb(var(--muted)); display: flex; align-items: center; justify-content: center; gap: 4px; }
 .excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--accent)); cursor: pointer; text-decoration: underline; }
 .empty-excepted-note { margin: 8px 0 0; font-size: 12px; color: rgb(var(--muted)); }
@@ -90,6 +91,9 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .row .totp-code.bad { color: rgb(var(--danger)); }
 .row .totp-mini .ring { width: 12px; height: 12px; }
 .row .totp-mini .ring circle { stroke-width: 2; }
+.row .warn-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-left: 2px; }
+.row .warn-dot.danger { background: rgb(var(--danger)); }
+.row .warn-dot.warn { background: rgb(var(--warn)); }
 .empty { padding: 24px 16px; color: rgb(var(--muted)); text-align: center; }
 .empty .empty-ic { display: flex; justify-content: center; margin-bottom: 8px; }
 .empty .empty-ic svg.ui { width: 22px; height: 22px; }
@@ -103,6 +107,14 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .d-head h2 { margin: 0; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .d-head .sub { color: rgb(var(--muted)); font-size: 12px; }
 .d-head .grow { flex: 1; min-width: 0; }
+.warning-strip { margin-top: -4px; margin-bottom: 12px; padding: 10px 12px; border-radius: 8px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); display: flex; flex-direction: column; gap: 8px; }
+.warning-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.warning-chip { display: inline-flex; align-items: center; padding: 3px 8px; border-radius: 6px; font-size: 11px; font-weight: 500; line-height: 1.3; outline: none; user-select: none; }
+.warning-chip.danger { background: rgb(var(--danger) / .15); color: rgb(var(--danger)); border: 1px solid rgb(var(--danger) / .35); }
+.warning-chip.warn { background: rgb(var(--warn) / .15); color: rgb(var(--warn)); border: 1px solid rgb(var(--warn) / .35); }
+.warning-chip:focus-visible, .warn-action:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 2px; }
+.warning-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 2px; }
+.warn-action { font-size: 12px; height: 28px; padding: 0 10px; }
 .menu-wrap { position: relative; }
 .menu { position: absolute; right: 0; top: 36px; z-index: 5; min-width: 170px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px #0008; }
 .menu button { display: flex; width: 100%; align-items: center; gap: 8px; padding: 7px 8px; border: 0; background: none; color: rgb(var(--fg)); font: inherit; border-radius: 6px; cursor: pointer; text-align: left; }

@@ -12,6 +12,7 @@ import {
   detectImportFormat,
   importReducer,
   initialImport,
+  type ImportFormatOption,
   type ImportStep,
 } from './importWizardLogic';
 
@@ -178,6 +179,10 @@ export function ImportWizard({ onBack, onDone }: { onBack: () => void; onDone: (
     onDone();
   };
 
+  const selectedFormat = IMPORT_FORMATS.find((f) => f.id === s.format) as
+    | ImportFormatOption
+    | undefined;
+
   const steps: { id: ImportStep; labelKey: Key }[] = [
     { id: 'file', labelKey: 'import.step1' },
     { id: 'preview', labelKey: 'import.step2' },
@@ -329,7 +334,7 @@ export function ImportWizard({ onBack, onDone }: { onBack: () => void; onDone: (
                 </option>
                 {IMPORT_FORMATS.map((f) => (
                   <option key={f.id} value={f.id}>
-                    {f.label}
+                    {t(f.labelKey)}
                   </option>
                 ))}
               </select>
@@ -351,6 +356,15 @@ export function ImportWizard({ onBack, onDone }: { onBack: () => void; onDone: (
               </select>
             </label>
           </div>
+
+          {selectedFormat?.hintKey && (
+            <p
+              data-testid="format-hint"
+              className="rounded-md border border-accent/30 bg-accent/10 px-2.5 py-1.5 text-xs text-fg"
+            >
+              {t(selectedFormat.hintKey)}
+            </p>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="ghost" onClick={onBack}>

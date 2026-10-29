@@ -26,6 +26,27 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     descriptionKey: 'settings.languageHelp',
     keywords: ['locale', 'translation', 'burmese', 'thai', 'english'],
   },
+  {
+    id: 'setting-show-website-icons',
+    tab: 'general',
+    labelKey: 'settings.showWebsiteIcons',
+    descriptionKey: 'settings.showWebsiteIconsHelp',
+    keywords: ['favicon', 'website icons', 'site icons', 'icons', 'logos', 'monogram'],
+  },
+  {
+    id: 'setting-quick-access-hotkey',
+    tab: 'general',
+    labelKey: 'settings.quickAccessHotkey',
+    descriptionKey: 'settings.quickAccessHotkeyHelp',
+    keywords: ['quick access', 'shortcut', 'hotkey', 'global', 'space', 'command'],
+  },
+  {
+    id: 'setting-setup-guide',
+    tab: 'general',
+    labelKey: 'settings.showSetupGuide',
+    descriptionKey: 'settings.showSetupGuideHelp',
+    keywords: ['onboarding', 'checklist', 'welcome', 'guide', 'get started', 'setup'],
+  },
   // Security
   {
     id: 'setting-autolock',

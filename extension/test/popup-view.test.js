@@ -144,7 +144,8 @@ test('ringOffset, formatValue, mask', () => {
   assert.ok(V.mask('password').startsWith('•'));
   assert.strictEqual(V.mask('card_number', '•••• •••• •••• 7575'), '•••• •••• •••• 7575');
   assert.strictEqual(V.mask('card_number'), '•••• •••• •••• ••••');
-  assert.strictEqual(V.mask('password', '•••• 7575'), '••••••••••', 'non-card secrets (CVV) ignore any mask hint');
+  assert.strictEqual(V.mask('password', 'sk-F••••WXYZ'), 'sk-F••••WXYZ', 'API secrets show the first4••••last4 preview the host computed');
+  assert.strictEqual(V.mask('password'), '••••••••••', 'no preview from the host: fully masked');
 });
 
 test('fillKind and primarySecretField per category', () => {

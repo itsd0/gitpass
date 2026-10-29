@@ -15,7 +15,7 @@ function bootContent() {
   w.Element.prototype.attachShadow = function (init) { const r = attach.call(this, init); roots.push(r); return r; };
   w.HTMLElement.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, right: 200, bottom: 30, width: 200, height: 30 }; };
   w.chrome = { runtime: { onMessage: { addListener() {} }, sendMessage: async () => ({ ok: true, result: { origin: 'https://site.example', items: [] } }) }, i18n: { getMessage: () => '' } };
-  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'content.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
+  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js', 'content.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
   return { dom, roots };
 }
 

@@ -64,7 +64,17 @@
   }
 
   /** Apply filter + query. `suggested` is the list returned by match for the active tab. */
-  function filterItems(all, suggested, filter, query) {
+  const SORTS = ['updated', 'created', 'title'];
+  function timeOf(v) { if (typeof v === 'number') return v; const n = Date.parse(v); return Number.isNaN(n) ? 0 : n; }
+  /** Comparator for the sort menu: favorites first, then newest edit / newest creation / title A-Z. */
+  function compareBy(sort) {
+    const byTitle = (a, b) => String(a.title).localeCompare(String(b.title));
+    const key = sort === 'created' ? 'created_at' : sort === 'updated' ? 'updated_at' : null;
+    return (a, b) => (b.favorite - a.favorite) || (key ? (timeOf(b[key]) - timeOf(a[key])) : 0) || byTitle(a, b);
+  }
+
+  /** Apply filter + query, then sort (`sort`: updated | created | title; default title). `suggested` is the list returned by match for the active tab. */
+  function filterItems(all, suggested, filter, query, sort = 'title') {
     let base;
     if (filter === 'suggested') base = suggested || [];
     else if (filter === 'favorites') base = all.filter((i) => i.favorite);
@@ -74,7 +84,7 @@
     // Searching from Suggestions searches everything, like 1Password.
     if (query && filter === 'suggested') base = all;
     return base.filter((i) => matchesQuery(i, query))
-      .sort((a, b) => (b.favorite - a.favorite) || String(a.title).localeCompare(String(b.title)));
+      .sort(compareBy(SORTS.includes(sort) ? sort : 'title'));
   }
 
   /** Which empty state to show when the list has no rows. ctx: { query, filter, origin, count, excepted } */
@@ -197,8 +207,8 @@
     return v;
   }
 
-  /** Card numbers show the last 4 the host computed after decryption (f.masked); everything else is fully masked. */
-  function mask(kind, masked) { return kind === 'card_number' ? (masked || '•••• •••• •••• ••••') : '••••••••••'; }
+  /** Fields show the preview the host computed after decryption (f.masked: card last 4, API secret first4••••last4); otherwise fully masked. */
+  function mask(kind, masked) { return masked || (kind === 'card_number' ? '•••• •••• •••• ••••' : '••••••••••'); }
 
   /** Which fill command applies to a category (or null if not fillable). */
   function fillKind(category) {
@@ -275,7 +285,86 @@
       .slice(0, max);
   }
 
-  const api = { CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, getRecentlyUsed };
+  /** Severity token for a Watchtower finding kind: danger or warn. */
+  function findingSeverity(kind) {
+    if (kind === 'weak' || kind === 'reused' || kind === 'pwned' || kind === 'expired') return 'danger';
+    return 'warn';
+  }
+
+  /** Display label for a Watchtower finding chip. */
+  function findingLabel(kind, meta, tFn) {
+    const t = typeof tFn === 'function' ? tFn : (k, d) => d;
+    switch (kind) {
+      case 'weak':
+        return t('watchtowerWeak', 'Weak password');
+      case 'reused':
+        return meta && meta.reused_count
+          ? t('watchtowerReusedN', 'Reused on $1 items', [meta.reused_count])
+          : t('watchtowerReused', 'Reused password');
+      case 'pwned':
+        return t('watchtowerPwned', 'In a data breach');
+      case 'old':
+        if (meta && typeof meta.old_days === 'number') {
+          if (meta.old_days >= 365) {
+            const yrs = Math.floor(meta.old_days / 365);
+            return yrs === 1
+              ? t('watchtowerOld1Yr', 'Not changed in 1 year')
+              : t('watchtowerOldNYrs', 'Not changed in $1 years', [yrs]);
+          }
+          return t('watchtowerOldNDays', 'Not changed in $1 days', [meta.old_days]);
+        }
+        return t('watchtowerOld', 'Old password');
+      case 'insecure_url':
+        return t('watchtowerInsecureUrl', 'Insecure website (HTTP)');
+      case 'missing_totp':
+        return t('watchtowerMissingTotp', '2FA not configured');
+      case 'totp_available':
+        return t('watchtowerTotpAvailable', '2FA available on site');
+      case 'passkey_available':
+        return t('watchtowerPasskeyAvailable', 'Passkey available');
+      case 'expired':
+        return t('watchtowerExpired', 'Expired');
+      case 'expiring_soon':
+        return t('watchtowerExpiringSoon', 'Expiring soon');
+      case 'duplicate':
+        return t('watchtowerDuplicate', 'Duplicate login');
+      default:
+        return String(kind);
+    }
+  }
+
+  /** Whether an item findings object contains any active findings. */
+  function hasWatchtowerFindings(findings) {
+    return Boolean(findings && Array.isArray(findings.kinds) && findings.kinds.length > 0);
+  }
+
+  /**
+   * Run `fn` over `items` with at most `limit` calls in flight. The first call runs alone so a
+   * host-side cache (e.g. the Watchtower audit) is warm before the rest fan out.
+   */
+  async function mapLimit(items, limit, fn) {
+    const list = Array.from(items || []);
+    if (!list.length) return [];
+    const out = new Array(list.length);
+    out[0] = await fn(list[0], 0);
+    let next = 1;
+    const n = Math.max(1, Math.min(limit | 0 || 1, list.length - 1));
+    const worker = async () => {
+      while (next < list.length) {
+        const i = next++;
+        out[i] = await fn(list[i], i);
+      }
+    };
+    await Promise.all(Array.from({ length: n }, worker));
+    return out;
+  }
+
+  /** Watchtower findings worth caching: a failed lookup (null/undefined) stays uncached so it is retried. */
+  function cacheableFindings(res) {
+    return Boolean(res && Array.isArray(res.kinds));
+  }
+
+  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

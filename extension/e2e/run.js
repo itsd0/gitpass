@@ -38,6 +38,8 @@ const MULTISTEP_USER_HTML = `<!doctype html><html><head><meta charset="utf-8"><t
 <button id="next" type="submit">Next</button></form>
 <script>document.getElementById('f').addEventListener('submit',e=>{e.preventDefault();setTimeout(()=>location.assign('/multistep/password'),150);});</script></body></html>`;
 
+const OTP_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Two-factor</title></head><body>
+<h1>Enter your verification code</h1><form id="f"><input id="otp" name="otp" autocomplete="one-time-code" inputmode="numeric" maxlength="6" placeholder="Code"><button type="submit">Verify</button></form></body></html>`;
 const MULTISTEP_PW_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Enter your password</title></head><body>
 <h1>Enter your password</h1><div id="msg"></div>
 <form id="f"><input id="p" name="password" type="password" autocomplete="current-password" placeholder="Password">
@@ -71,7 +73,44 @@ async function findInShadow(page, re) {
 }
 
 
-// Computed styles of the first element matching `selector` inside any <gitpass-ui> closed shadow root.
+// Node id of the first element matching `selector` inside any <gitpass-ui> closed shadow root.
+// (Closed roots are invisible to page JS; the DOM agent can still pierce them.)
+async function shadowNode(page, selector) {
+  const s = await cdpSession(page);
+  await s.send('DOM.enable');
+  const { root } = await s.send('DOM.getDocument', { depth: -1, pierce: true });
+  const roots = [];
+  const walk = (n) => { if (n.nodeName === 'GITPASS-UI') roots.push(...(n.shadowRoots || [])); for (const k of (n.children || [])) walk(k); };
+  walk(root);
+  for (const sr of roots) {
+    let nodeIds = [];
+    try { ({ nodeIds } = await s.send('DOM.querySelectorAll', { nodeId: sr.nodeId, selector })); } catch (_) { continue; }
+    if (nodeIds.length) return nodeIds[0];
+  }
+  return null;
+}
+
+async function shadowFocus(page, selector) {
+  const nodeId = await shadowNode(page, selector);
+  if (nodeId == null) return false;
+  await (await cdpSession(page)).send('DOM.focus', { nodeId });
+  return true;
+}
+
+async function shadowSetValue(page, selector, value) {
+  const s = await cdpSession(page);
+  const nodeId = await shadowNode(page, selector);
+  if (nodeId == null) return false;
+  const { object } = await s.send('DOM.resolveNode', { nodeId });
+  await s.send('Runtime.callFunctionOn', {
+    objectId: object.objectId,
+    functionDeclaration: 'function (v) { this.value = v; this.dispatchEvent(new Event("change", { bubbles: true })); }',
+    arguments: [{ value }],
+  });
+  return true;
+}
+
+
 // CSS.getComputedStyleForNode (with CSS.enable) sees shadow-DOM nodes found via DOM.getDocument pierce,
 // so prefers-color-scheme emulation can be asserted without opening the shadow root.
 async function shadowComputed(page, selector) {
@@ -202,7 +241,7 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
   // Linux Chromium reads the per-profile dir too; also set via env for safety on Linux CI.
   console.log(`tmp: ${tmp}\nextension id (expected): ${id}`);
 
-  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/multistep/password') ? MULTISTEP_PW_HTML : req.url.startsWith('/multistep') ? MULTISTEP_USER_HTML : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
+  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/2fa') ? OTP_HTML : req.url.startsWith('/multistep/password') ? MULTISTEP_PW_HTML : req.url.startsWith('/multistep') ? MULTISTEP_USER_HTML : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const LOGIN = `http://localhost:${server.address().port}/login`;
   if (realSetup) realSetup(server.address().port); // real host matches loopback origins incl. port
@@ -393,6 +432,26 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
           rec('popup shortcuts: Esc closes shortcuts sheet', !!sheetClosed, sheetClosed ? 'sheet closed' : 'sheet still open');
         } catch (e) {
           rec('popup shortcuts (#138)', false, e.message);
+        }
+
+        // --- Watchtower warnings in popup (#155): warning dot in list and warning strip in detail
+        try {
+          const dotVisible = await until(async () => {
+            return pop.eval(`(() => {
+              const rows = [...document.querySelectorAll('#listInner .row')];
+              const target = rows.find((r) => /Localhost Test Login/.test(r.innerText));
+              return Boolean(target && target.querySelector('.warn-dot[aria-label]'));
+            })()`);
+          }, T(4000));
+          rec('popup list shows warning dot on item with findings', !!dotVisible);
+
+          const stripVisible = await until(async () => {
+            const t = await pop.text();
+            return /Weak password/.test(t) && /Reused on 3 items/.test(t) && /Generate & update/.test(t) && /Change on site/.test(t);
+          }, T(4000));
+          rec('popup detail shows watchtower warning strip with chips and action buttons', !!stripVisible, stripVisible ? 'chips and action buttons visible' : (await pop.text()).slice(0, 160));
+        } catch (e) {
+          rec('popup watchtower findings e2e', false, e.message);
         }
 
         // --- New item (#41): the popup's New item form sends exactly one create_item per item, with the
@@ -703,6 +762,43 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     if (REAL) rec('save-login prompt after submit (real host)', !!banner, banner ? `banner button "${banner[0].text}" clicked` : 'no Save button found', 'test'); else
     rec('save-login prompt after submit -> save_login sent', !!saved, banner ? `banner button "${banner[0].text}"; save_login ${saved ? 'received' : 'NOT received'}` : 'no Save button found in page shadow DOM');
 
+    // --- Save banner (#148): editable title + vault picker, success state, Esc dismiss.
+    if (!REAL) {
+      await page.goto(LOGIN); await sleep(1000);
+      await page.fill('#u', 'vaultuser@example.com'); await page.fill('#p', 'Vault-Pass-42'); await page.click('#go');
+      const fieldsReady = await until(async () => (await shadowNode(page, '.banner input.inp')) != null && (await shadowNode(page, '.banner select')) != null, T(6000));
+      rec('save banner: title field and vault picker appear', !!fieldsReady, fieldsReady ? 'title + select' : 'not found');
+      const focusedUi = await page.evaluate(() => document.activeElement && document.activeElement.tagName);
+      rec('save banner: focus moves into the banner', focusedUi === 'GITPASS-UI', `activeElement=${focusedUi}`);
+      const typed = await shadowFocus(page, '.banner input.inp');
+      if (typed) { await page.keyboard.press(process.platform === 'darwin' ? 'Meta+A' : 'Control+A'); await page.keyboard.type('Work Custom Title'); }
+      const vaultSet = await shadowSetValue(page, '.banner select', 'v2');
+      const mark148 = cmdsIn(mockDir).length;
+      const saveBtn = await until(async () => { const h = await findInShadow(page, /^\s*Save\s*$/); return h.length && h; }, T(4000));
+      if (saveBtn) await page.mouse.click(saveBtn[0].x, saveBtn[0].y);
+      const custom = await until(() => cmdsIn(mockDir).slice(mark148).find((m) => m.cmd === 'save_login' && m.username === 'vaultuser@example.com'), T(5000));
+      rec('save banner: custom title and non-default vault reach save_login',
+        !!(typed && vaultSet && custom && custom.title === 'Work Custom Title' && custom.vault_id === 'v2'),
+        custom ? `title=${JSON.stringify(custom.title)} vault=${custom.vault_id}` : 'save_login NOT received');
+      const success = await until(async () => { const h = await findInShadow(page, /Open in gitpass/); return h.length && h; }, T(4000));
+      rec('save banner: success state offers Open in gitpass', !!success, success ? 'shown' : 'not shown');
+      await page.mouse.move(4, 4); // stop hovering the banner; programmatic focus must not pin it open
+      const autoClosed = await until(async () => !(await findInShadow(page, /Open in gitpass/)).length, T(8000), 300);
+      rec('save banner: success auto-closes after 4 s', !!autoClosed, autoClosed ? 'closed' : 'still open');
+
+      // Esc = Not now on a fresh banner; nothing is saved.
+      await page.goto(LOGIN); await sleep(1000);
+      await page.fill('#u', 'escuser@example.com'); await page.fill('#p', 'Esc-Pass-42'); await page.click('#go');
+      const escBanner = await until(async () => { const h = await findInShadow(page, /^\s*Save\s*$/); return h.length && h; }, T(6000));
+      const escMark = cmdsIn(mockDir).length;
+      if (escBanner) { await shadowFocus(page, '.banner input.inp'); await page.keyboard.press('Escape'); }
+      const escClosed = await until(async () => { const h = await findInShadow(page, /^\s*Save\s*$/); return !h.length; }, T(3000));
+      const after = cmdsIn(mockDir).slice(escMark);
+      const escSaved = after.some((m) => m.cmd === 'save_login' && m.username === 'escuser@example.com');
+      rec('save banner: Esc dismisses without saving', !!(escBanner && escClosed && !escSaved),
+        `banner=${!!escBanner} closed=${!!escClosed} saved=${!!escSaved}`);
+    }
+
     // --- Multi-step login (username page -> password page). The step-2 form has no username input, so
     // save_login can only carry both values if the step-1 username survives the page load in the background.
     // Each step must show exactly one icon (the anchor badge) for its single input field.
@@ -945,6 +1041,20 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       const one = await runCmd();
       const filled = await until(async () => { const v = await vals(); return v[0] === 'alice@example.com' && v[1] === 'Corr3ct-H0rse-Battery' && v; }, T(4000));
       rec('fill-login command: one match fills username + password', one && one.action === 'fill' && !!filled, `${JSON.stringify(one)} values=${JSON.stringify(await vals())}`);
+
+      // One-time code on the next page (#181): the login just filled has a code, so /2fa on the same site gets
+      // the chip; the same page on another host (127.0.0.1 vs localhost) never does.
+      const OTP = LOGIN.replace(/\/login$/, '/2fa');
+      await page.goto(OTP); await page.bringToFront();
+      const chip = await until(async () => /Fill one-time code/.test(await shadowText(page)), T(5000));
+      rec('one-time code chip is offered on the next page after a login fill', !!chip && (await page.inputValue('#otp')) === '', chip ? 'chip shown, field empty' : 'no chip: ' + (await shadowText(page)).slice(0, 120));
+      if (chip) { const h = await findInShadow(page, /Fill one-time code/); if (h.length) await page.mouse.click(h[0].x, h[0].y); }
+      const code = await until(async () => (await page.inputValue('#otp')) === '123456', T(4000));
+      rec('clicking the chip fills the one-time code', !!code, `otp=${JSON.stringify(await page.inputValue('#otp'))}`);
+      const other = await ctx.newPage();
+      await other.goto(OTP.replace('localhost', '127.0.0.1')); await other.bringToFront(); await sleep(1200);
+      rec('one-time code chip is not offered on a different site', !/Fill one-time code/.test(await shadowText(other)), 'checked 127.0.0.1');
+      await other.close(); await page.bringToFront();
 
       ctrl({ unlocked: true, only_match_ids: ['v1:i1', 'v1:cmd2'], add_item: { id: 'v1:cmd2', category: 'login', title: 'Second Command Login', subtitle: 'bob@example.com', url: 'http://localhost', favorite: false, _u: 'bob@example.com', _p: 'FAKE-second-pass' } }); await sleep(400);
       await page.goto(LOGIN); await page.bringToFront(); await sleep(800);

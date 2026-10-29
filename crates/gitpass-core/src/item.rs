@@ -40,6 +40,22 @@ impl std::str::FromStr for Category {
     }
 }
 
+/// Card brand from the BIN (leading digits). None when unknown.
+pub fn card_brand(d: &str) -> Option<&'static str> {
+    let digits: String = d.chars().filter(|c| c.is_ascii_digit()).collect();
+    let p = |n: usize| digits.get(..n).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
+    Some(match () {
+        _ if digits.starts_with('4') => "Visa",
+        _ if (51..=55).contains(&p(2)) || (2221..=2720).contains(&p(4)) => "Mastercard",
+        _ if p(2) == 34 || p(2) == 37 => "Amex",
+        _ if p(4) == 6011 || p(2) == 65 || (644..=649).contains(&p(3)) => "Discover",
+        _ if (3528..=3589).contains(&p(4)) => "JCB",
+        _ if p(2) == 36 || p(2) == 38 || (300..=305).contains(&p(3)) => "Diners Club",
+        _ if p(2) == 62 => "UnionPay",
+        _ => return None,
+    })
+}
+
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum FieldKind { #[default] Text, Concealed, Url, Email, Phone, Date, MonthYear, Totp, Multiline }
@@ -90,6 +106,20 @@ pub const HISTORY_LIMIT: usize = 20;
 pub const PURGE_AFTER_SECS: u64 = 30 * 86400;
 /// Attachment size cap.
 pub const MAX_ATTACHMENT_BYTES: usize = 25 * 1024 * 1024;
+
+/// Resolve a MIME type for a file name based on its extension.
+pub fn mime_for(name: &str) -> &'static str {
+    match std::path::Path::new(name).extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
+        Some("pdf") => "application/pdf",
+        Some("png") => "image/png",
+        Some("jpg") | Some("jpeg") => "image/jpeg",
+        Some("gif") => "image/gif",
+        Some("txt") => "text/plain",
+        Some("json") => "application/json",
+        Some("zip") => "application/zip",
+        _ => "application/octet-stream",
+    }
+}
 
 /// Field ids that map onto the legacy login fields of [`crate::store::Item`].
 pub const LOGIN_USERNAME: &str = "username";

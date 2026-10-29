@@ -112,7 +112,7 @@ cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_ca
 { const a = [...db.values()][5].detail; a.archived = true; const b = [...db.values()][22].detail; b.deletedAt = new Date(Date.now() - 29 * 86400000).toISOString(); }
 
 add('v_private', 'passkey', 'webauthn.example.invalid', 'demo@example.invalid', 6, [['site', 'text', 'webauthn.example.invalid'], ['user name', 'text', 'demo@example.invalid'], ['credential id', 'text', 'FAKE-cred-id'], ['private key', 'concealed', 'FAKE'], ['sign count', 'text', '3']]);
-let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true };
+let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false };
 let onboarding: T.Onboarding = { extensionInstalled: false, emergencyKitSaved: false, repoConnected: true, imported: false, dismissed: false };
 let unlocked = false;
 const devices: T.DeviceInfo[] = [
@@ -267,6 +267,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   status: () => delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: unlocked ? 'Demo Family' : null }),
   unlock: (a: { password: string }) => { if (!a.password) return Promise.reject(new Error('password required')); unlocked = true; return delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: 'Demo Family' }, 300); },
   lock: () => { unlocked = false; return delay(undefined); },
+  show_quick_access: () => delay(undefined),
   create_account: (a: { password: string }) => { if ((a.password ?? '').length < 8) return Promise.reject(new Error('master password must be at least 8 characters')); unlocked = true; return delay<T.CreateAccountResult>({ vaultPath: '~/.gitpass (mock)', secretKey: 'A3-MOCK00-000000-00000-00000-00000-00000' }, 300); },
   unlock_biometric: () => Promise.reject(new Error('biometric unlock is not supported yet on this platform')),
   list_vaults: () => delay(vaultInfo()),
@@ -393,6 +394,13 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   },
   add_attachment: (a: { itemId: string; path: string }) => { const att: T.Attachment = { id: uid('a'), name: a.path.split(/[\\/]/).pop() || 'file', size: 4096, mime: 'application/octet-stream' }; get(a.itemId).detail.attachments.push(att); return delay(att); },
   save_attachment: () => delay(undefined),
+  remove_attachment: (a: { itemId: string; attachmentId: string }) => {
+    const item = get(a.itemId);
+    const idx = item.detail.attachments.findIndex((x) => x.id === a.attachmentId);
+    if (idx < 0) return Promise.reject(new Error(`item has no attachment ${a.attachmentId}`));
+    item.detail.attachments.splice(idx, 1);
+    return delay(undefined);
+  },
   list_tags: () => delay([...new Set([...db.values()].flatMap((r) => r.detail.tags))].sort()),
   rename_tag: (a: { old: string; new: string }) => {
     const old = a.old.trim();
@@ -674,5 +682,5 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   emergency_kit_data: (a: { password?: string }) => (a?.password !== undefined && a.password !== 'demo-password' ? Promise.reject(new Error('wrong master password'))
     : delay<T.EmergencyKitData>({ accountId: 'acc-demo-0000', vaultPath: '~/.gitpass (mock)', remote: 'git@example.com:demo/vault.git', deviceName: 'Demo Mac', createdAt: '2026-10-26T09:00:00Z', secretKeyAvailable: true, secretKey: a?.password ? 'A3-MOCK00-000000-00000-00000-00000-00000' : null })),
   emergency_kit: () => delay('gitpass Emergency Kit (DEMO)\nAccount: Demo Family\nSecret Key: (not shown — rotate to reveal a new one)'),
-  favicon_url: () => delay(null),
+  favicon_url: (a?: { url?: string }) => delay(settings.showWebsiteIcons && a?.url?.startsWith('https://') ? 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiiciHI9IjEwIiBmaWxsPSIjZjI4YzI4Ii8+PC9zdmc+' : null),
 };
