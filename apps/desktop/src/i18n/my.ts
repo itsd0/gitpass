@@ -50,6 +50,8 @@ export const my: Partial<Record<Key, string>> = {
   'generator.includeDigits': 'ဂဏန်းများ (၀-၉)',
   'generator.includeSymbols': 'သင်္ကေတများ (!@#$)',
   'generator.regenerate': 'အသစ်ပြန်ထုတ်ရန်',
+  'generator.usePassword': 'ဤစကားဝှက်ကို အသုံးပြုမည်',
+  'generator.generatePassword': 'စကားဝှက် ထုတ်လုပ်ရန်',
   'generator.saveAsLogin': 'အကောင့်ဝင်ရန်အသစ်အဖြစ် သိမ်းဆည်းမည်…',
   'generator.copied': 'စကားဝှက်ကို ကလစ်ဘုတ်သို့ ကူးယူပြီးပါပြီ',
   'cmd.generatePassword': 'စကားဝှက် ထုတ်လုပ်ရန်',
