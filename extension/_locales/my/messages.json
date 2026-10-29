@@ -95,6 +95,18 @@
   "copyPassword": {
     "message": "စကားဝှက် ကူးယူရန်"
   },
+  "copyUsername": {
+    "message": "အသုံးပြုသူအမည် ကူးယူရန်"
+  },
+  "copyNumber": {
+    "message": "ကတ်နံပါတ် ကူးယူရန်"
+  },
+  "copyCredential": {
+    "message": "အထောက်အထား ကူးယူရန်"
+  },
+  "openWebsite": {
+    "message": "ဝဘ်ဆိုဒ်ကို ဖွင့်ရန်"
+  },
   "passwordCopied": {
     "message": "စကားဝှက် ကူးယူပြီးပါပြီ"
   },
@@ -942,6 +954,7 @@
   "badgeAppNotRunning": {
     "message": "gitpass အက်ပ် မလုပ်ဆောင်နေပါ"
   },
+
   "optAutoSubmit": {
     "message": "လော့ဂ်အင်ဖြည့်ပြီးနောက် ဖောင်ကို တင်သွင်းပါ"
   },
@@ -971,6 +984,12 @@
   },
   "pkPasskeysCount": {
     "message": "ဤဆိုက်အတွက် passkey {n} ခု"
+  },
+  "catBankAccount": {
+    "message": "ဘဏ်အကောင့်များ"
+  },
+  "catServer": {
+    "message": "ဆာဗာများ"
   },
   "genRecent": {
     "message": "မကြာသေးမီ"

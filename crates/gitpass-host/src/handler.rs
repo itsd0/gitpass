@@ -155,6 +155,31 @@ fn subtitle(r: &ItemRecord) -> String {
                 .into_iter().flatten().collect::<Vec<_>>().join(" ")
         }),
         Category::Wifi => field_val(r, &["ssid"]).unwrap_or_default(),
+        Category::BankAccount => {
+            let acct = field_val(r, &["account_number", "account_no", "account"]);
+            let holder = field_val(r, &["account_holder", "holder", "owner"]);
+            let bank = field_val(r, &["bank_name", "bank"]);
+            let acct_type = field_val(r, &["account_type", "type"]);
+            let l4 = acct.as_deref().map(|s| s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>()).filter(|d| d.len() >= 4).map(|d| format!("•••• {}", &d[d.len() - 4..]));
+            match (acct_type, l4, bank, holder) {
+                (Some(t), Some(m), _, _) => format!("{t} {m}"),
+                (_, Some(m), Some(b), _) => format!("{b} {m}"),
+                (_, Some(m), _, _) => m,
+                (_, _, Some(b), _) => b,
+                (_, _, _, Some(h)) => h,
+                _ => String::new(),
+            }
+        }
+        Category::Server => {
+            let u = nonempty(&r.item.username).map(String::from).or_else(|| field_val(r, &["username"]));
+            let h = nonempty(&r.item.url).map(String::from).or_else(|| field_val(r, &["url", "hostname"]));
+            match (u, h) {
+                (Some(u), Some(h)) => format!("{u}@{h}"),
+                (Some(u), _) => u,
+                (_, Some(h)) => h,
+                _ => String::new(),
+            }
+        }
         _ => fields_of(r).into_iter().find(|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty()))
             .and_then(|f| f.value).map(|v| v.lines().next().unwrap_or("").chars().take(80).collect()).unwrap_or_default(),
     }
@@ -188,6 +213,14 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         if !secret { o["value"] = json!(f.value); }
         else if r.category == Category::ApiCredential {
             if let Some(m) = f.value.as_deref().and_then(secret_preview) { o["masked"] = json!(m); }
+        }
+        else if r.category == Category::BankAccount && (f.id == "account_number" || f.id == "account_no") {
+            if let Some(v) = &f.value {
+                let d: String = v.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+                if d.len() >= 4 {
+                    o["masked"] = json!(format!("•••• •••• •••• {}", &d[d.len() - 4..]));
+                }
+            }
         }
         fields.push(o);
     }
@@ -515,12 +548,14 @@ impl Host {
                 check_request_origin(origin)?;
                 let usage = self.sess()?.all_last_used();
                 let matches_url = |u: &str| origin_matches(u, origin);
+                // Passkeys only on request (popup site list): fill flows must keep getting logins only.
+                let passkeys = req.get("include_passkeys").and_then(Value::as_bool) == Some(true);
                 let mut out = vec![];
                 for (vid, vname, iid, r) in self.all_records(None)? {
-                    if r.category == Category::Login
+                    let login = r.category == Category::Login
                         && (r.item.url.as_deref().is_some_and(matches_url)
-                            || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == FieldKind::Url && f.value.as_deref().is_some_and(matches_url)))
-                    {
+                            || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == FieldKind::Url && f.value.as_deref().is_some_and(matches_url)));
+                    if login || (passkeys && crate::passkey::record_matches_origin(&r, origin)) {
                         let mut s = summary(&vid, &vname, &iid, &r);
                         if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
                         out.push(s);
@@ -885,6 +920,7 @@ pub fn record_from_input(v: &Value) -> Result<(Option<String>, ItemRecord)> {
         #[serde(default)] url: Option<String>, #[serde(default)] tags: Option<Vec<String>> }
     let i: Input = serde_json::from_value(v.clone()).map_err(|e| coded(code::BAD_REQUEST, format!("bad item: {e}")))?;
     if i.category == Category::Passkey { return Err(coded(code::BAD_REQUEST, "passkeys are created by websites")); }
+    if i.category == Category::Other { return Err(coded(code::BAD_REQUEST, "invalid category")); }
     if i.title.trim().is_empty() { return Err(coded(code::BAD_REQUEST, "title is required")); }
     let mut ids = std::collections::BTreeSet::new();
     for s in &i.sections { for f in &s.fields {

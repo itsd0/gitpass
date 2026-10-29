@@ -95,6 +95,18 @@
   "copyPassword": {
     "message": "คัดลอกรหัสผ่าน"
   },
+  "copyUsername": {
+    "message": "คัดลอกชื่อผู้ใช้"
+  },
+  "copyNumber": {
+    "message": "คัดลอกหมายเลขบัตร"
+  },
+  "copyCredential": {
+    "message": "คัดลอกข้อมูลประจำตัว"
+  },
+  "openWebsite": {
+    "message": "เปิดเว็บไซต์"
+  },
   "passwordCopied": {
     "message": "คัดลอกรหัสผ่านแล้ว"
   },
@@ -942,6 +954,7 @@
   "badgeAppNotRunning": {
     "message": "แอป gitpass ไม่ได้ทำงานอยู่"
   },
+
   "optAutoSubmit": {
     "message": "ส่งแบบฟอร์มหลังจากกรอกข้อมูลเข้าสู่ระบบ"
   },
@@ -971,6 +984,12 @@
   },
   "pkPasskeysCount": {
     "message": "พาสคีย์ {n} รายการสำหรับไซต์นี้"
+  },
+  "catBankAccount": {
+    "message": "บัญชีธนาคาร"
+  },
+  "catServer": {
+    "message": "เซิร์ฟเวอร์"
   },
   "genRecent": {
     "message": "ล่าสุด"

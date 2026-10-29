@@ -5,7 +5,7 @@ const N = require('../popup/newitem.js');
 
 test('types mirror the desktop templates (category + field ids)', () => {
   const ids = N.TYPES.map((t) => t.id);
-  assert.deepStrictEqual(ids, ['login', 'api_credential', 'secure_note', 'credit_card', 'identity', 'wifi', 'ssh_key']);
+  assert.deepStrictEqual(ids, ['login', 'api_credential', 'secure_note', 'credit_card', 'identity', 'wifi', 'ssh_key', 'bank_account', 'server']);
   const fid = (t) => N.sectionsOf(N.typeById(t)).flatMap((s) => s.fields.map((f) => f.id)).sort();
   assert.deepStrictEqual(fid('api_credential'), ['credential', 'expires', 'hostname', 'type', 'username']);
   assert.deepStrictEqual(fid('credit_card'), ['cardholder', 'cvv', 'expiry', 'number', 'pin', 'type']);

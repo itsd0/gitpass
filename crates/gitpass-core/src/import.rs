@@ -129,6 +129,7 @@ struct CsvSpec {
     ignore: &'static [&'static str],
     /// (column, value) — rows whose column equals value are not logins and are imported as secure notes.
     note_type: Option<(&'static str, &'static str)>,
+    category: &'static [&'static str],
 }
 
 // Bitwarden: folder,favorite,type,name,notes,fields,reprompt,login_uri,login_username,login_password,login_totp
@@ -137,7 +138,7 @@ const BITWARDEN_CSV: CsvSpec = CsvSpec {
     title: &["name"], username: &["login_username"], email: &[], password: &["login_password"],
     url: &["login_uri"], notes: &["notes"], totp: &["login_totp"], created: &[], modified: &[],
     tags: &["folder"], tag_sep: &[], favorite: &["favorite"], archived: &[],
-    ignore: &["reprompt", "type"], note_type: Some(("type", "note")),
+    ignore: &["reprompt", "type"], note_type: Some(("type", "note")), category: &["type"],
 };
 // 1Password 8 CSV: Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
 // (older 1Password 7 exports used "URL"/"Website", "One-time password", "notesPlain").
@@ -147,7 +148,7 @@ const ONEPASSWORD_CSV: CsvSpec = CsvSpec {
     url: &["url", "website", "urls", "location"], notes: &["notes", "notesplain", "note"],
     totp: &["otpauth", "one-time password", "totp", "otp"], created: &[], modified: &[],
     tags: &["tags"], tag_sep: &[',', ';'], favorite: &["favorite"], archived: &["archived"],
-    ignore: &[], note_type: None,
+    ignore: &[], note_type: None, category: &["type", "category"],
 };
 // KeePassXC: "Group","Title","Username","Password","URL","Notes","TOTP","Icon","Last Modified","Created"
 // KeePass 2 (generic CSV): "Account","Login Name","Password","Web Site","Comments"
@@ -156,14 +157,14 @@ const KEEPASS_CSV: CsvSpec = CsvSpec {
     title: &["title", "account"], username: &["username", "login name", "user name"], email: &[], password: &["password"],
     url: &["url", "web site"], notes: &["notes", "comments"], totp: &["totp", "otp"],
     created: &[], modified: &["last modified"], tags: &["group"], tag_sep: &[], favorite: &[], archived: &[],
-    ignore: &["icon", "created"], note_type: None,
+    ignore: &["icon", "created"], note_type: None, category: &[],
 };
 // Chrome / Edge / Brave: name,url,username,password[,note]
 const CHROME_CSV: CsvSpec = CsvSpec {
     name: "chrome-csv",
     title: &["name", "origin"], username: &["username"], email: &[], password: &["password"],
     url: &["url", "origin_url"], notes: &["note", "notes"], totp: &[], created: &[], modified: &[],
-    tags: &[], tag_sep: &[], favorite: &[], archived: &[], ignore: &[], note_type: None,
+    tags: &[], tag_sep: &[], favorite: &[], archived: &[], ignore: &[], note_type: None, category: &[],
 };
 // LastPass: url,username,password,totp,extra,name,grouping,fav
 const LASTPASS_CSV: CsvSpec = CsvSpec {
@@ -171,7 +172,7 @@ const LASTPASS_CSV: CsvSpec = CsvSpec {
     title: &["name"], username: &["username"], email: &[], password: &["password"],
     url: &["url"], notes: &["extra", "notes", "note"], totp: &["totp"], created: &[], modified: &[],
     tags: &["grouping"], tag_sep: &[], favorite: &["fav", "favorite"], archived: &[],
-    ignore: &[], note_type: None,
+    ignore: &[], note_type: None, category: &[],
 };
 // Proton Pass: type,name,url,email,username,password,note,totp,createTime,modifyTime,vault
 const PROTONPASS_CSV: CsvSpec = CsvSpec {
@@ -180,7 +181,7 @@ const PROTONPASS_CSV: CsvSpec = CsvSpec {
     url: &["url"], notes: &["note", "notes"], totp: &["totp"],
     created: &["createtime", "create_time"], modified: &["modifytime", "modify_time"],
     tags: &["vault"], tag_sep: &[], favorite: &[], archived: &[],
-    ignore: &["type"], note_type: Some(("type", "note")),
+    ignore: &["type"], note_type: Some(("type", "note")), category: &["type"],
 };
 // Apple Passwords / Safari CSV (macOS 15 Passwords app / Safari export): Title,URL,Username,Password,Notes,OTPAuth
 const APPLE_PASSWORDS_CSV: CsvSpec = CsvSpec {
@@ -189,7 +190,7 @@ const APPLE_PASSWORDS_CSV: CsvSpec = CsvSpec {
     url: &["url", "website"], notes: &["notes", "note"],
     totp: &["otpauth", "totp", "otp"], created: &[], modified: &[],
     tags: &[], tag_sep: &[], favorite: &[], archived: &[],
-    ignore: &[], note_type: None,
+    ignore: &[], note_type: None, category: &[],
 };
 
 /// KeePass group path "Root/Work/Mail" -> tag "Work/Mail" (the root group alone gives no tag).
@@ -223,6 +224,8 @@ fn parse_csv(data: &str, spec: &CsvSpec) -> Result<Parsed> {
     if let Some(ec) = email_col { used.insert(ec); }
     if let Some(cc) = create_col { used.insert(cc); }
     let type_col = spec.note_type.and_then(|(c, _)| lower.iter().position(|h| h == c));
+    let cat_col = find(spec.category);
+    if let Some(cc) = cat_col { used.insert(cc); }
     for (row, rec) in rdr.records().enumerate() {
         let rec = rec.with_context(|| format!("{}: row {}", spec.name, row + 2))?;
         let get = |i: Option<usize>| i.and_then(|i| rec.get(i)).and_then(|v| opt(Some(v)));
@@ -247,7 +250,41 @@ fn parse_csv(data: &str, spec: &CsvSpec) -> Result<Parsed> {
             if let Some(v) = rec.get(i).and_then(|v| opt(Some(v))) { append_note(&mut notes, format!("{h}: {v}")); }
         }
         let is_note = is_lastpass_sn || matches!((spec.note_type, type_col), (Some((_, want)), Some(tc)) if rec.get(tc).map(|v| v.trim().eq_ignore_ascii_case(want)).unwrap_or(false));
-        let mut r = record(title, if is_note { Category::SecureNote } else { Category::Login });
+        let category = if let Some(cat_str) = cat_col.and_then(|c| rec.get(c)).map(str::trim).filter(|s| !s.is_empty()) {
+            let cat_lower = cat_str.to_ascii_lowercase();
+            if cat_lower == "bank account" || cat_lower == "bank_account" || cat_lower == "bank" {
+                Category::BankAccount
+            } else if cat_lower == "server" {
+                Category::Server
+            } else if cat_lower == "credit card" || cat_lower == "credit_card" || cat_lower == "card" {
+                Category::CreditCard
+            } else if cat_lower == "secure note" || cat_lower == "secure_note" || cat_lower == "note" {
+                Category::SecureNote
+            } else if cat_lower == "identity" {
+                Category::Identity
+            } else if cat_lower == "api credential" || cat_lower == "api_credential" || cat_lower == "api" {
+                Category::ApiCredential
+            } else if cat_lower == "wifi" {
+                Category::Wifi
+            } else if cat_lower == "ssh key" || cat_lower == "ssh_key" || cat_lower == "ssh" {
+                Category::SshKey
+            } else if cat_lower == "document" {
+                Category::Document
+            } else if cat_lower == "passkey" {
+                Category::Passkey
+            } else if cat_lower == "login" {
+                Category::Login
+            } else if is_note {
+                Category::SecureNote
+            } else {
+                Category::Login
+            }
+        } else if is_note {
+            Category::SecureNote
+        } else {
+            Category::Login
+        };
+        let mut r = record(title, category);
         let email = get(email_col);
         let username = get(cols[1]);
         let extra_email = match (&username, &email) { (Some(u), Some(e)) if !u.eq_ignore_ascii_case(e) => Some(e.clone()), _ => None };
@@ -258,6 +295,63 @@ fn parse_csv(data: &str, spec: &CsvSpec) -> Result<Parsed> {
         }
         // Keep a distinct email (e.g. Proton Pass `email` next to `username`) instead of dropping it.
         push_section(&mut r, "imported", Some("Imported"), vec![fld("email", "email", FieldKind::Text, extra_email)]);
+        if category == Category::BankAccount {
+            let mut bank_fields = vec![];
+            for (i, _h) in headers.iter().enumerate() {
+                let hl = lower[i].as_str();
+                let val = rec.get(i).and_then(|v| opt(Some(v)));
+                match hl {
+                    "bank" | "bank name" | "bank_name" => {
+                        if let Some(v) = val { bank_fields.push(fld("bank_name", "bank name", FieldKind::Text, Some(v))); }
+                    }
+                    "account holder" | "account_holder" | "name on account" => {
+                        if let Some(v) = val { bank_fields.push(fld("account_holder", "account holder", FieldKind::Text, Some(v))); }
+                    }
+                    "account type" | "account_type" => {
+                        if let Some(v) = val { bank_fields.push(fld("account_type", "account type", FieldKind::Text, Some(v))); }
+                    }
+                    "account number" | "account_number" | "account no" | "accountno" => {
+                        if let Some(v) = val { bank_fields.push(fld("account_number", "account number", FieldKind::Concealed, Some(v))); }
+                    }
+                    "routing number" | "routing_number" | "routing" | "swift" | "iban" => {
+                        if let Some(v) = val { bank_fields.push(fld("routing_number", "routing / SWIFT / IBAN", FieldKind::Text, Some(v))); }
+                    }
+                    "pin" => {
+                        if let Some(v) = val { bank_fields.push(fld("pin", "PIN", FieldKind::Concealed, Some(v))); }
+                    }
+                    "branch phone" | "branch_phone" => {
+                        if let Some(v) = val { bank_fields.push(fld("branch_phone", "branch phone", FieldKind::Phone, Some(v))); }
+                    }
+                    "branch address" | "branch_address" => {
+                        if let Some(v) = val { bank_fields.push(fld("branch_address", "branch address", FieldKind::Multiline, Some(v))); }
+                    }
+                    _ => {}
+                }
+            }
+            if !bank_fields.iter().any(|f| f.as_ref().is_some_and(|x| x.id == "account_holder")) && r.item.username.is_some() {
+                bank_fields.push(fld("account_holder", "account holder", FieldKind::Text, r.item.username.take()));
+            }
+            if !bank_fields.iter().any(|f| f.as_ref().is_some_and(|x| x.id == "account_number")) && r.item.password.is_some() {
+                bank_fields.push(fld("account_number", "account number", FieldKind::Concealed, r.item.password.take()));
+            }
+            if !bank_fields.is_empty() {
+                push_section(&mut r, "main", None, bank_fields);
+            }
+        } else if category == Category::Server {
+            let mut srv_fields = vec![];
+            if let Some(u) = &r.item.url {
+                srv_fields.push(fld("url", "URL or hostname", FieldKind::Url, Some(u.clone())));
+            }
+            if let Some(u) = r.item.username.clone() {
+                srv_fields.push(fld("username", "username", FieldKind::Text, Some(u)));
+            }
+            if let Some(p) = r.item.password.clone() {
+                srv_fields.push(fld("password", "password", FieldKind::Concealed, Some(p)));
+            }
+            if !srv_fields.is_empty() {
+                push_section(&mut r, "main", None, srv_fields);
+            }
+        }
         if is_note && (r.item.username.is_some() || r.item.password.is_some() || r.item.totp.is_some()) {
             // secure notes have no login fields: keep the values visible instead of dropping them
             let fs = vec![
@@ -418,14 +512,16 @@ fn parse_1pux(data: &[u8]) -> Result<Parsed> {
 
 fn pux_category(uuid: &str) -> Category {
     match uuid {
-        "001" | "005" | "102" | "110" | "111" => Category::Login,
+        "001" | "005" | "102" | "111" => Category::Login,
         "002" => Category::CreditCard,
         "004" | "103" | "104" | "106" | "108" => Category::Identity,
         "006" => Category::Document,
+        "101" => Category::BankAccount,
         "109" => Category::Wifi,
+        "110" => Category::Server,
         "112" => Category::ApiCredential,
         "114" => Category::SshKey,
-        _ => Category::SecureNote, // 003 note, 100 software licence, 101 bank, 105 membership, 107 reward, 113 medical, 115 crypto wallet...
+        _ => Category::SecureNote, // 003 note, 100 software licence, 105 membership, 107 reward, 113 medical, 115 crypto wallet...
     }
 }
 
@@ -474,6 +570,21 @@ fn pux_field_id(cat: Category, id: &str) -> Option<&'static str> {
         (Category::ApiCredential, "credential") => "credential", (Category::ApiCredential, "username") => "username",
         (Category::ApiCredential, "type") => "type", (Category::ApiCredential, "hostname") => "hostname", (Category::ApiCredential, "expires") => "expires",
         (Category::SshKey, "private_key") => "private_key", (Category::SshKey, "public_key") => "public_key", (Category::SshKey, "fingerprint") => "fingerprint",
+        (Category::BankAccount, "bankName" | "bank_name" | "bank") => "bank_name",
+        (Category::BankAccount, "owner" | "accountHolder" | "nameOnAccount" | "account_holder") => "account_holder",
+        (Category::BankAccount, "accountType" | "account_type" | "type") => "account_type",
+        (Category::BankAccount, "accountNo" | "accountNumber" | "account_number" | "account") => "account_number",
+        (Category::BankAccount, "routingNo" | "routingNumber" | "routing_number" | "routing" | "transitNumber") => "routing_number",
+        (Category::BankAccount, "swift" | "swiftCode") => "routing_number",
+        (Category::BankAccount, "iban" | "ibanNumber") => "routing_number",
+        (Category::BankAccount, "pin" | "telephonePin") => "pin",
+        (Category::BankAccount, "telephone" | "branchPhone" | "branch_phone" | "phone") => "branch_phone",
+        (Category::BankAccount, "branchAddress" | "branch_address" | "address") => "branch_address",
+        (Category::Server, "admin_console_url" | "adminConsoleUrl") => "admin_console_url",
+        (Category::Server, "hosting_provider_name" | "hostingProvider" | "hosting_provider") => "hosting_provider",
+        (Category::Server, "username") => "username",
+        (Category::Server, "password") => "password",
+        (Category::Server, "url" | "hostname") => "url",
         _ => return None,
     })
 }
@@ -506,7 +617,7 @@ fn parse_1pux_json(data: &str) -> Result<Parsed> {
                 // URLs: primary overview.url, then overview.urls[]
                 let mut urls: Vec<String> = s(ov, "url").into_iter().collect();
                 for u in ov.get("urls").and_then(Value::as_array).into_iter().flatten() { if let Some(x) = s(u, "url") { if !urls.contains(&x) { urls.push(x); } } }
-                let login_like = cat == Category::Login;
+                let login_like = cat == Category::Login || cat == Category::Server;
                 if login_like { r.item.url = urls.first().cloned(); }
                 let extra: Vec<Option<Field>> = urls.iter().skip(usize::from(login_like)).enumerate().map(|(n, u)| fld(&format!("url{}", n + 1), "website", FieldKind::Url, Some(u.clone()))).collect();
                 push_section(&mut r, "urls", Some("Websites"), extra);
@@ -533,7 +644,7 @@ fn parse_1pux_json(data: &str) -> Result<Parsed> {
                     let stitle = s(sec, "title");
                     let sid = s(sec, "name").filter(|n| !n.is_empty()).unwrap_or_else(|| format!("section{si}"));
                     // templated sections land in "main" (cards, wifi, api, ssh) / their own id (identity)
-                    let target = match cat { Category::CreditCard | Category::Wifi | Category::ApiCredential | Category::SshKey if stitle.is_none() => "main".to_string(), _ => sid.clone() };
+                    let target = match cat { Category::CreditCard | Category::Wifi | Category::ApiCredential | Category::SshKey | Category::BankAccount | Category::Server if stitle.is_none() => "main".to_string(), _ => sid.clone() };
                     for f in sec.get("fields").and_then(Value::as_array).into_iter().flatten() {
                         let Some((kind, val)) = f.get("value").and_then(pux_value) else { continue };
                         let fid = s(f, "id").unwrap_or_default();
@@ -552,6 +663,27 @@ fn parse_1pux_json(data: &str) -> Result<Parsed> {
                 }
                 if let Some(doc) = de.get("documentAttributes") {
                     if let Some(n) = s(doc, "fileName") { append_note(&mut r.item.notes, format!("Document file (not imported, re-attach manually): {n}")); }
+                }
+                if cat == Category::Server {
+                    let mut srv_fields = vec![];
+                    if let Some(u) = &r.item.url {
+                        if r.find_field("url").is_none() {
+                            srv_fields.push(fld("url", "URL or hostname", FieldKind::Url, Some(u.clone())));
+                        }
+                    }
+                    if let Some(u) = &r.item.username {
+                        if r.find_field("username").is_none() {
+                            srv_fields.push(fld("username", "username", FieldKind::Text, Some(u.clone())));
+                        }
+                    }
+                    if let Some(p) = &r.item.password {
+                        if r.find_field("password").is_none() {
+                            srv_fields.push(fld("password", "password", FieldKind::Concealed, Some(p.clone())));
+                        }
+                    }
+                    if !srv_fields.is_empty() {
+                        push_section(&mut r, "main", None, srv_fields);
+                    }
                 }
                 out.items.push(r);
             }

@@ -95,6 +95,18 @@
   "copyPassword": {
     "message": "Copy password"
   },
+  "copyUsername": {
+    "message": "Copy username"
+  },
+  "copyNumber": {
+    "message": "Copy number"
+  },
+  "copyCredential": {
+    "message": "Copy credential"
+  },
+  "openWebsite": {
+    "message": "Open website"
+  },
   "passwordCopied": {
     "message": "Password copied"
   },
@@ -863,6 +875,7 @@
   "badgeAppNotRunning": {
     "message": "gitpass app not running"
   },
+
   "optAutoSubmit": {
     "message": "Submit the form after filling a login"
   },
@@ -892,6 +905,12 @@
   },
   "pkPasskeysCount": {
     "message": "{n} passkeys for this site"
+  },
+  "catBankAccount": {
+    "message": "Bank Accounts"
+  },
+  "catServer": {
+    "message": "Servers"
   },
   "genRecent": {
     "message": "Recent"

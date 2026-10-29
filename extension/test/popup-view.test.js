@@ -9,10 +9,10 @@ const items = [
   { id: 'v2:d', vault_id: 'v2', vault_name: 'Work', category: 'wifi', title: 'Office', subtitle: 'net', favorite: false },
 ];
 
-test('buildFilters has suggestions, all, favorites, 9 categories and vaults', () => {
+test('buildFilters has suggestions, all, favorites, 11 categories and vaults', () => {
   const f = V.buildFilters([{ id: 'v1', name: 'Personal' }, { id: 'v2', name: 'Work' }]);
   assert.deepStrictEqual(f.slice(0, 3).map((x) => x.id), ['suggested', 'all', 'favorites']);
-  assert.strictEqual(f.filter((x) => x.group === 'category').length, 9);
+  assert.strictEqual(f.filter((x) => x.group === 'category').length, 11);
   assert.deepStrictEqual(f.filter((x) => x.group === 'vault').map((x) => x.id), ['vault:v1', 'vault:v2']);
 });
 
