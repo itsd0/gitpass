@@ -15,6 +15,8 @@ import { cn } from '../lib/utils';
 import { useT, useI18n, translate, type Key } from '../i18n';
 import { OnboardingBadge } from '../features/onboarding';
 import { useSettings } from '../features/settings/useSettings';
+import { useDragStore, canDropOnVault } from '../features/items/dragState';
+import { runBulk } from '../features/items/BulkPane';
 import { Button, Logo, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Tooltip, toast } from '../ui';
 
 const same = (r: Route, f: Filter) => r.name === 'items' && r.filter.kind === f.kind && r.filter.vaultId === f.vaultId && r.filter.tag === f.tag;
@@ -29,17 +31,25 @@ const NavItem = React.forwardRef<
     right?: React.ReactNode;
     onContextMenu?: (e: React.MouseEvent) => void;
     onKeyDown?: (e: React.KeyboardEvent) => void;
+    onDragOver?: (e: React.DragEvent) => void;
+    onDragLeave?: (e: React.DragEvent) => void;
+    onDrop?: (e: React.DragEvent) => void;
+    className?: string;
   }
->(({ active, icon, label, onClick, right, onContextMenu, onKeyDown }, ref) => {
+>(({ active, icon, label, onClick, right, onContextMenu, onKeyDown, onDragOver, onDragLeave, onDrop, className }, ref) => {
   return (
     <button
       ref={ref}
       onClick={onClick}
       onContextMenu={onContextMenu}
       onKeyDown={onKeyDown}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
       className={cn(
         'group flex w-full items-center gap-2.5 rounded-md px-2.5 py-1.5 text-left text-[14px]',
-        active ? 'bg-active font-medium' : 'hover:bg-hover'
+        active ? 'bg-active font-medium' : 'hover:bg-hover',
+        className
       )}
     >
       <span className="flex w-4 justify-center">{icon}</span>
@@ -84,6 +94,12 @@ function SidebarTagItem({
   const inputRef = useRef<HTMLInputElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const committingRef = useRef(false);
+  const dragged = useDragStore((s) => s.dragged);
+  const [hovered, setHovered] = useState(false);
+
+  useEffect(() => {
+    if (!dragged) setHovered(false);
+  }, [dragged]);
 
   useEffect(() => {
     if (isEditing) {
@@ -154,9 +170,24 @@ function SidebarTagItem({
     <div
       className="group/tag relative"
       data-testid="sidebar-tag"
+      data-tag-name={tag}
       onContextMenu={(e) => {
         e.preventDefault();
         onOpenMenu();
+      }}
+      onDragOver={(e) => {
+        if (!dragged) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        setHovered(true);
+      }}
+      onDragLeave={(e) => { const next = e.relatedTarget as Node | null; if (next && e.currentTarget.contains(next)) return; setHovered(false); }}
+      onDrop={(e) => {
+        if (!dragged) return;
+        e.preventDefault();
+        setHovered(false);
+        void runBulk('add_tag', { tag }, dragged.items);
+        useDragStore.getState().endDrag();
       }}
     >
       <NavItem
@@ -165,6 +196,7 @@ function SidebarTagItem({
         icon={<Tag size={14} className="text-ok" />}
         label={tag}
         onClick={onSelect}
+        className={cn(hovered && 'ring-2 ring-inset ring-accent bg-accent/10')}
         onKeyDown={(e) => {
           if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
             e.preventDefault();
@@ -211,6 +243,115 @@ function SidebarTagItem({
           >
             <Trash2 size={14} />
             {t('tag.delete')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
+function SidebarVaultItem({
+  vault,
+  active,
+  menuOpen,
+  onOpenMenu,
+  onCloseMenu,
+  onEdit,
+  onDelete,
+  onSelect,
+}: {
+  vault: VaultInfo;
+  active: boolean;
+  menuOpen: boolean;
+  onOpenMenu: () => void;
+  onCloseMenu: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+  onSelect: () => void;
+}) {
+  const t = useT();
+  const setRoute = useApp((s) => s.setRoute);
+  const dragged = useDragStore((s) => s.dragged);
+  const [hovered, setHovered] = useState(false);
+  const canDrop = dragged ? canDropOnVault(vault, dragged.items) : false;
+
+  useEffect(() => {
+    if (!dragged) setHovered(false);
+  }, [dragged]);
+
+  return (
+    <div
+      className={cn('group/vault relative', dragged && !canDrop && 'cursor-not-allowed')}
+      data-testid="sidebar-vault"
+      data-vault-id={vault.id}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onOpenMenu();
+      }}
+      onDragOver={(e) => {
+        if (!dragged) return;
+        if (!canDrop) {
+          e.dataTransfer.dropEffect = 'none';
+          return;
+        }
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setHovered(true);
+      }}
+      onDragLeave={(e) => { const next = e.relatedTarget as Node | null; if (next && e.currentTarget.contains(next)) return; setHovered(false); }}
+      onDrop={(e) => {
+        if (!dragged) return;
+        e.preventDefault();
+        setHovered(false);
+        if (!canDrop) return;
+        void runBulk('move', { toVaultId: vault.id }, dragged.items);
+        useDragStore.getState().endDrag();
+      }}
+    >
+      <NavItem
+        active={active}
+        label={vault.name}
+        icon={<VaultIcon icon={vault.icon} color={vault.color} size={16} />}
+        onClick={onSelect}
+        className={cn(
+          hovered && canDrop && 'ring-2 ring-inset ring-accent bg-accent/10',
+          dragged && !canDrop && 'cursor-not-allowed text-muted/70 hover:bg-transparent'
+        )}
+        right={
+          <span className="flex w-8 justify-end group-hover/vault:invisible">
+            {vault.shared ? (
+              <Users size={13} className="text-muted" aria-label={t("sidebar.sharedVault")} />
+            ) : (
+              <span className="text-xs text-muted">{vault.itemCount}</span>
+            )}
+          </span>
+        }
+      />
+      <DropdownMenu open={menuOpen} onOpenChange={(o) => (o ? onOpenMenu() : onCloseMenu())}>
+        <DropdownMenuTrigger asChild>
+          <button
+            aria-label={`${t('vault.more')}: ${vault.name}`}
+            className={cn(
+              'absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:bg-active hover:text-fg',
+              menuOpen ? 'visible' : 'invisible group-hover/vault:visible'
+            )}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem onSelect={onEdit}>
+            <Pencil size={14} />
+            {t('vault.edit')}
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => setRoute({ name: 'settings', tab: `vault:${vault.id}` })}>
+            <SettingsIcon size={14} />
+            {t('nav.settings')}…
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem className="text-danger" onSelect={onDelete}>
+            <Trash2 size={14} />
+            {t('vault.delete')}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -273,21 +414,17 @@ export function Sidebar() {
 
         <SectionHeader label={t('nav.vaults').toUpperCase()} action={<Tooltip content={t("sidebar.newVault")}><button aria-label={t("sidebar.newVault")} className="rounded p-0.5 hover:bg-hover" onClick={() => setNewVault(true)}><Plus size={14} /></button></Tooltip>} />
         {vaults.map((v) => (
-          <div key={v.id} className="group/vault relative" data-testid="sidebar-vault" onContextMenu={(e) => { e.preventDefault(); setMenuFor(v.id); }}>
-            <NavItem active={same(route, { kind: 'vault', vaultId: v.id })} label={v.name}
-              icon={<VaultIcon icon={v.icon} color={v.color} size={16} />}
-              onClick={() => go({ kind: 'vault', vaultId: v.id })}
-              right={<span className="flex w-8 justify-end group-hover/vault:invisible">{v.shared ? <Users size={13} className="text-muted" aria-label={t("sidebar.sharedVault")} /> : <span className="text-xs text-muted">{v.itemCount}</span>}</span>} />
-            <DropdownMenu open={menuFor === v.id} onOpenChange={(o) => setMenuFor(o ? v.id : null)}>
-              <DropdownMenuTrigger asChild><button aria-label={`${t('vault.more')}: ${v.name}`} className={cn('absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:bg-active hover:text-fg', menuFor === v.id ? 'visible' : 'invisible group-hover/vault:visible')}><MoreHorizontal size={14} /></button></DropdownMenuTrigger>
-              <DropdownMenuContent align="start">
-                <DropdownMenuItem onSelect={() => setEditV(v)}><Pencil size={14} />{t('vault.edit')}</DropdownMenuItem>
-                <DropdownMenuItem onSelect={() => setRoute({ name: 'settings', tab: `vault:${v.id}` })}><SettingsIcon size={14} />{t('nav.settings')}…</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem className="text-danger" onSelect={() => setDelV(v)}><Trash2 size={14} />{t('vault.delete')}</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <SidebarVaultItem
+            key={v.id}
+            vault={v}
+            active={same(route, { kind: 'vault', vaultId: v.id })}
+            menuOpen={menuFor === v.id}
+            onOpenMenu={() => setMenuFor(v.id)}
+            onCloseMenu={() => setMenuFor(null)}
+            onEdit={() => setEditV(v)}
+            onDelete={() => setDelV(v)}
+            onSelect={() => go({ kind: 'vault', vaultId: v.id })}
+          />
         ))}
 
         {tags.length > 0 && <SectionHeader label={t('nav.tags').toUpperCase()} />}

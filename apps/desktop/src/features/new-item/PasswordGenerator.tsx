@@ -83,12 +83,65 @@ export interface PasswordGeneratorProps {
   standalone?: boolean;
   onClose?: () => void;
   onSaveAsLogin?: (pw: string) => void;
+  /** Controlled popover mode (used by the item editor): when defined, the
+   * trigger button is not rendered and visibility follows `open`. The parent
+   * anchors the panel under its field and restores focus on close. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }: PasswordGeneratorProps) {
+export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin, open, onOpenChange }: PasswordGeneratorProps) {
   const t = useT();
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const isOpen = standalone || popoverOpen;
+  const controlled = open !== undefined;
+  const isOpen = standalone || (controlled ? open : popoverOpen);
+  const setOpen = (o: boolean) => {
+    if (controlled) onOpenChange?.(o);
+    else setPopoverOpen(o);
+  };
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // When the popover opens, move focus into it (first focusable control).
+  useEffect(() => {
+    if (!isOpen || standalone) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const first = Array.from(panel.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')).find((el) => !el.hasAttribute('disabled'));
+    first?.focus();
+  }, [isOpen, standalone]);
+
+  // Popover keyboard contract: Esc closes, Enter applies (except on buttons,
+  // where the native click already applies/closes), Tab cycles inside.
+  const onPanelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'Enter') {
+      if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+      e.preventDefault();
+      if (onUse && pw) onUse(pw);
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'Tab') {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusables = Array.from(panel.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((el) => !el.hasAttribute('disabled'));
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
 
   // Settings from app store
   const savedSettings = useSettings((s) => s.settings);
@@ -334,7 +387,7 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
         </div>
       ) : (
         <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" size="sm" variant="ghost" onClick={() => setPopoverOpen(false)}>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
             {t('common.cancel')}
           </Button>
           <Button
@@ -344,10 +397,10 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
             disabled={!pw}
             onClick={() => {
               if (onUse && pw) onUse(pw);
-              setPopoverOpen(false);
+              setOpen(false);
             }}
           >
-            Use password
+            {t('generator.usePassword')}
           </Button>
         </div>
       )}
@@ -358,21 +411,41 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
     return content;
   }
 
+  // Controlled mode: the parent owns the trigger and anchors this panel.
+  if (controlled) {
+    if (!open) return null;
+    return (
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-label={t('generator.title')}
+        data-generator-popover
+        onKeyDown={onPanelKeyDown}
+        className="absolute left-0 z-20 mt-1 w-80 rounded-lg border border-border bg-panel p-4 shadow-xl"
+      >
+        {content}
+      </div>
+    );
+  }
+
   return (
     <div className="relative">
       <Button
         type="button"
         size="sm"
         variant="ghost"
-        aria-label="Generate password"
-        onClick={() => setPopoverOpen((o) => !o)}
+        aria-label={t('generator.generatePassword')}
+        onClick={() => setOpen(!popoverOpen)}
       >
         <Wand2 size={14} /> Generate
       </Button>
       {popoverOpen && (
         <div
+          ref={panelRef}
           role="dialog"
-          aria-label="Password generator"
+          aria-label={t('generator.title')}
+          data-generator-popover
+          onKeyDown={onPanelKeyDown}
           className="absolute right-0 z-20 mt-1 w-80 rounded-lg border border-border bg-panel p-4 shadow-xl"
         >
           {content}

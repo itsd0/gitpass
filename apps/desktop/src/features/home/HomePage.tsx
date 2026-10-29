@@ -11,19 +11,20 @@ import { NewVaultDialog } from './NewVaultDialog';
 import { VaultIcon } from './vaultIcons';
 
 function VaultCard({ v, onOpen, onSettings }: { v: VaultInfo | 'all'; onOpen: () => void; onSettings?: () => void }) {
+  const t = useT();
   const all = v === 'all';
   return (
     <div className={`group flex flex-col rounded-lg border bg-panel ${all ? 'border-violet-500/60' : 'border-border'} hover:border-border`}>
-      <button onClick={onOpen} className="relative flex-1 p-4 pt-8 text-left" aria-label={`Open ${all ? 'All Vaults' : v.name}`}>
+      <button onClick={onOpen} className="relative flex-1 p-4 pt-8 text-left" aria-label={t('home.vault.open', { name: all ? t('home.vault.all') : v.name })}>
         <div className="absolute -top-0 right-4 translate-y-[-30%]">{all ? <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-pink-500 via-amber-400 to-sky-500 ring-4 ring-panel"><Layers size={20} /></span> : <VaultIcon icon={v.icon} color={v.color} />}</div>
-        <div className="text-lg font-semibold">{all ? 'All Vaults' : v.name}</div>
-        {!all && <div className="text-sm text-muted">{v.itemCount} {v.itemCount === 1 ? 'item' : 'items'}</div>}
-        <p className="mt-2 line-clamp-2 text-sm text-muted">{all ? 'View all of your items together, across all vaults.' : v.description ?? (v.shared ? 'Shared vault.' : 'Only you can view and edit items in this vault.')}</p>
+        <div className="text-lg font-semibold">{all ? t('home.vault.all') : v.name}</div>
+        {!all && <div className="text-sm text-muted">{t(v.itemCount === 1 ? 'home.vault.itemOne' : 'home.vault.items', { count: v.itemCount })}</div>}
+        <p className="mt-2 line-clamp-2 text-sm text-muted">{all ? t('home.vault.allDesc') : v.description ?? (v.shared ? t('home.vault.sharedDesc') : t('home.vault.privateDesc'))}</p>
         {!all && <div className="mt-3 flex gap-1">{v.members.slice(0, 5).map(m => <Avatar key={m.fingerprint} name={m.label ?? m.fingerprint} />)}</div>}
       </button>
       <div className="flex items-center border-t border-border">
-        {onSettings && <button aria-label="Vault settings" onClick={onSettings} className="border-r border-border p-3 text-muted hover:text-fg"><Settings size={16} /></button>}
-        <button aria-label="Open vault" onClick={onOpen} className="ml-auto p-3 text-muted hover:text-fg"><ArrowRight size={18} /></button>
+        {onSettings && <button aria-label={t('home.vault.settingsAria')} onClick={onSettings} className="border-r border-border p-3 text-muted hover:text-fg"><Settings size={16} /></button>}
+        <button aria-label={t('home.vault.openAria')} onClick={onOpen} className="ml-auto p-3 text-muted hover:text-fg"><ArrowRight size={18} /></button>
       </div>
     </div>
   );

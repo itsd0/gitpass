@@ -79,6 +79,15 @@ describe('i18n', () => {
     expect(importKeys.length).toBeGreaterThan(0);
     for (const d of [dictionaries.my, dictionaries.th]) for (const k of importKeys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
   });
+  it('covers the new home vault, watchtower score and breach-check strings in en/my/th', () => {
+    const keys = ['home.vault.all', 'home.vault.open', 'home.vault.itemOne', 'home.vault.items', 'home.vault.allDesc', 'home.vault.sharedDesc', 'home.vault.privateDesc', 'home.vault.settingsAria', 'home.vault.openAria', 'vault.confirmNameAria', 'watchtower.score.excellent', 'watchtower.score.good', 'watchtower.score.fair', 'watchtower.score.poor', 'watchtower.score.aria', 'watchtower.breachCheckAria', 'watchtower.breachCheckLabel'] as const;
+    for (const k of keys) {
+      expect(en[k]).toBeTruthy();
+      expect(translate('my', k)).not.toBe(k); expect(translate('th', k)).not.toBe(k);
+    }
+    expect(translate('my', 'home.vault.items', { count: 3 })).toBe('item 3 ခု');
+    expect(translate('th', 'watchtower.score.aria', { score: 71, label: 'ดี' })).toBe('คะแนนความปลอดภัย 71 จาก 100, ดี');
+  });
   it("covers all strength.*, field.* and totp.* strings in my and th", () => {
     const keys = Object.keys(en).filter((k) => k.startsWith("strength.") || k.startsWith("field.") || k.startsWith("totp."));
     expect(keys.length).toBeGreaterThan(0);
@@ -90,6 +99,13 @@ describe('i18n', () => {
   });
   it("covers all vault.* strings in my and th", () => {
     const keys = Object.keys(en).filter((k) => k.startsWith("vault."));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const d of [dictionaries.my, dictionaries.th]) {
+      for (const k of keys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+    }
+  });
+  it("covers all generator.* strings in my and th", () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith("generator."));
     expect(keys.length).toBeGreaterThan(0);
     for (const d of [dictionaries.my, dictionaries.th]) {
       for (const k of keys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
