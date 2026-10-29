@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Archive, ArchiveRestore, Copy, Download, FolderInput, RotateCcw, Star, StarOff, Tag, Trash2, X } from 'lucide-react';
 import { api } from '../../api/client';
-import type { BulkAction, BulkRequest, ItemRef } from '../../api/types';
+import type { BulkAction, BulkRequest, ItemRef, ItemSummary } from '../../api/types';
 import { useT, useI18n, translate, type Key } from '../../i18n';
 import { useApp } from '../../lib/store';
 import { useVaultsAndTags } from '../../lib/data';
@@ -15,12 +15,18 @@ import { readSel, refsFor, selectedIds } from './selection';
 const plural = (n: number) => `${n} item${n === 1 ? '' : 's'}`;
 
 /** Run a bulk action on the current selection (multi or single). Clears the selection when items leave the view. */
-export async function runBulk(action: BulkAction, extra: Partial<BulkRequest> = {}): Promise<boolean> {
-  const items = useItemsUI.getState().items;
+export async function runBulk(
+  action: BulkAction,
+  extra: Partial<BulkRequest> = {},
+  explicitItems?: ItemSummary[]
+): Promise<boolean> {
+  const allItems = useItemsUI.getState().items;
   const sIds = selectedIds(readSel());
-  const refs = refsFor(items, sIds);
+  const targetItems = explicitItems && explicitItems.length > 0
+    ? explicitItems
+    : allItems.filter((x) => sIds.includes(x.id));
+  const refs: ItemRef[] = targetItems.map((it) => ({ vaultId: it.vaultId, itemId: it.id }));
   if (!refs.length) return false;
-  const targetItems = items.filter((x) => sIds.includes(x.id));
   try {
     const r = await api.bulkItems({ req: { action, items: refs, ...extra } });
     const lang = useI18n.getState().lang;

@@ -48,7 +48,7 @@ export function DeleteVaultDialog({ vault, isLast, onOpenChange, onDeleted }: { 
         <div className="flex gap-3 rounded-lg border border-danger/50 bg-danger/10 p-3 text-sm"><AlertTriangle size={18} className="shrink-0 text-danger" />
           <div className="space-y-1"><p className="font-medium">{t('vault.deleteWarn', { n: vault?.itemCount ?? 0 })}</p><p className="text-muted">{t('vault.deleteDetail')}</p>
             {vault?.shared && <p className="text-muted">{t('vault.deleteShared')}</p>}</div></div>
-        <label className="block text-xs text-muted">{t('vault.typeName', { vault: vault?.name ?? '' })}<Input className="mt-1" autoFocus aria-label="Confirm vault name" value={typed} onChange={e => setTyped(e.target.value)} /></label></>}
+        <label className="block text-xs text-muted">{t('vault.typeName', { vault: vault?.name ?? '' })}<Input className="mt-1" autoFocus aria-label={t('vault.confirmNameAria')} value={typed} onChange={e => setTyped(e.target.value)} /></label></>}
       {err && <p role="alert" className="text-sm text-danger">{err}</p>}
       <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>{t('common.cancel')}</Button>
         {!isLast && <Button type="submit" variant="danger" disabled={!ok || busy}>{t('vault.deleteSubmit')}</Button>}</div>

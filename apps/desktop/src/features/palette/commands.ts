@@ -1,4 +1,4 @@
-import { Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Users, Keyboard, Zap } from 'lucide-react';
+import { FolderInput, Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap } from 'lucide-react';
 import { api } from '../../api/client';
 import { translate, useI18n, type Key } from '../../i18n';
 import type { PaletteCommand } from '../registry';
@@ -24,6 +24,26 @@ export function builtinCommands(): PaletteCommand[] {
     { id: 'sync', labelKey: 'cmd.sync', icon: RefreshCw, keywords: ['git', 'push', 'pull'], run: async () => { try { toast((await api.sync({ merge: false })).message); } catch (e) { toast(String((e as Error).message ?? e), 'danger'); } } },
     { id: 'shortcuts', labelKey: 'cmd.shortcuts', icon: Keyboard, keywords: ['help', 'keys'], shortcut: '?', run: openShortcutsHelp },
   ];
+  const hasSelection = Boolean(app.selectedItemId || app.multiIds.length > 0);
+  // No move/tag for items in Recently Deleted or Archive: restore them first.
+  const kind = app.route.name === 'items' ? app.route.filter.kind : null;
+  const movable = kind !== 'deleted' && kind !== 'archive';
+  if (hasSelection && movable) {
+    cmds.push({
+      id: 'move-to-vault',
+      labelKey: 'cmd.moveToVault',
+      icon: FolderInput,
+      keywords: ['move', 'vault', 'transfer'],
+      run: () => app.openModal('move-to-vault'),
+    });
+    cmds.push({
+      id: 'add-tag',
+      labelKey: 'cmd.addTag',
+      icon: Tag,
+      keywords: ['tag', 'label'],
+      run: () => app.openModal('add-tag'),
+    });
+  }
   if (app.selectedItemId) {
     cmds.push({
       id: 'show-large-type',
