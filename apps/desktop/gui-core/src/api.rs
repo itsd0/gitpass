@@ -379,20 +379,7 @@ fn card_digits(r: &ItemRecord) -> Option<String> {
     // First card-number-like field that actually holds >= 8 digits ("cardholder" etc. are excluded above).
     r.view_sections().into_iter().flat_map(|s| s.fields).filter(is_card_number).find_map(|f| f.value.as_deref().and_then(card_digits_of))
 }
-/// Card brand from the BIN (leading digits). None when unknown.
-pub fn card_brand(d: &str) -> Option<&'static str> {
-    let p = |n: usize| d.get(..n).and_then(|s| s.parse::<u32>().ok()).unwrap_or(0);
-    Some(match () {
-        _ if d.starts_with('4') => "Visa",
-        _ if (51..=55).contains(&p(2)) || (2221..=2720).contains(&p(4)) => "Mastercard",
-        _ if p(2) == 34 || p(2) == 37 => "Amex",
-        _ if p(4) == 6011 || p(2) == 65 || (644..=649).contains(&p(3)) => "Discover",
-        _ if (3528..=3589).contains(&p(4)) => "JCB",
-        _ if p(2) == 36 || p(2) == 38 || (300..=305).contains(&p(3)) => "Diners Club",
-        _ if p(2) == 62 => "UnionPay",
-        _ => return None,
-    })
-}
+pub use gitpass_core::item::card_brand;
 /// "Visa •••• 7575" / "•••• 7575": only the brand and last 4 digits ever leave this function.
 pub fn card_label(d: &str) -> String {
     let l4 = &d[d.len() - 4..];
