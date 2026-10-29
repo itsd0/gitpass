@@ -368,15 +368,19 @@ enum Cmd {
         #[arg(long, default_value_t = gitpass_cli::gen::DEFAULT_CLEAR_SECS, requires = "copy")]
         clear_secs: u64,
     },
-    /// Run a command with secrets from gp://<vault>/<item>/<field> references injected into its
-    /// environment only (never written to disk); resolved values are masked in its stdout/stderr
+    /// Run a command with secrets from gp://<vault>/<item>/<field> references in inherited environment
+    /// variables and/or --env-file injected into its environment only (never written to disk);
+    /// resolved values are masked in its stdout/stderr
     Run {
-        /// dotenv-style file whose values are (or contain) gp:// references; repeatable
-        #[arg(long = "env-file", required = true)] env_file: Vec<PathBuf>,
+        /// dotenv-style file whose values are (or contain) gp:// references; repeatable (optional; overrides inherited environment variables)
+        #[arg(long = "env-file")]
+        env_file: Vec<PathBuf>,
         /// Do not mask secrets in the child's output (child then writes straight to the terminal)
-        #[arg(long)] no_masking: bool,
+        #[arg(long)]
+        no_masking: bool,
         /// Command and arguments (after --)
-        #[arg(last = true, required = true)] cmd: Vec<String>,
+        #[arg(last = true, required = true)]
+        cmd: Vec<String>,
     },
     /// Render a template, replacing {{ gp://<vault>/<item>/<field> }} placeholders (stdout by default)
     Inject {
@@ -2230,14 +2234,23 @@ fn run() -> Result<()> {
         }
         Cmd::Run { env_file, no_masking, cmd } => {
             use gitpass_cli::inject;
+
+            if env_file.is_empty() && !std::env::vars().any(|(_, v)| v.contains("gp://")) {
+                bail!("no gp:// references found: no --env-file was given and no inherited environment variables contain gp:// references (usage: gitpass run [--env-file F] -- <cmd>)");
+            }
+
+            let mut file_texts = Vec::with_capacity(env_file.len());
+            for f in env_file {
+                let text = Zeroizing::new(std::fs::read_to_string(f).with_context(|| format!("reading {}", f.display()))?);
+                file_texts.push(text);
+            }
+            let file_slices: Vec<&str> = file_texts.iter().map(|s| s.as_str()).collect();
+
             let s = unlock(&cli, &root)?;
             let sr = SessionResolver(&s);
             let mut res = inject::Resolved::new(&sr);
-            let mut env = vec![];
-            for f in env_file {
-                let text = Zeroizing::new(std::fs::read_to_string(f).with_context(|| format!("reading {}", f.display()))?);
-                env.extend(inject::parse_env_file(&text, &mut res)?);
-            }
+            let env = inject::resolve_run_env(std::env::vars(), &file_slices, &mut res)?;
+            drop(file_texts);
             let secrets = std::mem::take(&mut res.secrets);
             drop(s);
             let code = inject::run_child(cmd, &env, &secrets, !*no_masking)?;

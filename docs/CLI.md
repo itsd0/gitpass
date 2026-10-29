@@ -158,14 +158,19 @@ unless `--no-history` is provided. `gitpass gen history` lists recently generate
 ## Secrets in commands and templates
 
 ```sh
+export GITHUB_TOKEN=gp://Personal/GitHub/token
+gitpass run -- gh repo list
 gitpass run --env-file .env.gitpass -- ./server --port 8080
 gitpass run --env-file .env.common --env-file .env.gitpass -- ./server
 gitpass inject -i config.yml.tpl                  # render to stdout
 gitpass inject -i .env.template -o .env           # write mode 0600 (plaintext secrets on disk)
 ```
 
-References are `gp://<vault>/<item>/<field>`; `run` puts resolved values only in the
-child's environment and masks them in its output, and `inject` replaces
+References are `gp://<vault>/<item>/<field>`; `run` resolves references from inherited
+environment variables and/or `--env-file` (which is optional and overrides inherited
+variables with the same name), puts resolved values only in the child's environment, and
+masks them in its output. If no `--env-file` is given and no inherited variable contains a
+`gp://` reference, `run` exits non-zero with an error. `inject` replaces
 `{{ gp://... }}` placeholders. See the README sections "Secrets in commands and config
 files" for the exact syntax, masking limits and `--no-masking`.
 
