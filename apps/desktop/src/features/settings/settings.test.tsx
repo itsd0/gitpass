@@ -140,4 +140,18 @@ describe('settings', () => {
     await u.click(setupSwitch);
     await waitFor(() => expect(patchSpy).toHaveBeenCalledWith({ patch: { dismissed: true } }));
   });
+
+  it('toggles remember generated passwords switch in Security tab', async () => {
+    const spy = vi.spyOn(api, 'setSettings');
+    const u = userEvent.setup();
+    render(<SettingsPage initialTab="security" />);
+
+    const rememberSwitch = await screen.findByTestId('remember-generated-passwords-switch');
+    expect(rememberSwitch).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('Remember generated passwords')).toBeTruthy();
+
+    await u.click(rememberSwitch);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[spy.mock.calls.length - 1]![0].settings.rememberGeneratedPasswords).toBe(false);
+  });
 });

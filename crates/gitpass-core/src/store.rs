@@ -199,6 +199,9 @@ pub struct Manifest {
     /// v4: identity.pub / identity.enc hashes. Absent before v4.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub identity: Option<IdentityEntry>,
+    /// Generator history (format v1). Absent when no history recorded yet.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub generator_history_hash: Option<String>,
 }
 
 /// Manifest format implied by content: 4 if any v4 structure is present, else 3.
@@ -361,7 +364,7 @@ pub fn init(root: &Path, password: &str, kdf: KdfParams) -> Result<SecretKey> {
     let account_key = Key32::random();
     let env = wrap_key(&auk, &account_key, &keyset_aad(&fmt))?;
     let keyset_hash = write_json(&root.join("keyset.enc"), &env)?;
-    let m = Manifest { format: INIT_FORMAT_VERSION, account_id: account_id.clone(), epoch: 1, keyset_hash, vaults: BTreeMap::new(), devices_hash: None, identity: None };
+    let m = Manifest { format: INIT_FORMAT_VERSION, account_id: account_id.clone(), epoch: 1, keyset_hash, vaults: BTreeMap::new(), devices_hash: None, identity: None, generator_history_hash: None };
     seal_manifest(root, &account_key, &m)?;
     atomic_write(&root.join(".gitignore"), fsutil::GITIGNORE.as_bytes())?;
     write_json(&root.join("format.json"), &fmt)?; // last
@@ -382,6 +385,12 @@ pub fn verify(root: &Path, m: &Manifest) -> Vec<String> {
         Some(h) => check(&mut p, &root.join(crate::device::DEVICES_FILE), h),
         None => if root.join(crate::device::DEVICES_FILE).exists() {
             p.push("unexpected devices.enc (not in manifest)".into());
+        },
+    }
+    match &m.generator_history_hash {
+        Some(h) => check(&mut p, &root.join(crate::gen_history::GEN_HISTORY_FILE), h),
+        None => if root.join(crate::gen_history::GEN_HISTORY_FILE).exists() {
+            p.push("unexpected generator_history.enc (not in manifest)".into());
         },
     }
     let (ip, ie) = (root.join(IDENTITY_PUB_FILE), root.join(IDENTITY_ENC_FILE));
@@ -579,13 +588,17 @@ impl Session {
     fn reseal(&self, prev_epoch: u64) -> Result<()> {
         let _g = fsutil::lock(&self.root)?;
         let mut m = Manifest { format: FORMAT_VERSION, account_id: self.fmt.account_id.clone(), epoch: prev_epoch + 1,
-            keyset_hash: hash_file(&self.root.join("keyset.enc"))?, vaults: BTreeMap::new(), devices_hash: None, identity: None };
+            keyset_hash: hash_file(&self.root.join("keyset.enc"))?, vaults: BTreeMap::new(), devices_hash: None, identity: None, generator_history_hash: None };
         if self.load_identity().is_ok() {
             m.identity = Some(IdentityEntry { pub_hash: hash_file(&self.root.join(IDENTITY_PUB_FILE))?, enc_hash: hash_file(&self.root.join(IDENTITY_ENC_FILE))? });
         }
         if crate::device::read_registry(&self.root, &self.account_key, &self.fmt.account_id).ok().flatten().is_some() {
             m.devices_hash = Some(hash_file(&self.root.join(crate::device::DEVICES_FILE))?);
             m.format = MANIFEST_FORMAT_V3;
+        }
+        if self.root.join(crate::gen_history::GEN_HISTORY_FILE).exists()
+            && crate::gen_history::read_history(&self.root, &self.account_key, &self.fmt.account_id).is_ok() {
+            m.generator_history_hash = Some(hash_file(&self.root.join(crate::gen_history::GEN_HISTORY_FILE))?);
         }
         if let Ok(rd) = fs::read_dir(self.root.join("vaults")) {
             for e in rd.filter_map(|e| e.ok()) {
@@ -908,6 +921,10 @@ impl Session {
         if let Some(r) = &reg {
             m.devices_hash = Some(crate::device::write_registry(&self.root, &new_ak, &self.fmt.account_id, r)?);
             m.format = m.format.max(MANIFEST_FORMAT_V3);
+        }
+        if m.generator_history_hash.is_some() {
+            let gh = crate::gen_history::read_history(&self.root, &self.account_key, &self.fmt.account_id)?;
+            m.generator_history_hash = Some(crate::gen_history::write_history(&self.root, &new_ak, &self.fmt.account_id, &gh)?);
         }
         if m.identity.is_some() {
             let kp = self.load_identity()?;
@@ -1686,6 +1703,55 @@ impl Session {
             Ok(())
         })?;
         Ok(())
+    }
+
+    // ---------- generator history ----------
+
+    pub fn read_generator_history(&self) -> Result<crate::gen_history::GeneratorHistory> {
+        let now = now_secs();
+        let mut gh = crate::gen_history::read_history(&self.root, &self.account_key, &self.fmt.account_id)?;
+        gh.prune(now);
+        Ok(gh)
+    }
+
+    pub fn write_generator_history(&self, gh: &crate::gen_history::GeneratorHistory) -> Result<String> {
+        let mut hash = String::new();
+        self.commit(|m| {
+            let h = crate::gen_history::write_history(&self.root, &self.account_key, &self.fmt.account_id, gh)?;
+            m.generator_history_hash = Some(h.clone());
+            hash = h;
+            Ok(())
+        })?;
+        Ok(hash)
+    }
+
+    pub fn record_generated_password(&self, value: &str, source: &str, host: Option<String>) -> Result<crate::gen_history::GeneratorHistoryEntry> {
+        self.ensure_not_revoked()?;
+        let mut gh = self.read_generator_history()?;
+        let now = now_secs();
+        let entry = gh.add_entry(value.to_string(), source, host, now);
+        self.write_generator_history(&gh)?;
+        Ok(entry)
+    }
+
+    pub fn clear_generator_history(&self) -> Result<()> {
+        self.ensure_not_revoked()?;
+        let mut gh = self.read_generator_history()?;
+        let now = now_secs();
+        gh.clear(now);
+        self.write_generator_history(&gh)?;
+        Ok(())
+    }
+
+    pub fn delete_generator_history_entry(&self, id: &str) -> Result<bool> {
+        self.ensure_not_revoked()?;
+        let mut gh = self.read_generator_history()?;
+        let now = now_secs();
+        let removed = gh.delete_entry(id, now);
+        if removed {
+            self.write_generator_history(&gh)?;
+        }
+        Ok(removed)
     }
 }
 

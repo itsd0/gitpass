@@ -22,6 +22,14 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 use zeroize::Zeroizing;
 
+fn clean_host(s: &str) -> Option<String> {
+    let s = s.trim();
+    if s.is_empty() { return None; }
+    let u = if s.contains("://") { url::Url::parse(s).ok()? } else { url::Url::parse(&format!("https://{s}")).ok()? };
+    u.host_str().map(|h| h.trim_start_matches("www.").to_string()).filter(|h| !h.is_empty())
+}
+
+
 pub const MAX_MSG: usize = 4 * 1024 * 1024;
 pub const UNLOCK_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -464,6 +472,14 @@ impl Agent {
                 let mode = if pin { Mode::Pin } else if words { Mode::Words } else { Mode::Random };
                 let r = Request { mode, length: q.get("len").and_then(|v| v.as_u64()).map(|v| v as usize), symbols: b("symbols"), digits: b("digits"), ..Request::new(mode) };
                 Ok(json!({"password": api::generate(&r).map_err(|e| err("bad_request", e.to_string()))?}))
+            }
+            "record_generated_password" => {
+                let pw = q.get("password").and_then(|v| v.as_str()).ok_or_else(|| err("bad_request", "password is required"))?;
+                let source = q.get("source").and_then(|v| v.as_str()).unwrap_or("extension");
+                let origin_or_host = q.get("origin").or_else(|| q.get("host")).and_then(|v| v.as_str());
+                let host = origin_or_host.and_then(clean_host);
+                self.app.record_generated_password(pw, source, host).map_err(host_err)?;
+                Ok(json!({"ok": true}))
             }
             "passkey_query" => {
                 self.app.state.with(|x| {

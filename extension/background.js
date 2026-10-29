@@ -146,6 +146,7 @@ async function popupRoute(msg) {
     case 'open_in_app': return host('open_in_app', msg.item_id ? { item_id: msg.item_id } : {});
     case 'can_fill_generated': return canFillGenerated();
     case 'fill_generated': return fillGenerated(msg.password);
+    case 'record_generated': return recordGenerated(msg.password);
     case 'open_fill': return openFill(msg);
   }
   throw new Error('unknown popup message');
@@ -170,7 +171,16 @@ async function fillGenerated(password) {
   if (typeof password !== 'string' || !password || password.length > 1024) throw Object.assign(new Error('password is required'), { code: 'bad_request' });
   const r = await chrome.tabs.sendMessage(tab.id, { type: 'gitpass-fill-generated', origin, password }, { frameId: 0 });
   if (!r || !r.filled) throw Object.assign(new Error('no focused password field'), { code: 'bad_request' });
+  await host('record_generated_password', { password, origin, source: 'extension' }).catch(() => {});
   return { filled: true };
+}
+
+/** Record a generated password (e.g. from popup copy). */
+async function recordGenerated(password) {
+  if (typeof password !== 'string' || !password || password.length > 1024) return { ok: false };
+  const { origin } = await activeOrigin();
+  await host('record_generated_password', { password, origin: origin || null, source: 'extension' }).catch(() => {});
+  return { ok: true };
 }
 
 /** Open & Fill: fill the active tab if it matches; for logins with a URL otherwise open that URL first. */async function openFill(msg) {
