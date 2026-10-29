@@ -151,7 +151,7 @@ pub fn migrate(root: &Path, password: &str, secret: &SecretKey, opts: MigrateOpt
     let salt = B64.decode(&fmt.salt)?;
     let auk = derive_auk(password, secret, &salt, &fmt.account_id, &fmt.kdf)?;
     let keyset_hash = write_json(&tmp.join("keyset.enc"), &wrap_key(&auk, &plain.account_key, &store::keyset_aad(&fmt))?)?;
-    let mut m = Manifest { format: store::MANIFEST_FORMAT_V3, account_id: fmt.account_id.clone(), epoch: 1, keyset_hash, vaults: BTreeMap::new(), devices_hash: None, identity: None };
+    let mut m = Manifest { format: store::MANIFEST_FORMAT_V3, account_id: fmt.account_id.clone(), epoch: 1, keyset_hash, vaults: BTreeMap::new(), devices_hash: None, identity: None, generator_history_hash: None };
     for (vid, vk, name, items) in &plain.vaults {
         let d = tmp.join("vaults").join(vid);
         fs::create_dir_all(d.join("items"))?;

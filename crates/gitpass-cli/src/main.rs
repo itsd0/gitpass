@@ -231,6 +231,11 @@ enum Cmd {
     },
     /// Generate a random password, a memorable passphrase or a PIN
     Gen {
+        #[command(subcommand)]
+        command: Option<GenSubcommand>,
+        /// Do not record the generated password to generator history
+        #[arg(long)]
+        no_history: bool,
         /// Length of the random password (default 24)
         len: Option<usize>,
         /// Memorable passphrase of N words (3-20) from a 128-word list
@@ -435,6 +440,27 @@ enum RemoteCmd {
     Show,
     /// Disconnect: remove the 'origin' remote (local files and history are kept; nothing is deleted remotely)
     Remove,
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum GenSubcommand {
+    /// Inspect or clear generator history
+    History {
+        #[command(subcommand)]
+        action: Option<GenHistoryAction>,
+        /// Output JSON array of history entries
+        #[arg(long)]
+        json: bool,
+        /// Reveal the plaintext password (otherwise masked)
+        #[arg(long)]
+        reveal: bool,
+    },
+}
+
+#[derive(Subcommand, Debug, Clone)]
+enum GenHistoryAction {
+    /// Clear all generator history
+    Clear,
 }
 
 #[derive(Subcommand)]
@@ -1695,11 +1721,55 @@ fn run() -> Result<()> {
             let new_v = s.restore_version(&vid, &iid, *version)?;
             println!("restored {iid} to version {version} (now version {new_v})");
         }
-        Cmd::Gen { len, words, pin, separator, capitalize, no_symbols, no_digits, copy, clear_secs } => {
+        Cmd::Gen { command, no_history, len, words, pin, separator, capitalize, no_symbols, no_digits, copy, clear_secs } => {
+            if let Some(cmd) = command {
+                match cmd {
+                    GenSubcommand::History { action, json, reveal } => {
+                        let s = unlock(&cli, &root)?;
+                        match action {
+                            Some(GenHistoryAction::Clear) => {
+                                s.clear_generator_history()?;
+                                eprintln!("cleared generator history");
+                            }
+                            None => {
+                                let history = s.read_generator_history()?;
+                                if *json {
+                                    let dtos: Vec<serde_json::Value> = history.entries.iter().map(|e| {
+                                        serde_json::json!({
+                                            "id": e.id,
+                                            "value": if *reveal { e.value.as_str() } else { "••••••••" },
+                                            "created_at": e.created_at,
+                                            "source": e.source,
+                                            "host": e.host,
+                                        })
+                                    }).collect();
+                                    println!("{}", serde_json::to_string_pretty(&dtos)?);
+                                } else if history.entries.is_empty() {
+                                    println!("(no generated passwords in history)");
+                                } else {
+                                    for entry in &history.entries {
+                                        let ts = gitpass_core::device::iso8601(entry.created_at as i64);
+                                        let val = if *reveal { entry.value.as_str() } else { "••••••••" };
+                                        let host_part = entry.host.as_deref().map(|h| format!("  ({h})")).unwrap_or_default();
+                                        println!("{ts}  [{}]  {val}{host_part}", entry.source);
+                                    }
+                                }
+                            }
+                        }
+                        return Ok(());
+                    }
+                }
+            }
             let args = gitpass_cli::gen::Args { len: *len, words: *words, pin: *pin, separator: *separator,
                 capitalize: *capitalize, no_symbols: *no_symbols, no_digits: *no_digits, copy: *copy, clear_secs: *clear_secs };
             let mut out = std::io::stdout();
-            gitpass_cli::gen::run(&args, gitpass_cli::clip::system, &mut out, std::thread::sleep)?;
+            let pw = gitpass_cli::gen::generate_pw(&args)?;
+            if !*no_history && root.join("format.json").exists() {
+                if let Ok(s) = unlock(&cli, &root) {
+                    let _ = s.record_generated_password(&pw, "cli", None);
+                }
+            }
+            gitpass_cli::gen::output_pw(&args, &pw, gitpass_cli::clip::system, &mut out, std::thread::sleep)?;
         }
         Cmd::Run { env_file, no_masking, cmd } => {
             use gitpass_cli::inject;

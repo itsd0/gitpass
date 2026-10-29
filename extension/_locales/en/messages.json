@@ -782,7 +782,7 @@
   },
   "updatePassword": {
     "message": "Update password"
-    },
+  },
   "sortBy": {
     "message": "Sort by"
   },
@@ -823,5 +823,38 @@
   },
   "csRulesTooShort": {
     "message": "This site's password rules are too short for a strong password"
+  },
+  "ctxGitpass": {
+    "message": "gitpass"
+  },
+  "ctxFillLogin": {
+    "message": "Fill login"
+  },
+  "ctxSearchGitpass": {
+    "message": "Search gitpass…"
+  },
+  "ctxSuggestPassword": {
+    "message": "Suggest strong password"
+  },
+  "ctxFillCard": {
+    "message": "Fill card"
+  },
+  "ctxFillIdentity": {
+    "message": "Fill identity"
+  },
+  "ctxOpenGitpass": {
+    "message": "Open gitpass"
+  },
+  "ctxUnlockGitpass": {
+    "message": "Unlock gitpass…"
+  },
+  "optBadge": {
+    "message": "Show match count on the toolbar icon"
+  },
+  "optBadgeBody": {
+    "message": "Show how many logins match the current site. Only the number is shown."
+  },
+  "badgeAppNotRunning": {
+    "message": "gitpass app not running"
   }
 }

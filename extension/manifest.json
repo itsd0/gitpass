@@ -10,7 +10,8 @@
     "clipboardWrite",
     "storage",
     "scripting",
-    "idle"
+    "idle",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://*/*",

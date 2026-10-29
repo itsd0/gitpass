@@ -270,4 +270,22 @@ describe('Settings search and consistent layout', () => {
     expect(row).toBeTruthy();
     expect(row?.className).toContain('ring-accent');
   });
+
+  it('searches for generator history setting and highlights the row in Security tab', async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage initialTab="general" />);
+    const searchInput = await screen.findByTestId('settings-search-input');
+
+    await user.type(searchInput, 'generator history');
+    const result = await screen.findByRole('option', { name: /Remember generated passwords/i });
+    expect(result).toBeTruthy();
+    await user.click(result);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tabpanel', { name: 'Security' })).toBeTruthy();
+    });
+    const row = document.getElementById('setting-remember-generated-passwords');
+    expect(row).toBeTruthy();
+    expect(row?.className).toContain('ring-accent');
+  });
 });

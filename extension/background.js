@@ -13,8 +13,13 @@ if (typeof importScripts === 'function') importScripts('bg-onboard.js');
 if (typeof importScripts === 'function' && !globalThis.GitpassPasskey) importScripts('bg-passkey.js');
 // ⌘⇧L / Ctrl+Shift+L "fill-login" command (#124)
 if (typeof importScripts === 'function' && !globalThis.GitpassCommand) importScripts('bg-command.js');
+// Right-click context menu (#213); installed at the bottom once the helpers exist.
+if (typeof importScripts === 'function' && !globalThis.GitpassContextMenu) importScripts('bg-context.js');
+// Toolbar icon state + match-count badge (#218)
+if (typeof importScripts === 'function' && !globalThis.GitpassBadge) importScripts('bg-badge.js');
 
 const HOST = 'com.gitpass.host';
+let contextMenuApi = null; // set by the install at the bottom; host events rebuild the menu
 let port = null;
 let nextId = 1;
 const pending = new Map();
@@ -25,7 +30,11 @@ function connect() {
   port.onMessage.addListener((msg) => {
     // App lock/unlock events (forwarded by the host) -> open popups. No popup open is fine.
     if (msg && msg.event && msg.id == null) {
-      if (msg.event === 'lock' || msg.event === 'unlock' || msg.event === 'changed') chrome.runtime.sendMessage({ type: 'popup:event', event: msg.event }).catch(() => {});
+      if (msg.event === 'lock' || msg.event === 'unlock' || msg.event === 'changed') {
+        chrome.runtime.sendMessage({ type: 'popup:event', event: msg.event }).catch(() => {});
+        if (contextMenuApi) contextMenuApi.rebuild(); // locked menu vs full menu (#213)
+        if (globalThis.gitpassBadge) globalThis.gitpassBadge.onHostEvent(msg.event);
+      }
       return;
     }
     const p = pending.get(msg.id);
@@ -56,6 +65,7 @@ if (typeof chrome !== 'undefined' && chrome.idle && chrome.idle.onStateChanged) 
     if (state === 'locked') {
       host('lock').catch(() => {});
       chrome.runtime.sendMessage({ type: 'popup:event', event: 'lock', reason: 'screen' }).catch(() => {});
+      if (globalThis.gitpassBadge) globalThis.gitpassBadge.onHostEvent('lock');
     } else if (state === 'idle') {
       host('status').catch(() => {});
     }
@@ -73,7 +83,12 @@ async function fillTab(tabId, origin, itemId, extra) {
   const creds = await host('fill', { item_id: itemId, origin }); // host enforces origin match
   const via = extra && extra.via === 'command' ? { via: 'command' } : {};
   if (globalThis.GitpassPage) GitpassPage.rememberFilled(tabId, origin, itemId); // ids only: offers the one-time code on the next page
-  await chrome.tabs.sendMessage(tabId, { type: 'gitpass-fill', origin, username: creds.username, password: creds.password, ...via }, { frameId: 0 });
+  // The frame is the caller's choice: popup/command fills use the top frame (0),
+  // the context menu (#213) passes the frame that was right-clicked. Never
+  // default a subframe click to the top frame: filling the wrong frame's form
+  // would be worse than failing closed with no receiver there.
+  const frameId = extra && Number.isInteger(extra.frameId) ? extra.frameId : 0;
+  await chrome.tabs.sendMessage(tabId, { type: 'gitpass-fill', origin, username: creds.username, password: creds.password, ...via }, { frameId });
   return true;
 }
 
@@ -135,6 +150,7 @@ async function popupRoute(msg) {
     case 'open_in_app': return host('open_in_app', msg.item_id ? { item_id: msg.item_id } : {});
     case 'can_fill_generated': return canFillGenerated();
     case 'fill_generated': return fillGenerated(msg.password);
+    case 'record_generated': return recordGenerated(msg.password);
     case 'open_fill': return openFill(msg);
   }
   throw new Error('unknown popup message');
@@ -159,7 +175,16 @@ async function fillGenerated(password) {
   if (typeof password !== 'string' || !password || password.length > 1024) throw Object.assign(new Error('password is required'), { code: 'bad_request' });
   const r = await chrome.tabs.sendMessage(tab.id, { type: 'gitpass-fill-generated', origin, password }, { frameId: 0 });
   if (!r || !r.filled) throw Object.assign(new Error('no focused password field'), { code: 'bad_request' });
+  await host('record_generated_password', { password, origin, source: 'extension' }).catch(() => {});
   return { filled: true };
+}
+
+/** Record a generated password (e.g. from popup copy). */
+async function recordGenerated(password) {
+  if (typeof password !== 'string' || !password || password.length > 1024) return { ok: false };
+  const { origin } = await activeOrigin();
+  await host('record_generated_password', { password, origin: origin || null, source: 'extension' }).catch(() => {});
+  return { ok: true };
 }
 
 /** Open & Fill: fill the active tab if it matches; for logins with a URL otherwise open that URL first. */async function openFill(msg) {
@@ -200,6 +225,9 @@ if (chrome.commands && chrome.commands.onCommand) {
   chrome.commands.onCommand.addListener((cmd) => { if (cmd === GitpassCommand.COMMAND) fillLoginCommand().catch(() => {}); });
 }
 
+// Toolbar icon: locked / not running variant, and the count of logins for the active tab (#218).
+if (globalThis.GitpassBadge) globalThis.gitpassBadge = GitpassBadge.install({ host });
+
 // Messages from the popup (extension pages) and content scripts.
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
@@ -221,3 +249,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   })().then((r) => sendResponse({ ok: true, result: r }), (e) => sendResponse({ ok: false, error: String(e.message || e), code: e.code || null }));
   return true; // async
 });
+
+// Right-click context menu (#213). Installed once, after host/fillTab exist;
+// bg-context.js only defines the factory, so on Firefox (background.scripts)
+// it must be listed before background.js in manifest.firefox.json.
+if (typeof chrome !== 'undefined' && chrome.contextMenus && globalThis.GitpassContextMenu) {
+  contextMenuApi = GitpassContextMenu.install({
+    chrome,
+    host,
+    activeTab,
+    fillTab,
+    sendToTab: (tabId, msg, frameId) => chrome.tabs.sendMessage(tabId, msg, { frameId }),
+    fillPaymentFrames: (tabId, fields) => GitpassPage.fillPaymentFrames(tabId, fields),
+    openPopup: () => { if (chrome.action && chrome.action.openPopup) chrome.action.openPopup().catch(() => {}); },
+    originOf: (url) => GitpassPolicy.originOf(url),
+    isFillableOrigin: (origin) => GitpassPolicy.isFillableOrigin(origin),
+    t: (key, fallback) => {
+      try { const m = chrome.i18n && chrome.i18n.getMessage(key); if (m) return m; } catch (_) {}
+      return fallback;
+    },
+  });
+}
