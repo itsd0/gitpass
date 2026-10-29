@@ -397,3 +397,139 @@ fn bulk_move_and_purge_keep_attachments_right() {
     assert_eq!(s.remove_items(&t).unwrap(), 2);
     assert!(s.read_attachment(&v2, &mv[0].2, &r.attachments[0].id).is_err());
 }
+
+#[test]
+fn remove_attachment_deletes_file_and_manifest_and_records_history() {
+    let (d, sk, s, v) = vault();
+    let id = s.add_record(&v, rec(Category::Login, "item-with-files", sample(Category::Login))).unwrap();
+
+    let data_a = b"fake-file-a-contents";
+    let data_b = b"fake-file-b-contents";
+    let att_a = s.add_attachment(&v, &id, "a.txt", "text/plain", data_a).unwrap();
+    let att_b = s.add_attachment(&v, &id, "b.pdf", "application/pdf", data_b).unwrap();
+
+    let fp_a = d.path().join("vaults").join(&v).join("files").join(format!("{}.enc", att_a.id));
+    let fp_b = d.path().join("vaults").join(&v).join("files").join(format!("{}.enc", att_b.id));
+    assert!(fp_a.exists());
+    assert!(fp_b.exists());
+    assert_eq!(s.read_attachment(&v, &id, &att_a.id).unwrap(), data_a);
+    assert_eq!(s.read_attachment(&v, &id, &att_b.id).unwrap(), data_b);
+
+    let m1 = s.load_manifest().unwrap();
+    assert!(m1.vaults[&v].files.contains_key(&att_a.id));
+    assert!(m1.vaults[&v].files.contains_key(&att_b.id));
+
+    let (v_before, r_before) = s.read_record(&v, &id).unwrap();
+    assert_eq!(r_before.attachments.len(), 2);
+
+    // Remove attachment A
+    s.remove_attachment(&v, &id, &att_a.id).unwrap();
+
+    // 1. Blob removed from disk
+    assert!(!fp_a.exists(), "attachment file must be removed from disk");
+    assert!(fp_b.exists(), "other attachment must remain");
+
+    // 2. Manifest entry removed
+    let m2 = s.load_manifest().unwrap();
+    assert!(!m2.vaults[&v].files.contains_key(&att_a.id), "manifest must drop removed file");
+    assert!(m2.vaults[&v].files.contains_key(&att_b.id));
+
+    // 3. Decrypting removed attachment fails
+    assert!(s.read_attachment(&v, &id, &att_a.id).is_err());
+    assert_eq!(s.read_attachment(&v, &id, &att_b.id).unwrap(), data_b);
+
+    // 4. Record updated and prior version recorded in history
+    let (v_after, r_after) = s.read_record(&v, &id).unwrap();
+    assert_eq!(v_after, v_before + 1);
+    assert_eq!(r_after.attachments.len(), 1);
+    assert_eq!(r_after.attachments[0].id, att_b.id);
+    assert!(!r_after.history.is_empty(), "history must record prior edit");
+    let last_hist = r_after.history.last().unwrap();
+    assert_eq!(last_hist.version, v_before);
+
+    // 5. Removing already-removed or non-existent attachment fails cleanly
+    let err = s.remove_attachment(&v, &id, &att_a.id).unwrap_err();
+    assert!(err.to_string().contains("item has no attachment"));
+
+    // 6. Remove attachment B (now 0 attachments)
+    s.remove_attachment(&v, &id, &att_b.id).unwrap();
+    assert!(!fp_b.exists());
+    let (_, r_empty) = s.read_record(&v, &id).unwrap();
+    assert!(r_empty.attachments.is_empty());
+
+    // 7. Adding file exceeding limit produces clear error
+    let huge = vec![0u8; gitpass_core::item::MAX_ATTACHMENT_BYTES + 1];
+    let err_size = s.add_attachment(&v, &id, "huge.dat", "application/octet-stream", &huge).unwrap_err();
+    assert!(err_size.to_string().contains("exceeds 25 MiB limit"), "{err_size}");
+
+    // 8. Re-unlocking session verifies clean integrity
+    let s_unlocked = Session::unlock_with(d.path(), "fake-pw", &sk, &opts()).unwrap();
+    assert_eq!(s_unlocked.list_records(&v).unwrap().len(), 1);
+}
+
+#[test]
+fn removed_attachment_stays_removed_after_concurrent_edit() {
+    let (d, _sk, s, v) = vault();
+    let id = s.add_record(&v, rec(Category::Login, "shared", sample(Category::Login))).unwrap();
+    let keep = s.add_attachment(&v, &id, "keep.txt", "text/plain", b"FAKE keep").unwrap();
+    let drop = s.add_attachment(&v, &id, "drop.txt", "text/plain", b"FAKE drop").unwrap();
+    let (_, base) = s.read_record(&v, &id).unwrap();
+    assert!(base.removed_attachments.is_empty());
+    assert!(!serde_json::to_string(&base).unwrap().contains("removed_attachments"), "no tombstone key when empty");
+
+    // Device B (remote): edits the item without knowing about the removal.
+    let mut remote = base.clone();
+    remote.tags = vec!["edited-on-b".into()];
+    gitpass_core::merge::stamp_ext(Some(&base), &mut remote, base.xclocks.values().max().copied().unwrap_or(0) + 1000);
+    assert_eq!(remote.attachments.len(), 2);
+
+    // Device A (local): removes drop.txt — record, blob and manifest change in one commit.
+    let epoch_before = s.load_manifest().unwrap().epoch;
+    s.remove_attachment(&v, &id, &drop.id).unwrap();
+    assert_eq!(s.load_manifest().unwrap().epoch, epoch_before + 1, "remove_attachment must be a single commit");
+    let (_, local) = s.read_record(&v, &id).unwrap();
+    assert_eq!(local.removed_attachments, vec![drop.id.clone()]);
+    assert!(!d.path().join("vaults").join(&v).join("files").join(format!("{}.enc", drop.id)).exists());
+
+    // A applies B's edit: the edit lands, the removed attachment does not come back.
+    s.merge_item(&v, &id, &remote).unwrap();
+    let (_, m) = s.read_record(&v, &id).unwrap();
+    assert_eq!(m.tags, vec!["edited-on-b".to_string()]);
+    assert_eq!(m.attachments.iter().map(|a| a.id.clone()).collect::<Vec<_>>(), vec![keep.id.clone()]);
+    assert!(m.removed_attachments.contains(&drop.id));
+    assert_eq!(s.read_attachment(&v, &id, &keep.id).unwrap(), b"FAKE keep");
+
+    // B applies A's record: the tombstone removes drop.txt there too.
+    let (out, rep) = merge_records(&remote, &local);
+    assert!(rep.changed_local());
+    assert_eq!(out.attachments.iter().map(|a| a.id.clone()).collect::<Vec<_>>(), vec![keep.id.clone()]);
+    assert!(out.removed_attachments.contains(&drop.id));
+    assert_eq!(out.tags, vec!["edited-on-b".to_string()]);
+
+    // A later plain edit on A keeps the tombstone.
+    let (_, cur) = s.read_record(&v, &id).unwrap();
+    let mut it = cur.item.clone();
+    it.title = "renamed".into();
+    s.update_item(&v, &id, &it).unwrap();
+    let (_, after) = s.read_record(&v, &id).unwrap();
+    assert!(after.removed_attachments.contains(&drop.id));
+    assert_eq!(after.attachments.len(), 1);
+}
+
+#[test]
+fn restore_version_keeps_attachment_tombstones() {
+    let (_d, _sk, s, v) = vault();
+    let id = s.add_record(&v, rec(Category::Login, "restore-tombstone", sample(Category::Login))).unwrap();
+    let att = s.add_attachment(&v, &id, "a.txt", "text/plain", b"fake-a").unwrap();
+    let (_, stale) = s.read_record(&v, &id).unwrap();
+    assert_eq!(stale.attachments.len(), 1);
+    s.remove_attachment(&v, &id, &att.id).unwrap();
+    s.restore_version(&v, &id, 1).unwrap();
+    let (_, restored) = s.read_record(&v, &id).unwrap();
+    assert!(restored.attachments.is_empty());
+    assert!(restored.removed_attachments.contains(&att.id), "restore must keep the tombstone");
+    let (m, _) = merge_records(&restored, &stale);
+    assert!(!m.attachments.iter().any(|a| a.id == att.id), "merge must not resurrect a removed attachment");
+    let (m2, _) = merge_records(&stale, &restored);
+    assert!(!m2.attachments.iter().any(|a| a.id == att.id));
+}

@@ -528,11 +528,7 @@ fn annotate_diff(d: &mut ItemDetail, snap: &ItemRecord, cur: &ItemRecord) {
 }
 
 fn mime_for(name: &str) -> &'static str {
-    match Path::new(name).extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
-        Some("pdf") => "application/pdf", Some("png") => "image/png", Some("jpg") | Some("jpeg") => "image/jpeg",
-        Some("gif") => "image/gif", Some("txt") => "text/plain", Some("json") => "application/json", Some("zip") => "application/zip",
-        _ => "application/octet-stream",
-    }
+    item::mime_for(name)
 }
 
 /// Generate a password (`words`: `length` words from a 128-word list joined by '-', ~7 bits/word, `pin`: `length` digits).
@@ -1027,6 +1023,9 @@ impl App {
     pub fn save_attachment(&self, vault_id: &str, item_id: &str, attachment_id: &str, dest_path: &str) -> Result<()> {
         let data = self.with(|u| Ok(Zeroizing::new(u.session.read_attachment(vault_id, item_id, attachment_id)?)))?;
         std::fs::write(dest_path, &*data).with_context(|| format!("cannot write {dest_path}"))
+    }
+    pub fn remove_attachment(&self, vault_id: &str, item_id: &str, attachment_id: &str) -> Result<()> {
+        self.write(|u| u.session.remove_attachment(vault_id, item_id, attachment_id))
     }
     pub fn list_tags(&self) -> Result<Vec<String>> {
         self.with(|u| Ok(Self::all_records(&u.session)?.iter().filter(|(_, _, r)| r.deleted_at.is_none())
