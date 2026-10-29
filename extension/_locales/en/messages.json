@@ -754,5 +754,17 @@
   },
   "sortTitle": {
     "message": "Title"
+  },
+  "csTotpOffer": {
+    "message": "Fill one-time code"
+  },
+  "csTotpDismiss": {
+    "message": "Dismiss"
+  },
+  "optAutoTotp": {
+    "message": "Fill one-time codes automatically"
+  },
+  "optAutoTotpBody": {
+    "message": "After gitpass fills a login, fill its one-time code on the next page without asking."
   }
 }
