@@ -603,6 +603,8 @@ export const th: Partial<Record<Key, string>> = {
   "sidebar.newVault": "ห้องนิรภัยใหม่",
   "sidebar.newVaultEllipsis": "ห้องนิรภัยใหม่…",
   "sidebar.sharedVault": "ห้องนิรภัยที่แชร์",
+  "sidebar.collapseSection": "ยุบ {section}",
+  "sidebar.expandSection": "ขยาย {section}",
   "sidebar.lightTheme": "ธีมสว่าง",
   "sidebar.darkTheme": "ธีมมืด",
   "tag.renameAria": "เปลี่ยนชื่อแท็ก {tag}",

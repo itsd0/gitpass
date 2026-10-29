@@ -600,6 +600,8 @@ export const en = {
   "sidebar.newVault": "New vault",
   "sidebar.newVaultEllipsis": "New vault…",
   "sidebar.sharedVault": "Shared vault",
+  "sidebar.collapseSection": "Collapse {section}",
+  "sidebar.expandSection": "Expand {section}",
   "sidebar.lightTheme": "Light theme",
   "sidebar.darkTheme": "Dark theme",
   "tag.renameAria": "Rename tag {tag}",
