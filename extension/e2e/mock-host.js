@@ -195,7 +195,8 @@ function handle(m) {
       const allow = Array.isArray(m.allow_credentials) ? m.allow_credentials : [];
       const matching = pkStore.list()
         .filter((p) => p.rp_id === rp && (!allow.length || allow.includes(p.credential_id)))
-        .map((p) => ({ credential_id: p.credential_id, user_name: p.user_name, user_handle: p.user_handle }));
+        .map((p) => ({ credential_id: p.credential_id, user_name: p.user_name, user_handle: p.user_handle, vault_name: p.vault_name || "Personal", last_used: p.last_used || 0 }))
+        .sort((a, b) => (b.last_used || 0) - (a.last_used || 0));
       return { rp_id: rp, matching };
     }
     case 'passkey_create': case 'passkey_get': needUnlock();

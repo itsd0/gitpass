@@ -1,6 +1,6 @@
 <!doctype html><html><head><meta charset="utf-8"><title>WebAuthn demo (local RP)</title></head><body>
 <h1>WebAuthn demo relying party</h1>
-<button id="reg">Register</button> <button id="login">Sign in</button>
+<button id="reg">Register</button> <button id="reg2">Register account 2</button> <button id="login">Sign in</button>
 <pre id="out"></pre>
 <script>
 // A minimal relying party in the page: it verifies what navigator.credentials returns with WebCrypto.
@@ -10,33 +10,59 @@ const rnd = (n) => crypto.getRandomValues(new Uint8Array(n));
 const sha = async (b) => new Uint8Array(await crypto.subtle.digest('SHA-256', b));
 const eq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 function derToRaw(der) { const d = new Uint8Array(der); let i = 2; const rd = () => { i++; const l = d[i++]; let v = d.slice(i, i + l); i += l; while (v.length > 32 && v[0] === 0) v = v.slice(1); const o = new Uint8Array(32); o.set(v, 32 - v.length); return o; }; const r = rd(), s = rd(); const o = new Uint8Array(64); o.set(r); o.set(s, 32); return o; }
-const RP = { stored: null };
+const RP = { stored: null, all: new Map() };
 async function checkClient(cdBuf, type, ch) { const cd = JSON.parse(new TextDecoder().decode(cdBuf)); if (cd.type !== type || cd.challenge !== b64u(ch) || cd.origin !== location.origin) throw new Error('clientData mismatch ' + JSON.stringify(cd)); }
+
+function storeCred(c, ad, key) {
+  const item = { rawId: c.rawId, id: c.id, key, count: new DataView(ad.buffer).getUint32(33) };
+  RP.stored = item;
+  RP.all.set(c.id, item);
+  return item;
+}
+
 document.getElementById('reg').onclick = async () => {
   try {
     const ch = rnd(32);
-    const c = await navigator.credentials.create({ publicKey: { challenge: ch, rp: { id: location.hostname, name: 'Demo RP' }, user: { id: new TextEncoder().encode('user-42'), name: 'demo@example.invalid', displayName: 'Demo' }, pubKeyCredParams: [{ type: 'public-key', alg: -7 }], excludeCredentials: RP.stored ? [{ type: 'public-key', id: RP.stored.rawId }] : [] } });
+    const c = await navigator.credentials.create({ publicKey: { challenge: ch, rp: { id: location.hostname, name: 'Demo RP' }, user: { id: new TextEncoder().encode('user-42'), name: 'demo@example.invalid', displayName: 'Demo' }, pubKeyCredParams: [{ type: 'public-key', alg: -7 }], excludeCredentials: Array.from(RP.all.values()).map(x => ({ type: 'public-key', id: x.rawId })) } });
     await checkClient(c.response.clientDataJSON, 'webauthn.create', ch);
     const ad = new Uint8Array(c.response.getAuthenticatorData());
     if (!eq(ad.slice(0, 32), await sha(new TextEncoder().encode(location.hostname)))) throw new Error('rpIdHash mismatch');
     if (c.response.getPublicKeyAlgorithm() !== -7) throw new Error('alg');
     const key = await crypto.subtle.importKey('spki', c.response.getPublicKey(), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
-    RP.stored = { rawId: c.rawId, id: c.id, key, count: new DataView(ad.buffer).getUint32(33) };
+    storeCred(c, ad, key);
     out({ registered: true, id: c.id, flags: ad[32] });
   } catch (e) { out({ error: e.name, message: e.message }); }
 };
+
+document.getElementById('reg2').onclick = async () => {
+  try {
+    const ch = rnd(32);
+    const c = await navigator.credentials.create({ publicKey: { challenge: ch, rp: { id: location.hostname, name: 'Demo RP' }, user: { id: new TextEncoder().encode('user-bob'), name: 'bob@example.invalid', displayName: 'Bob' }, pubKeyCredParams: [{ type: 'public-key', alg: -7 }] } });
+    await checkClient(c.response.clientDataJSON, 'webauthn.create', ch);
+    const ad = new Uint8Array(c.response.getAuthenticatorData());
+    if (!eq(ad.slice(0, 32), await sha(new TextEncoder().encode(location.hostname)))) throw new Error('rpIdHash mismatch');
+    if (c.response.getPublicKeyAlgorithm() !== -7) throw new Error('alg');
+    const key = await crypto.subtle.importKey('spki', c.response.getPublicKey(), { name: 'ECDSA', namedCurve: 'P-256' }, false, ['verify']);
+    storeCred(c, ad, key);
+    out({ registered: true, id: c.id, flags: ad[32] });
+  } catch (e) { out({ error: e.name, message: e.message }); }
+};
+
 document.getElementById('login').onclick = async () => {
   try {
     const ch = rnd(32);
-    const a = await navigator.credentials.get({ publicKey: { challenge: ch, rpId: location.hostname, allowCredentials: [{ type: 'public-key', id: RP.stored.rawId }] } });
+    const allow = Array.from(RP.all.values()).map(x => ({ type: 'public-key', id: x.rawId }));
+    const a = await navigator.credentials.get({ publicKey: { challenge: ch, rpId: location.hostname, allowCredentials: allow.length ? allow : undefined } });
     await checkClient(a.response.clientDataJSON, 'webauthn.get', ch);
     const ad = new Uint8Array(a.response.authenticatorData);
     const msg = new Uint8Array([...ad, ...await sha(a.response.clientDataJSON)]);
-    const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, RP.stored.key, derToRaw(a.response.signature), msg);
+    const target = RP.all.get(a.id) || RP.stored;
+    if (!target) throw new Error('unknown credential');
+    const ok = await crypto.subtle.verify({ name: 'ECDSA', hash: 'SHA-256' }, target.key, derToRaw(a.response.signature), msg);
     const count = new DataView(ad.buffer).getUint32(33);
     if (!ok) throw new Error('bad signature');
-    if (count <= RP.stored.count) throw new Error('signCount did not increase');
-    RP.stored.count = count;
+    if (count <= target.count) throw new Error('signCount did not increase');
+    target.count = count;
     out({ verified: true, id: a.id, signCount: count, userHandle: a.response.userHandle ? new TextDecoder().decode(a.response.userHandle) : null });
   } catch (e) { out({ error: e.name, message: e.message }); }
 };
