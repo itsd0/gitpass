@@ -12,7 +12,11 @@ use std::time::Duration;
 fn fast() -> KdfParams { KdfParams { alg: "argon2id".into(), m_kib: 8192, t: 1, p: 1 } }
 
 /// Test UI: request_unlock unlocks the vault from another thread (stands in for Touch ID / password).
-struct TestUi { app: Mutex<Option<(Arc<App>, String, String)>>, opened: Mutex<Vec<(Option<String>, Option<String>)>> }
+struct TestUi {
+    app: Mutex<Option<(Arc<App>, String, String)>>,
+    opened: Mutex<Vec<(Option<String>, Option<String>)>>,
+    views: Mutex<Vec<(String, Option<String>)>>,
+}
 impl AgentUi for TestUi {
     fn request_unlock(&self, _reason: &str) {
         if let Some((app, dir, sk)) = self.app.lock().unwrap().clone() {
@@ -20,6 +24,7 @@ impl AgentUi for TestUi {
         }
     }
     fn open_item(&self, v: Option<&str>, i: Option<&str>) { self.opened.lock().unwrap().push((v.map(Into::into), i.map(Into::into))); }
+    fn open_view(&self, v: &str, s: Option<&str>) { self.views.lock().unwrap().push((v.into(), s.map(Into::into))); }
 }
 
 struct Env { _vault: tempfile::TempDir, _cfg: tempfile::TempDir, _sock: tempfile::TempDir, app: Arc<App>, agent: Arc<Agent>, ui: Arc<TestUi>, vault: String }
@@ -33,7 +38,7 @@ fn env() -> Env {
     app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
     app.unlock(&d.path().display().to_string(), "correct horse", Some(&sk)).unwrap();
     let vault = app.list_vaults().unwrap()[0].id.clone();
-    let ui = Arc::new(TestUi { app: Mutex::new(Some((app.clone(), d.path().display().to_string(), sk))), opened: Mutex::new(vec![]) });
+    let ui = Arc::new(TestUi { app: Mutex::new(Some((app.clone(), d.path().display().to_string(), sk))), opened: Mutex::new(vec![]), views: Mutex::new(vec![]) });
     let agent = Agent::start(app.clone(), ui.clone(), &sockdir.path().join("gitpass")).unwrap();
     Env { _vault: d, _cfg: cfg, _sock: sockdir, app, agent, ui, vault }
 }
@@ -437,6 +442,44 @@ fn item_findings_agent_contract_and_security() {
     // 6. When locked gives locked
     e.app.lock();
     assert_eq!(c.err("item_findings", json!({"item_id": id1})), "locked");
+}
+
+#[test]
+fn open_in_app_view_targets_and_precedence() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+
+    // view: generator_history
+    c.ok("open_in_app", json!({"view": "generator_history"}));
+    assert_eq!(e.ui.views.lock().unwrap().pop(), Some(("generator_history".into(), None)));
+
+    // view: watchtower
+    c.ok("open_in_app", json!({"view": "watchtower"}));
+    assert_eq!(e.ui.views.lock().unwrap().pop(), Some(("watchtower".into(), None)));
+
+    // view: settings with section
+    c.ok("open_in_app", json!({"view": "settings", "section": "security"}));
+    assert_eq!(e.ui.views.lock().unwrap().pop(), Some(("settings".into(), Some("security".into()))));
+
+    // view: settings without section
+    c.ok("open_in_app", json!({"view": "settings"}));
+    assert_eq!(e.ui.views.lock().unwrap().pop(), Some(("settings".into(), None)));
+
+    // unknown view rejected with bad_request
+    assert_eq!(c.err("open_in_app", json!({"view": "bogus_view"})), "bad_request");
+    assert_eq!(c.err("open_in_app", json!({"view": "items"})), "bad_request");
+
+    // item_id wins over view when both provided
+    let full_id = c.ok("save_login", json!({"origin": "https://example.com", "username": "u", "password": "p"}))["item_id"].as_str().unwrap().to_string();
+    let (vid, iid) = full_id.split_once(':').unwrap();
+    c.ok("open_in_app", json!({"item_id": full_id, "view": "watchtower"}));
+    assert_eq!(e.ui.opened.lock().unwrap().pop(), Some((Some(vid.to_string()), Some(iid.to_string()))));
+    // views should not have recorded anything since item_id won
+    assert!(e.ui.views.lock().unwrap().is_empty());
+
+    // neither item_id nor view brings window forward
+    c.ok("open_in_app", json!({}));
+    assert_eq!(e.ui.opened.lock().unwrap().pop(), Some((None, None)));
 }
 
 #[test]

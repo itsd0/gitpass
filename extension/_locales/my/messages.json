@@ -849,6 +849,9 @@
   "changeOnSite": {
     "message": "ဆိုက်တွင် ပြောင်းရန်"
   },
+  "openWatchtower": {
+    "message": "Watchtower ဖွင့်ရန်"
+  },
   "openInGitpass": {
     "message": "gitpass တွင် ဖွင့်ရန်"
   },

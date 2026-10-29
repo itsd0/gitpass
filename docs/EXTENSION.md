@@ -51,6 +51,11 @@ Open it from the toolbar icon, or with the keyboard command below.
   desktop app). `gitpass gen --no-history` skips recording for a single
   CLI generation only. Note: when the desktop app is closed, the
   standalone host currently ignores that setting — see issue #225.
+- **Opening gitpass.** Actions like "Open in gitpass" and "Open Watchtower" in
+  the popup use `open_in_app` to bring the desktop app to the front and navigate
+  directly to the item or target view (Watchtower, generator history, or
+  Settings). If the app is locked, it shows the unlock screen first and then
+  completes the navigation.
 
 When the vault is locked, the popup shows the unlock screen instead of
 your items.

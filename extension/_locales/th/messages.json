@@ -849,6 +849,9 @@
   "changeOnSite": {
     "message": "เปลี่ยนที่เว็บไซต์"
   },
+  "openWatchtower": {
+    "message": "เปิด Watchtower"
+  },
   "openInGitpass": {
     "message": "เปิดใน gitpass"
   },
