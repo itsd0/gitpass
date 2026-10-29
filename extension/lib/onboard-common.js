@@ -17,7 +17,7 @@
       try { getPort().postMessage({ ...msg, rid: id }); } catch (e) { waiting.delete(id); rej(e); }
     });
   }
-  const DEFAULTS = { autolockFollowsApp: true, autofill: true, savePrompts: true, autoFillTotp: false, showBadge: true };
+  const DEFAULTS = { autolockFollowsApp: true, autofill: true, savePrompts: true, autoFillTotp: false, showBadge: true, autoSubmitAfterFill: false };
   function getSettings() { return new Promise((res) => chrome.storage.local.get('settings', (r) => res(Object.assign({}, DEFAULTS, (r && r.settings) || {})))); }
   function setSettings(patch) { return getSettings().then((s) => new Promise((res) => { const n = Object.assign(s, patch); chrome.storage.local.set({ settings: n }, () => res(n)); })); }
   function getNeverSave() {
@@ -40,5 +40,19 @@
       return setNeverSave(filtered);
     });
   }
-  root.GitpassOnboard = { send, getSettings, setSettings, getNeverSave, setNeverSave, removeNeverSave, DEFAULTS };
+  // Per-site "Never auto-submit here" list for issue #231. Same shape as neverSave, separate key.
+  function getNeverAutoSubmit() {
+    return new Promise((res) => {
+      chrome.storage.local.get(['neverAutoSubmit'], (r) => {
+        const list = (r && r.neverAutoSubmit) || [];
+        res(Array.isArray(list) ? list : []);
+      });
+    });
+  }
+  function setNeverAutoSubmit(list) {
+    return new Promise((res) => {
+      chrome.storage.local.set({ neverAutoSubmit: list }, () => res(list));
+    });
+  }
+  root.GitpassOnboard = { send, getSettings, setSettings, getNeverSave, setNeverSave, removeNeverSave, getNeverAutoSubmit, setNeverAutoSubmit, DEFAULTS };
 })(globalThis);
