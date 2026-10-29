@@ -1740,3 +1740,30 @@ fn settings_quick_access_hotkey_roundtrip_and_defaults() {
     assert_eq!(updated.quick_access_hotkey, "CommandOrControl+Shift+J");
     assert_eq!(e.app.get_settings().quick_access_hotkey, "CommandOrControl+Shift+J");
 }
+
+#[test]
+fn settings_render_notes_markdown_roundtrip_and_defaults() {
+    let s = Settings::default();
+    assert!(s.render_notes_markdown);
+
+    // Legacy JSON without renderNotesMarkdown defaults to true
+    let legacy_json = r#"{"autoLockMinutes":5,"clipboardClearSecs":90,"theme":"dark","language":"en","biometricUnlock":false}"#;
+    let parsed: Settings = serde_json::from_str(legacy_json).unwrap();
+    assert!(parsed.render_notes_markdown);
+
+    // Custom setting disabled
+    let mut custom = s;
+    custom.render_notes_markdown = false;
+    let serialized = serde_json::to_string(&custom).unwrap();
+    assert!(serialized.contains(r#""renderNotesMarkdown":false"#));
+    let deserialized: Settings = serde_json::from_str(&serialized).unwrap();
+    assert!(!deserialized.render_notes_markdown);
+
+    // App set_settings and get_settings persistence roundtrip
+    let e = env();
+    let initial = e.app.get_settings();
+    assert!(initial.render_notes_markdown);
+    let updated = e.app.set_settings(Settings { render_notes_markdown: false, ..initial }).unwrap();
+    assert!(!updated.render_notes_markdown);
+    assert!(!e.app.get_settings().render_notes_markdown);
+}
