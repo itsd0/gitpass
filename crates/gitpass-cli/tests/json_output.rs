@@ -334,3 +334,59 @@ fn get_archived_and_deleted_requires_include_archived() {
     let val4: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out4.stdout)).unwrap();
     assert!(val4["deleted_at"].is_string());
 }
+
+#[test]
+fn list_sort_recent_and_last_used_tracking() {
+    let v = setup_vault();
+
+    // 1. Initial state: items have no last_used
+    let out = gp(&v.root, &["list", "Personal", "--json"], None);
+    assert!(out.status.success());
+    let list: Vec<serde_json::Value> = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    for it in &list {
+        assert!(it.get("last_used").is_none());
+    }
+
+    // 2. Just viewing an item does NOT update last_used
+    let view_out = gp(&v.root, &["get", "Personal", &v.id_login], None);
+    assert!(view_out.status.success());
+    let out = gp(&v.root, &["list", "Personal", "--json"], None);
+    let list: Vec<serde_json::Value> = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let login_summary = list.iter().find(|x| x["id"] == v.id_login).unwrap();
+    assert!(login_summary.get("last_used").is_none());
+
+    // 3. Revealing the password updates last_used
+    let rev_out = gp(&v.root, &["get", "Personal", &v.id_login, "--password-only"], None);
+    assert!(rev_out.status.success());
+    let out = gp(&v.root, &["list", "Personal", "--json"], None);
+    let list: Vec<serde_json::Value> = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    let login_summary = list.iter().find(|x| x["id"] == v.id_login).unwrap();
+    assert!(login_summary["last_used"].as_u64().unwrap() > 0);
+
+    // 4. Copying a field updates last_used for id_work2
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    let copy_out = gp(&v.root, &["copy", "Personal", &v.id_work2, "--field", "username", "--quiet", "--clear-secs", "0"], None);
+    assert!(copy_out.status.success());
+
+    // 5. gitpass list --sort recent puts id_work2 first, then id_login, then others
+    let recent_out = gp(&v.root, &["list", "Personal", "--sort", "recent", "--json"], None);
+    assert!(recent_out.status.success());
+    let list: Vec<serde_json::Value> = serde_json::from_str(&String::from_utf8_lossy(&recent_out.stdout)).unwrap();
+    assert_eq!(list[0]["id"], v.id_work2);
+    assert_eq!(list[1]["id"], v.id_login);
+
+    // 6. get --json includes last_used_at
+    let get_json_out = gp(&v.root, &["get", "Personal", &v.id_work2, "--json"], None);
+    assert!(get_json_out.status.success());
+    let detail: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&get_json_out.stdout)).unwrap();
+    assert!(detail["last_used_at"].is_string());
+
+    // 7. Verify no vault commit or sync was triggered
+    let status = std::process::Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&v.root)
+        .output()
+        .unwrap();
+    let status_str = String::from_utf8_lossy(&status.stdout);
+    assert!(!status_str.contains(".gitpass-state.json"));
+}

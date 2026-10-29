@@ -305,17 +305,20 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     if (filter.category) xs = xs.filter((x) => x.category === filter.category);
     if (filter.query) { const q = filter.query.toLowerCase(); xs = xs.filter((x) => `${x.title} ${x.subtitle} ${x.url ?? ''} ${x.tags.join(' ')}`.toLowerCase().includes(q)); }
     const sort = filter.sort ?? 'updated';
-    xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : b.updatedAt.localeCompare(a.updatedAt));
+    xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : sort === 'recent' ? (b.lastUsed ?? 0) - (a.lastUsed ?? 0) || a.title.localeCompare(b.title) : b.updatedAt.localeCompare(a.updatedAt));
     return delay(xs.map(summary));
   },
   get_item: (a: { itemId: string }) => delay({ ...get(a.itemId).detail, findings: mockFindings(a.itemId) }),
   reveal_field: (a: { itemId: string; fieldId: string; version?: number | null }) => {
     const r = get(a.itemId);
+    r.detail.lastUsed = Math.floor(Date.now() / 1000);
     const v = r.secrets[a.fieldId] ?? r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId)?.value;
     return v == null ? Promise.reject(new Error('not a concealed field')) : delay(v);
   },
   copy_field: (a: { itemId: string; fieldId: string }) => {
-    const r = get(a.itemId); const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId);
+    const r = get(a.itemId);
+    r.detail.lastUsed = Math.floor(Date.now() / 1000);
+    const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId);
     const v = r.secrets[a.fieldId] ?? fld?.value ?? '';
     // In Tauri the copy happens in Rust; the browser mock best-effort uses the clipboard API.
     navigator.clipboard?.writeText(v).catch(() => {});

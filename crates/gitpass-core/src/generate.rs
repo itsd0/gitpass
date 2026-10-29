@@ -76,6 +76,42 @@ pub fn generate(opts: &Options) -> String {
     }
 }
 
+/// One character class of a site's password rules: draw from `chars`; when `required`, the password
+/// holds at least one of them.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CharClass {
+    pub chars: Vec<u8>,
+    pub required: bool,
+}
+
+/// Lowercase / uppercase letters (no look-alikes, as in the plain generator) and digits for site rules.
+pub const LOWER: &[u8] = b"abcdefghijkmnopqrstuvwxyz";
+pub const UPPER: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ";
+/// The symbols the plain generator uses when a site does not restrict them.
+pub const DEFAULT_SYMBOLS: &[u8] = SYMBOLS;
+/// Digits without the 0/1 look-alikes.
+pub const DEFAULT_DIGITS: &[u8] = DIGITS;
+
+/// Generate a `length`-character password from site rules: every character comes from some class and
+/// every `required` class appears at least once. `None` when the rules cannot be met (no usable
+/// characters, an empty class, or more required classes than `length`).
+pub fn generate_with_classes(length: usize, classes: &[CharClass]) -> Option<String> {
+    let required: Vec<&CharClass> = classes.iter().filter(|c| c.required).collect();
+    if length == 0 || classes.is_empty() || classes.iter().any(|c| c.chars.is_empty()) || required.len() > length {
+        return None;
+    }
+    let mut rng = OsRng;
+    let mut pool: Vec<u8> = classes.iter().flat_map(|c| c.chars.iter().copied()).collect();
+    pool.sort_unstable();
+    pool.dedup();
+    let mut out: Vec<u8> = required.iter().map(|c| *c.chars.choose(&mut rng).unwrap()).collect();
+    while out.len() < length {
+        out.push(*pool.choose(&mut rng).unwrap());
+    }
+    out.shuffle(&mut rng);
+    Some(out.into_iter().map(char::from).collect())
+}
+
 fn passphrase_word(rng: &mut impl Rng, capitalize: bool) -> String {
     let word = WORDLIST.choose(rng).unwrap();
     let mut out = String::with_capacity(word.len());
@@ -147,6 +183,41 @@ mod tests {
         assert!(pin.bytes().all(|b| b.is_ascii_digit()), "{pin}");
         assert_eq!(generate(&opts(1, false, true, false, true)).len(), MIN_PIN);
         assert_eq!(generate(&opts(99, false, true, false, true)).len(), MAX_PIN);
+    }
+
+    fn class(chars: &[u8], required: bool) -> CharClass { CharClass { chars: chars.to_vec(), required } }
+
+    #[test]
+    fn site_rules_use_only_allowed_classes_and_all_required_ones() {
+        let classes = [class(LOWER, true), class(UPPER, true), class(DEFAULT_DIGITS, true), class(b"-_", false)];
+        for _ in 0..200 {
+            let p = generate_with_classes(16, &classes).unwrap();
+            assert_eq!(p.len(), 16, "{p}");
+            assert!(p.bytes().all(|b| LOWER.contains(&b) || UPPER.contains(&b) || DEFAULT_DIGITS.contains(&b) || b"-_".contains(&b)), "{p}");
+            assert!(p.bytes().any(|b| LOWER.contains(&b)), "{p}");
+            assert!(p.bytes().any(|b| UPPER.contains(&b)), "{p}");
+            assert!(p.bytes().any(|b| DEFAULT_DIGITS.contains(&b)), "{p}");
+        }
+    }
+
+    #[test]
+    fn site_rules_required_symbol_set_is_honored_even_when_more_symbols_are_allowed() {
+        let classes = [class(LOWER, false), class(b"-", true), class(b"-_!", false)];
+        for _ in 0..200 {
+            let p = generate_with_classes(8, &classes).unwrap();
+            assert!(p.contains('-'), "{p}");
+            assert!(p.bytes().all(|b| LOWER.contains(&b) || b"-_!".contains(&b)), "{p}");
+        }
+    }
+
+    #[test]
+    fn site_rules_that_cannot_be_met_return_none() {
+        assert!(generate_with_classes(8, &[]).is_none());
+        assert!(generate_with_classes(0, &[class(LOWER, false)]).is_none());
+        assert!(generate_with_classes(8, &[class(b"", false)]).is_none());
+        let four = [class(LOWER, true), class(UPPER, true), class(DEFAULT_DIGITS, true), class(DEFAULT_SYMBOLS, true)];
+        assert!(generate_with_classes(3, &four).is_none());
+        assert_eq!(generate_with_classes(4, &four).unwrap().len(), 4);
     }
 
     #[test]

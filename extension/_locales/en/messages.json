@@ -662,6 +662,9 @@
   "optFillShortcutBody": {
     "message": "Fills the best-matching login on the current page without opening the popup."
   },
+  "recentlyUsed": {
+    "message": "Recently used"
+  },
   "watchtowerWarnings": {
     "message": "Watchtower warnings"
   },
@@ -766,5 +769,22 @@
   },
   "optAutoTotpBody": {
     "message": "After gitpass fills a login, fill its one-time code on the next page without asking."
+  },
+  "csRulesLen": {
+    "message": "$len$ characters",
+    "placeholders": {
+      "len": {
+        "content": "$1"
+      }
+    }
+  },
+  "csRulesNoSymbols": {
+    "message": "no symbols"
+  },
+  "csRulesFewSymbols": {
+    "message": "limited symbols"
+  },
+  "csRulesTooShort": {
+    "message": "This site's password rules are too short for a strong password"
   }
 }

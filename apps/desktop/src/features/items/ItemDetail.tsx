@@ -3,6 +3,7 @@ import { Archive, ArchiveRestore, ChevronRight, Copy, Download, ExternalLink, Ey
 import { api } from '../../api/client';
 import type { ItemDetail as Detail, VaultInfo } from '../../api/types';
 import { useApp } from '../../lib/store';
+import { formatRelativeLastUsed } from './lastUsedAge';
 import { useVaultsAndTags } from '../../lib/data';
 import { cn, fmtBytes, fmtDateLong } from '../../lib/utils';
 import { Badge, Button, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, Skeleton, Tooltip, toast } from '../../ui';
@@ -256,7 +257,14 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
         <div className="mx-auto max-w-3xl">
           <div className="mb-6 flex items-center gap-4">
             <ItemIcon item={detail} size={40} />
-            <h1 className="min-w-0 flex-1 truncate text-xl font-semibold">{detail.title}</h1>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-xl font-semibold">{detail.title}</h1>
+              {detail.lastUsed ? (
+                <div className="mt-0.5 text-xs text-muted" data-testid="last-used">
+                  {formatRelativeLastUsed(detail.lastUsed, undefined, t)}
+                </div>
+              ) : null}
+            </div>
             {!deleted && <Tooltip content={detail.favorite ? t('detail.unfavorite') : t('detail.favorite')}>
               <Button variant="ghost" size="icon" aria-label={t('detail.toggleFavorite')} onClick={() => run(api.setFavorite({ ...ctx, favorite: !detail.favorite }), detail.favorite ? t('bulk.toast.unfavorite') : t('bulk.toast.favorite'))}>
                 <Star size={18} className={cn(detail.favorite ? 'fill-warn text-warn' : 'text-muted')} />
@@ -529,6 +537,11 @@ function History({ detail }: { detail: Detail }) {
       {open && (
         <div className="ml-5 mt-2 space-y-1">
           <div className="text-xs text-muted">{t('detail.created', { date: fmtDateLong(detail.createdAt) })}</div>
+          {detail.lastUsed ? (
+            <div className="text-xs text-muted">
+              {formatRelativeLastUsed(detail.lastUsed, undefined, t)}
+            </div>
+          ) : null}
           {versions.map((h) => (
             <button key={h.version} className="block text-xs text-accent hover:underline"
               onClick={() => openSnapshot(h.version)}>
