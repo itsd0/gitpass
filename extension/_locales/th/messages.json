@@ -765,5 +765,17 @@
   "optFillShortcutBody": {
     "message": "เติมข้อมูลเข้าสู่ระบบที่ตรงที่สุดในหน้าปัจจุบันโดยไม่ต้องเปิดป๊อปอัป",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "sortBy": {
+    "message": "เรียงตาม"
+  },
+  "sortUpdated": {
+    "message": "แก้ไขล่าสุด"
+  },
+  "sortCreated": {
+    "message": "วันที่สร้าง"
+  },
+  "sortTitle": {
+    "message": "ชื่อ"
   }
 }

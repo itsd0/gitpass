@@ -101,7 +101,7 @@ async function popupRoute(msg) {
     case 'lock': return host('lock');
     case 'list_vaults': return host('list_vaults');
     case 'list_items': {
-      const a = {}; for (const k of ['vault_id', 'category', 'query', 'limit']) if (msg[k] != null) a[k] = msg[k];
+      const a = {}; for (const k of ['vault_id', 'category', 'query', 'limit', 'offset']) if (msg[k] != null) a[k] = msg[k];
       return host('list_items', a);
     }
     case 'match_active': {

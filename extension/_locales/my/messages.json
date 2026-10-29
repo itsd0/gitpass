@@ -765,5 +765,17 @@
   "optFillShortcutBody": {
     "message": "popup မဖွင့်ဘဲ လက်ရှိစာမျက်နှာအတွက် အကိုက်ညီဆုံး လော့ဂ်အင်ကို ဖြည့်ပါသည်။",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "sortBy": {
+    "message": "စီရန်"
+  },
+  "sortUpdated": {
+    "message": "နောက်ဆုံးပြင်ဆင်သည့်အချိန်"
+  },
+  "sortCreated": {
+    "message": "ဖန်တီးသည့်ရက်စွဲ"
+  },
+  "sortTitle": {
+    "message": "ခေါင်းစဉ်"
   }
 }
