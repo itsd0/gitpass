@@ -319,6 +319,9 @@ fn attachments_via_paths() {
     let dst = dir.path().join("out.pdf");
     e.app.save_attachment(&e.vault, &n.id, &a.id, &dst.display().to_string()).unwrap();
     assert_eq!(std::fs::read(&dst).unwrap(), b"%PDF-fake");
+    e.app.remove_attachment(&e.vault, &n.id, &a.id).unwrap();
+    assert!(e.app.get_item(&e.vault, &n.id).unwrap().attachments.is_empty());
+    assert!(e.app.remove_attachment(&e.vault, &n.id, &a.id).is_err());
 }
 
 #[test]
@@ -1377,4 +1380,38 @@ fn system_lock_event_dispatch_enabled_and_disabled() {
     assert!(e.app.handle_system_lock_event(LockTrigger::UserSwitch));
     assert!(!e.app.status().unwrap().unlocked);
     assert_eq!(e.clip.get_text().as_deref(), Some(""));
+}
+
+#[test]
+fn settings_quick_access_hotkey_roundtrip_and_defaults() {
+    let s = Settings::default();
+    assert_eq!(s.quick_access_hotkey, "CommandOrControl+Shift+Space");
+
+    // Legacy JSON without quickAccessHotkey defaults to default combo
+    let legacy_json = r#"{"autoLockMinutes":5,"clipboardClearSecs":90,"theme":"dark","language":"en","biometricUnlock":false}"#;
+    let parsed: Settings = serde_json::from_str(legacy_json).unwrap();
+    assert_eq!(parsed.quick_access_hotkey, "CommandOrControl+Shift+Space");
+
+    // Serialization and deserialization roundtrip with custom combo
+    let mut custom = s;
+    custom.quick_access_hotkey = "CommandOrControl+Alt+K".into();
+    let serialized = serde_json::to_string(&custom).unwrap();
+    assert!(serialized.contains(r#""quickAccessHotkey":"CommandOrControl+Alt+K""#));
+    let deserialized: Settings = serde_json::from_str(&serialized).unwrap();
+    assert_eq!(deserialized.quick_access_hotkey, "CommandOrControl+Alt+K");
+
+    // Roundtrip with disabled/empty hotkey
+    let mut disabled = deserialized;
+    disabled.quick_access_hotkey = "".into();
+    let serialized_disabled = serde_json::to_string(&disabled).unwrap();
+    let deserialized_disabled: Settings = serde_json::from_str(&serialized_disabled).unwrap();
+    assert_eq!(deserialized_disabled.quick_access_hotkey, "");
+
+    // App set_settings and get_settings persistence roundtrip
+    let e = env();
+    let initial = e.app.get_settings();
+    assert_eq!(initial.quick_access_hotkey, "CommandOrControl+Shift+Space");
+    let updated = e.app.set_settings(Settings { quick_access_hotkey: "CommandOrControl+Shift+J".into(), ..initial }).unwrap();
+    assert_eq!(updated.quick_access_hotkey, "CommandOrControl+Shift+J");
+    assert_eq!(e.app.get_settings().quick_access_hotkey, "CommandOrControl+Shift+J");
 }

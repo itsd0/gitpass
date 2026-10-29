@@ -48,6 +48,7 @@ export const api = {
   restoreItemVersion: (a:{vaultId:string; itemId:string; version:number}) => call<T.ItemDetail>('restore_item_version', a),
   addAttachment: (a:{vaultId:string; itemId:string; path:string}) => call<T.Attachment>('add_attachment', a),
   saveAttachment: (a:{vaultId:string; itemId:string; attachmentId:string; destPath:string}) => call<void>('save_attachment', a),
+  removeAttachment: (a:{vaultId:string; itemId:string; attachmentId:string}) => call<void>('remove_attachment', a),
   listTags: () => call<string[]>('list_tags'),
   renameTag: (a: { old: string; new: string }) => call<T.BulkResult>('rename_tag', a),
   deleteTag: (a: { name: string }) => call<T.BulkResult>('delete_tag', a),
