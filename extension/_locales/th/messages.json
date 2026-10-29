@@ -936,6 +936,27 @@
   "badgeAppNotRunning": {
     "message": "แอป gitpass ไม่ได้ทำงานอยู่"
   },
+  "optAutoSubmit": {
+    "message": "ส่งแบบฟอร์มหลังจากกรอกข้อมูลเข้าสู่ระบบ"
+  },
+  "optAutoSubmitBody": {
+    "message": "ใช้เฉพาะการเข้าสู่ระบบที่คุณกรอกเอง และเฉพาะเมื่อแบบฟอร์มมีปุ่มส่งเพียงปุ่มเดียวเท่านั้น โดยค่าเริ่มต้นจะปิดอยู่"
+  },
+  "optNeverAutoSubmit": {
+    "message": "ไม่ส่งอัตโนมัติในไซต์เหล่านี้"
+  },
+  "optNeverAutoSubmitBody": {
+    "message": "gitpass จะกรอกข้อมูลเข้าสู่ระบบในไซต์เหล่านี้ แต่จะไม่ส่งแบบฟอร์มให้คุณโดยอัตโนมัติ"
+  },
+  "optNeverAutoSubmitEmpty": {
+    "message": "ไม่มีไซต์ที่ยกเว้นจากการส่งอัตโนมัติ"
+  },
+  "optNeverAutoSubmitEmptyBody": {
+    "message": "ไซต์ที่คุณเพิ่มที่นี่จะปรากฏในรายการนี้"
+  },
+  "optNeverAutoSubmitAdd": {
+    "message": "เพิ่มไซต์"
+  },
   "genRecent": {
     "message": "ล่าสุด"
   },
