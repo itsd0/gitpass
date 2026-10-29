@@ -340,7 +340,6 @@ export const th: Partial<Record<Key, string>> = {
   "watchtower.ignoredSection": "คำเตือนที่ละเว้น",
   "watchtower.noIgnored": "ไม่มีคำเตือนที่ละเว้น",
   "watchtower.stopIgnoring": "หยุดละเว้น",
-  "watchtower.moreOptions": "ตัวเลือกเพิ่มเติม",
   "watchtower.changePassword": "เปลี่ยนรหัสผ่าน",
   "watchtower.changePasswordFor": "เปลี่ยนรหัสผ่านสำหรับ {title}",
   "watchtower.weakReason.containsUsername": "มีชื่อผู้ใช้อยู่ในรหัสผ่าน",

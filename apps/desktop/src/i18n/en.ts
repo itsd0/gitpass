@@ -357,7 +357,6 @@ export const en = {
   "watchtower.ignoredSection": "Ignored warnings",
   "watchtower.noIgnored": "No ignored warnings.",
   "watchtower.stopIgnoring": "Stop ignoring",
-  "watchtower.moreOptions": "More options",
   "watchtower.changePassword": "Change password",
   "watchtower.changePasswordFor": "Change password for {title}",
   "watchtower.weakReason.containsUsername": "contains the username",

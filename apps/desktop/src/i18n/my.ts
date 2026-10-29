@@ -347,7 +347,6 @@ export const my: Partial<Record<Key, string>> = {
   "watchtower.ignoredSection": "လျစ်လျူရှုထားသော သတိပေးချက်များ",
   "watchtower.noIgnored": "လျစ်လျူရှုထားသော သတိပေးချက်များ မရှိပါ။",
   "watchtower.stopIgnoring": "လျစ်လျူမရှုတော့ပါ",
-  "watchtower.moreOptions": "နောက်ထပ် ရွေးချယ်စရာများ",
   "watchtower.changePassword": "စကားဝှက် ပြောင်းရန်",
   "watchtower.changePasswordFor": "{title} အတွက် စကားဝှက် ပြောင်းရန်",
   "watchtower.weakReason.containsUsername": "အသုံးပြုသူအမည် ပါဝင်နေသည်",
