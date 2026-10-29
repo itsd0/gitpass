@@ -903,10 +903,28 @@
     "message": "ဤဝက်ဘ်ဆိုက်၏ စကားဝှက်စည်းမျဉ်းများသည် ခိုင်မာသော စကားဝှက်အတွက် တိုလွန်းပါသည်",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
-  "optWebsiteIcons": {
-    "message": "ဝဘ်ဆိုက် အိုင်ကွန်များ"
+  "ctxGitpass": {
+    "message": "gitpass"
   },
-  "optWebsiteIconsBody": {
-    "message": "ဝဘ်ဆိုက်အိုင်ကွန်များနှင့် အက္ခရာအမှတ်အသားများကို ပေါ့ပ်အပ်နှင့် အလိုအလျောက်ဖြည့်သွင်းမှု မီနူးတွင် ပြသထားသည်။ အိုင်ကွန်ဒေါင်းလုဒ်များကို ဖွင့်ရန် သို့မဟုတ် ပိတ်ရန် gitpass ဒက်စ်တော့အက်ပ် ဆက်တင်များရှိ 'ဝဘ်ဆိုက် အိုင်ကွန်များ ပြသပါ' ကို အသုံးပြုပါ။"
+  "ctxFillLogin": {
+    "message": "လော့ဂ်အင် ဖြည့်ရန်"
+  },
+  "ctxSearchGitpass": {
+    "message": "gitpass တွင် ရှာရန်…"
+  },
+  "ctxSuggestPassword": {
+    "message": "ခိုင်မာသော စကားဝှက် အကြံပြုရန်"
+  },
+  "ctxFillCard": {
+    "message": "ကတ် ဖြည့်ရန်"
+  },
+  "ctxFillIdentity": {
+    "message": "ကိုယ်ရေးအချက်အလက် ဖြည့်ရန်"
+  },
+  "ctxOpenGitpass": {
+    "message": "gitpass ကို ဖွင့်ရန်"
+  },
+  "ctxUnlockGitpass": {
+    "message": "gitpass ကို သော့ဖွင့်ရန်…"
   }
 }

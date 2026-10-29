@@ -1083,6 +1083,16 @@
     setTimeout(() => okBtn.focus(), 50);
   }
 
+  // Right-click target for the context menu's "Suggest strong password" (#213):
+  // the background only knows the clicked frame, not the field, so the last
+  // contextmenu target is remembered here when it is a password field. Stale
+  // targets (detached, disabled, read-only) are ignored by the handler below.
+  let lastContextMenuField = null;
+  document.addEventListener('contextmenu', (e) => {
+    const el = e.target;
+    if (el && el.tagName === 'INPUT' && (el.getAttribute('type') || 'text').toLowerCase() === 'password') lastContextMenuField = el;
+  }, true);
+
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (!msg || (sender && sender.id && sender.id !== chrome.runtime.id)) return;
     if (msg.type === 'gitpass-passkey-prompt') {
@@ -1109,6 +1119,30 @@
     }
     if (msg.type === 'gitpass-command-menu') { openCommandMenu(); return; }
     if (msg.type === 'gitpass-command-notice') { showNotice(msg.code); return; }
+    if (msg.type === 'gitpass-suggest-password') {
+      // Context menu (#213): same generate path as the in-page suggest row
+      // (field passwordrules -> page:generate -> fillNewPassword). The filled
+      // password is then captured by the usual save banner on submit; it is
+      // never kept here beyond this call. Async: keep the channel open.
+      (async () => {
+        let field = null;
+        if (lastContextMenuField && document.contains(lastContextMenuField) && !lastContextMenuField.disabled && !lastContextMenuField.readOnly) field = lastContextMenuField;
+        if (!field) field = focusedPasswordField();
+        if (!field) { sendResponse({ filled: false }); return; }
+        const PR = globalThis.GitpassPasswordRules;
+        const rules = PR ? PR.fromField(field) : null;
+        const fit = rules ? PR.sanitize(rules) : null;
+        if (fit && !fit.ok) { sendResponse({ filled: false }); return; } // site rules too short: refuse, don't weaken
+        const r = await send('page:generate', rules ? { rules } : {});
+        if (!originOk(r)) { sendResponse({ filled: false }); return; }
+        const forms = GitpassForms.detectForms(document);
+        const form = forms.find((f) => f && f.fields && Object.values(f.fields).includes(field));
+        if (form && form.fields.newPassword) GitpassForms.fillNewPassword(form, r.password);
+        else GitpassForms.setValue(field, r.password);
+        sendResponse({ filled: true });
+      })().catch(() => { try { sendResponse({ filled: false }); } catch (_) {} });
+      return true;
+    }
     const list = GitpassForms.detectForms(document);
     if (msg.type === 'gitpass-fill') {
       const f = list.find((x) => ['login', 'login_username', 'change_password'].includes(x.kind));

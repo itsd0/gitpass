@@ -84,6 +84,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['fast user switching', 'switch user', 'account', 'session'],
   },
   {
+    id: 'setting-hide-screen-recording',
+    tab: 'security',
+    labelKey: 'settings.hideFromScreenRecording',
+    descriptionKey: 'settings.hideFromScreenRecordingHelp',
+    keywords: ['screen recording', 'screen sharing', 'screenshot', 'capture', 'share', 'record'],
+  },
+  {
     id: 'setting-clipboard',
     tab: 'security',
     labelKey: 'settings.clipboard',

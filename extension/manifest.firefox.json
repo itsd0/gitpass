@@ -10,7 +10,8 @@
     "clipboardWrite",
     "storage",
     "scripting",
-    "idle"
+    "idle",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://*/*",
@@ -24,6 +25,7 @@
       "lib/banner.js",
       "bg-page.js",
       "bg-command.js",
+      "bg-context.js",
       "background.js",
       "bg-onboard.js",
       "bg-passkey.js"
