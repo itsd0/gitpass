@@ -37,6 +37,17 @@ describe('settings', () => {
     await u.click(sw);
     expect(await screen.findByText(/not supported yet/)).toBeTruthy();
   });
+  it('website icons toggle is off by default and saved when enabled', async () => {
+    const spy = vi.spyOn(api, 'setSettings').mockResolvedValue(undefined as any);
+    const u = userEvent.setup();
+    render(<SettingsPage initialTab="general" />);
+    const sw = await screen.findByTestId('show-website-icons-switch');
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    expect(sw).toBeEnabled();
+    await u.click(sw);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[spy.mock.calls.length - 1]![0].settings.showWebsiteIcons).toBe(true);
+  });
   it('HIBP check is off by default and saved when enabled', async () => {
     const spy = vi.spyOn(api, 'setSettings').mockResolvedValue(undefined as any); const u = userEvent.setup();
     render(<SettingsPage initialTab="security" />);

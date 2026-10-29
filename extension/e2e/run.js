@@ -38,6 +38,8 @@ const MULTISTEP_USER_HTML = `<!doctype html><html><head><meta charset="utf-8"><t
 <button id="next" type="submit">Next</button></form>
 <script>document.getElementById('f').addEventListener('submit',e=>{e.preventDefault();setTimeout(()=>location.assign('/multistep/password'),150);});</script></body></html>`;
 
+const OTP_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Two-factor</title></head><body>
+<h1>Enter your verification code</h1><form id="f"><input id="otp" name="otp" autocomplete="one-time-code" inputmode="numeric" maxlength="6" placeholder="Code"><button type="submit">Verify</button></form></body></html>`;
 const MULTISTEP_PW_HTML = `<!doctype html><html><head><meta charset="utf-8"><title>Enter your password</title></head><body>
 <h1>Enter your password</h1><div id="msg"></div>
 <form id="f"><input id="p" name="password" type="password" autocomplete="current-password" placeholder="Password">
@@ -239,7 +241,7 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
   // Linux Chromium reads the per-profile dir too; also set via env for safety on Linux CI.
   console.log(`tmp: ${tmp}\nextension id (expected): ${id}`);
 
-  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/multistep/password') ? MULTISTEP_PW_HTML : req.url.startsWith('/multistep') ? MULTISTEP_USER_HTML : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
+  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/2fa') ? OTP_HTML : req.url.startsWith('/multistep/password') ? MULTISTEP_PW_HTML : req.url.startsWith('/multistep') ? MULTISTEP_USER_HTML : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const LOGIN = `http://localhost:${server.address().port}/login`;
   if (realSetup) realSetup(server.address().port); // real host matches loopback origins incl. port
@@ -1039,6 +1041,20 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       const one = await runCmd();
       const filled = await until(async () => { const v = await vals(); return v[0] === 'alice@example.com' && v[1] === 'Corr3ct-H0rse-Battery' && v; }, T(4000));
       rec('fill-login command: one match fills username + password', one && one.action === 'fill' && !!filled, `${JSON.stringify(one)} values=${JSON.stringify(await vals())}`);
+
+      // One-time code on the next page (#181): the login just filled has a code, so /2fa on the same site gets
+      // the chip; the same page on another host (127.0.0.1 vs localhost) never does.
+      const OTP = LOGIN.replace(/\/login$/, '/2fa');
+      await page.goto(OTP); await page.bringToFront();
+      const chip = await until(async () => /Fill one-time code/.test(await shadowText(page)), T(5000));
+      rec('one-time code chip is offered on the next page after a login fill', !!chip && (await page.inputValue('#otp')) === '', chip ? 'chip shown, field empty' : 'no chip: ' + (await shadowText(page)).slice(0, 120));
+      if (chip) { const h = await findInShadow(page, /Fill one-time code/); if (h.length) await page.mouse.click(h[0].x, h[0].y); }
+      const code = await until(async () => (await page.inputValue('#otp')) === '123456', T(4000));
+      rec('clicking the chip fills the one-time code', !!code, `otp=${JSON.stringify(await page.inputValue('#otp'))}`);
+      const other = await ctx.newPage();
+      await other.goto(OTP.replace('localhost', '127.0.0.1')); await other.bringToFront(); await sleep(1200);
+      rec('one-time code chip is not offered on a different site', !/Fill one-time code/.test(await shadowText(other)), 'checked 127.0.0.1');
+      await other.close(); await page.bringToFront();
 
       ctrl({ unlocked: true, only_match_ids: ['v1:i1', 'v1:cmd2'], add_item: { id: 'v1:cmd2', category: 'login', title: 'Second Command Login', subtitle: 'bob@example.com', url: 'http://localhost', favorite: false, _u: 'bob@example.com', _p: 'FAKE-second-pass' } }); await sleep(400);
       await page.goto(LOGIN); await page.bringToFront(); await sleep(800);

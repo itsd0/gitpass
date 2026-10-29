@@ -65,7 +65,7 @@ function PlainValue({ field, ctx, category }: { field: Field; ctx: Ctx; category
         )}
       </div>
       <div className="flex opacity-0 transition-opacity group-hover:opacity-100">
-        {field.kind === 'url' && v && <Tooltip content="Open"><a className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-hover" href={v} target="_blank" rel="noreferrer noopener" aria-label="Open link"><ExternalLink size={13} /></a></Tooltip>}
+        {field.kind === 'url' && v && <Tooltip content={t('field.open')}><a className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-hover" href={v} target="_blank" rel="noreferrer noopener" aria-label={t('field.openLink')}><ExternalLink size={13} /></a></Tooltip>}
         {v && <CopyBtn ctx={ctx} fieldId={field.id} label={field.label} />}
       </div>
     </div>
@@ -173,14 +173,16 @@ export function ConcealedValue({ field, ctx, strength, passwordChangedAt }: { fi
   );
 }
 
-const STRENGTH = [['Terrible', 'bg-danger'], ['Weak', 'bg-danger'], ['Fair', 'bg-warn'], ['Good', 'bg-ok'], ['Excellent', 'bg-ok']] as const;
+const STRENGTH = [['strength.terrible', 'bg-danger'], ['strength.weak', 'bg-danger'], ['strength.fair', 'bg-warn'], ['strength.good', 'bg-ok'], ['strength.excellent', 'bg-ok']] as const;
 /** `score` is the backend's 0-100 strength (gui-core `strength`), bucketed into 5 bars. */
 export function StrengthMeter({ score }: { score: number }) {
+  const t = useT();
   const s = Math.max(0, Math.min(4, Math.floor(score / 20)));
+  const label = t(STRENGTH[s][0]);
   return (
-    <div className="mt-1.5 flex items-center gap-2" data-testid="strength-meter">
+    <div className="mt-1.5 flex items-center gap-2" data-testid="strength-meter" role="meter" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.max(0, Math.min(100, score))} aria-label={t('strength.label', { label })}>
       <div className="flex w-32 gap-0.5">{[0, 1, 2, 3, 4].map((i) => <div key={i} className={cn('h-1 flex-1 rounded-full', i <= s ? STRENGTH[s][1] : 'bg-active')} />)}</div>
-      <span className="text-xs text-muted">{STRENGTH[s][0]}</span>
+      <span className="text-xs text-muted">{label}</span>
     </div>
   );
 }
@@ -188,7 +190,7 @@ export function StrengthMeter({ score }: { score: number }) {
 export function TotpRing({ remaining, period, size = 18 }: { remaining: number; period: number; size?: number }) {
   const r = size / 2 - 2; const c = 2 * Math.PI * r; const frac = Math.max(0, Math.min(1, remaining / period));
   return (
-    <svg width={size} height={size} className="-rotate-90" aria-label={`${remaining} seconds remaining`}>
+    <svg width={size} height={size} className="-rotate-90" aria-hidden="true">
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="rgb(var(--active))" strokeWidth="2.5" />
       <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={remaining <= 5 ? 'rgb(var(--danger))' : 'rgb(var(--accent))'} strokeWidth="2.5" strokeDasharray={c} strokeDashoffset={c * (1 - frac)} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s linear' }} />
     </svg>
@@ -196,6 +198,7 @@ export function TotpRing({ remaining, period, size = 18 }: { remaining: number; 
 }
 
 function TotpValue({ ctx, fieldId }: { ctx: Ctx; fieldId: string }) {
+  const t = useT();
   const [state, setState] = useState<{ code: string; remaining: number; period: number } | null>(null);
   useEffect(() => {
     let on = true; let left = 0;
@@ -207,7 +210,7 @@ function TotpValue({ ctx, fieldId }: { ctx: Ctx; fieldId: string }) {
   return (
     <div className="flex items-center gap-2">
       <div className="flex flex-1 items-center gap-2 font-mono text-[15px] tracking-wider">
-        {state ? <>{state.code.slice(0, 3)} {state.code.slice(3)}<TotpRing remaining={state.remaining} period={state.period} /><span className="text-xs text-muted">{state.remaining}s</span></> : '··· ···'}
+        {state ? <><span aria-label={`${state.code} ${t('totp.remaining', { n: state.remaining })}`}>{state.code.slice(0, 3)} {state.code.slice(3)}</span><TotpRing remaining={state.remaining} period={state.period} /><span className="text-xs text-muted" aria-hidden="true">{state.remaining}s</span></> : '··· ···'}
       </div>
       <div className="flex opacity-0 group-hover:opacity-100"><CopyBtn ctx={ctx} fieldId={fieldId} label="one-time password" /></div>
     </div>

@@ -75,6 +75,8 @@ export const th: Partial<Record<Key, string>> = {
   'settings.hibp': 'ตรวจรหัสผ่านกับข้อมูลรั่วไหลที่รู้จัก', 'settings.hibpHelp': 'ปิดไว้เป็นค่าเริ่มต้น ส่งเฉพาะ 5 ตัวอักษรแรกของแฮช SHA-1 ไปยัง Have I Been Pwned (k-anonymity) และจับคู่บนอุปกรณ์นี้',
   'settings.title': 'การตั้งค่า', 'settings.general': 'ทั่วไป', 'settings.security': 'ความปลอดภัย', 'settings.devices': 'อุปกรณ์', 'settings.sync': 'ซิงค์', 'settings.about': 'เกี่ยวกับ',
   'settings.theme': 'ธีม', 'settings.theme.dark': 'มืด', 'settings.theme.light': 'สว่าง', 'settings.theme.system': 'ตามระบบ', 'settings.language': 'ภาษา',
+  'settings.showWebsiteIcons': 'แสดงไอคอนเว็บไซต์',
+  'settings.showWebsiteIconsHelp': 'ดึงไอคอนสำหรับเว็บไซต์ผ่าน HTTPS ปิดใช้งานเป็นค่าเริ่มต้นเนื่องจากการดึงข้อมูลจะแจ้งให้แต่ละไซต์ทราบว่าคุณมีบัญชีที่นั่น การปิดจะล้างแคชไอคอน',
   'settings.autoLock': 'ล็อกอัตโนมัติหลัง (นาที)', 'settings.clipboard': 'ล้างคลิปบอร์ดหลัง (วินาที)', 'settings.biometric': 'ปลดล็อกด้วยไบโอเมตริกซ์',
   'settings.lockOnSleep': 'ล็อกเมื่อ Mac เข้าสู่โหมดพักผ่อน', 'settings.lockOnSleepHelp': 'ล็อกห้องนิรภัยทันทีเมื่อ Mac ของคุณเข้าสู่โหมดพักผ่อน',
   'settings.lockOnScreenLock': 'ล็อกเมื่อล็อกหน้าจอ', 'settings.lockOnScreenLockHelp': 'ล็อกห้องนิรภัยเมื่อล็อกหน้าจอ (⌃⌘Q หรือ hot corner)',
@@ -440,6 +442,18 @@ export const th: Partial<Record<Key, string>> = {
   'largetype.close': 'ปิด',
   'largetype.label': 'มุมมองตัวอักษรขนาดใหญ่',
   'largetype.title': 'มุมมองตัวอักษรขนาดใหญ่',
+  // password strength meter (item detail + item editor)
+  'strength.terrible': 'แย่มาก',
+  'strength.weak': 'อ่อนแอ',
+  'strength.fair': 'พอใช้',
+  'strength.good': 'ดี',
+  'strength.excellent': 'ยอดเยี่ยม',
+  'strength.label': 'ความแข็งแกร่งของรหัสผ่าน: {label}',
+  // item detail field actions
+  'field.open': 'เปิด',
+  'field.openLink': 'เปิดลิงก์',
+  // one-time password countdown
+  'totp.remaining': 'เหลืออีก {n} วินาที',
   'cmd.showLargeType': 'แสดงรหัสผ่านด้วยตัวอักษรขนาดใหญ่',
 
   // TODO(i18n-review): unlock and sidebar strings
@@ -497,12 +511,14 @@ export const th: Partial<Record<Key, string>> = {
   "import.dropzoneTitle": "ลากและวางไฟล์ส่งออกของคุณที่นี่",
   "import.dropzoneOr": "หรือ",
   "import.chooseFile": "เลือกไฟล์…",
-  "import.dropzoneHint": "รองรับ Apple Passwords / Safari, 1Password, Bitwarden, KeePass, Chrome (.csv, .json, .1pux)",
+  "import.dropzoneHint": "รองรับ Apple Passwords / Safari, 1Password, Bitwarden, KeePass, Chrome, LastPass, Proton Pass (.csv, .json, .1pux)",
   "import.selectedFile": "ไฟล์ที่เลือก",
   "import.manualPath": "เส้นทางไฟล์ส่งออก",
   "import.manualPathPlaceholder": "/path/to/export.csv, .json, หรือ .1pux",
   "import.format": "รูปแบบ",
   "import.selectFormat": "เลือกรูปแบบ",
+  "import.formatLastpass": "LastPass (.csv)",
+  "import.formatProtonPass": "Proton Pass (.csv)",
   "import.formatAutoDetected": "ตรวจพบอัตโนมัติ",
   "import.formatApplePasswords": "Apple Passwords / Safari (.csv)",
   "import.hintApplePasswords": "แอป Passwords (File → Export All Passwords…) หรือ Safari (File → Export → Passwords…)",

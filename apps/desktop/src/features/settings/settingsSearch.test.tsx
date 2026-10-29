@@ -238,6 +238,21 @@ describe('Settings search and consistent layout', () => {
     });
   });
 
+  it('searches for website icons / favicon and targets appearance row', async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage initialTab="security" />);
+    const searchInput = await screen.findByTestId('settings-search-input');
+
+    await user.type(searchInput, 'favicon');
+    const result = await screen.findByRole('option', { name: /website icons/i });
+    expect(result).toBeTruthy();
+    await user.click(result);
+
+    const row = document.getElementById('setting-show-website-icons');
+    expect(row).toBeTruthy();
+    expect(row?.className).toContain('ring-accent');
+  });
+
   it('searches for setup guide and highlights the row in General tab', async () => {
     const user = userEvent.setup();
     render(<SettingsPage initialTab="security" />);

@@ -78,6 +78,8 @@ export const my: Partial<Record<Key, string>> = {
   'settings.hibp': 'ပေါက်ကြားထားသော စကားဝှက်များနှင့် စစ်ဆေးရန်', 'settings.hibpHelp': 'မူလအားဖြင့် ပိတ်ထားသည်။ SHA-1 hash ၏ ပထမ စာလုံး ၅ လုံးကိုသာ Have I Been Pwned သို့ ပို့ပြီး ဤစက်ပေါ်တွင် တိုက်စစ်သည်။',
   'settings.title': 'ဆက်တင်များ', 'settings.general': 'အထွေထွေ', 'settings.security': 'လုံခြုံရေး', 'settings.devices': 'စက်များ', 'settings.sync': 'ချိန်ကိုက်ရန်', 'settings.about': 'အကြောင်း',
   'settings.theme': 'အပြင်အဆင်', 'settings.theme.dark': 'အမှောင်', 'settings.theme.light': 'အလင်း', 'settings.theme.system': 'စနစ်အတိုင်း', 'settings.language': 'ဘာသာစကား',
+  'settings.showWebsiteIcons': 'ဝဘ်ဆိုက် အိုင်ကွန်များ ပြသပါ',
+  'settings.showWebsiteIconsHelp': 'ဝဘ်ဆိုက်များအတွက် အိုင်ကွန်များကို HTTPS ဖြင့် ရယူသည်။ ဤသို့ရယူခြင်းက သက်ဆိုင်ရာဆိုက်များသို့ အကောင့်ရှိကြောင်း သိစေနိုင်သဖြင့် မူလအတိုင်း ပိတ်ထားသည်။ ပိတ်လိုက်ပါက အိုင်ကွန် ကက်ရှ်ကို ရှင်းလင်းပေးမည်။',
   'settings.autoLock': 'အလိုအလျောက် သော့ခတ်ချိန် (မိနစ်)', 'settings.clipboard': 'ကလစ်ဘုတ် ရှင်းချိန် (စက္ကန့်)', 'settings.biometric': 'ဇီဝမက်ထရစ် (Touch ID) ဖြင့် သော့ဖွင့်ရန်',
   'settings.lockOnSleep': 'Mac အိပ်စက်ချိန်တွင် လော့ခ်ချရန်', 'settings.lockOnSleepHelp': 'သင့် Mac အိပ်စက်သွားသည်နှင့် ချက်ချင်း လော့ခ်ချပါ',
   'settings.lockOnScreenLock': 'မျက်နှာပြင် လော့ခ်ကျချိန်တွင် လော့ခ်ချရန်', 'settings.lockOnScreenLockHelp': 'မျက်နှာပြင် လော့ခ်ကျသည့်အခါ (⌃⌘Q သို့မဟုတ် hot corner) လော့ခ်ချပါ',
@@ -447,6 +449,18 @@ export const my: Partial<Record<Key, string>> = {
   'largetype.close': 'ပိတ်ရန်',
   'largetype.label': 'စာလုံးကြီးမြင်ကွင်း',
   'largetype.title': 'စာလုံးကြီးမြင်ကွင်း',
+  // password strength meter (item detail + item editor)
+  'strength.terrible': 'အလွန်ညံ့ဖျင်း',
+  'strength.weak': 'အားနည်း',
+  'strength.fair': 'အသင့်အတင့်',
+  'strength.good': 'ကောင်း',
+  'strength.excellent': 'အလွန်ကောင်း',
+  'strength.label': 'စကားဝှက် အားကောင်းမှု: {label}',
+  // item detail field actions
+  'field.open': 'ဖွင့်ရန်',
+  'field.openLink': 'လင့်ခ်ဖွင့်ရန်',
+  // one-time password countdown
+  'totp.remaining': '{n} စက္ကန့် ကျန်သေးသည်',
   'cmd.showLargeType': 'စကားဝှက်ကို စာလုံးကြီးဖြင့် ကြည့်ရန်',
 
   // TODO(i18n-review): unlock and sidebar strings
@@ -504,12 +518,14 @@ export const my: Partial<Record<Key, string>> = {
   "import.dropzoneTitle": "ထုတ်ယူထားသောဖိုင်ကို ဤနေရာသို့ ဆွဲထည့်ပါ",
   "import.dropzoneOr": "သို့မဟုတ်",
   "import.chooseFile": "ဖိုင်ရွေးရန်…",
-  "import.dropzoneHint": "Apple Passwords / Safari၊ 1Password၊ Bitwarden၊ KeePass၊ Chrome (.csv, .json, .1pux) တို့ကို ထောက်ပံ့သည်",
+  "import.dropzoneHint": "Apple Passwords / Safari၊ 1Password၊ Bitwarden၊ KeePass၊ Chrome၊ LastPass၊ Proton Pass (.csv, .json, .1pux) တို့ကို ထောက်ပံ့သည်",
   "import.selectedFile": "ရွေးချယ်ထားသော ဖိုင်",
   "import.manualPath": "ဖိုင်လမ်းကြောင်း",
   "import.manualPathPlaceholder": "/path/to/export.csv, .json, သို့မဟုတ် .1pux",
   "import.format": "ဖော်မတ်",
   "import.selectFormat": "ဖော်မတ် ရွေးချယ်ပါ",
+  "import.formatLastpass": "LastPass (.csv)",
+  "import.formatProtonPass": "Proton Pass (.csv)",
   "import.formatAutoDetected": "အလိုအလျောက် သိရှိပြီး",
   "import.formatApplePasswords": "Apple Passwords / Safari (.csv)",
   "import.hintApplePasswords": "Passwords အက်ပ် (File → Export All Passwords…) သို့မဟုတ် Safari (File → Export → Passwords…)",
