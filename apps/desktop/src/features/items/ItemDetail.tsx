@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, ChevronRight, Copy, Download, ExternalLink, Eye, EyeOff, FolderInput, MoreVertical, Paperclip, Pencil, Plus, RotateCcw, Share2, ShieldAlert, Star, Trash2, Users } from 'lucide-react';
+import { Archive, ArchiveRestore, ChevronRight, Copy, Download, ExternalLink, Eye, EyeOff, FolderInput, MoreVertical, Paperclip, Pencil, Plus, QrCode, RotateCcw, Share2, ShieldAlert, Star, Trash2, Users } from 'lucide-react';
 import { api } from '../../api/client';
 import type { ItemDetail as Detail, VaultInfo } from '../../api/types';
 import { useApp } from '../../lib/store';
@@ -12,6 +12,8 @@ import { FieldRow } from './FieldView';
 import { ItemEditor } from './ItemEditor';
 import { SafeMarkdown } from './SafeMarkdown';
 import { useSettings } from '../settings/useSettings';
+import { WifiQrDialog } from './WifiQrDialog';
+import { extractWifiFields } from './wifiQr';
 import { errText } from './actions';
 import { EmptyIllustration } from './EmptyIllustration';
 import { useItemsUI } from './state';
@@ -86,6 +88,13 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropPaneRef = useRef<HTMLDivElement>(null);
+  const [showWifiQr, setShowWifiQr] = useState(false);
+  const wifiQrBtnRef = useRef<HTMLButtonElement>(null);
+  const moreActionsBtnRef = useRef<HTMLButtonElement>(null);
+  const lastTriggerRef = useRef<HTMLElement | null>(null);
+
+  const wifiInfo = detail.category === 'wifi' ? extractWifiFields(detail) : null;
+  const hasSsid = Boolean(wifiInfo && wifiInfo.ssid.length > 0);
 
   const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
@@ -192,16 +201,79 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
           {vault && <span className="ml-2 flex items-center gap-1 text-muted"><Users size={13} />{vault.members.length}</span>}
         </div>
         {!deleted && <>
+          {detail.category === 'wifi' && (
+            hasSsid ? (
+              <Button
+                ref={wifiQrBtnRef}
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  lastTriggerRef.current = wifiQrBtnRef.current;
+                  setShowWifiQr(true);
+                }}
+                aria-label={t('wifi.showQrCode')}
+                data-testid="show-wifi-qr-btn"
+              >
+                <QrCode size={14} />{t('wifi.showQrCode')}
+              </Button>
+            ) : (
+              <Tooltip content={t('wifi.missingSsidTooltip')}>
+                <span className="inline-block">
+                  <Button
+                    ref={wifiQrBtnRef}
+                    variant="ghost"
+                    size="sm"
+                    disabled
+                    aria-label={t('wifi.showQrCode')}
+                    data-testid="show-wifi-qr-btn"
+                  >
+                    <QrCode size={14} />{t('wifi.showQrCode')}
+                  </Button>
+                </span>
+              </Tooltip>
+            )
+          )}
           <Button variant="ghost" size="sm" onClick={() => useApp.getState().openModal('people', { vaultId: detail.vaultId })}><Share2 size={14} />{t('detail.share')}</Button>
           <Button variant="ghost" size="sm" onClick={() => setEditing(true)}><Pencil size={14} />{t('detail.edit')}</Button>
         </>}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={t('detail.moreActions')}><MoreVertical size={16} /></Button></DropdownMenuTrigger>
+          <DropdownMenuTrigger asChild>
+            <Button
+              ref={moreActionsBtnRef}
+              variant="ghost"
+              size="icon"
+              aria-label={t('detail.moreActions')}
+              data-testid="detail-more-actions-btn"
+            >
+              <MoreVertical size={16} />
+            </Button>
+          </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
             {deleted ? <>
               <DropdownMenuItem onSelect={() => run(api.restoreItem(ctx), t('detail.toast.restored'), true)}><RotateCcw size={14} />{t('detail.restore')}</DropdownMenuItem>
               <DropdownMenuItem danger onSelect={() => setConfirmPurge(true)}><Trash2 size={14} />{t('detail.deletePermanently')}</DropdownMenuItem>
             </> : <>
+              {detail.category === 'wifi' && (
+                hasSsid ? (
+                  <DropdownMenuItem
+                    data-testid="menu-show-wifi-qr"
+                    onSelect={() => {
+                      lastTriggerRef.current = moreActionsBtnRef.current;
+                      setShowWifiQr(true);
+                    }}
+                  >
+                    <QrCode size={14} />{t('wifi.showQrCode')}
+                  </DropdownMenuItem>
+                ) : (
+                  <DropdownMenuItem
+                    disabled
+                    data-testid="menu-show-wifi-qr"
+                    title={t('wifi.missingSsidTooltip')}
+                  >
+                    <QrCode size={14} />{t('wifi.showQrCode')}
+                  </DropdownMenuItem>
+                )
+              )}
               <DropdownMenuItem onSelect={() => run(api.setFavorite({ ...ctx, favorite: !detail.favorite }), detail.favorite ? t('bulk.toast.unfavorite') : t('bulk.toast.favorite'))}><Star size={14} />{detail.favorite ? t('bulk.unfavorite') : t('bulk.favorite')}</DropdownMenuItem>
               <DropdownMenuSub>
                 <DropdownMenuSubTrigger><FolderInput size={14} />{t('bulk.moveToVault')}</DropdownMenuSubTrigger>
@@ -480,6 +552,15 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
           </div>
         </DialogContent>
       </Dialog>
+
+      {showWifiQr && (
+        <WifiQrDialog
+          open={showWifiQr}
+          onOpenChange={setShowWifiQr}
+          detail={detail}
+          triggerRef={lastTriggerRef}
+        />
+      )}
     </div>
   );
 }
