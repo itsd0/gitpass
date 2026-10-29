@@ -208,6 +208,27 @@ function showNoHost(e) {
   show('nohost');
 }
 
+let throttleTimer = null;
+function startThrottleCountdown(secs) {
+  if (throttleTimer) clearInterval(throttleTimer);
+  let left = Math.max(1, secs);
+  const update = () => {
+    const btn = $('unlockBtn');
+    if (left <= 0) {
+      clearInterval(throttleTimer);
+      throttleTimer = null;
+      if (btn) btn.disabled = false;
+      $('unlockErr').textContent = '';
+      return;
+    }
+    if (btn) btn.disabled = true;
+    $('unlockErr').textContent = t('unlockThrottled', 'Too many attempts. Try again in $1 s', [left]);
+    left--;
+  };
+  update();
+  throttleTimer = setInterval(update, 1000);
+}
+
 function showLocked(view, st) {
   stopTotp(); stopListTotp(); clearTotpCache();
   if (S.iconCache) S.iconCache.clear();
@@ -223,6 +244,9 @@ function showLocked(view, st) {
   $('lockedSub').textContent = appDown ? t('appNotRunning', 'The gitpass app is not running.') : ((st && st.account && st.account.email) || '');
   // Secret Key is only needed in standalone mode (app not running).
   $('skRow').classList.toggle('hidden', !appDown || !!(st && st.secret_key_file));
+  if (st && st.throttled_secs && st.throttled_secs > 0) {
+    startThrottleCountdown(st.throttled_secs);
+  }
   $('touchBtn').focus();
 }
 
@@ -247,9 +271,21 @@ $('unlockForm').onsubmit = async (e) => {
   if (!msg.password) { $('unlockErr').textContent = t('pwRequired', 'Enter your master password'); return; }
   const sp = btn.querySelector('.spinner');
   btn.disabled = true; if (sp) sp.classList.remove('hidden');
-  try { await send(msg); $('pw').value = ''; $('sk').value = ''; await refresh(); }
-  catch (err) { $('unlockErr').textContent = (err.code === 'denied' || /unlock failed|denied/i.test(err.message)) ? t('wrongCreds', 'Wrong master password or Secret Key') : String(err.message); $('pw').select(); }
-  finally { btn.disabled = false; if (sp) sp.classList.add('hidden'); }
+  try {
+    if (throttleTimer) { clearInterval(throttleTimer); throttleTimer = null; }
+    await send(msg); $('pw').value = ''; $('sk').value = ''; await refresh();
+  } catch (err) {
+    if (err.code === 'throttled' || /throttled/i.test(err.message)) {
+      const secs = err.seconds_remaining || err.retry_after_secs || (err.message && parseInt(err.message.match(/(\d+)\s*s?/)?.[1] || '2', 10)) || 2;
+      startThrottleCountdown(secs);
+    } else {
+      $('unlockErr').textContent = (err.code === 'denied' || /unlock failed|denied/i.test(err.message)) ? t('wrongCreds', 'Wrong master password or Secret Key') : String(err.message);
+      $('pw').select();
+    }
+  } finally {
+    if (!throttleTimer) btn.disabled = false;
+    if (sp) sp.classList.add('hidden');
+  }
 };
 document.querySelectorAll('.eye').forEach((b) => {
   b.innerHTML = UI.eye;

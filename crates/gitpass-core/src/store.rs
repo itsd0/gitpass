@@ -427,7 +427,7 @@ fn list_enc(d: &Path) -> Vec<String> {
         .map(|p| p.file_stem().unwrap().to_string_lossy().to_string()).collect()).unwrap_or_default()
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Debug)]
 pub struct UnlockOpts {
     /// Accept integrity/rollback failures and re-seal the manifest from what's on disk.
     pub accept_rollback: bool,
@@ -500,23 +500,41 @@ impl Session {
 
     /// Unlock and register/refresh this device in the registry (`device_name` None => env/hostname).
     pub fn unlock_device(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>) -> Result<Self> {
-        Self::unlock_device_inner(root, password, secret, opts, device_name, true)
+        Self::unlock_device_inner(root, password, secret, opts, device_name, true, false)
+    }
+    /// Unlock via biometric authentication: bypasses password failure throttling, but resets it on success.
+    pub fn unlock_device_biometric(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>) -> Result<Self> {
+        Self::unlock_device_inner(root, password, secret, opts, device_name, true, true)
     }
     /// Verify-only re-unlock used after a sync pull: same integrity/rollback checks, but never touches the
     /// device registry or upgrades the KDF, so the working tree stays exactly as committed/pulled.
     pub fn reopen_verify(root: &Path, password: &str, secret: &SecretKey, accept_rollback: bool) -> Result<Self> {
         let fmt = read_format(root)?;
         let opts = UnlockOpts { accept_rollback, target_kdf: fmt.kdf.clone() };
-        Self::unlock_device_inner(root, password, secret, &opts, None, false)
+        Self::unlock_device_inner(root, password, secret, &opts, None, false, false)
     }
-    fn unlock_device_inner(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>, touch: bool) -> Result<Self> {
+    fn unlock_device_inner(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>, touch: bool, is_biometric: bool) -> Result<Self> {
+        if !is_biometric {
+            crate::unlock_throttle::check_throttle(root)?;
+        }
         let recovered = {
             let _g = fsutil::lock(root)?;
             finish_pending_rewrap(root, password, secret)?
         };
         let fmt = read_format(root)?;
         if fmt.version < MIN_READ_FORMAT { bail!("vault is format v{}; run `gitpass migrate` to upgrade to v{FORMAT_VERSION}", fmt.version); }
-        let (auk, account_key) = open_keyset_auk(root, &fmt, &root.join("keyset.enc"), password, secret)?;
+        let (auk, account_key) = match open_keyset_auk(root, &fmt, &root.join("keyset.enc"), password, secret) {
+            Ok(k) => {
+                let _ = crate::unlock_throttle::record_success(root);
+                k
+            }
+            Err(e) => {
+                if !is_biometric {
+                    let _ = crate::unlock_throttle::record_failure(root);
+                }
+                return Err(e);
+            }
+        };
         let device_kek = device_kek(&auk, &fmt.account_id);
         drop(auk);
         let device_id = crate::device::local_device_id(root)?;

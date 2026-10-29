@@ -977,7 +977,7 @@ fn emergency_kit_data_reveal_rules() {
     let root = tempfile::tempdir().unwrap();
     let cfg = tempfile::tempdir().unwrap();
     let dir = root.path().join("v");
-    let app = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default()));
+    let app = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default())).with_biometric(Box::new(MemBio(Default::default())));
     app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
     let r = app.create_account(&dir.display().to_string(), "correct horse", false).unwrap();
     // right after create_account the kit carries the fresh Secret Key
@@ -1804,4 +1804,57 @@ fn settings_render_notes_markdown_roundtrip_and_defaults() {
     let updated = e.app.set_settings(Settings { render_notes_markdown: false, ..initial }).unwrap();
     assert!(!updated.render_notes_markdown);
     assert!(!e.app.get_settings().render_notes_markdown);
+}
+
+#[test]
+fn unlock_throttling_and_biometric_reset() {
+    gitpass_core::unlock_throttle::reset_memory();
+    let root = tempfile::tempdir().unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let dir = root.path().join("v");
+    let app = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default())).with_biometric(Box::new(MemBio(Default::default())));
+    app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
+    let r = app.create_account(&dir.display().to_string(), "correct horse", false).unwrap();
+    let mut s = app.get_settings();
+    s.biometric_unlock = true;
+    app.set_settings(s).unwrap();
+    app.lock();
+
+    let vp = dir.display().to_string();
+
+    // 1st wrong attempt
+    let err1 = app.unlock(&vp, "wrong-1", Some(&r.secret_key)).unwrap_err();
+    assert!(err1.to_string().contains("unlock failed"));
+
+    // 2nd wrong attempt
+    let err2 = app.unlock(&vp, "wrong-2", Some(&r.secret_key)).unwrap_err();
+    assert!(err2.to_string().contains("unlock failed"));
+
+    // 3rd wrong attempt
+    let err3 = app.unlock(&vp, "wrong-3", Some(&r.secret_key)).unwrap_err();
+    assert!(err3.to_string().contains("unlock failed"));
+
+    // 4th attempt is throttled
+    let err4 = app.unlock(&vp, "correct horse", Some(&r.secret_key)).unwrap_err();
+    assert!(err4.to_string().starts_with("throttled: try again in "));
+
+    // Status reports throttledSecs
+    let st = app.status().unwrap();
+    assert!(!st.unlocked);
+    assert!(st.throttled_secs.is_some());
+    assert!(st.throttled_secs.unwrap() >= 1);
+
+    // Biometric unlock is NOT throttled by password failures and succeeds
+    let bio_st = app.unlock_biometric(&vp).unwrap();
+    assert!(bio_st.unlocked);
+
+    // Throttle is now reset
+    app.lock();
+    let post_st = app.status().unwrap();
+    assert!(!post_st.unlocked);
+    assert_eq!(post_st.throttled_secs, None);
+
+    // Normal password unlock now succeeds
+    let ok_st = app.unlock(&vp, "correct horse", Some(&r.secret_key)).unwrap();
+    assert!(ok_st.unlocked);
 }

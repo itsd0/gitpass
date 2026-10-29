@@ -164,6 +164,9 @@
   "unlockReason": {
     "message": "ปลดล็อกส่วนขยายเบราว์เซอร์ gitpass"
   },
+  "unlockThrottled": {
+    "message": "พยายามมากเกินไป ลองใหม่อีกครั้งในอีก $1 วินาที"
+  },
   "unlockCancelled": {
     "message": "ยกเลิกการปลดล็อกแล้ว"
   },

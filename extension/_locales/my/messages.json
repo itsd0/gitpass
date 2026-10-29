@@ -164,6 +164,9 @@
   "unlockReason": {
     "message": "gitpass browser extension ကို သော့ဖွင့်ရန်"
   },
+  "unlockThrottled": {
+    "message": "ကြိုးစားမှု အကြိမ်အရေအတွက် များလွန်းသည်။ $1 စက္ကန့်အကြာတွင် ထပ်မံကြိုးစားပါ။"
+  },
   "unlockCancelled": {
     "message": "သော့ဖွင့်ခြင်းကို ပယ်ဖျက်လိုက်သည်"
   },

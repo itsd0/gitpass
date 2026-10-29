@@ -576,6 +576,7 @@ export const my: Partial<Record<Key, string>> = {
 
   // TODO(i18n-review): unlock and sidebar strings
   "unlock.title": "gitpass ကို သော့ဖွင့်ပါ",
+  "unlock.throttled": "ကြိုးစားမှု အကြိမ်အရေအတွက် များလွန်းသည်။ {n} စက္ကန့်အကြာတွင် ထပ်မံကြိုးစားပါ။",
   "unlock.masterPassword": "မာစတာ စကားဝှက်",
   "unlock.masterPasswordPlaceholder": "သင့် စကားဝှက်ကို ရိုက်ထည့်ပါ",
   "unlock.submit": "သော့ဖွင့်ပါ",

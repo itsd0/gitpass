@@ -568,6 +568,7 @@ export const th: Partial<Record<Key, string>> = {
 
   // TODO(i18n-review): unlock and sidebar strings
   "unlock.title": "ปลดล็อก gitpass",
+  "unlock.throttled": "พยายามมากเกินไป ลองใหม่อีกครั้งในอีก {n} วินาที",
   "unlock.masterPassword": "รหัสผ่านหลัก",
   "unlock.masterPasswordPlaceholder": "ป้อนรหัสผ่านของคุณ",
   "unlock.submit": "ปลดล็อก",

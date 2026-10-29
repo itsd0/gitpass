@@ -164,6 +164,9 @@
   "unlockReason": {
     "message": "Unlock the gitpass browser extension"
   },
+  "unlockThrottled": {
+    "message": "Too many attempts. Try again in $1 s"
+  },
   "unlockCancelled": {
     "message": "Unlock was cancelled"
   },

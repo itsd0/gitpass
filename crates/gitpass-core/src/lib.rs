@@ -23,6 +23,7 @@ pub mod passkey;
 pub mod store;
 pub mod sync;
 pub mod totp;
+pub mod unlock_throttle;
 
 pub use merge::{merge_records as merge_items, ItemRecord, MergeReport};
 pub use search::rank as fuzzy_find;

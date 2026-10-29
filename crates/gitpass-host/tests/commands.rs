@@ -431,3 +431,39 @@ fn record_generated_password_respects_settings_and_returns_recorded_flag() {
     let bytes_after_r4 = std::fs::read(&history_file).unwrap();
     assert_ne!(bytes_after_r1, bytes_after_r4, "history file must be updated when setting is re-enabled");
 }
+
+#[test]
+fn unlock_throttled_after_three_failures() {
+    gitpass_core::unlock_throttle::reset_memory();
+    let mut f = setup();
+
+    // 1st wrong attempt
+    let r1 = f.host.handle(&json!({"id": 1, "cmd": "unlock", "password": "wrong-password-1"}));
+    assert_eq!(r1["ok"], false);
+    assert_eq!(r1["error"], "denied");
+
+    // 2nd wrong attempt
+    let r2 = f.host.handle(&json!({"id": 2, "cmd": "unlock", "password": "wrong-password-2"}));
+    assert_eq!(r2["ok"], false);
+    assert_eq!(r2["error"], "denied");
+
+    // 3rd wrong attempt
+    let r3 = f.host.handle(&json!({"id": 3, "cmd": "unlock", "password": "wrong-password-3"}));
+    assert_eq!(r3["ok"], false);
+    assert_eq!(r3["error"], "denied");
+
+    // 4th attempt is throttled
+    let r4 = f.host.handle(&json!({"id": 4, "cmd": "unlock", "password": PW}));
+    assert_eq!(r4["ok"], false);
+    assert_eq!(r4["error"], "throttled");
+    let secs = r4["seconds_remaining"].as_u64().unwrap();
+    assert!((1..=2).contains(&secs));
+    assert_eq!(r4["retry_after_secs"], secs);
+    assert!(r4["message"].as_str().unwrap().contains("Too many attempts"));
+
+    // Status command reports throttled_secs
+    let st = f.host.handle(&json!({"id": 5, "cmd": "status"}));
+    assert_eq!(st["ok"], true);
+    assert_eq!(st["result"]["unlocked"], false);
+    assert!(st["result"]["throttled_secs"].as_u64().unwrap() >= 1);
+}

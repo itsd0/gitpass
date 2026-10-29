@@ -39,7 +39,7 @@ gitpass migrate                                    # migrate a format v1 vault, 
 ```
 
 `init` and `rotate-secret-key` read `GITPASS_PASSWORD`; `passwd` reads
-`GITPASS_NEW_PASSWORD`. Otherwise they prompt. `rotate-account-key` rewrites the keyset
+`GITPASS_NEW_PASSWORD`. Otherwise they prompt. Unlock attempts are throttled after 3 consecutive wrong master password failures per vault; subsequent attempts are refused with a delay doubling from 2 s up to a 5-minute cap (persisted in `.gitpass-throttle.json`), and a successful unlock resets the failure counter. `rotate-account-key` rewrites the keyset
 (and with `--with-vault-keys`, every vault key and item). Read the security notes in the
 README before relying on rotation.
 
