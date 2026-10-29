@@ -543,12 +543,14 @@ impl Host {
                 check_request_origin(origin)?;
                 let usage = self.sess()?.all_last_used();
                 let matches_url = |u: &str| origin_matches(u, origin);
+                // Passkeys only on request (popup site list): fill flows must keep getting logins only.
+                let passkeys = req.get("include_passkeys").and_then(Value::as_bool) == Some(true);
                 let mut out = vec![];
                 for (vid, vname, iid, r) in self.all_records(None)? {
-                    if r.category == Category::Login
+                    let login = r.category == Category::Login
                         && (r.item.url.as_deref().is_some_and(matches_url)
-                            || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == FieldKind::Url && f.value.as_deref().is_some_and(matches_url)))
-                    {
+                            || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == FieldKind::Url && f.value.as_deref().is_some_and(matches_url)));
+                    if login || (passkeys && crate::passkey::record_matches_origin(&r, origin)) {
                         let mut s = summary(&vid, &vname, &iid, &r);
                         if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
                         out.push(s);
