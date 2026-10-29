@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.5 — 2026-10-29
+
+The v0.6.4 tag has no published build: its release build failed on a Tauri npm/Rust version mismatch. 0.6.5 is the
+first published release that contains every 0.6.4 change listed below, plus:
+
+### Desktop
+- Align Tauri npm and Rust versions (tauri/@tauri-apps/api 2.12, plugin-global-shortcut 2.4, plugin-updater 2.14),
+  fixing the release build (#233).
+
+### Extension / host
+- The standalone gitpass-host now honors the "remember generated passwords" setting (#228).
+
+### Docs
+- List all import formats and aliases; document extension generator history (#229).
+
 ## 0.6.4 — 2026-10-29
 
 ### Desktop

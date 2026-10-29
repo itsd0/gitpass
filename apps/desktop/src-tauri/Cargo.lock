@@ -1645,7 +1645,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-core"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "argon2",
@@ -1676,7 +1676,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-desktop"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "arboard",
@@ -1701,7 +1701,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-gui-core"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1720,7 +1720,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-host"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1737,7 +1737,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-pasteboard"
-version = "0.6.4"
+version = "0.6.5"
 dependencies = [
  "anyhow",
  "objc2",
