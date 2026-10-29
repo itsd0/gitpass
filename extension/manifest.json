@@ -59,6 +59,7 @@
       "js": [
         "lib/policy.js",
         "lib/forms.js",
+        "lib/password-rules.js",
         "lib/i18n.js",
         "lib/icons.js",
         "lib/banner.js",

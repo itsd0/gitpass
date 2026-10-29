@@ -93,6 +93,27 @@ fn match_fill_totp_generate_lock() {
     assert_eq!(g["password"].as_str().unwrap().chars().count(), 32);
     err(&mut f.host, json!({"cmd":"generate","len":4}));
 
+    // Site password rules (extension `page:generate`): required classes present, only allowed symbols.
+    let rules = json!({"classes":[
+        {"kind":"lower","required":true},{"kind":"upper","required":true},{"kind":"digit","required":true},
+        {"kind":"special","required":false,"chars":"-_"}]});
+    for _ in 0..30 {
+        let g = ok(&mut f.host, json!({"cmd":"generate","len":16,"rules":rules}));
+        let p = g["password"].as_str().unwrap();
+        assert_eq!(p.chars().count(), 16, "{p}");
+        assert!(p.chars().any(|c| c.is_ascii_lowercase()) && p.chars().any(|c| c.is_ascii_uppercase()) && p.chars().any(|c| c.is_ascii_digit()), "{p}");
+        assert!(p.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'), "{p}");
+    }
+    for bad in [
+        json!({"classes":[]}),
+        json!({"classes":[{"kind":"emoji","required":true}]}),
+        json!({"classes":[{"kind":"special","chars":"a1 "}]}),
+        json!({"classes":[{"kind":"special","chars":"é"}]}),
+    ] {
+        err(&mut f.host, json!({"cmd":"generate","len":16,"rules":bad}));
+    }
+    err(&mut f.host, json!({"cmd":"generate","len":16,"words":true,"rules":rules}));
+
     ok(&mut f.host, json!({"cmd":"lock"}));
     assert!(err(&mut f.host, json!({"cmd":"fill","item_id":f.paypal,"origin":"https://paypal.com"})).contains("locked"));
 }
