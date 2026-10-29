@@ -302,12 +302,15 @@ fn update_state(root: &Path, f: impl FnOnce(Option<LocalState>) -> Option<LocalS
     let _ = FileExt::unlock(&dir);
     res
 }
-fn save_epoch(root: &Path, account_id: &str, epoch: u64) -> Result<()> {
+fn save_epoch(root: &Path, account_id: &str, epoch: u64) -> Result<()> { write_epoch(root, account_id, epoch, false) }
+/// `allow_lower` is only for `set_last_epoch` (e.g. `sync --merge` deliberately rewinds to the
+/// merge-base epoch before adopting the remote); normal saves never lower the last-seen epoch.
+fn write_epoch(root: &Path, account_id: &str, epoch: u64, allow_lower: bool) -> Result<()> {
     update_state(root, |cur| {
         // A corrupt file is replaced: the epoch is what matters for rollback detection.
         let mut s = cur.unwrap_or_default();
         if s.account_id == account_id {
-            s.epoch = s.epoch.max(epoch); // never lower the last-seen epoch
+            s.epoch = if allow_lower { epoch } else { s.epoch.max(epoch) };
         } else {
             s.account_id = account_id.into();
             s.epoch = epoch;
@@ -1698,7 +1701,7 @@ pub fn now() -> String {
 /// Overwrite this device's last-seen epoch. Only for `sync --merge`, which deliberately discards
 /// unpushed local commits (after snapshotting their plaintext) and must accept the remote epoch, which
 /// the caller has checked is >= the epoch at the merge base.
-pub fn set_last_epoch(root: &Path, account_id: &str, epoch: u64) -> Result<()> { save_epoch(root, account_id, epoch) }
+pub fn set_last_epoch(root: &Path, account_id: &str, epoch: u64) -> Result<()> { write_epoch(root, account_id, epoch, true) }
 
 #[cfg(test)]
 mod share_signature_tests {
@@ -1848,6 +1851,10 @@ mod local_state_tests {
         assert_eq!(get_item_last_used(root, "item-a"), Some(100));
         save_epoch(root, "acct", 6).unwrap();
         assert_eq!(last_epoch(root, "acct"), Some(6));
+        // An explicit rewind (sync --merge) may lower it, and keeps usage data.
+        set_last_epoch(root, "acct", 4).unwrap();
+        assert_eq!(last_epoch(root, "acct"), Some(4));
+        assert_eq!(get_item_last_used(root, "item-a"), Some(100));
     }
 
     #[test]
