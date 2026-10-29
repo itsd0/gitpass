@@ -70,12 +70,25 @@ fn real_ssh_add_and_ssh_keygen_sign_against_agent() {
     assert!(String::from_utf8_lossy(&fp.stdout).contains(&imp.fingerprint), "fingerprint matches ssh-keygen -l");
     assert_eq!(imp.item.title, "ecdsa@test");
 
+    // imported RSA key (2048 bits)
+    let kf_rsa = kd.path().join("id_rsa");
+    assert!(Command::new("ssh-keygen").args(["-q", "-t", "rsa", "-b", "2048", "-N", "", "-C", "rsa@test", "-f"]).arg(&kf_rsa).status().unwrap().success());
+    let rsa_pem = std::fs::read_to_string(&kf_rsa).unwrap();
+    let imp_rsa = e.app.ssh_import(&e.vault, "", &rsa_pem, None).unwrap();
+    assert_eq!(imp_rsa.key_type, "ssh-rsa");
+    let real_rsa_pub = std::fs::read_to_string(kf_rsa.with_extension("pub")).unwrap();
+    assert_eq!(imp_rsa.public_key, real_rsa_pub.trim());
+    let fp_rsa = Command::new("ssh-keygen").arg("-lf").arg(kf_rsa.with_extension("pub")).output().unwrap();
+    assert!(String::from_utf8_lossy(&fp_rsa.stdout).contains(&imp_rsa.fingerprint));
+
     let (code, out) = ssh_add_l(&a.socket_path);
     assert_eq!(code, 0, "{out}");
     assert!(out.contains(k.public_key.split(' ').nth(1).unwrap()), "{out}");
     assert!(out.contains(imp.public_key.split(' ').nth(1).unwrap()), "{out}");
+    assert!(out.contains(imp_rsa.public_key.split(' ').nth(1).unwrap()), "{out}");
     y_sign(&a.socket_path, kd.path(), &k.public_key).expect("ed25519 sign+verify");
     y_sign(&a.socket_path, kd.path(), &imp.public_key).expect("ecdsa sign+verify");
+    y_sign(&a.socket_path, kd.path(), &imp_rsa.public_key).expect("rsa sign+verify");
 
     // per-use approval
     e.app.set_settings(Settings { ssh_approve_each_use: true, ..e.app.get_settings() }).unwrap();

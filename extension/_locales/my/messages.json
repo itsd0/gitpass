@@ -956,5 +956,8 @@
   },
   "optNeverAutoSubmitAdd": {
     "message": "ဆိုက်တစ်ခု ထည့်ပါ"
+  },
+  "watchtowerWeakSshKey": {
+    "message": "အားနည်းသော SSH သော့"
   }
 }

@@ -877,5 +877,8 @@
   },
   "optNeverAutoSubmitAdd": {
     "message": "Add a site"
+  },
+  "watchtowerWeakSshKey": {
+    "message": "Weak SSH key"
   }
 }
