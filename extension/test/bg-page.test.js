@@ -1,6 +1,12 @@
 // page:* routing rules in bg-page.js, with a fake native host.
 const test = require('node:test');
 const assert = require('node:assert');
+globalThis.chrome = {
+  runtime: {
+    id: 'mock',
+    getURL: (p) => 'chrome-extension://mock/' + p,
+  },
+};
 globalThis.GitpassPolicy = require('../lib/policy.js');
 const B = require('../bg-page.js');
 
@@ -10,13 +16,14 @@ function fakeHost(items, pw = 'old') {
   const calls = [];
   const h = async (cmd, args) => {
     calls.push([cmd, args]);
-    if (cmd === 'match') return { items };
-    if (cmd === 'fill') { if (args.origin !== 'https://site.example') { const e = new Error('origin_mismatch'); throw e; } return { username: 'me', password: pw }; }
+    if (cmd === 'match') return { items: args.origin === 'https://site.example' ? items : [] };
+    if (cmd === 'fill') { if (args.origin !== 'https://site.example' && !args.user_confirm && !args.confirm) { const e = new Error('origin_mismatch'); throw e; } return { username: 'me', password: pw }; }
     if (cmd === 'save_login') return { item_id: 'v:new' };
     if (cmd === 'update_password') return { ok: true };
     if (cmd === 'totp') return { code: '123456', remaining: 10 };
-    if (cmd === 'list_items') return { items: [{ id: 'v:c', category: 'credit_card' }, { id: 'v:l', category: 'login' }] };
+    if (cmd === 'list_items') return { items: [{ id: 'v:c', category: 'credit_card' }, { id: 'v:l', category: 'login', title: 'Site', subtitle: 'me', url: 'https://site.example', favorite: true, secret: 'leaked' }].filter((i) => !args.category || i.category === args.category) };
     if (cmd === 'list_vaults') return { vaults: VAULTS };
+    if (cmd === 'add_url') return { ok: true };
     return {};
   };
   h.calls = calls; return h;
@@ -39,6 +46,79 @@ test('fill passes sender origin to host; totp only for matching items', async ()
   assert.deepStrictEqual(r, { origin: 'https://site.example', username: 'me', password: 'old', totp: null });
   assert.strictEqual((await B.handle({ type: 'page:totp', item_id: 'v:1' }, tab('https://site.example/'), h)).code, '123456');
   await assert.rejects(B.handle({ type: 'page:totp', item_id: 'v:other' }, tab('https://site.example/'), h), /does not match/);
+
+  // Cross-site fill without background-issued approval is refused even if message sends user_confirm
+  await assert.rejects(B.handle({ type: 'page:fill', item_id: 'v:1', user_confirm: true }, tab('https://other.example/'), h), /origin_mismatch/);
+
+  // Background approval granted via confirm UI allows single-use cross-site fill
+  B._crossSiteApprovals.set('1:https://other.example:v:1', { ts: Date.now() });
+  const cross = await B.handle({ type: 'page:fill', item_id: 'v:1' }, tab('https://other.example/'), h);
+  assert.strictEqual(cross.username, 'me');
+  assert.strictEqual(h.calls.at(-1)[1].user_confirm, true);
+
+  // Approval is single-use: immediate second fill is refused
+  await assert.rejects(B.handle({ type: 'page:fill', item_id: 'v:1' }, tab('https://other.example/'), h), /origin_mismatch/);
+
+  // Cross-site TOTP without background approval is refused
+  await assert.rejects(B.handle({ type: 'page:totp', item_id: 'v:1' }, tab('https://other.example/'), h), /does not match/);
+
+  // Background approval granted via confirm UI allows single-use cross-site TOTP
+  B._crossSiteApprovals.set('1:https://other.example:v:1', { ts: Date.now() });
+  const crossTotp = await B.handle({ type: 'page:totp', item_id: 'v:1' }, tab('https://other.example/'), h);
+  assert.strictEqual(crossTotp.code, '123456');
+
+  // Approval is single-use: immediate second TOTP is refused
+  await assert.rejects(B.handle({ type: 'page:totp', item_id: 'v:1' }, tab('https://other.example/'), h), /does not match/);
+});
+
+test('page:search is gated by trusted activation; page:add_url requires prior confirmed cross-site fill', async () => {
+  const h = fakeHost([]);
+  const sTab = tab('https://site.example/');
+
+  // page:search refused when search not active for the tab
+  await assert.rejects(B.handle({ type: 'page:search', query: 'sit' }, sTab, h), /search not active/);
+
+  // page:search_enable requires user click
+  await assert.rejects(B.handle({ type: 'page:search_enable' }, sTab, h), /search needs a user click/);
+  await B.handle({ type: 'page:search_enable', user_click: true }, sTab, h);
+
+  // Now search succeeds and returns logins without secrets
+  const s = await B.handle({ type: 'page:search', query: 'sit' }, sTab, h);
+  assert.strictEqual(s.items.length, 1);
+  assert.strictEqual(s.items[0].id, 'v:l');
+  assert.strictEqual(s.items[0].title, 'Site');
+  assert.strictEqual(s.items[0].favorite, true);
+  assert.ok(!('secret' in s.items[0]), 'no secrets returned in search summary');
+
+  // Verify search activation does not slide and expires after 60s
+  const activeEntry = B._searchActive.get(sTab.tab.id);
+  assert.ok(activeEntry);
+  const activatedTs = activeEntry.ts;
+  await B.handle({ type: 'page:search', query: 'sit' }, sTab, h);
+  assert.strictEqual(B._searchActive.get(sTab.tab.id).ts, activatedTs, 'search activation ts does not slide on query');
+
+  activeEntry.ts = Date.now() - 61 * 1000;
+  await assert.rejects(B.handle({ type: 'page:search', query: 'sit' }, sTab, h), /search not active/);
+
+  // Re-enable for subsequent disable test
+  await B.handle({ type: 'page:search_enable', user_click: true }, sTab, h);
+
+  // page:search_disable deactivates search
+  await B.handle({ type: 'page:search_disable' }, sTab, h);
+  await assert.rejects(B.handle({ type: 'page:search', query: 'sit' }, sTab, h), /search not active/);
+
+  // page:add_url requires user_click and prior confirmed cross-site fill approval
+  await assert.rejects(B.handle({ type: 'page:add_url', item_id: 'v:l' }, sTab, h), /click/);
+  await assert.rejects(B.handle({ type: 'page:add_url', item_id: 'v:l', user_click: true }, sTab, h), /confirmed cross-site fill/);
+
+  // Grant add_url approval (as granted after a confirmed cross-site fill)
+  B._addUrlApprovals.set('1:https://site.example:v:l', { ts: Date.now() });
+  const added = await B.handle({ type: 'page:add_url', item_id: 'v:l', user_click: true }, sTab, h);
+  assert.deepStrictEqual(added, { origin: 'https://site.example', ok: true });
+  assert.deepStrictEqual(h.calls.at(-1), ['add_url', { item_id: 'v:l', origin: 'https://site.example', url: 'https://site.example' }]);
+
+  // add_url approval is consumed (single-use)
+  await assert.rejects(B.handle({ type: 'page:add_url', item_id: 'v:l', user_click: true }, sTab, h), /confirmed cross-site fill/);
 });
 
 test('page:list only cards/identities; card fill needs a click flag', async () => {
@@ -249,6 +329,119 @@ test('page:open_app forwards only the item saved from this tab', async () => {
   assert.deepStrictEqual(h.calls.at(-1), ['open_in_app', { item_id: 'v:new' }]);
   await B.handle({ type: 'page:open_app', last_save: true }, tab('https://other.example/', 0, 25), h);
   assert.deepStrictEqual(h.calls.at(-1), ['open_in_app', {}]);
+});
+
+test('fromConfirmUi handles approve and cancel decisions', () => {
+  let resolved = null, rejected = null;
+  B._pendingConfirms.set('req-1', {
+    reqId: 'req-1',
+    tabId: 5,
+    origin: 'https://site.example',
+    itemId: 'v:1',
+    pageHost: 'site.example',
+    itemHost: 'other.example',
+    title: 'Other Login',
+    resolve: (v) => { resolved = v; },
+    reject: (e) => { rejected = e; },
+  });
+
+  // Query metadata for UI
+  const reqData = B.fromConfirmUi({ type: 'confirm-ui:request', req: 'req-1' });
+  assert.deepStrictEqual(reqData, { pageHost: 'site.example', itemHost: 'other.example', title: 'Other Login' });
+
+  // Approve decision grants approval and resolves
+  const dec = B.fromConfirmUi({ type: 'confirm-ui:decide', req: 'req-1', approved: true });
+  assert.strictEqual(dec.approved, true);
+  assert.deepStrictEqual(resolved, { approved: true });
+  assert.ok(B._crossSiteApprovals.has('5:https://site.example:v:1'));
+
+  // Cancel decision rejects
+  B._pendingConfirms.set('req-2', {
+    reqId: 'req-2',
+    tabId: 5,
+    origin: 'https://site.example',
+    itemId: 'v:2',
+    pageHost: 'site.example',
+    itemHost: 'other.example',
+    title: 'Other 2',
+    resolve: () => {},
+    reject: (e) => { rejected = e; },
+  });
+  B.fromConfirmUi({ type: 'confirm-ui:decide', req: 'req-2', approved: false });
+  assert.ok(rejected && /cancelled/i.test(rejected.message));
+
+  // Sender validation: content script senders or mismatched req are refused
+  const confirmUiUrl = 'chrome-extension://mock/popup/confirm.html?req=req-3';
+  const validSender = { id: 'mock', url: confirmUiUrl };
+  const contentScriptSender = { id: 'mock', url: 'https://site.example/login' };
+  const contentScriptWithTab = { id: 'mock', tab: { id: 10, url: 'https://site.example/login' }, url: 'https://site.example/login' };
+  const wrongExtSender = { id: 'wrong', url: confirmUiUrl };
+
+  assert.strictEqual(B.isConfirmUiSender(validSender), true);
+  assert.strictEqual(B.isConfirmUiSender(contentScriptSender), false);
+  assert.strictEqual(B.isConfirmUiSender(contentScriptWithTab), false);
+  assert.strictEqual(B.isConfirmUiSender(wrongExtSender), false);
+
+  assert.throws(() => B.fromConfirmUi({ type: 'confirm-ui:request', req: 'req-3' }, contentScriptSender), /unauthorized sender/);
+  assert.throws(() => B.fromConfirmUi({ type: 'confirm-ui:decide', req: 'req-3', approved: true }, contentScriptWithTab), /unauthorized sender/);
+  assert.throws(() => B.fromConfirmUi({ type: 'confirm-ui:request', req: 'req-wrong' }, validSender), /mismatched request id/);
+});
+
+test('confirm-ui TTL expiry rejects pending waiter and cleans up pendingConfirms', () => {
+  let rejected = null;
+  const cleanup = () => { B._pendingConfirms.delete('req-exp'); };
+  B._pendingConfirms.set('req-exp', {
+    reqId: 'req-exp',
+    tabId: 5,
+    origin: 'https://site.example',
+    itemId: 'v:exp',
+    pageHost: 'site.example',
+    itemHost: 'other.example',
+    title: 'Other Exp',
+    resolve: () => {},
+    reject: (e) => { rejected = e; },
+    cleanup,
+    ts: Date.now() - 70000,
+  });
+
+  assert.throws(() => B.fromConfirmUi({ type: 'confirm-ui:request', req: 'req-exp' }), /request expired/);
+  assert.ok(rejected && /request expired/i.test(rejected.message));
+  assert.strictEqual(B._pendingConfirms.has('req-exp'), false);
+});
+
+test('background.js rejects confirm-ui:decide from a sender with a tab', async () => {
+  let messageListener = null;
+  const originalChrome = globalThis.chrome;
+  globalThis.chrome = {
+    runtime: {
+      id: 'mock-ext',
+      getURL: (p) => 'chrome-extension://mock-ext/' + p,
+      onMessage: { addListener: (fn) => { messageListener = fn; } },
+      connectNative: () => ({ onMessage: { addListener: () => {} }, onDisconnect: { addListener: () => {} }, postMessage: () => {} }),
+    },
+    idle: { onStateChanged: { addListener: () => {} } },
+    tabs: { onRemoved: { addListener: () => {} } },
+    windows: { onRemoved: { addListener: () => {} } },
+  };
+
+  delete require.cache[require.resolve('../background.js')];
+  require('../background.js');
+  assert.ok(messageListener, 'background message listener registered');
+
+  const tabSender = {
+    id: 'mock-ext',
+    tab: { id: 42, url: 'https://evil.example/login' },
+    url: 'https://evil.example/login',
+  };
+
+  const res = await new Promise((resolve) => {
+    messageListener({ type: 'confirm-ui:decide', req: 'some-req', approved: true }, tabSender, resolve);
+  });
+
+  assert.strictEqual(res.ok, false);
+  assert.match(res.error, /unknown message/);
+
+  globalThis.chrome = originalChrome;
 });
 
 test('sameSite', () => {

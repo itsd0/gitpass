@@ -305,8 +305,9 @@ impl Agent {
                 let origin = req("origin")?;
                 if gitpass_host::origin::parse_request_origin(&origin).is_none() { return Err(err("origin_mismatch", "origin must be https:// (or http:// on loopback)")); }
                 let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
+                let matches_url = |u: &str| gitpass_host::origin::origin_matches(u, &origin);
                 let items: Vec<Value> = self.records()?.into_iter()
-                    .filter(|(_, _, _, r)| r.category == Category::Login && r.item.url.as_deref().is_some_and(|u| gitpass_host::origin::origin_matches(u, &origin)))
+                    .filter(|(_, _, _, r)| r.category == Category::Login && (r.item.url.as_deref().is_some_and(matches_url) || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == gitpass_core::item::FieldKind::Url && f.value.as_deref().is_some_and(matches_url))))
                     .map(|(vid, vname, iid, r)| {
                         let mut s = summary(&vid, &vname, &iid, &r);
                         if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
@@ -335,7 +336,12 @@ impl Agent {
                 let origin = req("origin")?;
                 let (_, r) = self.record(&vid, &iid)?;
                 if r.category != Category::Login { return Err(err("bad_request", "fill needs a login item")); }
-                if !r.item.url.as_deref().is_some_and(|u| gitpass_host::origin::origin_matches(u, &origin)) {
+                let matches_url = |u: &str| gitpass_host::origin::origin_matches(u, &origin);
+                let confirmed = q.get("user_confirm").and_then(|v| v.as_bool()).unwrap_or(false);
+                let ok = r.item.url.as_deref().is_some_and(matches_url)
+                    || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == gitpass_core::item::FieldKind::Url && f.value.as_deref().is_some_and(matches_url))
+                    || confirmed;
+                if !ok {
                     return Err(err("origin_mismatch", "the item's website does not match this page"));
                 }
                 let _ = self.app.state.with(|x| Ok(x.session.touch_item_used(&iid)));
@@ -420,6 +426,19 @@ impl Agent {
                             r.item.username = Some(u);
                         }
                     }
+                    x.session.update_record(&vid, &iid, r)
+                })?;
+                self.poll_state();
+                Ok(json!({"ok": true}))
+            }
+            "add_url" => {
+                let (vid, iid) = split_id(&req("item_id")?)?;
+                let url = req("url")?;
+                gitpass_host::handler::check_request_origin(&url)?;
+                self.app.state.with(|x| {
+                    crate::GuiState::writable(x).map_err(|e| err("denied", e.to_string()))?;
+                    let (_, mut r) = x.session.read_record(&vid, &iid)?;
+                    gitpass_host::handler::add_url_to_record(&mut r, &url);
                     x.session.update_record(&vid, &iid, r)
                 })?;
                 self.poll_state();

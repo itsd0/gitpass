@@ -262,7 +262,7 @@ fn parse_websites(v: &Value) -> Result<Vec<String>> {
     Ok(out)
 }
 
-fn apply_websites(r: &mut ItemRecord, urls: Vec<String>) {
+pub fn apply_websites(r: &mut ItemRecord, urls: Vec<String>) {
     r.item.url = urls.first().cloned();
     let mut fields: Vec<Field> = urls.iter().skip(1).enumerate().map(|(n, u)| Field {
         id: format!("url{}", n + 1), label: "website".into(), kind: FieldKind::Url, value: Some(u.clone()), removed: false,
@@ -280,6 +280,29 @@ fn apply_websites(r: &mut ItemRecord, urls: Vec<String>) {
         r.sections.retain(|s| s.id != "urls");
     } else if let Some(s) = r.sections.iter_mut().find(|s| s.id == "urls") {
         s.fields = fields;
+    }
+}
+
+pub fn add_url_to_record(r: &mut ItemRecord, url: &str) {
+    let matches_url = |u: &str| origin_matches(u, url);
+    let mut urls: Vec<String> = Vec::new();
+    if let Some(u) = &r.item.url {
+        urls.push(u.clone());
+    }
+    for s in &r.sections {
+        for f in &s.fields {
+            if !f.removed && f.kind == FieldKind::Url {
+                if let Some(v) = &f.value {
+                    if !urls.contains(v) {
+                        urls.push(v.clone());
+                    }
+                }
+            }
+        }
+    }
+    if !urls.iter().any(|u| matches_url(u)) {
+        urls.push(url.to_string());
+        apply_websites(r, urls);
     }
 }
 
@@ -460,9 +483,13 @@ impl Host {
                     .ok_or_else(|| coded(code::BAD_REQUEST, "missing string argument 'origin'"))?;
                 check_request_origin(origin)?;
                 let usage = self.sess()?.all_last_used();
+                let matches_url = |u: &str| origin_matches(u, origin);
                 let mut out = vec![];
                 for (vid, vname, iid, r) in self.all_records(None)? {
-                    if r.category == Category::Login && r.item.url.as_deref().is_some_and(|u| origin_matches(u, origin)) {
+                    if r.category == Category::Login
+                        && (r.item.url.as_deref().is_some_and(matches_url)
+                            || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == FieldKind::Url && f.value.as_deref().is_some_and(matches_url)))
+                    {
                         let mut s = summary(&vid, &vname, &iid, &r);
                         if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
                         out.push(s);
@@ -509,7 +536,11 @@ impl Host {
                 let origin = arg_str(req, "origin")?;
                 check_request_origin(origin)?;
                 let (_, iid, r) = self.record(arg_str(req, "item_id")?)?;
-                let ok = r.item.url.as_deref().is_some_and(|u| origin_matches(u, origin));
+                let matches_url = |u: &str| origin_matches(u, origin);
+                let confirmed = req.get("user_confirm").and_then(Value::as_bool).unwrap_or(false);
+                let ok = r.item.url.as_deref().is_some_and(matches_url)
+                    || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == FieldKind::Url && f.value.as_deref().is_some_and(matches_url))
+                    || confirmed;
                 if !ok { return Err(coded(code::ORIGIN_MISMATCH, format!("refused: item URL does not match origin {origin}"))); }
                 let _ = self.sess()?.touch_item_used(&iid);
                 let totp = match nonempty(&r.item.totp) {
@@ -595,6 +626,14 @@ impl Host {
                 }
                 self.sess()?.update_record(&vid, &iid, r)?;
                 self.audit_cache = None;
+                Ok(json!({"ok": true}))
+            }
+            "add_url" => {
+                let url = arg_str(req, "url")?;
+                check_request_origin(url)?;
+                let (vid, iid, mut r) = self.record(arg_str(req, "item_id")?)?;
+                add_url_to_record(&mut r, url);
+                self.sess()?.update_record(&vid, &iid, r)?;
                 Ok(json!({"ok": true}))
             }
             "set_favorite" => {
