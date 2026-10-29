@@ -194,6 +194,8 @@ pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_length: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_digits: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_symbols: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_separator: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_capitalize: Option<bool>,
     /// Privacy: Settings → Appearance gets a toggle, "Show website icons" (off by default, because fetching tells each site you have a login there).
     #[serde(default)] pub show_website_icons: bool,
 }
@@ -203,6 +205,7 @@ impl Default for Settings {
             biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false, ssh_approve_each_use: false,
             lock_on_sleep: true, lock_on_screen_lock: true, lock_on_user_switch: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
+            generator_separator: None, generator_capitalize: None,
             show_website_icons: false }
     }
 }
@@ -522,15 +525,25 @@ fn mime_for(name: &str) -> &'static str {
     item::mime_for(name)
 }
 
-/// Generate a password (`words`: `length` words from a 128-word list joined by '-', ~7 bits/word, `pin`: `length` digits).
-pub fn generate(length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String {
+/// Separators the desktop generator offers for word passphrases; anything else is a bad request.
+pub const WORD_SEPARATORS: [char; 4] = ['-', '.', '_', ' '];
+
+/// Generate a password (`words`: `length` words from a 128-word list joined by `separator`, ~7 bits/word, `pin`: `length` digits).
+/// `separator`/`capitalize` only affect words mode. Omitted values keep the historical defaults:
+/// separator `-` (`'.'` when symbols are off), no capitalization.
+pub fn generate(length: usize, symbols: bool, digits: bool, words: bool, pin: bool, separator: Option<char>, capitalize: Option<bool>) -> Result<String, String> {
+    let separator = match separator {
+        None => if symbols { '-' } else { '.' },
+        Some(c) if WORD_SEPARATORS.contains(&c) => c,
+        Some(c) => return Err(format!("invalid word separator {c:?}: use one of -, ., _, space")),
+    };
     // The desktop app and the browser host have always floored character passwords at 8.
     let length = if words || pin { length } else { length.max(8) };
-    gitpass_core::generate::generate(&gitpass_core::generate::Options {
+    Ok(gitpass_core::generate::generate(&gitpass_core::generate::Options {
         length, symbols, digits, words, pin,
-        separator: if symbols { '-' } else { '.' },
-        capitalize: false,
-    })
+        separator,
+        capitalize: capitalize.unwrap_or(false),
+    }))
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
@@ -1073,7 +1086,7 @@ impl App {
     }
 
     // ---------------- tools
-    pub fn generate_password(&self, length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String { generate(length, symbols, digits, words, pin) }
+
     pub fn password_strength(&self, password: &str) -> u8 { strength(password) }
 
     /// The site's standard change-password URL for an item. Derived in Rust so the webview never

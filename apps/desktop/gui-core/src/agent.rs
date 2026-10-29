@@ -422,7 +422,8 @@ impl Agent {
                 let b = |k: &str| q.get(k).and_then(|v| v.as_bool()).unwrap_or(true);
                 let pin = q.get("pin").and_then(|v| v.as_bool()).unwrap_or(false);
                 let words = q.get("words").and_then(|v| v.as_bool()).unwrap_or(false);
-                Ok(json!({"password": api::generate(len, b("symbols"), b("digits"), words, pin)}))
+                let pw = api::generate(len, b("symbols"), b("digits"), words, pin, None, None).map_err(|m| err("bad_request", m))?;
+                Ok(json!({"password": pw}))
             }
             "passkey_query" => {
                 self.app.state.with(|x| {
