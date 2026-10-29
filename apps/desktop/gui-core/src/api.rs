@@ -192,6 +192,9 @@ pub struct Settings {
     #[serde(default = "default_true")] pub lock_on_screen_lock: bool,
     /// Lock the vault when switching away with fast user switching (default on).
     #[serde(default = "default_true")] pub lock_on_user_switch: bool,
+    /// Hide gitpass windows from screen recording and screen sharing (default on: screenshots
+    /// and screen shares show a blank window; turn off for demos).
+    #[serde(default = "default_true")] pub hide_from_screen_recording: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_mode: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_length: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_digits: Option<bool>,
@@ -210,6 +213,7 @@ impl Default for Settings {
         Settings { auto_lock_minutes: 5, clipboard_clear_secs: crate::CLIPBOARD_CLEAR_SECS, theme: Theme::Dark, language: Language::En,
             biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false, ssh_approve_each_use: false,
             lock_on_sleep: true, lock_on_screen_lock: true, lock_on_user_switch: true,
+            hide_from_screen_recording: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
             show_website_icons: false, render_notes_markdown: true, remember_generated_passwords: true }

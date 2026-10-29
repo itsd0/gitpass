@@ -99,6 +99,7 @@ export const en = {
   'settings.lockOnSleep': 'Lock when Mac sleeps', 'settings.lockOnSleepHelp': 'Lock the vault immediately when your Mac goes to sleep',
   'settings.lockOnScreenLock': 'Lock when screen locks', 'settings.lockOnScreenLockHelp': 'Lock the vault when the screen is locked (⌃⌘Q or hot corner)',
   'settings.lockOnUserSwitch': 'Lock when switching users', 'settings.lockOnUserSwitchHelp': 'Lock the vault when switching between macOS user accounts',
+  'settings.hideFromScreenRecording': 'Hide gitpass from screen recording and sharing', 'settings.hideFromScreenRecordingHelp': 'Screenshots and screen shares show a blank window while this is on; turn it off for demos',
   'settings.biometricUnsupported': 'Biometric unlock is not supported yet on this device.',
   'settings.changePassword': 'Change master password', 'settings.currentPassword': 'Current password', 'settings.newPassword': 'New password', 'settings.confirmPassword': 'Confirm new password',
   'settings.passwordMismatch': 'Passwords do not match', 'settings.passwordShort': 'Use at least 10 characters', 'settings.passwordChanged': 'Master password changed',
@@ -632,5 +633,19 @@ export const en = {
   "onboarding.extGet": "Get it now",
   "settings.showSetupGuide": "Show setup guide",
   "settings.showSetupGuideHelp": "Display the setup checklist on the Home page",
+  // item keyboard shortcuts + palette actions
+  "itemKeys.copyPassword": "Copy password",
+  "itemKeys.copyUsername": "Copy username",
+  "itemKeys.copyTotp": "Copy one-time code",
+  "itemKeys.edit": "Edit item",
+  "itemKeys.openWebsite": "Open website",
+  "itemKeys.passwordCopied": "Password copied",
+  "itemKeys.secretCopied": "Secret copied",
+  "itemKeys.usernameCopied": "Username copied",
+  "itemKeys.totpCopied": "One-time code copied",
+  "itemKeys.noSecret": "No password on this item",
+  "itemKeys.noUsername": "No username",
+  "itemKeys.noTotp": "No one-time code on this item",
+  "itemKeys.noWebsite": "No website on this item",
 } as const;
 export type Key = keyof typeof en;

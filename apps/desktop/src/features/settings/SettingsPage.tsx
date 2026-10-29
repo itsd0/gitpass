@@ -543,6 +543,31 @@ function Security({ highlightedId }: { highlightedId?: string | null }) {
           </button>
         </SettingsRow>
         <SettingsRow
+          id="setting-hide-screen-recording"
+          highlighted={highlightedId === 'setting-hide-screen-recording'}
+          label={t('settings.hideFromScreenRecording')}
+          description={t('settings.hideFromScreenRecordingHelp')}
+        >
+          <button
+            role="switch"
+            aria-checked={settings.hideFromScreenRecording ?? true}
+            aria-label={t('settings.hideFromScreenRecording')}
+            data-testid="hide-screen-recording-switch"
+            onClick={() => s({ hideFromScreenRecording: !(settings.hideFromScreenRecording ?? true) })}
+            className={cn(
+              'relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+              (settings.hideFromScreenRecording ?? true) ? 'bg-accent' : 'bg-border'
+            )}
+          >
+            <span
+              className={cn(
+                'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+                (settings.hideFromScreenRecording ?? true) ? 'translate-x-5' : 'translate-x-0.5'
+              )}
+            />
+          </button>
+        </SettingsRow>
+        <SettingsRow
           id="setting-remember-generated-passwords"
           highlighted={highlightedId === 'setting-remember-generated-passwords'}
           label={t('settings.rememberGeneratedPasswords')}
