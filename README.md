@@ -44,6 +44,7 @@ cp target/release/gitpass-host "$D/" && codesign -f -s "gitpass Local Signing" -
 "$D/gitpass-host" install --browser firefox --extension-id gitpass@gitpass.dev
 ```
 `extension/manifest.json` is the Chrome (MV3 service worker) manifest; `extension/manifest.firefox.json` is the Firefox one (`background.scripts`).
+User guide: [`docs/EXTENSION.md`](docs/EXTENSION.md) covers the popup, inline and right-click menus, keyboard commands, the save banner, passkeys, and what the extension never stores.
 
 Unlocking from the popup: enter the master password and, if there's no `<vault>/secret.key`, your Secret Key. The popup sends both
 only to the background worker, which passes them over native messaging to `gitpass-host`. Content scripts never see them. The host uses the
