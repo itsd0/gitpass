@@ -123,6 +123,32 @@ function General({ highlightedId }: { highlightedId?: string | null }) {
         />
       </SettingsRow>
       <SettingsRow
+        id="setting-show-website-icons"
+        highlighted={highlightedId === 'setting-show-website-icons'}
+        label={t('settings.showWebsiteIcons')}
+        description={t('settings.showWebsiteIconsHelp')}
+      >
+        <button
+          type="button"
+          role="switch"
+          aria-checked={settings.showWebsiteIcons ?? false}
+          aria-label={t('settings.showWebsiteIcons')}
+          data-testid="show-website-icons-switch"
+          onClick={() => s({ showWebsiteIcons: !(settings.showWebsiteIcons ?? false) })}
+          className={cn(
+            'relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            (settings.showWebsiteIcons ?? false) ? 'bg-accent' : 'bg-border'
+          )}
+        >
+          <span
+            className={cn(
+              'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+              (settings.showWebsiteIcons ?? false) ? 'translate-x-5' : 'translate-x-0.5'
+            )}
+          />
+        </button>
+      </SettingsRow>
+      <SettingsRow
         id="setting-quick-access-hotkey"
         highlighted={highlightedId === 'setting-quick-access-hotkey'}
         label={t('settings.quickAccessHotkey')}

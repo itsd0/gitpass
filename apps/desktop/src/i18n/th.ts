@@ -75,6 +75,8 @@ export const th: Partial<Record<Key, string>> = {
   'settings.hibp': 'ตรวจรหัสผ่านกับข้อมูลรั่วไหลที่รู้จัก', 'settings.hibpHelp': 'ปิดไว้เป็นค่าเริ่มต้น ส่งเฉพาะ 5 ตัวอักษรแรกของแฮช SHA-1 ไปยัง Have I Been Pwned (k-anonymity) และจับคู่บนอุปกรณ์นี้',
   'settings.title': 'การตั้งค่า', 'settings.general': 'ทั่วไป', 'settings.security': 'ความปลอดภัย', 'settings.devices': 'อุปกรณ์', 'settings.sync': 'ซิงค์', 'settings.about': 'เกี่ยวกับ',
   'settings.theme': 'ธีม', 'settings.theme.dark': 'มืด', 'settings.theme.light': 'สว่าง', 'settings.theme.system': 'ตามระบบ', 'settings.language': 'ภาษา',
+  'settings.showWebsiteIcons': 'แสดงไอคอนเว็บไซต์',
+  'settings.showWebsiteIconsHelp': 'ดึงไอคอนสำหรับเว็บไซต์ผ่าน HTTPS ปิดใช้งานเป็นค่าเริ่มต้นเนื่องจากการดึงข้อมูลจะแจ้งให้แต่ละไซต์ทราบว่าคุณมีบัญชีที่นั่น การปิดจะล้างแคชไอคอน',
   'settings.autoLock': 'ล็อกอัตโนมัติหลัง (นาที)', 'settings.clipboard': 'ล้างคลิปบอร์ดหลัง (วินาที)', 'settings.biometric': 'ปลดล็อกด้วยไบโอเมตริกซ์',
   'settings.lockOnSleep': 'ล็อกเมื่อ Mac เข้าสู่โหมดพักผ่อน', 'settings.lockOnSleepHelp': 'ล็อกห้องนิรภัยทันทีเมื่อ Mac ของคุณเข้าสู่โหมดพักผ่อน',
   'settings.lockOnScreenLock': 'ล็อกเมื่อล็อกหน้าจอ', 'settings.lockOnScreenLockHelp': 'ล็อกห้องนิรภัยเมื่อล็อกหน้าจอ (⌃⌘Q หรือ hot corner)',

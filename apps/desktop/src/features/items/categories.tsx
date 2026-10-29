@@ -1,6 +1,7 @@
 import { CreditCard, FileText, Fingerprint, KeyRound, Code2, StickyNote, UserSquare, Wifi, Terminal, ShieldCheck } from 'lucide-react';
 import type { ItemCategory, ItemSummary } from '../../api/types';
 import { CategoryIcon } from '../../components/CategoryIcon';
+import { SiteIcon } from '../../components/SiteIcon';
 
 export const CATEGORIES: { id: ItemCategory; label: string; icon: typeof KeyRound; color: string }[] = [
   { id: 'login', label: 'Login', icon: KeyRound, color: '#3b82f6' },
@@ -15,6 +16,9 @@ export const CATEGORIES: { id: ItemCategory; label: string; icon: typeof KeyRoun
 ];
 export const catMeta = (c: ItemCategory) => CATEGORIES.find((x) => x.id === c) ?? { id: c, label: c, icon: Fingerprint, color: '#64748b' };
 
-export function ItemIcon({ item, size = 20 }: { item: Pick<ItemSummary, 'category' | 'title' | 'subtitle'>; size?: number }) {
+export function ItemIcon({ item, size = 24 }: { item: Pick<ItemSummary, 'category' | 'title' | 'subtitle'> & { url?: string | null }; size?: number }) {
+  if (item.category === 'login') {
+    return <SiteIcon item={item} size={size} />;
+  }
   return <CategoryIcon category={item.category} size={size} title={catMeta(item.category).label} />;
 }

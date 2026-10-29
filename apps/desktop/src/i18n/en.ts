@@ -72,6 +72,8 @@ export const en = {
   'ssh.copy': 'Copy config', 'ssh.copied': 'Copied to clipboard', 'ssh.approve': 'Approve each use', 'ssh.approveHelp': 'Ask before every signature (e.g. each git push or ssh login).',
   'ssh.cli': 'Command line', 'ssh.cliHelp': 'gitpass ssh generate | import | list | public | config | agent',
   'settings.theme': 'Theme', 'settings.theme.dark': 'Dark', 'settings.theme.light': 'Light', 'settings.theme.system': 'System', 'settings.language': 'Language',
+  'settings.showWebsiteIcons': 'Show website icons',
+  'settings.showWebsiteIconsHelp': 'Fetch icons for websites over HTTPS. Off by default because fetching tells each site you have an account there. Turning this off clears the cache.',
   'settings.autoLock': 'Auto-lock after (minutes)', 'settings.clipboard': 'Clear clipboard after (seconds)', 'settings.biometric': 'Unlock with biometrics',
   'settings.lockOnSleep': 'Lock when Mac sleeps', 'settings.lockOnSleepHelp': 'Lock the vault immediately when your Mac goes to sleep',
   'settings.lockOnScreenLock': 'Lock when screen locks', 'settings.lockOnScreenLockHelp': 'Lock the vault when the screen is locked (⌃⌘Q or hot corner)',

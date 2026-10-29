@@ -78,6 +78,8 @@ export const my: Partial<Record<Key, string>> = {
   'settings.hibp': 'ပေါက်ကြားထားသော စကားဝှက်များနှင့် စစ်ဆေးရန်', 'settings.hibpHelp': 'မူလအားဖြင့် ပိတ်ထားသည်။ SHA-1 hash ၏ ပထမ စာလုံး ၅ လုံးကိုသာ Have I Been Pwned သို့ ပို့ပြီး ဤစက်ပေါ်တွင် တိုက်စစ်သည်။',
   'settings.title': 'ဆက်တင်များ', 'settings.general': 'အထွေထွေ', 'settings.security': 'လုံခြုံရေး', 'settings.devices': 'စက်များ', 'settings.sync': 'ချိန်ကိုက်ရန်', 'settings.about': 'အကြောင်း',
   'settings.theme': 'အပြင်အဆင်', 'settings.theme.dark': 'အမှောင်', 'settings.theme.light': 'အလင်း', 'settings.theme.system': 'စနစ်အတိုင်း', 'settings.language': 'ဘာသာစကား',
+  'settings.showWebsiteIcons': 'ဝဘ်ဆိုက် အိုင်ကွန်များ ပြသပါ',
+  'settings.showWebsiteIconsHelp': 'ဝဘ်ဆိုက်များအတွက် အိုင်ကွန်များကို HTTPS ဖြင့် ရယူသည်။ ဤသို့ရယူခြင်းက သက်ဆိုင်ရာဆိုက်များသို့ အကောင့်ရှိကြောင်း သိစေနိုင်သဖြင့် မူလအတိုင်း ပိတ်ထားသည်။ ပိတ်လိုက်ပါက အိုင်ကွန် ကက်ရှ်ကို ရှင်းလင်းပေးမည်။',
   'settings.autoLock': 'အလိုအလျောက် သော့ခတ်ချိန် (မိနစ်)', 'settings.clipboard': 'ကလစ်ဘုတ် ရှင်းချိန် (စက္ကန့်)', 'settings.biometric': 'ဇီဝမက်ထရစ် (Touch ID) ဖြင့် သော့ဖွင့်ရန်',
   'settings.lockOnSleep': 'Mac အိပ်စက်ချိန်တွင် လော့ခ်ချရန်', 'settings.lockOnSleepHelp': 'သင့် Mac အိပ်စက်သွားသည်နှင့် ချက်ချင်း လော့ခ်ချပါ',
   'settings.lockOnScreenLock': 'မျက်နှာပြင် လော့ခ်ကျချိန်တွင် လော့ခ်ချရန်', 'settings.lockOnScreenLockHelp': 'မျက်နှာပြင် လော့ခ်ကျသည့်အခါ (⌃⌘Q သို့မဟုတ် hot corner) လော့ခ်ချပါ',
