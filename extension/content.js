@@ -679,15 +679,19 @@
     banner.host.style.zIndex = '2147483647'; banner.host.style.top = '0'; banner.host.style.right = '0';
     const b = el('div', 'banner'); b.setAttribute('role', 'dialog'); b.tabIndex = -1;
     const isUpdate = p.prompt === 'update';
-    const headTitle = isUpdate ? t('csUpdateQ', 'Update password in gitpass?') : t('csSaveQ', 'Save login to gitpass?');
+    const isCard = p.prompt === 'save_card';
+    const headTitle = isUpdate ? t('csUpdateQ', 'Update password in gitpass?')
+      : isCard ? t('csSaveCardQ', 'Save card to gitpass?') : t('csSaveQ', 'Save login to gitpass?');
     b.setAttribute('aria-label', headTitle);
     const row = el('div', 'row'); const lg = el('img'); lg.src = LOGO; lg.alt = ''; lg.style.cssText = 'width:24px;height:24px;border-radius:6px';
     const m = el('div', 'm');
     m.append(el('div', 'ti', headTitle));
-    m.append(el('div', 'u', (p.title ? p.title + ' · ' : siteName() + ' · ') + (p.username || t('csNoUser', '(no username)'))));
+    // Card banner shows the brand + masked number only — never the full number.
+    m.append(el('div', 'u', isCard ? ((p.brand ? p.brand + ' · ' : '') + (p.masked || ''))
+      : ((p.title ? p.title + ' · ' : siteName() + ' · ') + (p.username || t('csNoUser', '(no username)')))));
     row.append(lg, m);
 
-    const title = el('input', 'inp'); title.type = 'text'; title.value = siteName(); title.maxLength = GitpassBanner.MAX_TITLE;
+    const title = el('input', 'inp'); title.type = 'text'; title.value = isCard && p.title ? p.title : siteName(); title.maxLength = GitpassBanner.MAX_TITLE;
     title.autocomplete = 'off'; title.spellcheck = false;
     const titleFld = el('label', 'fld'); titleFld.append(el('span', null, t('title', 'Title')), title);
     const fields = el('div', 'fields'); fields.append(titleFld);
@@ -755,8 +759,9 @@
       b.removeAttribute('aria-busy');
       fields.remove(); acts.remove(); errLine.remove();
       m.firstChild.textContent = action === 'update' ? t('csUpdated', 'Password updated')
-        : action === 'save_new' ? t('csSavedNew', 'Saved as a new login') : t('csSaved', 'Saved to gitpass');
-      m.lastChild.textContent = siteName() + ' · ' + (p.username || t('csNoUser', '(no username)'));
+        : action === 'save_new' ? t('csSavedNew', 'Saved as a new login')
+        : isCard ? t('csSavedCard', 'Card saved') : t('csSaved', 'Saved to gitpass');
+      m.lastChild.textContent = siteName() + ' · ' + (isCard ? (p.masked || '') : (p.username || t('csNoUser', '(no username)')));
       const done = el('div', 'acts');
       const mark = el('span', 'ok', '✓'); mark.setAttribute('aria-hidden', 'true');
       const open = el('button', 'btn pri', t('openInApp', 'Open in gitpass')); open.type = 'button';
@@ -836,7 +841,7 @@
     for (const f of (cand.length ? cand : list)) {
       let c = GitpassForms.captureCredentials(f);
       if (!c) continue;
-      if (!c.username) {
+      if (c.kind !== 'card' && !c.username) {
         const fallback = getStoredUsername();
         if (fallback) c.username = fallback;
       }
