@@ -51,6 +51,13 @@ export function useAgentEvents() {
         // Backend lock on any path (idle, sleep, manual, extension/agent): back to the unlock screen.
         listen<string>('locked', () => { const s = useApp.getState(); if (!s.locked) s.lock(); }).then((u) => unlisten.push(u));
         listen('vault-changed', () => onVaultChanged()).then((u) => unlisten.push(u));
+        listen<string>('menu-action', (ev) => {
+          if (ev.payload === 'open-generator') {
+            useApp.getState().openModal('password-generator');
+          } else if (ev.payload === 'open-settings') {
+            useApp.getState().setRoute({ name: 'settings' });
+          }
+        }).then((u) => unlisten.push(u));
         // Unlocked from the extension (Touch ID): refresh state in place instead of reloading the window.
         listen('unlocked', () => {
           api.status().then((st) => {

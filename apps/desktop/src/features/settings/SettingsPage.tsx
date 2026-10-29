@@ -175,6 +175,32 @@ function General({ highlightedId }: { highlightedId?: string | null }) {
         </button>
       </SettingsRow>
       <SettingsRow
+        id="setting-show-menu-bar-icon"
+        highlighted={highlightedId === 'setting-show-menu-bar-icon'}
+        label={t('settings.showMenuBarIcon')}
+        description={t('settings.showMenuBarIconHelp')}
+      >
+        <button
+          type="button"
+          role="switch"
+          aria-checked={settings.showMenuBarIcon ?? true}
+          aria-label={t('settings.showMenuBarIcon')}
+          data-testid="show-menu-bar-icon-switch"
+          onClick={() => s({ showMenuBarIcon: !(settings.showMenuBarIcon ?? true) })}
+          className={cn(
+            'relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            (settings.showMenuBarIcon ?? true) ? 'bg-accent' : 'bg-border'
+          )}
+        >
+          <span
+            className={cn(
+              'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+              (settings.showMenuBarIcon ?? true) ? 'translate-x-5' : 'translate-x-0.5'
+            )}
+          />
+        </button>
+      </SettingsRow>
+      <SettingsRow
         id="setting-quick-access-hotkey"
         highlighted={highlightedId === 'setting-quick-access-hotkey'}
         label={t('settings.quickAccessHotkey')}

@@ -94,6 +94,8 @@ export const th: Partial<Record<Key, string>> = {
   'settings.showWebsiteIconsHelp': 'ดึงไอคอนสำหรับเว็บไซต์ผ่าน HTTPS ปิดใช้งานเป็นค่าเริ่มต้นเนื่องจากการดึงข้อมูลจะแจ้งให้แต่ละไซต์ทราบว่าคุณมีบัญชีที่นั่น การปิดจะล้างแคชไอคอน',
   'settings.renderNotesMarkdown': 'แสดงบันทึกเป็น Markdown',
   'settings.renderNotesMarkdownHelp': 'จัดรูปแบบหัวเรื่อง รายการ บล็อกโค้ด และลิงก์ในบันทึกอย่างปลอดภัย ไม่อนุญาต HTML ดิบและรูปภาพภายนอก',
+  'settings.showMenuBarIcon': 'แสดง gitpass ในแถบเมนู',
+  'settings.showMenuBarIconHelp': 'ให้เข้าถึง gitpass จากแถบเมนูได้แม้ปิดหน้าต่าง',
   'editor.edit': 'แก้ไข',
   'editor.preview': 'ดูตัวอย่าง',
   'editor.notesMode': 'โหมดบันทึก',
