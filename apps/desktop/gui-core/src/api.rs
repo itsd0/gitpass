@@ -427,7 +427,10 @@ fn is_card_cvv(f: &item::Field) -> bool {
 /// passwords, TOTP codes, card numbers/CVVs and API credentials; card data stored as plain text
 /// by an old import is still recognised by label/id.
 pub(crate) fn is_secret_copy(category: Category, f: &item::Field) -> bool {
-    f.kind.is_secret() || (category == Category::CreditCard && (is_card_number(f) || is_card_cvv(f)))
+    let l = f.label.to_lowercase();
+    f.kind.is_secret()
+        || (category == Category::CreditCard && (is_card_number(f) || is_card_cvv(f)))
+        || (category == Category::BankAccount && (f.id == "account_number" || f.id == "pin" || l.contains("account number") || l.contains("pin")))
 }
 fn card_digits(r: &ItemRecord) -> Option<String> {
     if r.category != Category::CreditCard { return None; }
@@ -446,20 +449,60 @@ pub fn card_mask(d: &str) -> String { format!("•••• •••• ••�
 pub fn subtitle(r: &ItemRecord) -> String {
     let fields: Vec<item::Field> = r.view_sections().into_iter().flat_map(|s| s.fields).collect();
     let find = |pred: &dyn Fn(&item::Field) -> bool| fields.iter().find(|f| pred(f)).and_then(|f| f.value.clone());
+    let field_val = |ids: &[&str]| ids.iter().find_map(|id| fields.iter().find(|f| f.id == *id).and_then(|f| f.value.clone()).filter(|v| !v.is_empty()));
     match r.category {
         Category::Login => r.item.username.clone().unwrap_or_default(),
         Category::CreditCard => card_digits(r).map(|d| card_label(&d)).unwrap_or_default(),
         Category::Identity => find(&|f| { let l = f.label.to_lowercase(); f.id == "name" || l.contains("name") })
             .or_else(|| find(&|f| !f.kind.is_secret())).unwrap_or_default(),
+        Category::BankAccount => {
+            let acct = field_val(&["account_number", "account_no", "account"]);
+            let holder = field_val(&["account_holder", "holder", "owner"]);
+            let bank = field_val(&["bank_name", "bank"]);
+            let acct_type = field_val(&["account_type", "type"]);
+            let l4 = acct.as_deref().map(|s| s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>()).filter(|d| d.len() >= 4).map(|d| format!("•••• {}", &d[d.len() - 4..]));
+            match (acct_type, l4, bank, holder) {
+                (Some(t), Some(m), _, _) => format!("{t} {m}"),
+                (_, Some(m), Some(b), _) => format!("{b} {m}"),
+                (_, Some(m), _, _) => m,
+                (_, _, Some(b), _) => b,
+                (_, _, _, Some(h)) => h,
+                _ => String::new(),
+            }
+        }
+        Category::Server => {
+            let u = r.item.username.clone().or_else(|| field_val(&["username"]));
+            let h = r.item.url.clone().or_else(|| field_val(&["url", "hostname"]));
+            match (u, h) {
+                (Some(u), Some(h)) if !u.is_empty() && !h.is_empty() => format!("{u}@{h}"),
+                (Some(u), _) if !u.is_empty() => u,
+                (_, Some(h)) if !h.is_empty() => h,
+                _ => String::new(),
+            }
+        }
         _ => find(&|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())).unwrap_or_default(),
     }
 }
 
 fn to_dto_sections(r: &ItemRecord) -> Vec<Section> {
-    r.view_sections().into_iter().map(|s| Section { id: s.id, title: s.title, fields: s.fields.into_iter().map(|f| Field {
-        masked: (r.category == Category::CreditCard && f.kind.is_secret() && is_card_number(&f))
-            .then(|| f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8).map(|d| card_mask(&d))).flatten(),
-        value: if f.kind.is_secret() { None } else { f.value.clone() }, id: f.id, label: f.label, kind: f.kind, diff: None }).collect() }).collect()
+    r.view_sections().into_iter().map(|s| Section { id: s.id, title: s.title, fields: s.fields.into_iter().map(|f| {
+        let masked = if f.kind.is_secret() {
+            if r.category == Category::CreditCard && is_card_number(&f) {
+                f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8).map(|d| card_mask(&d))
+            } else if r.category == Category::BankAccount && (f.id == "account_number" || f.id == "account_no" || f.label.to_lowercase().contains("account number")) {
+                f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>()).filter(|d| d.len() >= 4).map(|d| format!("•••• •••• •••• {}", &d[d.len() - 4..]))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        Field {
+            masked,
+            value: if f.kind.is_secret() { None } else { f.value.clone() },
+            id: f.id, label: f.label, kind: f.kind, diff: None
+        }
+    }).collect() }).collect()
 }
 
 pub fn item_expiry(r: &ItemRecord) -> Option<String> {
@@ -925,6 +968,7 @@ impl App {
     }
     fn validate(input: &ItemInput) -> Result<()> {
         if input.title.trim().is_empty() { bail!("title is required"); }
+        if input.category == Category::Other { bail!("invalid category"); }
         let mut ids = BTreeSet::new();
         for s in &input.sections { for f in &s.fields {
             if f.id.trim().is_empty() { bail!("field id is empty"); }
@@ -1597,6 +1641,26 @@ impl App {
     }
     pub fn scan_totp_image(&self, data_base64: &str) -> Result<crate::qr::ScannedTotp> {
         crate::qr::decode_qr_base64(data_base64)
+
+    /// Get the Git commit signing configuration for an SSH key item.
+    pub fn ssh_git_signing_config(&self, vault_id: &str, item_id: &str, email: Option<&str>, socket: Option<&str>) -> Result<gitpass_core::ssh::GitSigningConfig> {
+        let (_, r) = self.with(|u| u.session.read_record(vault_id, item_id))?;
+        let k = gitpass_core::ssh::SshKey::from_record(&r)?;
+        let signers_path = gitpass_core::ssh::default_allowed_signers_path();
+        let socket_path = socket.map(std::path::PathBuf::from).unwrap_or_else(gitpass_core::ssh::default_ssh_agent_socket_path);
+        let email_val = gitpass_core::ssh::resolve_signing_email(email, &k);
+        gitpass_core::ssh::build_git_signing_config(&k, &email_val, &signers_path, &socket_path)
+    }
+    /// Apply the Git commit signing configuration for an SSH key item.
+    pub fn ssh_apply_git_signing(&self, vault_id: &str, item_id: &str, email: Option<&str>, allowed_signers_file: Option<&str>, socket: Option<&str>, global: bool) -> Result<gitpass_core::ssh::GitSigningConfig> {
+        let (_, r) = self.with(|u| u.session.read_record(vault_id, item_id))?;
+        let k = gitpass_core::ssh::SshKey::from_record(&r)?;
+        let signers_path = allowed_signers_file
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(gitpass_core::ssh::default_allowed_signers_path);
+        let socket_path = socket.map(std::path::PathBuf::from).unwrap_or_else(gitpass_core::ssh::default_ssh_agent_socket_path);
+        let email_val = gitpass_core::ssh::resolve_signing_email(email, &k);
+        gitpass_core::ssh::apply_git_signing(&k, &email_val, &signers_path, &socket_path, global)
     }
 }
 

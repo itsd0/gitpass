@@ -1,4 +1,4 @@
-export type ItemCategory = 'login'|'credit_card'|'secure_note'|'identity'|'api_credential'|'document'|'ssh_key'|'wifi'|'passkey';
+export type ItemCategory = 'login'|'credit_card'|'secure_note'|'identity'|'api_credential'|'document'|'ssh_key'|'wifi'|'passkey'|'bank_account'|'server';
 export interface ScannedTotp {
   uri: string;
   secret: string;
@@ -45,6 +45,7 @@ export interface ExportRequest { vaultId?: string; items?: ItemRef[]; format: 'g
 export interface ExportResult { path: string; items: number; format: string; encrypted: boolean; }
 export interface SshKeyCreated { item: ItemSummary; publicKey: string; fingerprint: string; keyType: string; }
 export interface SshAgentInfo { socketPath: string; configLine: string; running: boolean; approveEachUse: boolean; }
+export interface GitSigningConfig { keyType: string; publicKey: string; signingKey: string; socketPath: string; exportAuthSock: string; allowedSignersFile: string; allowedSignersLine: string; configLines: string; email: string; authSockActive: boolean; }
 
 export interface ItemRef { vaultId: string; itemId: string }
 export type BulkAction = 'trash' | 'restore' | 'purge' | 'archive' | 'unarchive' | 'favorite' | 'unfavorite' | 'add_tag' | 'remove_tag' | 'move' | 'copy';

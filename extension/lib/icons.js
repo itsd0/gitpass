@@ -12,6 +12,8 @@
     ssh_key: ['<rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><path d="M6.5 9.5l3 2.5-3 2.5"/>', '<path d="M12 15h5"/>'],
     passkey: ['<circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 10.5-4"/>', '<circle cx="17.5" cy="13.5" r="2.5"/><path d="M17.5 16v5M17.5 18.5h2"/>'],
     wifi: [`<path d="M2.5 9a14 14 0 0 1 19 0M5.5 12.5a9.5 9.5 0 0 1 13 0"/><circle cx="12" cy="19.2" r="1.1" fill="${S}" stroke="none"/>`, '<path d="M8.5 16a5 5 0 0 1 7 0"/>'],
+    bank_account: ['<path d="m3 9 9-7 9 7v2H3V9z"/><path d="M4 22h16"/><path d="M19 11v9M5 11v9M10 11v9M14 11v9"/>', `<circle cx="12" cy="5.5" r="1.3" fill="${A}"/>`],
+    server: ['<rect x="2.5" y="3.5" width="19" height="7" rx="2"/><rect x="2.5" y="13.5" width="19" height="7" rx="2"/><path d="M6 7h.01M6 17h.01"/>', `<circle cx="18" cy="7" r="1.2" fill="${A}"/><circle cx="18" cy="17" r="1.2" fill="${A}"/>`],
   };
   function escapeXml(str) {
     return String(str || '').replace(/[&<>"']/g, (c) => {

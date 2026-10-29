@@ -71,6 +71,8 @@ export const api = {
   /** v0.7: import an OpenSSH private key (decrypted with passphrase if encrypted) */
   sshImport: (a:{vaultId:string; title:string; privateKey:string; passphrase?:string|null}) => call<T.SshKeyCreated>('ssh_import', a),
   sshAgentInfo: () => call<T.SshAgentInfo>('ssh_agent_info'),
+  sshGitSigningConfig: (a:{vaultId:string; itemId:string; email?:string|null}) => call<T.GitSigningConfig>('ssh_git_signing_config', a),
+  sshApplyGitSigning: (a:{vaultId:string; itemId:string; email?:string|null; allowedSignersFile?:string|null; global?:boolean}) => call<T.GitSigningConfig>('ssh_apply_git_signing', a),
   /** fingerprint of a pasted recipient key (same parser as share_vault); for out-of-band verification */
   fingerprintOf: (a:{publicKey:string}) => call<string>('fingerprint_of', a),
   listMembers: (a:{vaultId:string}) => call<T.Member[]>('list_members', a),

@@ -174,6 +174,22 @@ function annotateMockDiff(snap: T.ItemDetail, cur: T.ItemDetail) {
 const subtitleFor = (input: T.ItemInput): string => {
   const flds = input.sections.flatMap((s) => s.fields);
   if (input.category === 'credit_card') { const n = flds.find((x) => x.id === 'number' || x.label === 'number'); return n?.value ? cardLabel(n.value) : ''; }
+  if (input.category === 'bank_account') {
+    const num = flds.find((x) => x.id === 'account_number' || x.label === 'account number');
+    const b = flds.find((x) => x.id === 'bank_name' || x.label === 'bank name');
+    const t = flds.find((x) => x.id === 'account_type' || x.label === 'account type');
+    const l4 = num?.value ? `•••• ${num.value.slice(-4)}` : '';
+    if (t?.value && l4) return `${t.value} ${l4}`;
+    if (b?.value && l4) return `${b.value} ${l4}`;
+    if (l4) return l4;
+    return b?.value ?? '';
+  }
+  if (input.category === 'server') {
+    const u = flds.find((x) => x.id === 'username' || x.label === 'username')?.value;
+    const h = (flds.find((x) => x.id === 'url' || x.label.toLowerCase().includes('url') || x.label === 'hostname')?.value) || input.url;
+    if (u && h) return `${u}@${h}`;
+    return u || h || '';
+  }
   const u = flds.find((x) => x.kind === 'text' || x.kind === 'email');
   return u?.value ?? '';
 };
@@ -668,6 +684,41 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     return mock.ssh_generate({ vaultId: a.vaultId, title: a.title || 'Imported key', comment: 'imported' });
   },
   ssh_agent_info: () => delay<T.SshAgentInfo>({ socketPath: '/Users/demo/Library/Application Support/gitpass/ssh-agent.sock', configLine: 'Host *\n  IdentityAgent "~/Library/Application Support/gitpass/ssh-agent.sock"', running: true, approveEachUse: !!settings.sshApproveEachUse }),
+  ssh_git_signing_config: (a: { vaultId: string; itemId: string; email?: string | null }) => {
+    const rec = db.get(a.itemId);
+    if (!rec) return Promise.reject(new Error('item not found'));
+    const item = rec.detail;
+    if (item.category !== 'ssh_key') return Promise.reject(new Error('item is not an SSH key'));
+    const pubField = item.sections.flatMap((s: T.Section) => s.fields).find((f: T.Field) => f.id === 'public_key');
+    const pub = pubField?.value || 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5FAKEDEMO demo@example.com';
+    const typeField = item.sections.flatMap((s: T.Section) => s.fields).find((f: T.Field) => f.id === 'key_type');
+    const keyType = typeField?.value || (pub.startsWith('ssh-rsa') ? 'ssh-rsa' : pub.startsWith('ecdsa') ? 'ecdsa-sha2-nistp256' : 'ssh-ed25519');
+    if (keyType !== 'ssh-ed25519' && keyType !== 'ssh-rsa') {
+      return Promise.reject(new Error(`Git commit signing supports Ed25519 and RSA keys; found ${keyType}`));
+    }
+    const email = a.email || 'demo@example.com';
+    const allowedSignersFile = '~/.ssh/allowed_signers';
+    const socketPath = '/Users/demo/Library/Application Support/gitpass/ssh-agent.sock';
+    const exportAuthSock = `export SSH_AUTH_SOCK="${socketPath}"`;
+    const signingKey = `key::${pub.trim()}`;
+    const allowedSignersLine = `${email} ${pub.trim()}`;
+    const configLines = `gpg.format=ssh\nuser.signingkey="${signingKey}"\ncommit.gpgsign=true\ntag.gpgsign=true\ngpg.ssh.allowedSignersFile=${allowedSignersFile}`;
+    return delay<T.GitSigningConfig>({
+      keyType,
+      publicKey: pub.trim(),
+      signingKey,
+      socketPath,
+      exportAuthSock,
+      allowedSignersFile,
+      allowedSignersLine,
+      configLines,
+      email,
+      authSockActive: false,
+    });
+  },
+  ssh_apply_git_signing: (a: { vaultId: string; itemId: string; email?: string | null; allowedSignersFile?: string | null; global?: boolean }) => {
+    return mock.ssh_git_signing_config({ vaultId: a.vaultId, itemId: a.itemId, email: a.email });
+  },
   identity: () => delay<T.Identity>({ publicKey: SELF_KEY, fingerprint: SELF.fingerprint }),
   fingerprint_of: (a: { publicKey: string }) => (PUB_RE.test(a.publicKey.trim()) ? delay(mockFingerprint(a.publicKey), 20) : Promise.reject(new Error('public key is not valid base64'))),
   list_members: (a: { vaultId: string }) => delay(vaults.find((v) => v.id === a.vaultId)?.members ?? []),

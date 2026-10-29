@@ -6,7 +6,7 @@
 //! * `inject` renders a template, replacing `{{ gp://v/i/f }}` placeholders.
 //!
 //! Segments are percent-decoded (`%2F` = `/`, `%20` = space, `%25` = `%`), so names containing `/` work.
-use anyhow::{anyhow, bail, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use std::io::{Read, Write};
 use zeroize::Zeroizing;
 
@@ -102,6 +102,68 @@ pub fn render_template(text: &str, res: &mut Resolved) -> Result<Zeroizing<Strin
     Ok(out)
 }
 
+/// Resolve secrets for `gitpass run` from inherited environment variables and/or env files.
+///
+/// * Scans `inherited` environment variables: any variable whose value is (or contains) a `gp://`
+///   reference is resolved, unless overridden by an env file.
+/// * Parses and resolves each env file in `env_file_contents`. Values defined in an env file override
+///   inherited variables with the same name.
+/// * If no env file was given (`env_file_contents` is empty) and no inherited variable contains a
+///   `gp://` reference, returns an error.
+/// * Fails before running if any reference cannot be resolved, naming the variable without leaking secrets.
+pub fn resolve_run_env<I, K, V>(
+    inherited: I,
+    env_file_contents: &[&str],
+    res: &mut Resolved,
+) -> Result<Vec<(String, Zeroizing<String>)>>
+where
+    I: IntoIterator<Item = (K, V)>,
+    K: AsRef<str>,
+    V: AsRef<str>,
+{
+    fn insert_or_update(vec: &mut Vec<(String, Zeroizing<String>)>, key: String, val: Zeroizing<String>) {
+        if let Some(existing) = vec.iter_mut().find(|(k, _)| *k == key) {
+            existing.1 = val;
+        } else {
+            vec.push((key, val));
+        }
+    }
+
+    let mut file_vars: Vec<(String, Zeroizing<String>)> = Vec::new();
+    for (n, content) in env_file_contents.iter().enumerate() {
+        let parsed = parse_env_file(content, res)
+            .with_context(|| format!("parsing env file {}", n + 1))?;
+        for (k, v) in parsed {
+            insert_or_update(&mut file_vars, k, v);
+        }
+    }
+
+    let mut inherited_vars: Vec<(String, Zeroizing<String>)> = Vec::new();
+    let mut has_inherited_ref = false;
+
+    for (k, v) in inherited {
+        let k = k.as_ref();
+        let v = v.as_ref();
+        if v.contains("gp://") {
+            has_inherited_ref = true;
+            if !file_vars.iter().any(|(fk, _)| fk == k) {
+                let resolved = resolve_value(v, res)
+                    .map_err(|e| anyhow!("environment variable '{k}': {e}"))?;
+                insert_or_update(&mut inherited_vars, k.to_string(), resolved);
+            }
+        }
+    }
+
+    if env_file_contents.is_empty() && !has_inherited_ref {
+        bail!("no gp:// references found: no --env-file was given and no inherited environment variables contain gp:// references (usage: gitpass run [--env-file F] -- <cmd>)");
+    }
+
+    let mut out = inherited_vars;
+    out.extend(file_vars);
+    Ok(out)
+}
+
+
 /// Streaming masker: replaces any occurrence of a secret, even if split across writes, by holding back
 /// at most `longest_secret - 1` bytes until more data (or EOF) arrives.
 pub struct Masker<W: Write> { out: W, secrets: Vec<Vec<u8>>, buf: Vec<u8>, hold: usize }
@@ -150,7 +212,7 @@ pub fn pump<R: Read, W: Write>(mut r: R, w: W, secrets: &[Zeroizing<String>]) ->
 /// masked unless `mask` is false. Returns the child's exit code (128+signal on unix signals).
 pub fn run_child(cmd: &[String], env: &[(String, Zeroizing<String>)], secrets: &[Zeroizing<String>], mask: bool) -> Result<i32> {
     use std::process::{Command, Stdio};
-    let (prog, args) = cmd.split_first().ok_or_else(|| anyhow!("no command given; usage: gitpass run --env-file F -- <cmd> [args]"))?;
+    let (prog, args) = cmd.split_first().ok_or_else(|| anyhow!("no command given; usage: gitpass run [--env-file F] -- <cmd> [args]"))?;
     let mut c = Command::new(prog);
     c.args(args).stdin(Stdio::inherit());
     for (k, v) in env { c.env(k, v.as_str()); }
@@ -170,4 +232,88 @@ pub fn run_child(cmd: &[String], env: &[(String, Zeroizing<String>)], secrets: &
     for t in threads { let _ = t.join(); }
     #[cfg(unix)] { use std::os::unix::process::ExitStatusExt; if let Some(sig) = st.signal() { return Ok(128 + sig); } }
     Ok(st.code().unwrap_or(1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    struct TestResolver(HashMap<(String, String, String), String>);
+    impl Resolver for TestResolver {
+        fn resolve(&self, r: &SecretRef) -> Result<Zeroizing<String>> {
+            self.0
+                .get(&(r.vault.clone(), r.item.clone(), r.field.clone()))
+                .map(|v| Zeroizing::new(v.clone()))
+                .ok_or_else(|| anyhow!("missing"))
+        }
+    }
+
+    fn test_resolver() -> TestResolver {
+        let mut m = HashMap::new();
+        m.insert(("Dev".into(), "Postgres".into(), "password".into()), "pg-FAKE-s3cret".into());
+        m.insert(("Dev".into(), "Postgres".into(), "username".into()), "app".into());
+        m.insert(("Personal".into(), "GitHub".into(), "token".into()), "ghp_FAKE_tok123".into());
+        TestResolver(m)
+    }
+
+    #[test]
+    fn test_inherited_only_references() {
+        let resolver = test_resolver();
+        let mut res = Resolved::new(&resolver);
+        let inherited = vec![
+            ("GITHUB_TOKEN", "gp://Personal/GitHub/token"),
+            ("PATH", "/usr/bin:/bin"),
+            ("DB_PASS", "gp://Dev/Postgres/password"),
+        ];
+        let resolved = resolve_run_env(inherited, &[], &mut res).unwrap();
+        let map: HashMap<String, String> = resolved.into_iter().map(|(k, v)| (k, v.to_string())).collect();
+        assert_eq!(map.len(), 2);
+        assert_eq!(map.get("GITHUB_TOKEN").unwrap(), "ghp_FAKE_tok123");
+        assert_eq!(map.get("DB_PASS").unwrap(), "pg-FAKE-s3cret");
+        assert_eq!(res.secrets.len(), 2);
+    }
+
+    #[test]
+    fn test_env_file_overriding_inherited() {
+        let resolver = test_resolver();
+        let mut res = Resolved::new(&resolver);
+        let inherited = vec![
+            ("GITHUB_TOKEN", "gp://Personal/GitHub/token"),
+            ("DB_PASS", "gp://Dev/Postgres/password"),
+            ("PORT", "3000"),
+        ];
+        let env_files = ["GITHUB_TOKEN=override-token\nDB_PASS=gp://Dev/Postgres/password\nNEW_VAR=hello"];
+        let resolved = resolve_run_env(inherited, &env_files, &mut res).unwrap();
+        let map: HashMap<String, String> = resolved.into_iter().map(|(k, v)| (k, v.to_string())).collect();
+        assert_eq!(map.get("GITHUB_TOKEN").unwrap(), "override-token");
+        assert_eq!(map.get("DB_PASS").unwrap(), "pg-FAKE-s3cret");
+        assert_eq!(map.get("NEW_VAR").unwrap(), "hello");
+        assert_eq!(map.get("PORT"), None);
+    }
+
+    #[test]
+    fn test_no_references_at_all_error() {
+        let resolver = test_resolver();
+        let mut res = Resolved::new(&resolver);
+        let inherited = vec![
+            ("PATH", "/usr/bin"),
+            ("USER", "alice"),
+        ];
+        let err = resolve_run_env(inherited, &[], &mut res).unwrap_err();
+        assert!(err.to_string().contains("no gp:// references found"));
+        assert!(err.to_string().contains("no --env-file was given"));
+    }
+
+    #[test]
+    fn test_unresolvable_inherited_reference_error_no_secret() {
+        let resolver = test_resolver();
+        let mut res = Resolved::new(&resolver);
+        let inherited = vec![("SECRET_VAR", "gp://Dev/NoSuchItem/password")];
+        let err = resolve_run_env(inherited, &[], &mut res).unwrap_err();
+        let msg = format!("{err:#}");
+        assert!(msg.contains("SECRET_VAR"), "must name variable: {msg}");
+        assert!(msg.contains("NoSuchItem") || msg.contains("missing"), "must contain reason: {msg}");
+        assert!(!msg.contains("FAKE-s3cret") && !msg.contains("ghp_FAKE"), "no secrets in error: {msg}");
+    }
 }
