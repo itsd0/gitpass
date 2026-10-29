@@ -789,6 +789,13 @@ function renderList() {
       dot.setAttribute('aria-label', t('watchtowerWarning', 'Security warning'));
       row.append(dot);
     }
+    // Quick actions (issue #255): rendered for every row that has them, but
+    // only shown on row hover / selection / focus (see popup.css), so the
+    // title never moves and the row height never changes. Only the selected
+    // row's buttons are in the Tab order; the rest are mouse-only until
+    // selected, which re-renders them tabbable.
+    const qa = V.quickActions ? V.quickActions(it) : [];
+    if (qa.length) row.append(quickActionsEl(it, i, isSel, qa));
     row.onclick = () => select(i);
     row.ondblclick = () => openAndFill();
     inner.append(row);
@@ -1419,6 +1426,60 @@ function openWebsite() {
   }
 }
 
+// ---------- list row quick actions (issue #255) ----------
+// Copy actions reuse copyUsername()/copyPrimary(), so concealed values and
+// the 30 s clipboard auto-clear behave exactly as today, and no value is
+// fetched until the button is clicked (select() loads the detail, then the
+// copy path reveals only that one field). Copy number (cards) and Copy
+// credential (API credentials) are both the primary-secret path.
+const QUICK_ACTION_META = {
+  copyUsername: ['copyUsername', 'Copy username', 'copy'],
+  copyPassword: ['copyPassword', 'Copy password', 'copy'],
+  copyNumber: ['copyNumber', 'Copy number', 'copy'],
+  copyCredential: ['copyCredential', 'Copy credential', 'copy'],
+  openWebsite: ['openWebsite', 'Open website', 'external'],
+};
+
+async function runQuickAction(action) {
+  if (action === 'copyUsername') await copyUsername();
+  else if (action === 'openWebsite') openWebsite();
+  else await copyPrimary();
+}
+
+function quickActionsEl(it, idx, isSel, actions) {
+  const wrap = el('span', 'quick-actions');
+  for (const action of actions) {
+    const [key, fallback, icon] = QUICK_ACTION_META[action] || [action, action, 'copy'];
+    const label = t(key, fallback);
+    const b = el('button', 'quick-btn');
+    b.type = 'button';
+    b.dataset.action = action;
+    b.setAttribute('aria-label', label);
+    b.title = label;
+    b.tabIndex = isSel ? 0 : -1;
+    b.innerHTML = UI[icon] || UI.copy;
+    b.onclick = async (e) => {
+      e.stopPropagation();
+      try {
+        // The copy paths work off the selected row + its detail, so select
+        // first when this row is not the selected one, then run the action.
+        if (S.sel !== idx) await select(idx);
+        await runQuickAction(action);
+      } catch (err) { showErr(err); }
+      // select() re-rendered the row; put focus back on this button so a
+      // keyboard user stays in the quick actions.
+      try {
+        const row = document.querySelector('#row-' + idx);
+        const btn = row && row.querySelector('.quick-btn[data-action="' + action + '"]');
+        if (btn) btn.focus();
+      } catch (_) {}
+    };
+    b.ondblclick = (e) => e.stopPropagation();
+    wrap.append(b);
+  }
+  return wrap;
+}
+
 // ---------- panels: generator / new login / shortcuts ----------
 let prevFocus = null;
 
@@ -1598,6 +1659,7 @@ async function openGenerator(opts) {
   if (useBtn) acts.append(useBtn);
   if (updateBtn) acts.append(updateBtn);
   acts.append(copyBtn); p.append(acts);
+  p.append(recentSection());
 
   const persist = () => saveGeneratorSettings(st).catch(() => {});
   let persistT = null;
@@ -1684,6 +1746,98 @@ async function openGenerator(opts) {
   syncControls();
   paintStrength();
   void run();
+}
+
+/** Collapsible "Recent" list of generated passwords (issue #226). Values come from the read-only host command
+ *  `generator_history` (popup only), are masked until revealed per row, and are fetched only when expanded. */
+function recentSection() {
+  const box = el('section', 'gen-recent');
+  const head = el('button', 'gen-recent-toggle'); head.type = 'button';
+  head.setAttribute('aria-expanded', 'false');
+  const headLab = el('span', null, t('genRecent', 'Recent'));
+  const chev = el('span', 'gen-recent-chev'); chev.innerHTML = UI.chevron;
+  head.append(headLab, chev);
+  const body = el('div', 'gen-recent-body hidden');
+  body.id = 'genRecentBody'; head.setAttribute('aria-controls', body.id);
+  box.append(head, body);
+  let loaded = false;
+  let canFill = false;
+
+  const note = (text) => { body.textContent = ''; body.append(el('p', 'muted gen-recent-note', text)); };
+  const rows = () => [...body.querySelectorAll('.gen-recent-row')];
+  function focusRow(i) {
+    const rs = rows(); if (!rs.length) return;
+    const n = Math.max(0, Math.min(rs.length - 1, i));
+    rs.forEach((r, k) => { r.tabIndex = k === n ? 0 : -1; });
+    rs[n].focus();
+  }
+  function paintRow(e, nowSecs) {
+    const li = el('li', 'gen-recent-row'); li.tabIndex = -1; li.dataset.id = String(e.id);
+    let shown = false;
+    const val = el('code', 'gen-recent-val', G.maskValue(e.value));
+    const age = G.ageParts(e.created_at, nowSecs);
+    const ageText = age.key === 'genAgoNow' ? t('genAgoNow', 'just now')
+      : t(age.key, age.key === 'genAgoMin' ? '$1 min ago' : age.key === 'genAgoHour' ? '$1 h ago' : '$1 d ago', [String(age.n)]);
+    const meta = el('span', 'gen-recent-meta', (e.host ? e.host + ' · ' : '') + ageText);
+    const info = el('div', 'gen-recent-info'); info.append(val, meta);
+    const toggle = () => {
+      shown = !shown;
+      val.textContent = shown ? e.value : G.maskValue(e.value);
+      eyeB.innerHTML = shown ? UI.eyeOff : UI.eye;
+      eyeB.setAttribute('aria-pressed', String(shown));
+      eyeB.title = shown ? t('genRecentHide', 'Hide') : t('reveal', 'Reveal');
+    };
+    const doCopy = () => copy(e.value, t('passwordCopied', 'Password copied'));
+    const copyB = iconBtn(UI.copy, t('copy', 'Copy'), doCopy);
+    const eyeB = iconBtn(UI.eye, t('reveal', 'Reveal'), toggle); eyeB.setAttribute('aria-pressed', 'false');
+    const acts = el('div', 'gen-recent-acts'); acts.append(copyB, eyeB);
+    if (canFill && G.hostMatches(e.host, S.origin)) {
+      acts.append(iconBtn(UI.external, t('fillTitle', 'Fill on this page'), () => send({ type: 'popup:fill_generated', password: e.value })
+        .then(() => { toast(t('genFilled', 'Filled on this page')); window.close(); })
+        .catch(() => toast(t('genFillFailed', 'Could not fill on this page')))));
+    }
+    li.append(info, acts);
+    li.addEventListener('keydown', (ev) => {
+      if (ev.target !== li) return;
+      if (ev.key === 'ArrowDown') { ev.preventDefault(); focusRow(rows().indexOf(li) + 1); }
+      else if (ev.key === 'ArrowUp') { ev.preventDefault(); focusRow(rows().indexOf(li) - 1); }
+      else if (ev.key === 'Enter') { ev.preventDefault(); void doCopy(); }
+      else if (ev.key === 'r' || ev.key === 'R') { ev.preventDefault(); toggle(); }
+    });
+    return li;
+  }
+  async function load() {
+    note('…');
+    let r;
+    try { r = await send({ type: 'popup:generator_history' }); }
+    catch (err) {
+      if (err && err.code === 'locked') { box.classList.add('hidden'); return; } // locked: section hidden
+      note(errText(err)); return;
+    }
+    if (S.panel !== 'gen' || !box.isConnected) return;
+    const h = G.cleanHistory(r, 10);
+    if (!h.enabled) return note(t('genRecentOff', 'Generator history is off'));
+    if (!h.entries.length) return note(t('genRecentEmpty', 'No generated passwords yet'));
+    try { canFill = !!((await send({ type: 'popup:can_fill_generated' })) || {}).canFill; } catch (_) { canFill = false; }
+    if (S.panel !== 'gen' || !box.isConnected) return;
+    const ul = el('ul', 'gen-recent-list'); ul.setAttribute('role', 'list');
+    const now = Math.floor(Date.now() / 1000);
+    for (const e of h.entries) ul.append(paintRow(e, now));
+    body.textContent = '';
+    body.append(ul);
+    const all = el('button', 'btn-link gen-recent-all', t('genRecentViewAll', 'View all in gitpass')); all.type = 'button';
+    all.onclick = () => send({ type: 'popup:open_in_app' }).catch(showErr);
+    body.append(all);
+    const first = ul.firstElementChild; if (first) first.tabIndex = 0;
+  }
+  head.onclick = () => {
+    const open = head.getAttribute('aria-expanded') !== 'true';
+    head.setAttribute('aria-expanded', String(open));
+    body.classList.toggle('hidden', !open);
+    chev.classList.toggle('open', open);
+    if (open && !loaded) { loaded = true; void load(); }
+  };
+  return box;
 }
 
 /** New item: every type the desktop app supports (except passkeys, which websites create, and documents,

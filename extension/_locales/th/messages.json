@@ -95,6 +95,18 @@
   "copyPassword": {
     "message": "คัดลอกรหัสผ่าน"
   },
+  "copyUsername": {
+    "message": "คัดลอกชื่อผู้ใช้"
+  },
+  "copyNumber": {
+    "message": "คัดลอกหมายเลขบัตร"
+  },
+  "copyCredential": {
+    "message": "คัดลอกข้อมูลประจำตัว"
+  },
+  "openWebsite": {
+    "message": "เปิดเว็บไซต์"
+  },
   "passwordCopied": {
     "message": "คัดลอกรหัสผ่านแล้ว"
   },
@@ -971,5 +983,47 @@
   },
   "pkPasskeysCount": {
     "message": "พาสคีย์ {n} รายการสำหรับไซต์นี้"
+  },
+  "genRecent": {
+    "message": "ล่าสุด"
+  },
+  "genRecentEmpty": {
+    "message": "ยังไม่มีรหัสผ่านที่สร้างไว้"
+  },
+  "genRecentOff": {
+    "message": "ประวัติตัวสร้างรหัสผ่านปิดอยู่"
+  },
+  "genRecentViewAll": {
+    "message": "ดูทั้งหมดใน gitpass"
+  },
+  "genRecentHide": {
+    "message": "ซ่อน"
+  },
+  "genAgoNow": {
+    "message": "เมื่อสักครู่"
+  },
+  "genAgoMin": {
+    "message": "$1 นาทีที่แล้ว",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "genAgoHour": {
+    "message": "$1 ชม. ที่แล้ว",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "genAgoDay": {
+    "message": "$1 วันที่แล้ว",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
   }
 }

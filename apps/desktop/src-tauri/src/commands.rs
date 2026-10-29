@@ -127,12 +127,21 @@ fn open_external(url: &str) -> R<()> {
 }
 /// Open https://github.com/new (fixed URL; no user input reaches the shell) in the default browser.
 #[tauri::command] pub fn open_new_repo_page() -> R<()> { open_external("https://github.com/new") }
+/// Open GitHub's "New SSH key" page (fixed URL; no user input reaches the shell) in the default browser.
+#[tauri::command] pub fn open_github_ssh_keys_page() -> R<()> { open_external("https://github.com/settings/ssh/new") }
 /// Open the site's standard change-password page for an item. The URL is derived in Rust from the
 /// item's saved URL, so the webview never supplies a URL to the OS.
 #[tauri::command] pub fn open_change_password(s: State<App>, vault_id: String, item_id: String) -> R<()> {
     match s.item_change_password_url(&vault_id, &item_id).map_err(e)? {
         Some(url) => open_external(&url),
         None => Err("this item has no change-password URL".into()),
+    }
+}
+/// Open the passkey's site (`https://<rp_id>`, derived in Rust from the item) in the default browser.
+#[tauri::command] pub fn open_passkey_site(s: State<App>, vault_id: String, item_id: String) -> R<()> {
+    match s.item_passkey_site_url(&vault_id, &item_id).map_err(e)? {
+        Some(url) => open_external(&url),
+        None => Err("this item has no passkey site".into()),
     }
 }
 #[tauri::command(async)] pub fn remote_disconnect(s: State<'_, App>) -> R<a::SyncStatus> { s.remote_disconnect().map_err(e) }

@@ -81,12 +81,16 @@ describe('SshKeyDetail (#249)', () => {
 
   it('Add to GitHub copies the public key first, then opens the GitHub SSH key page', async () => {
     const spy = vi.spyOn(api, 'copyField').mockResolvedValue(undefined);
-    const openSpy = vi.fn();
-    window.open = openSpy as unknown as typeof window.open;
+    const openSpy = vi.spyOn(api, 'openGithubSshKeysPage').mockResolvedValue(undefined);
+    const winOpen = vi.fn();
+    window.open = winOpen as unknown as typeof window.open;
     wrap(detail());
     await act(async () => { fireEvent.click(screen.getByTestId('ssh-add-to-github')); });
     expect(spy).toHaveBeenCalledWith({ vaultId: 'v1', itemId: 'item-1', fieldId: 'public_key' });
-    expect(openSpy).toHaveBeenCalledWith(GITHUB_SSH_NEW_URL, '_blank', 'noopener,noreferrer');
+    // The real app opens the page through the fixed-URL Rust command, never window.open.
+    expect(openSpy).toHaveBeenCalledTimes(1);
+    expect(spy.mock.invocationCallOrder[0]).toBeLessThan(openSpy.mock.invocationCallOrder[0]);
+    expect(winOpen).not.toHaveBeenCalled();
     expect(GITHUB_SSH_NEW_URL).toBe('https://github.com/settings/ssh/new');
   });
 

@@ -8,7 +8,7 @@ import { cn } from '../../lib/utils';
 import { Badge, Button, toast } from '../../ui';
 import { errText } from './actions';
 
-/** GitHub's "new SSH key" page. No API call is made; the public key is copied first. */
+/** GitHub's "new SSH key" page, opened by the fixed-URL `open_github_ssh_keys_page` Rust command after the public key is copied. */
 export const GITHUB_SSH_NEW_URL = 'https://github.com/settings/ssh/new';
 
 /** Field ids of the SSH facts rendered by this section (see crates/gitpass-core/src/ssh.rs). */
@@ -71,11 +71,11 @@ export function SshKeyDetail({ detail, ctx }: { detail: Detail; ctx: { vaultId: 
 
   if (!publicKey && !fingerprint && !rawKeyType) return null;
 
-  const copyText = async (fieldId: string, value: string | null, toastMsg: string) => {
+  const copyText = async (fieldId: string, value: string | null, toastMsg?: string) => {
     try {
       if (hasField(detail, fieldId)) await api.copyField({ ...ctx, fieldId });
       else if (value) await navigator.clipboard?.writeText(value);
-      toast(toastMsg);
+      if (toastMsg) toast(toastMsg);
     } catch (e) {
       toast(errText(e), 'danger');
     }
@@ -84,9 +84,11 @@ export function SshKeyDetail({ detail, ctx }: { detail: Detail; ctx: { vaultId: 
   const copyPublicKey = () => copyText('public_key', publicKey, t('ssh.detail.copiedPublicKey'));
 
   const addToGithub = async () => {
-    await copyPublicKey();
+    // One toast only: copy without the generic "copied" toast, then explain the next step.
+    await copyText('public_key', publicKey);
     toast(t('ssh.detail.addToGithubToast'));
-    window.open(GITHUB_SSH_NEW_URL, '_blank', 'noopener,noreferrer');
+    // Opened by a fixed-URL Rust command: the webview never hands a URL to the OS.
+    await api.openGithubSshKeysPage().catch(() => {});
   };
 
   return (

@@ -10,6 +10,7 @@ import { Badge, Button, Dialog, DialogContent, DropdownMenu, DropdownMenuContent
 import { ItemIcon } from './categories';
 import { FieldRow } from './FieldView';
 import { SshKeyDetail, SSH_DETAIL_FIELD_IDS } from './SshKeyDetail';
+import { PasskeyDetail, isPasskeyDetailField } from './PasskeyDetail';
 import { ItemEditor } from './ItemEditor';
 import { SafeMarkdown } from './SafeMarkdown';
 import { useSettings } from '../settings/useSettings';
@@ -347,6 +348,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
               </Button></Tooltip>}
           </div>
           {detail.category === 'ssh_key' && <SshKeyDetail detail={detail} ctx={ctx} />}
+          {detail.category === 'passkey' && <PasskeyDetail detail={detail} ctx={ctx} />}
           {deleted && <div className="mb-4 rounded-lg border border-danger/40 bg-danger/10 px-4 py-2 text-sm">{t('detail.inTrash')}</div>}
           {findings.length > 0 && (
             <div
@@ -404,6 +406,8 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
 
           {detail.sections.map((s) => detail.category === 'ssh_key'
             ? { ...s, fields: s.fields.filter((f) => !(SSH_DETAIL_FIELD_IDS as readonly string[]).includes(f.id)) }
+            : detail.category === 'passkey'
+            ? { ...s, fields: s.fields.filter((f) => !isPasskeyDetailField(f)) }
             : s).filter((s) => s.fields.length).map((s) => (
             <div key={s.id} className="mb-4">
               {s.title && <div className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted">{s.title}</div>}
