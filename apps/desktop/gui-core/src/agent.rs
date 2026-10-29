@@ -479,8 +479,8 @@ impl Agent {
                 let source = q.get("source").and_then(|v| v.as_str()).unwrap_or("extension");
                 let origin_or_host = q.get("origin").or_else(|| q.get("host")).and_then(|v| v.as_str());
                 let host = origin_or_host.and_then(clean_host);
-                self.app.record_generated_password(pw, source, host).map_err(host_err)?;
-                Ok(json!({"ok": true}))
+                let recorded = self.app.record_generated_password(pw, source, host).map_err(host_err)?.is_some();
+                Ok(json!({"ok": true, "recorded": recorded}))
             }
             "passkey_query" => {
                 self.app.state.with(|x| {
