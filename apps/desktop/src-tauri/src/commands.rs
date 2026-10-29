@@ -135,6 +135,13 @@ fn open_external(url: &str) -> R<()> {
         None => Err("this item has no change-password URL".into()),
     }
 }
+/// Open the passkey's site (`https://<rp_id>`, derived in Rust from the item) in the default browser.
+#[tauri::command] pub fn open_passkey_site(s: State<App>, vault_id: String, item_id: String) -> R<()> {
+    match s.item_passkey_site_url(&vault_id, &item_id).map_err(e)? {
+        Some(url) => open_external(&url),
+        None => Err("this item has no passkey site".into()),
+    }
+}
 #[tauri::command(async)] pub fn remote_disconnect(s: State<'_, App>) -> R<a::SyncStatus> { s.remote_disconnect().map_err(e) }
 #[tauri::command(async)] pub fn sync(s: State<'_, App>, merge: bool) -> R<a::SyncResult> { s.sync(merge).map_err(e) }
 #[tauri::command] pub fn onboarding(s: State<App>) -> a::Onboarding { s.onboarding() }

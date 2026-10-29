@@ -684,6 +684,15 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
     return delay(undefined);
   },
+  // Dev mock only: the real path derives https://<rp_id> in Rust (open_passkey_site).
+  open_passkey_site: (a: { itemId: string }) => {
+    const d = get(a.itemId).detail;
+    const site = d.sections.flatMap((s) => s.fields).find((f) => /^(site|website|rp_id)$/i.test(f.label) || f.label === 'rp_id');
+    const host = (site?.value ?? '') || (() => { try { return new URL(d.url ?? '').hostname; } catch { return ''; } })();
+    if (!host) return Promise.reject(new Error('this item has no passkey site'));
+    if (typeof window !== 'undefined') window.open(`https://${host}`, '_blank', 'noopener');
+    return delay(undefined);
+  },
   sync: () => delay({ message: 'Pulled 1 commit (mock)' }, 400),
   onboarding: () => delay(onboarding),
   set_onboarding: (a: { patch: Partial<T.Onboarding> }) => { onboarding = { ...onboarding, ...a.patch }; return delay(onboarding); },
