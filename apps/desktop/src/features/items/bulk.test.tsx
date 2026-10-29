@@ -12,8 +12,9 @@ import { useApp } from '../../lib/store';
 import { useItemsUI } from './state';
 import { BulkConfirm, BulkPane, runBulk } from './BulkPane';
 import { ItemList } from './ItemList';
+import { ItemsPage } from './ItemsPage';
 import type { Filter } from '../../api/types';
-import { Toaster, useToasts } from '../../ui';
+import { Toaster, TooltipProvider, useToasts } from '../../ui';
 import { translate } from '../../i18n';
 afterEach(() => { cleanup(); useToasts.setState({ list: [] }); });
 
@@ -261,6 +262,87 @@ describe('item list multi-select', () => {
     expect(useApp.getState().selectedItemId).toBe(items[2].id);
   });
 
+  it('ticking 2 items then plain-clicking a third gives a single selection with no ticks and shows item detail', async () => {
+    const items = await load();
+    useApp.setState({ selectedItemId: items[0].id });
+    render(<TooltipProvider><ItemsPage /></TooltipProvider>);
+    const checks = await screen.findAllByTestId('row-check');
+    fireEvent.click(checks[0]);
+    fireEvent.click(checks[1]);
+    expect(useApp.getState().multiIds).toEqual([items[0].id, items[1].id]);
+    expect(screen.getByTestId('bulk-count').textContent).toBe('2 items selected');
+    expect(checks[0].getAttribute('aria-checked')).toBe('true');
+    expect(checks[1].getAttribute('aria-checked')).toBe('true');
+    expect(checks[2].getAttribute('aria-checked')).toBe('false');
+
+    const rows = screen.getAllByRole('option');
+    expect(rows[0].getAttribute('aria-selected')).toBe('true');
+    expect(rows[1].getAttribute('aria-selected')).toBe('true');
+    expect(rows[2].getAttribute('aria-selected')).toBe('false');
+
+    // Plain click on third row outside the checkbox column
+    fireEvent.click(rows[2]);
+    expect(useApp.getState().multiIds).toEqual([]);
+    expect(useApp.getState().selectedItemId).toBe(items[2].id);
+    expect(rows[2].getAttribute('aria-selected')).toBe('true');
+    expect(rows[0].getAttribute('aria-selected')).toBe('false');
+    expect(rows[1].getAttribute('aria-selected')).toBe('false');
+    expect(checks[0].getAttribute('aria-checked')).toBe('false');
+    expect(checks[1].getAttribute('aria-checked')).toBe('false');
+    expect(checks[2].getAttribute('aria-checked')).toBe('false');
+    expect(screen.queryByTestId('bulk-count')).toBeNull();
+    expect(await screen.findByTestId('crumb-item')).toHaveTextContent(items[2].title);
+  });
+
+  it('hovering a row between selected rows does not change aria-selected and keeps distinct neutral styling', async () => {
+    const items = await load();
+    useApp.setState({ selectedItemId: items[0].id, multiIds: [items[0].id, items[2].id] });
+    render(<ItemList />);
+    const rows = await screen.findAllByRole('option');
+    expect(rows[0].getAttribute('aria-selected')).toBe('true');
+    expect(rows[1].getAttribute('aria-selected')).toBe('false');
+    expect(rows[2].getAttribute('aria-selected')).toBe('true');
+
+    // Selected rows have orange accent background and ring
+    expect(rows[0].className).toContain('bg-accent/15');
+    expect(rows[0].className).toContain('ring-accent');
+    expect(rows[2].className).toContain('bg-accent/15');
+    expect(rows[2].className).toContain('ring-accent');
+
+    // Row 1 (unselected) has neutral hover styling, without accent background or ring
+    expect(rows[1].className).toContain('hover:bg-hover');
+    expect(rows[1].className).not.toContain('bg-accent/15');
+    expect(rows[1].className).not.toContain('ring-accent');
+
+    // Hovering row 1 between them does not change aria-selected or row styling
+    fireEvent.mouseEnter(rows[1]);
+    expect(rows[1].getAttribute('aria-selected')).toBe('false');
+    expect(rows[0].getAttribute('aria-selected')).toBe('true');
+    expect(rows[2].getAttribute('aria-selected')).toBe('true');
+    expect(rows[1].className).not.toContain('bg-accent/15');
+    expect(rows[1].className).not.toContain('ring-accent');
+  });
+
+  it('spacebar key toggles checkbox selection for the current item and listbox has aria-multiselectable', async () => {
+    const items = await load();
+    useApp.setState({ selectedItemId: items[0].id });
+    render(<ItemList />);
+    await screen.findAllByRole('option');
+    const list = screen.getByRole('listbox');
+    expect(list.getAttribute('aria-multiselectable')).toBe('true');
+
+    // Cmd-click row 1 to multi-select items 0 and 1
+    const rows = screen.getAllByRole('option');
+    fireEvent.click(rows[1], { metaKey: true });
+    expect(useApp.getState().multiIds).toEqual([items[0].id, items[1].id]);
+    expect(useApp.getState().selectedItemId).toBe(items[1].id);
+
+    // Space key on active item 1 toggles it out of multi-selection
+    fireEvent.keyDown(list, { key: ' ' });
+    expect(useApp.getState().multiIds).toEqual([]);
+    expect(useApp.getState().selectedItemId).toBe(items[0].id);
+  });
+
   it('cmd-A then plain arrow moves from the anchor, not the opposite end', async () => {
     const items = await load();
     useApp.setState({ selectedItemId: items[2].id });
@@ -277,7 +359,7 @@ describe('item list multi-select', () => {
 
   it('has Burmese and Thai strings for all bulk keys', () => {
     const keys = [
-      'bulk.undo', 'bulk.undone', 'bulk.nSelected', 'bulk.oneSelected', 'bulk.clear',
+      'items.selectItem', 'items.deselectItem', 'bulk.undo', 'bulk.undone', 'bulk.nSelected', 'bulk.oneSelected', 'bulk.clear',
       'bulk.restore', 'bulk.deletePermanently', 'bulk.unarchive', 'bulk.moveToTrash',
       'bulk.favorite', 'bulk.unfavorite', 'bulk.addTag', 'bulk.add', 'bulk.moveToVault',
       'bulk.copyToVault', 'bulk.archive', 'bulk.hint', 'bulk.toast.trash', 'bulk.toast.restore',
