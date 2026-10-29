@@ -3,7 +3,15 @@ import { dictionaries, translate } from '.';
 import { en } from './en';
 describe('i18n', () => {
   it('translates present keys', () => { expect(translate('th', 'nav.settings')).toBe('การตั้งค่า'); expect(translate('my', 'nav.settings')).toBe('ဆက်တင်များ'); });
-  it('falls back to English when a key is missing in the language', () => { expect(dictionaries.my['about.license']).toBeUndefined(); expect(translate('my', 'about.license')).toBe(en['about.license']); });
+  it('falls back to English when a key is missing in the language', () => {
+    (en as Record<string, string>)['test.missingFallback'] = 'Fallback Value';
+    try {
+      expect(dictionaries.my['test.missingFallback' as keyof typeof en]).toBeUndefined();
+      expect(translate('my', 'test.missingFallback')).toBe('Fallback Value');
+    } finally {
+      delete (en as Record<string, string>)['test.missingFallback'];
+    }
+  });
   it('falls back to the key when unknown everywhere', () => { expect(translate('th', 'does.not.exist')).toBe('does.not.exist'); });
   it('interpolates variables', () => { expect(translate('en', 'share.done', { name: 'Alex' })).toBe('Vault shared with Alex'); expect(translate('th', 'sync.ahead', { n: 3 })).toBe('นำหน้า 3'); });
   it('localizes the change-password label with the item title', () => {
