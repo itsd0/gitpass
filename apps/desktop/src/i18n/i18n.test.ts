@@ -111,4 +111,14 @@ describe('i18n', () => {
       for (const k of keys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
     }
   });
+  it("covers all wifi.* strings in my and th and category.wifi unification", () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith("wifi."));
+    expect(keys.length).toBeGreaterThan(0);
+    for (const d of [dictionaries.my, dictionaries.th]) {
+      for (const k of keys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+    }
+    expect(en['category.wifi']).toBe('Wi-Fi');
+    expect(dictionaries.my['category.wifi']).toBe('Wi-Fi');
+    expect(dictionaries.th['category.wifi']).toBe('Wi-Fi');
+  });
 });
