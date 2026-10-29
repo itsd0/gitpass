@@ -187,6 +187,42 @@ pub fn generate(len: usize, digits: bool, symbols: bool, words: bool, pin: bool)
     })
 }
 
+/// Site password rules sent by the extension (already parsed from `passwordrules` / `maxlength`):
+/// `{"classes": [{"kind": "lower|upper|digit|special", "required": bool, "chars": "-_"}]}`. `chars` only
+/// narrows a `special` class and must be printable ASCII symbols. Fails with `bad_request` on anything else
+/// or when the rules cannot be met, so the extension never gets a password the site would reject.
+pub fn generate_for_rules(len: usize, rules: &Value) -> Result<String> {
+    use gitpass_core::generate::{generate_with_classes, CharClass, DEFAULT_DIGITS, DEFAULT_SYMBOLS, LOWER, UPPER};
+    let list = rules.get("classes").and_then(Value::as_array)
+        .filter(|l| !l.is_empty() && l.len() <= 8)
+        .ok_or_else(|| coded(code::BAD_REQUEST, "rules.classes must hold 1..=8 entries"))?;
+    let mut classes = Vec::with_capacity(list.len());
+    for c in list {
+        let required = c.get("required").and_then(Value::as_bool).unwrap_or(false);
+        let kind = c.get("kind").and_then(Value::as_str).unwrap_or("");
+        let chars: Vec<u8> = match kind {
+            "lower" => LOWER.to_vec(),
+            "upper" => UPPER.to_vec(),
+            "digit" => DEFAULT_DIGITS.to_vec(),
+            "special" => match c.get("chars").and_then(Value::as_str) {
+                None => DEFAULT_SYMBOLS.to_vec(),
+                Some(s) => {
+                    let mut v: Vec<u8> = s.bytes().collect();
+                    if v.is_empty() || v.len() > 32 || !v.iter().all(|b| b.is_ascii_graphic() && !b.is_ascii_alphanumeric()) {
+                        return Err(coded(code::BAD_REQUEST, "rules special chars must be 1..=32 printable ASCII symbols"));
+                    }
+                    v.sort_unstable();
+                    v.dedup();
+                    v
+                }
+            },
+            _ => return Err(coded(code::BAD_REQUEST, "unknown rules class")),
+        };
+        classes.push(CharClass { chars, required });
+    }
+    generate_with_classes(len, &classes).ok_or_else(|| coded(code::BAD_REQUEST, "password rules cannot be satisfied"))
+}
+
 /// Apply an `update_login` request to a login record. Absent keys keep their stored value; an empty
 /// username/password/notes clears it. `urls` replaces the websites: the first becomes the item URL and
 /// the rest go to the importers' `urls` section (fields `url1`, `url2`, …).
@@ -234,7 +270,7 @@ fn parse_websites(v: &Value) -> Result<Vec<String>> {
     Ok(out)
 }
 
-fn apply_websites(r: &mut ItemRecord, urls: Vec<String>) {
+pub fn apply_websites(r: &mut ItemRecord, urls: Vec<String>) {
     r.item.url = urls.first().cloned();
     let mut fields: Vec<Field> = urls.iter().skip(1).enumerate().map(|(n, u)| Field {
         id: format!("url{}", n + 1), label: "website".into(), kind: FieldKind::Url, value: Some(u.clone()), removed: false,
@@ -252,6 +288,29 @@ fn apply_websites(r: &mut ItemRecord, urls: Vec<String>) {
         r.sections.retain(|s| s.id != "urls");
     } else if let Some(s) = r.sections.iter_mut().find(|s| s.id == "urls") {
         s.fields = fields;
+    }
+}
+
+pub fn add_url_to_record(r: &mut ItemRecord, url: &str) {
+    let matches_url = |u: &str| origin_matches(u, url);
+    let mut urls: Vec<String> = Vec::new();
+    if let Some(u) = &r.item.url {
+        urls.push(u.clone());
+    }
+    for s in &r.sections {
+        for f in &s.fields {
+            if !f.removed && f.kind == FieldKind::Url {
+                if let Some(v) = &f.value {
+                    if !urls.contains(v) {
+                        urls.push(v.clone());
+                    }
+                }
+            }
+        }
+    }
+    if !urls.iter().any(|u| matches_url(u)) {
+        urls.push(url.to_string());
+        apply_websites(r, urls);
     }
 }
 
@@ -407,10 +466,12 @@ impl Host {
                 let limit = req.get("limit").and_then(Value::as_u64).map(|n| n as usize);
                 // Paging: a reply is capped at 1 MiB (framing::MAX_OUT), so big vaults are fetched in pages via `offset`.
                 let offset = req.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
+                let usage = self.sess()?.all_last_used();
                 let mut out = vec![];
                 for (vid, vname, iid, r) in self.all_records(vault)? {
                     if cat.is_some_and(|c| c != r.category.as_str()) { continue; }
-                    let s = summary(&vid, &vname, &iid, &r);
+                    let mut s = summary(&vid, &vname, &iid, &r);
+                    if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
                     if let Some(q) = &q {
                         let hay = format!("{} {} {}", r.item.title, s["subtitle"].as_str().unwrap_or(""), r.item.url.as_deref().unwrap_or("")).to_lowercase();
                         if !hay.contains(q.as_str()) { continue; }
@@ -429,10 +490,17 @@ impl Host {
                 let origin = req.get("origin").or_else(|| req.get("url")).and_then(Value::as_str)
                     .ok_or_else(|| coded(code::BAD_REQUEST, "missing string argument 'origin'"))?;
                 check_request_origin(origin)?;
+                let usage = self.sess()?.all_last_used();
+                let matches_url = |u: &str| origin_matches(u, origin);
                 let mut out = vec![];
                 for (vid, vname, iid, r) in self.all_records(None)? {
-                    if r.category == Category::Login && r.item.url.as_deref().is_some_and(|u| origin_matches(u, origin)) {
-                        out.push(summary(&vid, &vname, &iid, &r));
+                    if r.category == Category::Login
+                        && (r.item.url.as_deref().is_some_and(matches_url)
+                            || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == FieldKind::Url && f.value.as_deref().is_some_and(matches_url)))
+                    {
+                        let mut s = summary(&vid, &vname, &iid, &r);
+                        if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
+                        out.push(s);
                     }
                 }
                 Ok(json!({"items": out}))
@@ -452,27 +520,37 @@ impl Host {
             }
             "get_item" => {
                 let (vid, iid, r) = self.record(arg_str(req, "item_id")?)?;
-                Ok(json!({"item": detail(&vid, &self.vault_name(&vid)?, &iid, &r)}))
+                let mut d = detail(&vid, &self.vault_name(&vid)?, &iid, &r);
+                if let Some(lu) = self.sess()?.last_used(&iid) {
+                    d["last_used"] = json!(lu);
+                }
+                Ok(json!({"item": d}))
             }
             "reveal" => {
                 if req.get("source").and_then(Value::as_str) != Some("popup") {
                     return Err(coded(code::DENIED, "reveal is allowed only from the popup"));
                 }
-                let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
+                let (_, iid, r) = self.record(arg_str(req, "item_id")?)?;
                 let field = arg_str(req, "field")?;
                 let value = match field {
                     "notes" => r.item.notes.clone(),
                     "url" => r.item.url.clone(),
                     _ => r.find_field(field).and_then(|f| f.value),
                 }.ok_or_else(|| coded(code::NOT_FOUND, format!("no field '{field}'")))?;
+                let _ = self.sess()?.touch_item_used(&iid);
                 Ok(json!({"value": value}))
             }
             "fill" => {
                 let origin = arg_str(req, "origin")?;
                 check_request_origin(origin)?;
-                let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
-                let ok = r.item.url.as_deref().is_some_and(|u| origin_matches(u, origin));
+                let (_, iid, r) = self.record(arg_str(req, "item_id")?)?;
+                let matches_url = |u: &str| origin_matches(u, origin);
+                let confirmed = req.get("user_confirm").and_then(Value::as_bool).unwrap_or(false);
+                let ok = r.item.url.as_deref().is_some_and(matches_url)
+                    || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == FieldKind::Url && f.value.as_deref().is_some_and(matches_url))
+                    || confirmed;
                 if !ok { return Err(coded(code::ORIGIN_MISMATCH, format!("refused: item URL does not match origin {origin}"))); }
+                let _ = self.sess()?.touch_item_used(&iid);
                 let totp = match nonempty(&r.item.totp) {
                     Some(t) => Some(gitpass_core::totp_now(&gitpass_core::totp::parse(t)?).0),
                     None => None,
@@ -482,8 +560,9 @@ impl Host {
             "fill_card" | "fill_identity" => {
                 Self::require_user_action(req, cmd)?;
                 let want = if cmd == "fill_card" { Category::CreditCard } else { Category::Identity };
-                let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
+                let (_, iid, r) = self.record(arg_str(req, "item_id")?)?;
                 if r.category != want { return Err(coded(code::BAD_REQUEST, format!("item is a {}, not a {}", r.category.as_str(), want.as_str()))); }
+                let _ = self.sess()?.touch_item_used(&iid);
                 let mut m = Map::new();
                 for f in fields_of(&r) {
                     if let Some(v) = f.value.filter(|v| !v.is_empty()) { m.entry(f.id).or_insert(json!(v)); }
@@ -557,6 +636,14 @@ impl Host {
                 self.audit_cache = None;
                 Ok(json!({"ok": true}))
             }
+            "add_url" => {
+                let url = arg_str(req, "url")?;
+                check_request_origin(url)?;
+                let (vid, iid, mut r) = self.record(arg_str(req, "item_id")?)?;
+                add_url_to_record(&mut r, url);
+                self.sess()?.update_record(&vid, &iid, r)?;
+                Ok(json!({"ok": true}))
+            }
             "set_favorite" => {
                 let fav = req.get("favorite").and_then(Value::as_bool).ok_or_else(|| coded(code::BAD_REQUEST, "favorite must be a bool"))?;
                 let (vid, iid, mut r) = self.record(arg_str(req, "item_id")?)?;
@@ -574,6 +661,10 @@ impl Host {
                 if !(min..=max).contains(&len) { return Err(coded(code::BAD_REQUEST, format!("len must be {min}..={max}"))); }
                 let digits = req.get("digits").and_then(Value::as_bool).unwrap_or(true);
                 let symbols = req.get("symbols").and_then(Value::as_bool).unwrap_or(true);
+                if let Some(rules) = req.get("rules").filter(|r| !r.is_null()) {
+                    if words || pin { return Err(coded(code::BAD_REQUEST, "rules apply to random passwords only")); }
+                    return Ok(json!({"password": generate_for_rules(len, rules)?}));
+                }
                 Ok(json!({"password": generate(len, digits, symbols, words, pin)}))
             }
             "record_generated_password" => {

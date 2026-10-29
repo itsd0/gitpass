@@ -404,6 +404,37 @@
     "message": "ชื่อรายการยาวเกินไป (สูงสุด 200 อักขระ)",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "csSearchGitpass": {
+    "message": "ค้นหาใน gitpass…"
+  },
+  "csNoMatchingLogins": {
+    "message": "ไม่พบบัญชีที่ตรงกัน"
+  },
+  "csConfirmCrossSite": {
+    "message": "กรอกใน $PAGE$ หรือไม่? ข้อมูลนี้สำหรับ $ITEM$",
+    "placeholders": {
+      "page": {
+        "content": "$1",
+        "example": "example.com"
+      },
+      "item": {
+        "content": "$2",
+        "example": "other.com"
+      }
+    }
+  },
+  "csConfirmFill": {
+    "message": "กรอก"
+  },
+  "csCancel": {
+    "message": "ยกเลิก"
+  },
+  "csAlsoAddSite": {
+    "message": "เพิ่มเว็บไซต์นี้ลงในรายการด้วย"
+  },
+  "csSiteAdded": {
+    "message": "เพิ่มเว็บไซต์แล้ว"
+  },
   "allSet": {
     "message": "พร้อมใช้งานแล้ว",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
@@ -735,6 +766,9 @@
     "message": "เติมข้อมูลเข้าสู่ระบบที่ตรงที่สุดในหน้าปัจจุบันโดยไม่ต้องเปิดป๊อปอัป",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "recentlyUsed": {
+    "message": "ใช้งานล่าสุด"
+  },
   "watchtowerWarnings": {
     "message": "คำเตือน Watchtower"
   },
@@ -839,5 +873,26 @@
   },
   "optAutoTotpBody": {
     "message": "หลังจาก gitpass กรอกข้อมูลเข้าสู่ระบบแล้ว ให้กรอกรหัสใช้ครั้งเดียวในหน้าถัดไปโดยไม่ต้องถาม"
+  },
+  "csRulesLen": {
+    "message": "$len$ ตัวอักษร",
+    "placeholders": {
+      "len": {
+        "content": "$1"
+      }
+    },
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csRulesNoSymbols": {
+    "message": "ไม่มีสัญลักษณ์",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csRulesFewSymbols": {
+    "message": "สัญลักษณ์จำกัด",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csRulesTooShort": {
+    "message": "กฎรหัสผ่านของเว็บไซต์นี้สั้นเกินไปสำหรับรหัสผ่านที่รัดกุม",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   }
 }

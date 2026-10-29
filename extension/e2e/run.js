@@ -46,6 +46,7 @@ const MULTISTEP_PW_HTML = `<!doctype html><html><head><meta charset="utf-8"><tit
 <button id="go" type="submit">Log in</button></form>
 <script>document.getElementById('f').addEventListener('submit',e=>{e.preventDefault();document.getElementById('msg').textContent='signed in';});</script></body></html>`;
 
+const SIGNUP_RULES_HTML = fs.readFileSync(path.join(ROOT, 'test', 'pages', 'signup-rules.html'), 'utf8');
 const CARD_HTML = fs.readFileSync(path.join(ROOT, 'test', 'pages', 'card.html'), 'utf8');
 
 // Find visible elements by text, piercing CLOSED shadow roots via CDP (DOM.getDocument pierce:true).
@@ -56,16 +57,16 @@ async function findInShadow(page, re) {
     const hits = [];
     const walk = (n, inShadow, chain) => {
       if (n.nodeType === 3 && inShadow && re.test(n.nodeValue || '')) hits.push({ text: n.nodeValue.trim(), chain });
-      if (n.nodeType === 1 && inShadow) { const a = n.attributes || []; for (let i = 0; i < a.length; i += 2) if (/^(title|aria-label)$/.test(a[i]) && re.test(a[i + 1])) hits.push({ text: a[i + 1], chain: [...chain, n] }); }
+      if (n.nodeType === 1 && inShadow) { const a = n.attributes || []; for (let i = 0; i < a.length; i += 2) if (/^(title|aria-label|placeholder)$/.test(a[i]) && re.test(a[i + 1])) hits.push({ text: a[i + 1], chain: [...chain, n] }); }
       const kids = [...(n.children || []), ...(n.shadowRoots || []), ...(n.contentDocument ? [n.contentDocument] : [])];
       for (const k of kids) walk(k, inShadow || (n.shadowRoots || []).includes(k) || k.nodeType === 11, n.nodeType === 1 ? [...chain, n] : chain);
     };
     walk(root, false, []);
     const out = [];
     for (const h of hits) {
-      // Prefer the nearest clickable ancestor (button / [role] / li), else the parent element.
+      // Prefer the nearest clickable ancestor (button / [role] / li / input), else the parent element.
       const rev = [...h.chain].reverse();
-      const el = rev.find((e) => /^(BUTTON|A|LI)$/.test(e.nodeName) || (e.attributes || []).some((a, i, arr) => i % 2 === 0 && a === 'role' && /button|option|menuitem/.test(arr[i + 1]))) || rev[0];
+      const el = rev.find((e) => /^(BUTTON|A|LI|INPUT)$/.test(e.nodeName) || (e.attributes || []).some((a, i, arr) => i % 2 === 0 && a === 'role' && /button|option|menuitem/.test(arr[i + 1]))) || rev[0];
       try { const { model } = await s.send('DOM.getBoxModel', { nodeId: el.nodeId }); const q = model.content; if (model.width > 0 && model.height > 0) out.push({ text: h.text, tag: el.nodeName, x: (q[0] + q[4]) / 2, y: (q[1] + q[5]) / 2 }); } catch (_) { /* not rendered */ }
     }
     return out;
@@ -241,7 +242,7 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
   // Linux Chromium reads the per-profile dir too; also set via env for safety on Linux CI.
   console.log(`tmp: ${tmp}\nextension id (expected): ${id}`);
 
-  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/2fa') ? OTP_HTML : req.url.startsWith('/multistep/password') ? MULTISTEP_PW_HTML : req.url.startsWith('/multistep') ? MULTISTEP_USER_HTML : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
+  const server = http.createServer((req, res) => { res.setHeader('content-type', 'text/html; charset=utf-8'); res.end(req.url.startsWith('/done') ? '<h1>done</h1>' : req.url.startsWith('/2fa') ? OTP_HTML : req.url.startsWith('/multistep/password') ? MULTISTEP_PW_HTML : req.url.startsWith('/multistep') ? MULTISTEP_USER_HTML : req.url.startsWith('/signup-rules') ? SIGNUP_RULES_HTML : req.url.startsWith('/card') ? CARD_HTML : req.url.startsWith('/webauthn') ? fs.readFileSync(path.join(ROOT, 'test', 'pages', 'webauthn.html')) : LOGIN_HTML); });
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   const LOGIN = `http://localhost:${server.address().port}/login`;
   if (realSetup) realSetup(server.address().port); // real host matches loopback origins incl. port
@@ -699,6 +700,155 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       !!reopened && !!escaped && (await page.inputValue('#u')) === 'alice@example.com',
       `opened=${!!reopened} closed=${!!escaped} u=${JSON.stringify(await page.inputValue('#u'))}`);
     await page.fill('#u', ''); await page.fill('#p', '');
+
+    // --- Issue #80: "Search gitpass…" in inline menu with cross-site confirm & add-site prompt
+    let inlineSearchOk = false, inlineSearchDetail = '';
+    try {
+      // 1. Re-open menu with Alt+ArrowDown
+      await page.focus('#u');
+      await page.keyboard.down('Alt'); await page.keyboard.press('ArrowDown'); await page.keyboard.up('Alt');
+      await until(async () => !!(await shadowComputed(page, '.menu')), T(3000));
+
+      // 2. Click "Search gitpass…" row
+      const searchRowHits = await until(async () => {
+        const h = await findInShadow(page, /Search gitpass/i);
+        const btn = h.find((x) => x.tag === 'BUTTON');
+        return btn && [btn];
+      }, T(3000));
+      if (!searchRowHits) throw new Error('Search gitpass row not found in menu');
+      await page.mouse.click(searchRowHits[0].x, searchRowHits[0].y);
+
+      // 3. Header transforms into search input and receives focus
+      const searchInputHits = await until(async () => {
+        const h = await findInShadow(page, /Search gitpass/i);
+        const inp = h.find((x) => x.tag === 'INPUT');
+        return inp && [inp];
+      }, T(3000));
+      if (!searchInputHits) throw new Error('search input not rendered');
+      await page.mouse.click(searchInputHits[0].x, searchInputHits[0].y);
+
+      // 4. Type non-matching login name (GitHub)
+      await page.keyboard.type('github');
+      const ghResult = await until(async () => {
+        const h = await findInShadow(page, /^GitHub$/);
+        return h.length && h;
+      }, T(3000));
+      if (!ghResult) throw new Error('GitHub not found in search results');
+
+      // 5. Escape returns to suggestions; second Escape closes menu (value untouched)
+      await page.keyboard.press('Escape');
+      const backToSug = await until(async () => (await shadowComputed(page, '.search-input')) === null && !!(await shadowComputed(page, '.menu')), T(3000));
+      await page.keyboard.press('Escape');
+      const menuClosed = await until(async () => (await shadowComputed(page, '.menu')) === null, T(3000));
+      if (!backToSug || !menuClosed || (await page.inputValue('#u')) !== '') {
+        throw new Error(`Escape navigation failed: backToSug=${!!backToSug} menuClosed=${!!menuClosed} u=${await page.inputValue('#u')}`);
+      }
+
+      // 6. Open search again to test cross-site confirm and fill
+      await page.focus('#u');
+      await page.keyboard.down('Alt'); await page.keyboard.press('ArrowDown'); await page.keyboard.up('Alt');
+      await until(async () => !!(await shadowComputed(page, '.menu')), T(3000));
+      const searchRowHits2 = await until(async () => {
+        const h = await findInShadow(page, /Search gitpass/i);
+        const btn = h.find((x) => x.tag === 'BUTTON');
+        return btn && [btn];
+      }, T(3000));
+      if (!searchRowHits2) throw new Error('Search gitpass row not found in menu on re-open');
+      await page.mouse.click(searchRowHits2[0].x, searchRowHits2[0].y);
+      const searchInputHits2 = await until(async () => {
+        const h = await findInShadow(page, /Search gitpass/i);
+        const inp = h.find((x) => x.tag === 'INPUT');
+        return inp && [inp];
+      }, T(3000));
+      if (!searchInputHits2) throw new Error('search input 2 not rendered');
+      await page.mouse.click(searchInputHits2[0].x, searchInputHits2[0].y);
+      await page.keyboard.type('github');
+      const ghResult2 = await until(async () => {
+        const h = await findInShadow(page, /^GitHub$/);
+        return h.length && h;
+      }, T(3000));
+
+      // 7. Verify no secrets in DOM before fill
+      const shadowBefore = (await findInShadow(page, /.*/)).map((h) => h.text).join(' ');
+      if (shadowBefore.includes('gh-pass-123') || shadowBefore.includes('Corr3ct-H0rse')) {
+        throw new Error('Secret password found in shadow DOM before fill');
+      }
+
+      // 8. Click GitHub -> Extension-owned cross-site confirm popup window opens
+      await page.mouse.click(ghResult2[0].x, ghResult2[0].y);
+      const confirmWin = await until(() => ctx.pages().find((p) => p.url().includes('popup/confirm.html')), T(4000));
+      if (!confirmWin) throw new Error('cross-site confirm popup window not opened');
+
+      const confirmMsg = await until(async () => {
+        const t = await confirmWin.locator('#msg').textContent().catch(() => '');
+        return /Fill on localhost\? This login is for github\.com/i.test(t) && t;
+      }, T(3000));
+      if (!confirmMsg) throw new Error('cross-site confirm window message not matching');
+
+      // 9. Cancel with Escape in confirm window leaves inputs untouched and returns to search
+      await confirmWin.keyboard.press('Escape');
+      await until(() => !ctx.pages().some((p) => p.url().includes('popup/confirm.html')), T(3000));
+
+      let cancelU = '', cancelP = '', cancelSearchInp = false;
+      const cancelledOk = await until(async () => {
+        cancelU = await page.inputValue('#u');
+        cancelP = await page.inputValue('#p');
+        cancelSearchInp = !!(await shadowComputed(page, '.search-input'));
+        return cancelU === '' && cancelP === '' && cancelSearchInp;
+      }, T(3000));
+      if (!cancelledOk) throw new Error(`Escape cancel failed: u=${cancelU} p=${cancelP} searchInp=${cancelSearchInp}`);
+
+      // Also verify clicking Cancel button in confirm window
+      const ghResultRetry = await until(async () => {
+        const h = await findInShadow(page, /^GitHub$/);
+        return h.length && h;
+      }, T(3000));
+      await page.mouse.click(ghResultRetry[0].x, ghResultRetry[0].y);
+      const confirmWinRetry = await until(() => ctx.pages().find((p) => p.url().includes('popup/confirm.html')), T(4000));
+      if (!confirmWinRetry) throw new Error('confirm window retry not opened');
+      await confirmWinRetry.click('#cancelBtn');
+      await until(() => !ctx.pages().some((p) => p.url().includes('popup/confirm.html')), T(3000));
+
+      // 10. Click GitHub again and confirm fill via "Fill" button in confirm window
+      const ghResult3 = await until(async () => {
+        const h = await findInShadow(page, /^GitHub$/);
+        return h.length && h;
+      }, T(3000));
+      await page.mouse.click(ghResult3[0].x, ghResult3[0].y);
+      const confirmWinFill = await until(() => ctx.pages().find((p) => p.url().includes('popup/confirm.html')), T(4000));
+      if (!confirmWinFill) throw new Error('confirm window fill not opened');
+      await confirmWinFill.click('#fillBtn');
+      await until(() => !ctx.pages().some((p) => p.url().includes('popup/confirm.html')), T(3000));
+
+      // 11. Credentials filled (octo-edited@example.com / gh-pass-123)
+      const fillFilled = await until(async () => ['alice', 'octo-edited@example.com'].includes(await page.inputValue('#u')) && (await page.inputValue('#p')) === 'gh-pass-123', T(3000));
+      if (!fillFilled) throw new Error(`Fill failed: u=${await page.inputValue('#u')}`);
+
+      // 12. Post-fill prompt: "Also add this site to the item"
+      const addSitePrompt = await until(async () => {
+        const h = await findInShadow(page, /Also add this site to the item/i);
+        return h.length && h;
+      }, T(3000));
+      if (!addSitePrompt) throw new Error('Add site prompt not shown');
+
+      const markAddUrl = cmdsIn(mockDir).length;
+      await page.mouse.click(addSitePrompt[0].x, addSitePrompt[0].y);
+      const siteAddedNotice = await until(async () => {
+        const h = await findInShadow(page, /Site added/i);
+        return h.length && h;
+      }, T(3000));
+      if (!siteAddedNotice) throw new Error('Site added notice not shown');
+
+      const addUrlCmd = cmdsIn(mockDir).slice(markAddUrl).find((m) => m.cmd === 'add_url');
+      if (!addUrlCmd && !REAL) throw new Error('add_url command not sent to host');
+
+      inlineSearchOk = true;
+      inlineSearchDetail = `u=${await page.inputValue('#u')} p=[set]; cross-site confirm verified; add_url sent`;
+    } catch (e) {
+      inlineSearchDetail = e.message;
+    }
+    rec('inline search: search gitpass, cross-site confirm, fill, Escape cancel, add-site prompt', inlineSearchOk, inlineSearchDetail);
+    await page.fill('#u', ''); await page.fill('#p', '');
     let viaPopup = false, how = '';
     try {
       const p2 = await openRealPopup(ctx, sw, page, EXT);
@@ -829,6 +979,24 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
         : 'save_login NOT received');
     rec('multi-step login saves exactly once', REAL || msSavedAll.length === 1, REAL ? 'real host (not logged)' : `save_login count=${msSavedAll.length}`);
     await ms.close();
+
+    // --- Site password rules (#188): maxlength + passwordrules shape the suggested password
+    try {
+      const rulesPage = await ctx.newPage();
+      await rulesPage.goto(LOGIN.replace(/\/login$/, '/signup-rules')); await sleep(1000); await rulesPage.bringToFront();
+      await rulesPage.click('input[name=username]'); await sleep(800); // sign-up forms anchor the menu on the username field
+      const sug = await until(async () => { const x = await findInShadow(rulesPage, /Suggest strong password/); return x.length && x; }, T(5000));
+      const sub = sug ? await findInShadow(rulesPage, /characters|gitpass will save/) : [];
+      if (sug) await rulesPage.mouse.click(sug[0].x, sug[0].y);
+      const gen = await until(async () => (await rulesPage.inputValue('#np')) || false, T(3000));
+      const pw = gen || '';
+      const sent = REAL ? null : cmdsIn(mockDir).filter((m) => m.cmd === 'generate' && m.rules).pop();
+      // Never print the password itself: report which rules held.
+      rec('signup with maxlength + passwordrules gets a compliant suggested password',
+        pw.length === 16 && /^[A-Za-z0-9_-]+$/.test(pw) && /[a-z]/.test(pw) && /[A-Z]/.test(pw) && /[0-9]/.test(pw),
+        `row=${!!sug}; subtitle=${sub.length ? JSON.stringify(sub[0].text) : 'missing'}; length=${pw.length}; charset ok=${/^[A-Za-z0-9_-]*$/.test(pw)}; host rules=${sent ? sent.rules.classes.length + ' classes, len ' + sent.len : '(real host)'}`);
+      await rulesPage.close();
+    } catch (e) { rec('signup password rules (#188)', false, e.message); }
 
     // --- Card + identity (test/pages/card.html): in-page click and popup Fill
     const CARD = LOGIN.replace(/\/login$/, '/card');

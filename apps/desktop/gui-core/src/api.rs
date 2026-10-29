@@ -47,6 +47,8 @@ pub struct ItemSummary {
     pub change_password_url: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ignored_findings: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub last_used: Option<u64>,
 }
 /// Active Watchtower finding for the item-detail banner (description is English, like the audit text).
 #[derive(Serialize, Debug, Clone, PartialEq)]
@@ -123,7 +125,7 @@ pub struct VaultInfo {
 pub enum FilterKind { All, Favorites, Archive, Deleted, Vault, Tag, Category }
 #[derive(Deserialize, Serialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-pub enum Sort { Updated, Title, Created }
+pub enum Sort { Updated, Title, Created, Recent }
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct Filter {
@@ -194,6 +196,8 @@ pub struct Settings {
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_length: Option<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_digits: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_symbols: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_separator: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub generator_capitalize: Option<bool>,
     /// Privacy: Settings → Appearance gets a toggle, "Show website icons" (off by default, because fetching tells each site you have a login there).
     #[serde(default)] pub show_website_icons: bool,
     /// Remember generated passwords in an encrypted vault history (default on).
@@ -205,6 +209,7 @@ impl Default for Settings {
             biometric_unlock: false, quick_access_hotkey: "CommandOrControl+Shift+Space".into(), hibp_check: false, ssh_approve_each_use: false,
             lock_on_sleep: true, lock_on_screen_lock: true, lock_on_user_switch: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
+            generator_separator: None, generator_capitalize: None,
             show_website_icons: false, remember_generated_passwords: true }
     }
 }
@@ -445,7 +450,7 @@ pub fn item_expiry(r: &ItemRecord) -> Option<String> {
         .map(|v| v.trim().to_string())
 }
 
-fn summary(vid: &str, iid: &str, r: &ItemRecord) -> ItemSummary {
+fn summary(vid: &str, iid: &str, r: &ItemRecord, last_used: Option<u64>) -> ItemSummary {
     ItemSummary {
         id: iid.into(), vault_id: vid.into(), category: r.category, title: r.item.title.clone(), subtitle: subtitle(r),
         favorite: r.favorite, archived: r.archived, deleted_at: r.deleted_at.map(|d| iso8601(d as i64)), tags: r.tags.clone(),
@@ -454,15 +459,16 @@ fn summary(vid: &str, iid: &str, r: &ItemRecord) -> ItemSummary {
         expiry: item_expiry(r),
         change_password_url: r.item.url.as_deref().and_then(audit::change_password_url),
         ignored_findings: r.ignored_findings.clone(),
+        last_used,
     }
 }
 
 fn has_totp(r: &ItemRecord) -> bool { r.view_sections().iter().flat_map(|s| s.fields.iter()).any(|f| f.kind == FieldKind::Totp && f.value.is_some()) }
 
-fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>) -> ItemDetail {
+fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>) -> ItemDetail {
     let pw = r.view_sections().into_iter().flat_map(|s| s.fields).find(|f| f.kind == FieldKind::Concealed && f.value.is_some());
     ItemDetail {
-        summary: summary(vid, iid, r), version, sections: to_dto_sections(r), notes: r.item.notes.clone(),
+        summary: summary(vid, iid, r, last_used), version, sections: to_dto_sections(r), notes: r.item.notes.clone(),
         attachments: r.attachments.iter().map(|a| Attachment { id: a.id.clone(), name: a.name.clone(), size: a.size, mime: a.mime.clone() }).collect(),
         history: r.history.iter().rev().map(|h| HistoryRef { version: h.version, updated_at: ts(&h.updated_at) }).collect(),
         password_strength: if r.category == Category::Login { r.item.password.as_deref().map(strength) } else { pw.and_then(|f| f.value).map(|v| strength(&v)) },
@@ -536,15 +542,25 @@ fn mime_for(name: &str) -> &'static str {
     item::mime_for(name)
 }
 
-/// Generate a password (`words`: `length` words from a 128-word list joined by '-', ~7 bits/word, `pin`: `length` digits).
-pub fn generate(length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String {
+/// Separators the desktop generator offers for word passphrases; anything else is a bad request.
+pub const WORD_SEPARATORS: [char; 4] = ['-', '.', '_', ' '];
+
+/// Generate a password (`words`: `length` words from a 128-word list joined by `separator`, ~7 bits/word, `pin`: `length` digits).
+/// `separator`/`capitalize` only affect words mode. Omitted values keep the historical defaults:
+/// separator `-` (`'.'` when symbols are off), no capitalization.
+pub fn generate(length: usize, symbols: bool, digits: bool, words: bool, pin: bool, separator: Option<char>, capitalize: Option<bool>) -> Result<String, String> {
+    let separator = match separator {
+        None => if symbols { '-' } else { '.' },
+        Some(c) if WORD_SEPARATORS.contains(&c) => c,
+        Some(c) => return Err(format!("invalid word separator {c:?}: use one of -, ., _, space")),
+    };
     // The desktop app and the browser host have always floored character passwords at 8.
     let length = if words || pin { length } else { length.max(8) };
-    gitpass_core::generate::generate(&gitpass_core::generate::Options {
+    Ok(gitpass_core::generate::generate(&gitpass_core::generate::Options {
         length, symbols, digits, words, pin,
-        separator: if symbols { '-' } else { '.' },
-        capitalize: false,
-    })
+        separator,
+        capitalize: capitalize.unwrap_or(false),
+    }))
 }
 
 fn git(dir: &Path, args: &[&str]) -> Option<String> {
@@ -741,6 +757,7 @@ impl App {
         self.with(|u| {
             let all = Self::all_records(&u.session)?;
             let q = filter.query.as_deref().unwrap_or("").trim().to_lowercase();
+            let usage = u.session.all_last_used();
             let mut v: Vec<(ItemSummary, u64)> = all.iter().filter(|(vid, _, r)| {
                 let live = r.deleted_at.is_none();
                 let keep = match filter.kind {
@@ -753,7 +770,7 @@ impl App {
                     FilterKind::Category => live && !r.archived && Some(r.category) == filter.category,
                 };
                 keep
-            }).map(|(vid, iid, r)| (summary(vid, iid, r), r.created_at.unwrap_or(0)))
+            }).map(|(vid, iid, r)| (summary(vid, iid, r, usage.get(iid).copied()), r.created_at.unwrap_or(0)))
               .filter(|(s, _)| q.is_empty() || [s.title.as_str(), s.subtitle.as_str(), s.url.as_deref().unwrap_or("")].iter().any(|x| x.to_lowercase().contains(&q))
                     || s.tags.iter().any(|t| t.to_lowercase().contains(&q)))
               .collect();
@@ -761,6 +778,11 @@ impl App {
                 Sort::Title => v.sort_by(|a, b| a.0.title.to_lowercase().cmp(&b.0.title.to_lowercase())),
                 Sort::Updated => v.sort_by(|a, b| b.0.updated_at.cmp(&a.0.updated_at).then_with(|| a.0.title.cmp(&b.0.title))),
                 Sort::Created => v.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| b.0.created_at.cmp(&a.0.created_at))),
+                Sort::Recent => v.sort_by(|a, b| {
+                    let a_u = a.0.last_used.unwrap_or(0);
+                    let b_u = b.0.last_used.unwrap_or(0);
+                    b_u.cmp(&a_u).then_with(|| a.0.title.to_lowercase().cmp(&b.0.title.to_lowercase()))
+                }),
             }
             Ok(v.into_iter().map(|x| x.0).collect())
         })
@@ -769,7 +791,8 @@ impl App {
         self.with(|u| {
             let (v, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, vault_id, item_id)?;
-            Ok(detail(vault_id, item_id, v, &r, findings))
+            let last_used = u.session.last_used(item_id);
+            Ok(detail(vault_id, item_id, v, &r, findings, last_used))
         })
     }
     /// The ONLY call that returns a stored secret value.
@@ -789,6 +812,7 @@ impl App {
                     None
                 }
             }).ok_or_else(|| anyhow!("item has no field '{field_id}'"))?;
+            let _ = u.session.touch_item_used(item_id);
             Ok(Zeroizing::new(f.value.clone().unwrap_or_default()))
         })
     }
@@ -801,6 +825,7 @@ impl App {
             let f = r.find_field(field_id).ok_or_else(|| anyhow!("item has no field '{field_id}'"))?;
             let markers = is_secret_copy(r.category, &f).then_some(PasteboardMarkers::SECRET);
             let raw = f.value.clone().filter(|v| !v.is_empty()).ok_or_else(|| anyhow!("field '{field_id}' is empty"))?;
+            let _ = u.session.touch_item_used(item_id);
             Ok((Zeroizing::new(if f.kind == FieldKind::Totp { totp::code_now(&totp::parse(&raw)?).0 } else { raw }), markers))
         })?;
         match markers {
@@ -904,7 +929,7 @@ impl App {
             Self::apply_input(&mut r, input);
             let iid = u.session.add_record(&input.vault_id, r)?;
             let (_, r) = u.session.read_record(&input.vault_id, &iid)?;
-            Ok(summary(&input.vault_id, &iid, &r))
+            Ok(summary(&input.vault_id, &iid, &r, None))
         })
     }
     pub fn update_item(&self, item_id: &str, input: &ItemInput) -> Result<ItemSummary> {
@@ -915,7 +940,7 @@ impl App {
             Self::apply_input(&mut r, input);
             u.session.update_record(&input.vault_id, item_id, r)?;
             let (_, r) = u.session.read_record(&input.vault_id, item_id)?;
-            Ok(summary(&input.vault_id, item_id, &r))
+            Ok(summary(&input.vault_id, item_id, &r, u.session.last_used(item_id)))
         })
     }
     pub fn set_favorite(&self, vault_id: &str, item_id: &str, favorite: bool) -> Result<()> { self.write(|u| u.session.set_favorite(vault_id, item_id, favorite)) }
@@ -981,7 +1006,7 @@ impl App {
         self.write(|u| {
             let nid = u.session.move_item(vault_id, item_id, to_vault_id)?;
             let (_, r) = u.session.read_record(to_vault_id, &nid)?;
-            Ok(summary(to_vault_id, &nid, &r))
+            Ok(summary(to_vault_id, &nid, &r, u.session.last_used(&nid)))
         })
     }
     pub fn duplicate_item(&self, vault_id: &str, item_id: &str) -> Result<ItemSummary> {
@@ -992,14 +1017,14 @@ impl App {
             r.favorite = false;
             u.session.update_record(vault_id, &nid, r)?;
             let (_, r) = u.session.read_record(vault_id, &nid)?;
-            Ok(summary(vault_id, &nid, &r))
+            Ok(summary(vault_id, &nid, &r, None))
         })
     }
     pub fn item_version(&self, vault_id: &str, item_id: &str, version: u64) -> Result<ItemDetail> {
         self.with(|u| {
             let r = u.session.item_version(vault_id, item_id, version)?;
             let (_, cur) = u.session.read_record(vault_id, item_id)?;
-            let mut d = detail(vault_id, item_id, version, &r, Vec::new());
+            let last_used = u.session.last_used(item_id); let mut d = detail(vault_id, item_id, version, &r, Vec::new(), last_used);
             d.history.clear();
             d.attachments.clear();
             if let Some(h) = cur.history.iter().find(|h| h.version == version) { d.summary.updated_at = ts(&h.updated_at); }
@@ -1012,7 +1037,8 @@ impl App {
             let new_v = u.session.restore_version(vault_id, item_id, version)?;
             let (_, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, vault_id, item_id)?;
-            Ok(detail(vault_id, item_id, new_v, &r, findings))
+            let last_used = u.session.last_used(item_id);
+            Ok(detail(vault_id, item_id, new_v, &r, findings, last_used))
         })
     }
     pub fn add_attachment(&self, vault_id: &str, item_id: &str, path: &str) -> Result<Attachment> {
@@ -1087,12 +1113,6 @@ impl App {
     }
 
     // ---------------- tools
-    pub fn generate_password(&self, length: usize, symbols: bool, digits: bool, words: bool, pin: bool) -> String {
-        let pw = generate(length, symbols, digits, words, pin);
-        let _ = self.record_generated_password(&pw, "desktop", None);
-        pw
-    }
-
     pub fn get_generator_history(&self) -> Result<Vec<GeneratorHistoryEntryDto>> {
         self.with(|u| {
             let gh = u.session.read_generator_history()?;
@@ -1506,7 +1526,7 @@ impl App {
         let item = self.write(|u| {
             let iid = u.session.add_record(vault_id, rec)?;
             let (_, r) = u.session.read_record(vault_id, &iid)?;
-            Ok(summary(vault_id, &iid, &r))
+            Ok(summary(vault_id, &iid, &r, None))
         })?;
         Ok(SshKeyCreated { item, public_key: k.info.public_key.clone(), fingerprint: k.info.fingerprint.clone(), key_type: k.info.key_type.clone() })
     }

@@ -67,7 +67,12 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn list_tags(s: State<App>) -> R<Vec<String>> { s.list_tags().map_err(e) }
 #[tauri::command] pub fn rename_tag(s: State<App>, old: String, new: String) -> R<a::BulkResult> { s.rename_tag(&old, &new).map_err(e) }
 #[tauri::command] pub fn delete_tag(s: State<App>, name: String) -> R<a::BulkResult> { s.delete_tag(&name).map_err(e) }
-#[tauri::command] pub fn generate_password(s: State<App>, length: usize, symbols: bool, digits: bool, words: Option<bool>, pin: Option<bool>) -> String { s.generate_password(length, symbols, digits, words.unwrap_or(false), pin.unwrap_or(false)) }
+#[allow(clippy::too_many_arguments)] // Tauri command args map 1:1 to the JS invoke payload.
+#[tauri::command] pub fn generate_password(s: State<App>, length: usize, symbols: bool, digits: bool, words: Option<bool>, pin: Option<bool>, separator: Option<char>, capitalize: Option<bool>) -> R<String> {
+    let pw = a::generate(length, symbols, digits, words.unwrap_or(false), pin.unwrap_or(false), separator, capitalize)?;
+    let _ = s.record_generated_password(&pw, "desktop", None);
+    Ok(pw)
+}
 #[tauri::command] pub fn get_generator_history(s: State<App>) -> R<Vec<a::GeneratorHistoryEntryDto>> { s.get_generator_history().map_err(e) }
 #[tauri::command] pub fn delete_generator_history_entry(s: State<App>, id: String) -> R<bool> { s.delete_generator_history_entry(&id).map_err(e) }
 #[tauri::command] pub fn clear_generator_history(s: State<App>) -> R<()> { s.clear_generator_history().map_err(e) }

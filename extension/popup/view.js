@@ -276,6 +276,15 @@
     return it.subtitle || host || '—';
   }
 
+  /** Extract up to `max` recently used items, sorted newest first. */
+  function getRecentlyUsed(all, max = 5) {
+    if (!Array.isArray(all)) return [];
+    return all
+      .filter((i) => i && i.last_used && i.last_used > 0)
+      .sort((a, b) => b.last_used - a.last_used)
+      .slice(0, max);
+  }
+
   /** Severity token for a Watchtower finding kind: danger or warn. */
   function findingSeverity(kind) {
     if (kind === 'weak' || kind === 'reused' || kind === 'pwned' || kind === 'expired') return 'danger';
@@ -355,7 +364,7 @@
     return Boolean(res && Array.isArray(res.kinds));
   }
 
-  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings };
+  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

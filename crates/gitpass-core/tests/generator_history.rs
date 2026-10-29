@@ -92,3 +92,36 @@ fn test_tampered_generator_history_rejected() {
     assert!(!problems.is_empty());
     assert!(problems[0].contains("generator_history.enc does not match manifest hash"));
 }
+
+#[test]
+fn test_generator_history_deletion_survives_sync_merge() {
+    let dir = tempdir().unwrap();
+    let root = dir.path().join("vault");
+    let secret = store::init(&root, "test-master-pw-1", fast()).unwrap();
+    let s = Session::unlock(&root, "test-master-pw-1", &secret).unwrap();
+
+    let e1 = s.record_generated_password("FAKE-pass-deleted", "desktop", None).unwrap();
+    let e2 = s.record_generated_password("FAKE-pass-kept", "extension", Some("github.com".into())).unwrap();
+
+    // Snapshot state representing Device B before deletion
+    let h_dev_b = s.read_generator_history().unwrap();
+    assert_eq!(h_dev_b.entries.len(), 2);
+
+    // Device A deletes e1
+    assert!(s.delete_generator_history_entry(&e1.id).unwrap());
+    let h_dev_a = s.read_generator_history().unwrap();
+    assert_eq!(h_dev_a.entries.len(), 1);
+    assert_eq!(h_dev_a.entries[0].id, e2.id);
+
+    // Device A merges with Device B (which still has e1)
+    let merged = h_dev_a.merge(&h_dev_b, store::now_secs());
+    assert_eq!(merged.entries.len(), 1);
+    assert_eq!(merged.entries[0].id, e2.id);
+    assert!(!merged.entries.iter().any(|e| e.id == e1.id), "deleted entry must not be resurrected after merge");
+
+    // Device B merges with Device A
+    let merged_b = h_dev_b.merge(&h_dev_a, store::now_secs());
+    assert_eq!(merged_b.entries.len(), 1);
+    assert_eq!(merged_b.entries[0].id, e2.id);
+    assert!(!merged_b.entries.iter().any(|e| e.id == e1.id), "deleted entry must not be resurrected after merge");
+}

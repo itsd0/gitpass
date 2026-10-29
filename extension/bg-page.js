@@ -11,12 +11,37 @@
 (function (root) {
   'use strict';
   const TTL_MS = 5 * 60 * 1000;
+  const SHORT_TTL_MS = 60 * 1000; // 60 s for crossSiteApprovals, addUrlApprovals, searchActive, and pendingConfirms
   const OFFER_TTL_MS = 2 * 60 * 1000; // how long a filled login may offer its one-time code (#181)
   const pendingSaves = new Map(); // tabId -> { origin, kind, username, password, item_id, prompt, ts }
   const lastUsername = new Map(); // tabId -> { origin, username, ts }  (multi-step logins: step 1 value, 5 min TTL)
   const lastFilled = new Map(); // tabId -> { origin, item_id, ts }  (just-filled login; offers its one-time code on the next page)
   const lastSaved = new Map(); // tabId -> { origin, item_id, ts }  ("Open in gitpass" after a banner save)
   const inflightDecisions = new Map(); // tabId -> promise settled when the write ends (no replay, see waitInflight)
+  const searchActive = new Map(); // tabId -> { origin, ts } (active while search mode is open)
+  const crossSiteApprovals = new Map(); // `${tabId}:${origin}:${itemId}` -> { ts } (single-use, short-lived)
+  const addUrlApprovals = new Map(); // `${tabId}:${origin}:${itemId}` -> { ts } (short-lived post-fill approval)
+  const pendingConfirms = new Map(); // reqId -> { reqId, tabId, origin, itemId, pageHost, itemHost, title, resolve, reject, winId, ts }
+  let confirmSeq = 0;
+  const CONFIRM_URL = () => (root.chrome && chrome.runtime && chrome.runtime.getURL ? chrome.runtime.getURL('popup/confirm.html') : 'chrome-extension://mock/popup/confirm.html');
+  function isConfirmUiSender(sender) {
+    const extId = root.chrome && chrome.runtime && chrome.runtime.id;
+    if (!sender || typeof sender.url !== 'string') return false;
+    if (extId && sender.id !== extId) return false;
+    if (sender.tab && typeof sender.tab.url === 'string' && !sender.tab.url.startsWith(CONFIRM_URL())) return false;
+    return sender.url.startsWith(CONFIRM_URL());
+  }
+  function generateConfirmReqId() {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const buf = new Uint8Array(16);
+      crypto.getRandomValues(buf);
+      return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+    }
+    return 'c' + (++confirmSeq) + '-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+  }
   const PAGE_LISTABLE = new Set(['credit_card', 'identity']);
   let neverSaveFallback = [];
 
@@ -171,6 +196,100 @@
     switch (a.type) {
       case 'page:status': return host('status');
       case 'page:match': return { origin, items: await matchItems(host, origin) };
+      case 'page:search_enable': {
+        if (!a.user_click) throw err('denied', 'search needs a user click');
+        searchActive.set(tabId, { origin, ts: Date.now() });
+        return { origin, ok: true };
+      }
+      case 'page:search_disable': {
+        searchActive.delete(tabId);
+        return { origin, ok: true };
+      }
+      case 'page:search': {
+        const sa = fresh(searchActive, tabId, origin, false, SHORT_TTL_MS);
+        if (!sa) throw err('denied', 'search not active for this tab');
+        const q = typeof a.query === 'string' ? a.query : '';
+        const r = await host('list_items', { category: 'login', query: q, limit: 100 });
+        const items = ((r && r.items) || [])
+          .filter((i) => !i.category || i.category === 'login')
+          .map((i) => ({
+            id: i.id,
+            category: 'login',
+            title: i.title || '',
+            subtitle: i.subtitle || '',
+            url: i.url || '',
+            favicon_host: i.favicon_host || '',
+            has_totp: !!i.has_totp,
+            favorite: !!i.favorite,
+          }));
+        return { origin, items };
+      }
+      case 'page:request_cross_site_confirm': {
+        if (typeof a.item_id !== 'string') throw err('bad_request', 'item_id');
+        const rec = await host('get_item', { item_id: a.item_id });
+        const it = rec && rec.item;
+        if (!it) throw err('not_found', 'item not found');
+        const pageHost = GitpassPolicy.registrableDomain(origin) || new URL(origin).hostname;
+        let itemHost = it.url ? GitpassPolicy.registrableDomain(it.url) : null;
+        if (!itemHost && it.url) {
+          try { itemHost = new URL(it.url).hostname; } catch (_) {}
+        }
+        itemHost = itemHost || it.title || 'another site';
+
+        const reqId = generateConfirmReqId();
+        return new Promise((resolve, reject) => {
+          let timer = null;
+          const cleanup = () => {
+            if (timer) { clearTimeout(timer); timer = null; }
+            pendingConfirms.delete(reqId);
+          };
+
+          timer = setTimeout(() => {
+            const c = pendingConfirms.get(reqId);
+            if (c) {
+              c.cleanup();
+              c.reject(err('cancelled', 'request expired'));
+            }
+          }, SHORT_TTL_MS);
+
+          pendingConfirms.set(reqId, {
+            reqId,
+            tabId,
+            origin,
+            itemId: a.item_id,
+            pageHost,
+            itemHost,
+            title: it.title || '',
+            resolve,
+            reject,
+            cleanup,
+            ts: Date.now(),
+          });
+
+          if (root.chrome && chrome.windows && chrome.windows.create) {
+            chrome.windows.create({
+              url: chrome.runtime.getURL(`popup/confirm.html?req=${encodeURIComponent(reqId)}`),
+              type: 'popup',
+              width: 380,
+              height: 240,
+              focused: true,
+            }).then((w) => {
+              const c = pendingConfirms.get(reqId);
+              if (c) {
+                c.winId = w.id;
+              } else {
+                try { if (chrome.windows && chrome.windows.remove) chrome.windows.remove(w.id).catch(() => {}); } catch (_) {}
+              }
+            }).catch((e) => {
+              cleanup();
+              reject(err('denied', String(e.message || e)));
+            });
+          } else {
+            cleanup();
+            reject(err('denied', 'No UI prompt mechanism available'));
+          }
+        });
+      }
       case 'page:list': {
         if (!PAGE_LISTABLE.has(a.category)) throw err('bad_request', 'category not listable from a page');
         const r = await host('list_items', { category: a.category, limit: 20 });
@@ -178,14 +297,46 @@
       }
       case 'page:fill': {
         if (typeof a.item_id !== 'string') throw err('bad_request', 'item_id');
-        const c = await host('fill', { item_id: a.item_id, origin }); // host enforces the origin match
+        const approvalKey = `${tabId}:${origin}:${a.item_id}`;
+        const approval = crossSiteApprovals.get(approvalKey);
+        const isApproved = approval && (Date.now() - approval.ts < SHORT_TTL_MS);
+        crossSiteApprovals.delete(approvalKey); // strictly single-use
+
+        const fillArgs = { item_id: a.item_id, origin };
+        if (isApproved) {
+          fillArgs.user_confirm = true;
+        }
+        const c = await host('fill', fillArgs); // host enforces the origin match unless user_confirm
         rememberFilled(tabId, origin, a.item_id);
+        if (isApproved) {
+          addUrlApprovals.set(approvalKey, { ts: Date.now() });
+        }
         return { origin, username: c.username, password: c.password, totp: c.totp || null };
+      }
+      case 'page:add_url': {
+        if (typeof a.item_id !== 'string') throw err('bad_request', 'item_id');
+        if (!a.user_click) throw err('denied', 'add_url needs a click');
+        const approvalKey = `${tabId}:${origin}:${a.item_id}`;
+        const approval = addUrlApprovals.get(approvalKey);
+        if (!approval || (Date.now() - approval.ts > SHORT_TTL_MS)) {
+          addUrlApprovals.delete(approvalKey);
+          throw err('denied', 'add_url is only allowed after a confirmed cross-site fill of this item');
+        }
+        addUrlApprovals.delete(approvalKey);
+        await host('add_url', { item_id: a.item_id, origin, url: origin });
+        return { origin, ok: true };
       }
       case 'page:totp': {
         if (typeof a.item_id !== 'string') throw err('bad_request', 'item_id');
-        const ok = (await matchItems(host, origin)).some((i) => i.id === a.item_id);
-        if (!ok) throw err('origin_mismatch', 'item does not match this site');
+        const approvalKey = `${tabId}:${origin}:${a.item_id}`;
+        const approval = crossSiteApprovals.get(approvalKey);
+        const isApproved = approval && (Date.now() - approval.ts < SHORT_TTL_MS);
+        crossSiteApprovals.delete(approvalKey); // strictly single-use
+        const isMatched = (await matchItems(host, origin)).some((i) => i.id === a.item_id);
+        if (!isMatched && !isApproved) throw err('origin_mismatch', 'item does not match this site');
+        if (isApproved) {
+          addUrlApprovals.set(approvalKey, { ts: Date.now() });
+        }
         const t = await host('totp', { item_id: a.item_id });
         const lf = lastFilled.get(tabId);
         if (lf && lf.item_id === a.item_id) lastFilled.delete(tabId); // the code is used: stop offering it
@@ -211,7 +362,16 @@
         return { origin, fields };
       }
       case 'page:generate': {
-        const r = await host('generate', { len: 20, digits: true, symbols: true });
+        // Optional site rules (#188): parsed constraints only, validated and clamped here before the host sees them.
+        const PR = root.GitpassPasswordRules || (typeof require === 'function' ? require('./lib/password-rules.js') : null);
+        let r;
+        if (a.rules == null || !PR) {
+          r = await host('generate', { len: 20, digits: true, symbols: true });
+        } else {
+          const s = PR.sanitize(a.rules);
+          if (!s.ok) throw err('bad_request', 'password rules ' + s.reason);
+          r = await host('generate', { len: s.len, rules: { classes: s.classes } });
+        }
         if (r && r.password) {
           await host('record_generated_password', { password: r.password, origin, source: 'extension' }).catch(() => {});
         }
@@ -305,8 +465,85 @@
     throw err('bad_request', 'unknown page message');
   }
 
-  function forgetTab(tabId) { pendingSaves.delete(tabId); lastUsername.delete(tabId); lastSaved.delete(tabId); lastFilled.delete(tabId); inflightDecisions.delete(tabId); }
+  function fromConfirmUi(msg, sender) {
+    if (sender && !isConfirmUiSender(sender)) throw err('denied', 'unauthorized sender');
+    const a = msg || {};
+    if (typeof a.req !== 'string' || !a.req) throw err('bad_request', 'missing req');
+    if (sender && typeof sender.url === 'string') {
+      try {
+        const u = new URL(sender.url);
+        if (u.searchParams.get('req') !== a.req) {
+          throw err('denied', 'mismatched request id');
+        }
+      } catch (e) {
+        if (e && e.code) throw e;
+        throw err('denied', 'invalid sender url');
+      }
+    }
+    if (a.type === 'confirm-ui:request') {
+      const c = pendingConfirms.get(a.req);
+      if (!c || (Date.now() - c.ts > SHORT_TTL_MS)) {
+        if (c) {
+          if (c.cleanup) c.cleanup(); else pendingConfirms.delete(a.req);
+          c.reject(err('cancelled', 'request expired'));
+        }
+        throw err('not_found', 'request expired');
+      }
+      return { pageHost: c.pageHost, itemHost: c.itemHost, title: c.title };
+    }
+    if (a.type === 'confirm-ui:decide') {
+      const c = pendingConfirms.get(a.req);
+      if (!c || (Date.now() - c.ts > SHORT_TTL_MS)) {
+        if (c) {
+          if (c.cleanup) c.cleanup(); else pendingConfirms.delete(a.req);
+          c.reject(err('cancelled', 'request expired'));
+        }
+        throw err('not_found', 'request expired');
+      }
+      if (c.cleanup) c.cleanup(); else pendingConfirms.delete(a.req);
+      if (a.approved) {
+        crossSiteApprovals.set(`${c.tabId}:${c.origin}:${c.itemId}`, { ts: Date.now() });
+        c.resolve({ approved: true });
+        return { approved: true };
+      } else {
+        c.reject(err('cancelled', 'The user cancelled'));
+        return { approved: false };
+      }
+    }
+    throw err('bad_request', 'unknown confirm-ui message');
+  }
+
+  function forgetTab(tabId) {
+    pendingSaves.delete(tabId);
+    lastUsername.delete(tabId);
+    lastSaved.delete(tabId);
+    lastFilled.delete(tabId);
+    inflightDecisions.delete(tabId);
+    searchActive.delete(tabId);
+    for (const k of crossSiteApprovals.keys()) {
+      if (k.startsWith(`${tabId}:`)) crossSiteApprovals.delete(k);
+    }
+    for (const k of addUrlApprovals.keys()) {
+      if (k.startsWith(`${tabId}:`)) addUrlApprovals.delete(k);
+    }
+    for (const [id, c] of pendingConfirms.entries()) {
+      if (c.tabId === tabId) {
+        if (c.cleanup) c.cleanup(); else pendingConfirms.delete(id);
+        c.reject(err('cancelled', 'tab closed'));
+      }
+    }
+  }
   if (root.chrome && chrome.tabs && chrome.tabs.onRemoved) chrome.tabs.onRemoved.addListener(forgetTab);
+  if (root.chrome && chrome.windows && chrome.windows.onRemoved) {
+    chrome.windows.onRemoved.addListener((winId) => {
+      for (const [id, c] of pendingConfirms.entries()) {
+        if (c.winId === winId) {
+          if (c.cleanup) c.cleanup(); else pendingConfirms.delete(id);
+          c.reject(err('cancelled', 'Confirmation window closed'));
+        }
+      }
+    });
+  }
 
   /** Fill a card into the tab's payment-processor iframes (Stripe Elements & co., see GitpassPolicy.
    *  isPaymentFrameOrigin), so one pick in the top frame fills number / expiry / CVC living in separate
@@ -334,6 +571,12 @@
     forgetTab,
     rememberFilled,
     fillPaymentFrames,
+    fromConfirmUi,
+    isConfirmUiSender,
+    _searchActive: searchActive,
+    _crossSiteApprovals: crossSiteApprovals,
+    _addUrlApprovals: addUrlApprovals,
+    _pendingConfirms: pendingConfirms,
     OFFER_TTL_MS,
     _lastFilled: lastFilled,
     _pendingSaves: pendingSaves,

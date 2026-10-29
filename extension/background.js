@@ -3,6 +3,7 @@
 'use strict';
 if (typeof importScripts === 'function' && !globalThis.GitpassPolicy) importScripts('lib/policy.js');
 // ws4 (in-page): page:* routing lives in bg-page.js
+if (typeof importScripts === 'function' && !globalThis.GitpassPasswordRules) importScripts('lib/password-rules.js');
 if (typeof importScripts === 'function' && !globalThis.GitpassPage) importScripts('bg-page.js');
 // onboarding (welcome/options/commands); Firefox loads it via manifest.firefox.json background.scripts
 if (typeof importScripts === 'function') importScripts('bg-onboard.js');
@@ -211,6 +212,10 @@ if (chrome.commands && chrome.commands.onCommand) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   (async () => {
     if (typeof msg.type === 'string' && msg.type.startsWith('passkey-ui:')) { if (!GitpassPasskey.isUiSender(sender)) throw new Error('unknown message'); return GitpassPasskey.fromUi(msg, host); }
+    if (typeof msg.type === 'string' && msg.type.startsWith('confirm-ui:')) {
+      if (!GitpassPage.isConfirmUiSender(sender)) throw new Error('unknown message');
+      return GitpassPage.fromConfirmUi(msg, sender);
+    }
     if (typeof msg.type === 'string' && msg.type.startsWith('passkey:') && sender.tab) return GitpassPasskey.fromPage(msg, sender, host);
     const fromExtensionPage = sender.id === chrome.runtime.id && !sender.tab;
     if (fromExtensionPage) {

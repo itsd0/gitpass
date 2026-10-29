@@ -33,6 +33,7 @@ import {
   selectAll,
 } from "./selection";
 import { requestDelete } from "./BulkPane";
+import { useDragStore, getDragPreviewText } from "./dragState";
 import { ItemListEmptyState } from "./ItemListEmptyState";
 import { SearchHighlight } from "./SearchHighlight";
 import { getCategoryLabel } from "./categoryLabel";
@@ -45,11 +46,12 @@ export const HEADER_H = 32,
 export const rowHeight = (r: Row) => (r.type === "header" ? HEADER_H : ITEM_H);
 const SORTS: {
   id: NonNullable<Filter["sort"]>;
-  labelKey: "items.sortUpdated" | "items.sortCreated" | "items.sortTitle";
+  labelKey: "items.sortUpdated" | "items.sortCreated" | "items.sortTitle" | "items.sortRecent";
 }[] = [
   { id: "updated", labelKey: "items.sortUpdated" },
   { id: "created", labelKey: "items.sortCreated" },
   { id: "title", labelKey: "items.sortTitle" },
+  { id: "recent", labelKey: "items.sortRecent" },
 ];
 
 export function ItemList() {
@@ -59,6 +61,7 @@ export function ItemList() {
   const selectItem = useApp((s) => s.selectItem);
   const multiIds = useApp((s) => s.multiIds);
   const multiSet = useMemo(() => new Set(multiIds), [multiIds]);
+  const dragged = useDragStore((s) => s.dragged);
   const multiOn = multiIds.length > 1;
   const t = useT();
   const {
@@ -73,6 +76,8 @@ export function ItemList() {
     setLoading,
   } = useItemsUI();
   const base: Filter = route.name === "items" ? route.filter : { kind: "all" };
+  // Trashed or archived items must not be dragged onto a vault/tag (moving would bypass restore).
+  const canDrag = base.kind !== "deleted" && base.kind !== "archive";
 
   // debounce query (200ms) then call api.listItems
   const debounced = useDebounced(query, 200);
@@ -99,7 +104,16 @@ export function ItemList() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(base), debounced, sort, category, version]);
 
-  const rows = useMemo(() => groupRows(items, sort), [items, sort]);
+  const showRecentSection = base.kind === "all" && !searchQuery && sort !== "recent";
+  const rows = useMemo(
+    () =>
+      groupRows(items, sort, {
+        showRecentSection,
+        recentLabel: t("items.recentlyUsed"),
+        neverUsedLabel: t("items.neverUsed"),
+      }),
+    [items, sort, showRecentSection, t]
+  );
   const parentRef = useRef<HTMLDivElement>(null);
   const virt = useVirtualizer({
     count: rows.length,
@@ -112,10 +126,16 @@ export function ItemList() {
 
   // auto-select first item when nothing selected
   useEffect(() => {
-    if (!selectedItemId && items[0]) selectItem(items[0].id);
-  }, [items, selectedItemId, selectItem]);
+    if (!selectedItemId && rows.length > 0) {
+      const first = rows.find((r) => r.type === "item");
+      if (first && first.type === "item") selectItem(first.item.id);
+    }
+  }, [rows, selectedItemId, selectItem]);
   // drop selected ids that left the list (refresh, filter, search)
-  const order = useMemo(() => items.map((x) => x.id), [items]);
+  const order = useMemo(
+    () => rows.filter((r) => r.type === "item").map((r) => r.item.id),
+    [rows]
+  );
   useEffect(() => {
     const s = readSel();
     if (!s.multi.length) return;
@@ -134,6 +154,28 @@ export function ItemList() {
       applySel(clickSelect(order, readSel(), id, { toggle, range }));
     } else selectItem(id);
     parentRef.current?.focus();
+  }
+
+  function onRowDragStart(e: React.DragEvent, item: (typeof items)[number]) {
+    const isMulti = multiOn && multiSet.has(item.id);
+    const draggedItems = isMulti ? items.filter((x) => multiSet.has(x.id)) : [item];
+    useDragStore.getState().startDrag(draggedItems);
+    try {
+      e.dataTransfer.setData("application/json", JSON.stringify({ itemIds: draggedItems.map((x) => x.id) }));
+      e.dataTransfer.setData("text/plain", draggedItems.map((x) => x.id).join(","));
+      e.dataTransfer.effectAllowed = "copyMove"; // vault drop = move, tag drop = copy
+    } catch {
+      // ignore
+    }
+    const previewEl = document.getElementById("drag-preview");
+    if (previewEl && e.dataTransfer.setDragImage) {
+      previewEl.textContent = getDragPreviewText(draggedItems, t);
+      e.dataTransfer.setDragImage(previewEl, 10, 10);
+    }
+  }
+
+  function onRowDragEnd() {
+    useDragStore.getState().endDrag();
   }
 
   function onKey(e: React.KeyboardEvent) {
@@ -307,6 +349,10 @@ export function ItemList() {
                     return (
                       <div
                         role="option"
+                        data-testid="item-row"
+                        draggable={canDrag}
+                        onDragStart={canDrag ? (e) => onRowDragStart(e, r.item) : undefined}
+                        onDragEnd={canDrag ? onRowDragEnd : undefined}
                         aria-selected={isSelected}
                         onClick={(e) => onRowClick(e, r.item.id)}
                         onMouseDown={(e) => {
@@ -407,6 +453,14 @@ export function ItemList() {
             })}
           </div>
         )}
+      </div>
+      <div
+        id="drag-preview"
+        data-testid="drag-preview"
+        aria-hidden="true"
+        className="pointer-events-none fixed -left-[9999px] top-0 z-50 rounded-md border border-accent bg-panel px-2.5 py-1 text-xs font-medium text-fg shadow-md"
+      >
+        {dragged ? getDragPreviewText(dragged.items, t) : ""}
       </div>
     </div>
   );

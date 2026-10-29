@@ -325,14 +325,36 @@ fn attachments_via_paths() {
 }
 
 #[test]
+fn generate_words_separator_capitalize_and_rejection() {
+    // Explicit separator joins the words; capitalize upper-cases each word's first letter.
+    let p = generate(5, true, false, true, false, Some('_'), Some(true)).unwrap();
+    let words: Vec<&str> = p.split('_').collect();
+    assert_eq!(words.len(), 5);
+    assert!(words.iter().all(|w| w.chars().next().unwrap().is_ascii_uppercase()
+        && w[1..].chars().all(|c| c.is_ascii_lowercase())), "{p}");
+    let spaced = generate(4, true, false, true, false, Some(' '), None).unwrap();
+    assert_eq!(spaced.split(' ').count(), 4);
+    // Omitted values keep the historical defaults: '-' with symbols, '.' without, no capitalization.
+    assert_eq!(generate(3, true, false, true, false, None, None).unwrap().split('-').count(), 3);
+    let dotted = generate(3, false, false, true, false, None, None).unwrap();
+    assert_eq!(dotted.split('.').count(), 3);
+    assert!(dotted.chars().all(|c| c.is_ascii_lowercase() || c == '.'));
+    // Anything outside the offered separators is a bad request.
+    assert!(generate(3, true, false, true, false, Some('!'), None).is_err());
+    assert!(generate(3, true, false, true, false, Some('/'), None).is_err());
+    // Separator/capitalize do not change the random-mode shape (still 20 characters).
+    assert_eq!(generate(20, true, true, false, false, Some('_'), Some(true)).unwrap().len(), 20);
+}
+
+#[test]
 fn tools_generate_strength_watchtower_hibp() {
     let e = env();
-    let p = e.app.generate_password(24, true, true, false, false);
+    let p = generate(24, true, true, false, false, None, None).unwrap();
     assert_eq!(p.len(), 24);
     assert!(p.chars().any(|c| c.is_ascii_digit()) && p.chars().any(|c| "!@#$%^&*-_=+?".contains(c)));
-    assert!(e.app.generate_password(20, false, false, false, false).chars().all(|c| c.is_ascii_alphabetic()));
-    assert_eq!(e.app.generate_password(5, true, false, true, false).split('-').count(), 5);
-    let pin = e.app.generate_password(6, false, false, false, true);
+    assert!(generate(20, false, false, false, false, None, None).unwrap().chars().all(|c| c.is_ascii_alphabetic()));
+    assert_eq!(generate(5, true, false, true, false, None, None).unwrap().split('-').count(), 5);
+    let pin = generate(6, false, false, false, true, None, None).unwrap();
     assert_eq!(pin.len(), 6);
     assert!(pin.chars().all(|c| c.is_ascii_digit()));
     assert!(e.app.password_strength("password") <= 10);
@@ -791,6 +813,7 @@ fn item_summary_carries_expiry_for_card_and_api_credential_only() {
     // 3. Serialized JSON contains expiry, and NO secret values (password, card number, CVV, credential)
     for (item, secret_values) in [
         (&l, vec!["super-secret-login-password"]),
+        // CVV is matched as a whole JSON string: a bare "123" also appears in random ids/timestamps.
         (&c, vec!["4111 1111 1111 1111", "\"123\""]),
         (&a, vec!["sk_live_FAKE_SECRET_KEY_12345678"]),
     ] {
@@ -1379,6 +1402,57 @@ fn system_lock_event_dispatch_enabled_and_disabled() {
     assert!(e.app.handle_system_lock_event(LockTrigger::UserSwitch));
     assert!(!e.app.status().unwrap().unlocked);
     assert_eq!(e.clip.get_text().as_deref(), Some(""));
+}
+
+#[test]
+fn last_used_tracking_and_sort_recent() {
+    let e = env();
+    let l1 = login(&e, "Beta App", "u1", "FAKE-pw1");
+    let l2 = login(&e, "Alpha App", "u2", "FAKE-pw2");
+    let l3 = login(&e, "Gamma App", "u3", "FAKE-pw3");
+
+    // 1. Initial items have no last_used
+    let detail1 = e.app.get_item(&e.vault, &l1.id).unwrap();
+    assert_eq!(detail1.summary.last_used, None);
+
+    // 2. Revealing l1 updates last_used
+    let _ = e.app.reveal_field(&e.vault, &l1.id, "password").unwrap();
+    let detail1_after = e.app.get_item(&e.vault, &l1.id).unwrap();
+    let t1 = detail1_after.summary.last_used.expect("l1 should have last_used after reveal");
+    assert!(t1 > 0);
+
+    // 3. Copying field on l3 updates last_used
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    e.app.copy_field(&e.vault, &l3.id, "password").unwrap();
+    let detail3_after = e.app.get_item(&e.vault, &l3.id).unwrap();
+    let t3 = detail3_after.summary.last_used.expect("l3 should have last_used after copy");
+    assert!(t3 >= t1);
+
+    // 4. Sort::Recent returns l3, l1, then l2 (never used)
+    let recent_items = e.app.list_items(&Filter {
+        kind: FilterKind::All,
+        vault_id: None,
+        tag: None,
+        category: None,
+        query: None,
+        sort: Some(Sort::Recent),
+    }).unwrap();
+    assert_eq!(recent_items[0].id, l3.id);
+    assert_eq!(recent_items[1].id, l1.id);
+    assert_eq!(recent_items[2].id, l2.id);
+
+    // 5. Sort::Title returns Alpha, Beta, Gamma
+    let title_items = e.app.list_items(&Filter {
+        kind: FilterKind::All,
+        vault_id: None,
+        tag: None,
+        category: None,
+        query: None,
+        sort: Some(Sort::Title),
+    }).unwrap();
+    assert_eq!(title_items[0].id, l2.id);
+    assert_eq!(title_items[1].id, l1.id);
+    assert_eq!(title_items[2].id, l3.id);
 }
 
 struct LocalMockHttp {

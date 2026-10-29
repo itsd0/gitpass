@@ -33,11 +33,19 @@ pub struct GeneratorHistoryEntry {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct DeletedHistoryEntry {
+    pub id: String,
+    pub at: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct GeneratorHistory {
     pub format: u32,
     pub entries: Vec<GeneratorHistoryEntry>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub cleared_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub deleted: Vec<DeletedHistoryEntry>,
 }
 
 impl Default for GeneratorHistory {
@@ -46,6 +54,7 @@ impl Default for GeneratorHistory {
             format: GEN_HISTORY_FORMAT,
             entries: Vec::new(),
             cleared_at: None,
+            deleted: Vec::new(),
         }
     }
 }
@@ -54,8 +63,10 @@ impl GeneratorHistory {
     pub fn prune(&mut self, now: u64) {
         let cutoff = now.saturating_sub(MAX_HISTORY_AGE_SECS);
         self.entries.retain(|e| e.created_at >= cutoff);
+        self.deleted.retain(|d| d.at >= cutoff);
         if let Some(c) = self.cleared_at {
             self.entries.retain(|e| e.created_at > c);
+            self.deleted.retain(|d| d.at > c);
         }
         if self.entries.len() > MAX_HISTORY_ENTRIES {
             self.entries.truncate(MAX_HISTORY_ENTRIES);
@@ -75,14 +86,25 @@ impl GeneratorHistory {
         entry
     }
 
-    pub fn delete_entry(&mut self, id: &str) -> bool {
+    pub fn delete_entry(&mut self, id: &str, now: u64) -> bool {
         let before = self.entries.len();
         self.entries.retain(|e| e.id != id);
-        self.entries.len() < before
+        let removed = self.entries.len() < before;
+        if removed {
+            if !self.deleted.iter().any(|d| d.id == id) {
+                self.deleted.push(DeletedHistoryEntry {
+                    id: id.to_string(),
+                    at: now,
+                });
+            }
+            self.prune(now);
+        }
+        removed
     }
 
     pub fn clear(&mut self, now: u64) {
         self.entries.clear();
+        self.deleted.clear();
         self.cleared_at = Some(now);
     }
 
@@ -94,6 +116,22 @@ impl GeneratorHistory {
             (None, None) => None,
         };
         let cutoff = now.saturating_sub(MAX_HISTORY_AGE_SECS);
+
+        // Merge tombstones from both sides
+        let mut deleted_map: std::collections::HashMap<String, u64> = std::collections::HashMap::new();
+        for d in self.deleted.iter().chain(remote.deleted.iter()) {
+            if d.at < cutoff {
+                continue;
+            }
+            if let Some(c) = max_cleared {
+                if d.at <= c {
+                    continue;
+                }
+            }
+            deleted_map.entry(d.id.clone())
+                .and_modify(|existing| *existing = (*existing).max(d.at))
+                .or_insert(d.at);
+        }
 
         let mut seen_ids = HashSet::new();
         let mut seen_tuples = HashSet::new();
@@ -107,6 +145,9 @@ impl GeneratorHistory {
                 if e.created_at <= c {
                     continue;
                 }
+            }
+            if deleted_map.contains_key(&e.id) {
+                continue;
             }
             if !seen_ids.insert(e.id.clone()) {
                 continue;
@@ -123,10 +164,16 @@ impl GeneratorHistory {
             combined.truncate(MAX_HISTORY_ENTRIES);
         }
 
+        let mut merged_deleted: Vec<DeletedHistoryEntry> = deleted_map.into_iter()
+            .map(|(id, at)| DeletedHistoryEntry { id, at })
+            .collect();
+        merged_deleted.sort_by(|a, b| b.at.cmp(&a.at).then_with(|| b.id.cmp(&a.id)));
+
         GeneratorHistory {
             format: GEN_HISTORY_FORMAT,
             entries: combined,
             cleared_at: max_cleared,
+            deleted: merged_deleted,
         }
     }
 }
@@ -221,5 +268,40 @@ mod tests {
         let merged_after_clear = dev_a.merge(&dev_b, now);
         assert_eq!(merged_after_clear.entries.len(), 1);
         assert_eq!(merged_after_clear.entries[0].value, "dev-b-2"); // 250 > 180
+    }
+    #[test]
+    fn test_delete_tombstone_survives_merge_across_devices() {
+        let now = 1000u64;
+        let mut dev_a = GeneratorHistory::default();
+        let e1 = dev_a.add_entry("common-pw".into(), "desktop", None, 100);
+        let e2 = dev_a.add_entry("other-pw".into(), "desktop", None, 200);
+
+        // dev_b has both entries (e.g. from prior sync)
+        let mut dev_b = dev_a.clone();
+
+        // dev_a deletes e1 at t=300
+        assert!(dev_a.delete_entry(&e1.id, 300));
+        assert_eq!(dev_a.entries.len(), 1);
+        assert_eq!(dev_a.deleted.len(), 1);
+        assert_eq!(dev_a.deleted[0].id, e1.id);
+
+        // dev_b still has e1 and adds e3 at t=400
+        let e3 = dev_b.add_entry("dev-b-new".into(), "cli", None, 400);
+        assert_eq!(dev_b.entries.len(), 3);
+
+        // Merge dev_a with dev_b: e1 was deleted on dev_a so it MUST NOT be resurrected!
+        let merged_a = dev_a.merge(&dev_b, now);
+        assert_eq!(merged_a.entries.len(), 2);
+        assert_eq!(merged_a.entries[0].id, e3.id);
+        assert_eq!(merged_a.entries[1].id, e2.id);
+        assert!(!merged_a.entries.iter().any(|e| e.id == e1.id));
+        assert!(merged_a.deleted.iter().any(|d| d.id == e1.id));
+
+        // Symmetric merge: dev_b merging with dev_a gives the exact same result
+        let merged_b = dev_b.merge(&dev_a, now);
+        assert_eq!(merged_b.entries.len(), 2);
+        assert_eq!(merged_b.entries[0].id, e3.id);
+        assert_eq!(merged_b.entries[1].id, e2.id);
+        assert!(!merged_b.entries.iter().any(|e| e.id == e1.id));
     }
 }

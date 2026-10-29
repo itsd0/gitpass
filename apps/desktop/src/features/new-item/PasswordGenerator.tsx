@@ -16,6 +16,9 @@ const MODE_LIMITS: Record<GeneratorMode, { min: number; max: number; def: number
   pin: { min: 4, max: 12, def: 6 },
 };
 
+/** Word-passphrase separators offered in Memorable mode; ' ' renders as ␣. */
+const WORD_SEPARATORS = ['-', '.', '_', ' '] as const;
+
 function clamp(val: number, min: number, max: number): number {
   if (isNaN(val)) return min;
   return Math.max(min, Math.min(max, val));
@@ -84,12 +87,65 @@ export interface PasswordGeneratorProps {
   standalone?: boolean;
   onClose?: () => void;
   onSaveAsLogin?: (pw: string, host?: string) => void;
+  /** Controlled popover mode (used by the item editor): when defined, the
+   * trigger button is not rendered and visibility follows `open`. The parent
+   * anchors the panel under its field and restores focus on close. */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
-export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }: PasswordGeneratorProps) {
+export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin, open, onOpenChange }: PasswordGeneratorProps) {
   const t = useT();
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const isOpen = standalone || popoverOpen;
+  const controlled = open !== undefined;
+  const isOpen = standalone || (controlled ? open : popoverOpen);
+  const setOpen = (o: boolean) => {
+    if (controlled) onOpenChange?.(o);
+    else setPopoverOpen(o);
+  };
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // When the popover opens, move focus into it (first focusable control).
+  useEffect(() => {
+    if (!isOpen || standalone) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const first = Array.from(panel.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')).find((el) => !el.hasAttribute('disabled'));
+    first?.focus();
+  }, [isOpen, standalone]);
+
+  // Popover keyboard contract: Esc closes, Enter applies (except on buttons,
+  // where the native click already applies/closes), Tab cycles inside.
+  const onPanelKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'Enter') {
+      if ((e.target as HTMLElement).tagName === 'BUTTON') return;
+      e.preventDefault();
+      if (onUse && pw) onUse(pw);
+      setOpen(false);
+      return;
+    }
+    if (e.key === 'Tab') {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const focusables = Array.from(panel.querySelectorAll<HTMLElement>('button, input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((el) => !el.hasAttribute('disabled'));
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+  };
 
   // Settings from app store
   const savedSettings = useSettings((s) => s.settings);
@@ -103,6 +159,12 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
   const [length, setLength] = useState<number>(initialLength);
   const [symbols, setSymbols] = useState<boolean>(savedSettings?.generatorSymbols ?? true);
   const [digits, setDigits] = useState<boolean>(savedSettings?.generatorDigits ?? true);
+  // Words-mode options. `separator === null` means "never chosen": the
+  // historical default applies ('-' with symbols, '.' without), so existing
+  // users see no change until they pick a separator.
+  const [separator, setSeparator] = useState<string | null>(savedSettings?.generatorSeparator ?? null);
+  const [capitalize, setCapitalize] = useState<boolean>(savedSettings?.generatorCapitalize ?? false);
+  const effectiveSeparator = separator ?? (symbols ? '-' : '.');
 
   const [pw, setPw] = useState<string>('');
   const [err, setErr] = useState<string | null>(null);
@@ -178,7 +240,7 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
   // Keep a ref to save timer to debounce settings persistence
   const saveTimeout = useRef<ReturnType<typeof setTimeout>>();
 
-  const persistSettings = useCallback((m: GeneratorMode, l: number, d: boolean, s: boolean) => {
+  const persistSettings = useCallback((m: GeneratorMode, l: number, d: boolean, s: boolean, sep: string | null, cap: boolean) => {
     clearTimeout(saveTimeout.current);
     saveTimeout.current = setTimeout(() => {
       void useSettings.getState().save({
@@ -186,6 +248,8 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
         generatorLength: l,
         generatorDigits: d,
         generatorSymbols: s,
+        generatorSeparator: sep ?? undefined,
+        generatorCapitalize: cap,
       }).catch(() => {});
     }, 250);
   }, []);
@@ -200,6 +264,7 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
         digits: isPin ? true : digits,
         words: isWords,
         pin: isPin,
+        ...(isWords ? { separator: effectiveSeparator, capitalize } : {}),
       })
       .then((p) => {
         setPw(p);
@@ -209,7 +274,7 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
         }
       })
       .catch((e) => setErr(String((e as Error)?.message ?? e)));
-  }, [mode, length, symbols, digits]);
+  }, [mode, length, symbols, digits, effectiveSeparator, capitalize]);
 
   useEffect(() => {
     if (isOpen) {
@@ -238,23 +303,46 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
     const lim = MODE_LIMITS[m];
     const newLen = clamp(length, lim.min, lim.max);
     setLength(newLen);
-    persistSettings(m, newLen, digits, symbols);
+    persistSettings(m, newLen, digits, symbols, separator, capitalize);
   };
 
   const updateLength = (val: number) => {
     const clamped = clamp(val, limits.min, limits.max);
     setLength(clamped);
-    persistSettings(mode, clamped, digits, symbols);
+    persistSettings(mode, clamped, digits, symbols, separator, capitalize);
   };
 
   const updateDigits = (val: boolean) => {
     setDigits(val);
-    persistSettings(mode, length, val, symbols);
+    persistSettings(mode, length, val, symbols, separator, capitalize);
   };
 
   const updateSymbols = (val: boolean) => {
     setSymbols(val);
-    persistSettings(mode, length, digits, val);
+    persistSettings(mode, length, digits, val, separator, capitalize);
+  };
+
+  const updateSeparator = (val: string) => {
+    setSeparator(val);
+    persistSettings(mode, length, digits, symbols, val, capitalize);
+  };
+
+  const updateCapitalize = (val: boolean) => {
+    setCapitalize(val);
+    persistSettings(mode, length, digits, symbols, separator, val);
+  };
+
+  // Arrow-key navigation inside the separator segmented control: moving
+  // focus also selects, so the preview regenerates immediately.
+  const onSeparatorKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+    const idx = WORD_SEPARATORS.indexOf(effectiveSeparator as (typeof WORD_SEPARATORS)[number]);
+    const next = WORD_SEPARATORS[(idx + dir + WORD_SEPARATORS.length) % WORD_SEPARATORS.length];
+    updateSeparator(next);
+    const group = e.currentTarget;
+    (group.querySelector(`[data-sep="${next}"]`) as HTMLElement | null)?.focus();
   };
 
   const handleCopy = async () => {
@@ -373,6 +461,50 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
               className="h-4 w-4 rounded border-border accent-[#f97316]"
             />
             <span>{mode === 'memorable' ? t('generator.includeSymbols') : t('generator.symbols')}</span>
+          </label>
+        </div>
+      )}
+
+      {/* Words-mode options: separator + capitalize, hidden in Random/PIN modes */}
+      {mode === 'memorable' && (
+        <div className="rounded-lg border border-border bg-panel p-3 space-y-3">
+          <div>
+            <span id="gen-separator-label" className="text-xs font-medium text-muted">
+              {t('generator.separator')}
+            </span>
+            <div
+              role="radiogroup"
+              aria-labelledby="gen-separator-label"
+              onKeyDown={onSeparatorKeyDown}
+              className="mt-1.5 flex rounded-lg border border-border bg-bg p-1"
+            >
+              {WORD_SEPARATORS.map((sep) => (
+                <button
+                  key={sep === ' ' ? 'space' : sep}
+                  data-sep={sep}
+                  type="button"
+                  role="radio"
+                  aria-checked={effectiveSeparator === sep}
+                  aria-label={sep === ' ' ? t('generator.separatorSpace') : sep}
+                  onClick={() => updateSeparator(sep)}
+                  className={cn(
+                    'flex-1 rounded-md py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+                    effectiveSeparator === sep ? 'bg-[#f97316] text-white shadow-sm font-semibold' : 'text-muted hover:text-fg'
+                  )}
+                >
+                  {sep === ' ' ? '␣' : sep}
+                </button>
+              ))}
+            </div>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer text-xs text-fg">
+            <input
+              type="checkbox"
+              checked={capitalize}
+              onChange={(e) => updateCapitalize(e.target.checked)}
+              className="h-4 w-4 rounded border-border accent-[#f97316]"
+            />
+            <span>{t('generator.capitalize')}</span>
           </label>
         </div>
       )}
@@ -567,7 +699,7 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
         </>
       ) : (
         <div className="mt-4 flex justify-end gap-2">
-          <Button type="button" size="sm" variant="ghost" onClick={() => setPopoverOpen(false)}>
+          <Button type="button" size="sm" variant="ghost" onClick={() => setOpen(false)}>
             {t('common.cancel')}
           </Button>
           <Button
@@ -577,10 +709,10 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
             disabled={!pw}
             onClick={() => {
               if (onUse && pw) onUse(pw);
-              setPopoverOpen(false);
+              setOpen(false);
             }}
           >
-            Use password
+            {t('generator.usePassword')}
           </Button>
         </div>
       )}
@@ -591,21 +723,41 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin }:
     return content;
   }
 
+  // Controlled mode: the parent owns the trigger and anchors this panel.
+  if (controlled) {
+    if (!open) return null;
+    return (
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-label={t('generator.title')}
+        data-generator-popover
+        onKeyDown={onPanelKeyDown}
+        className="absolute left-0 z-20 mt-1 w-80 rounded-lg border border-border bg-panel p-4 shadow-xl"
+      >
+        {content}
+      </div>
+    );
+  }
+
   return (
     <div className="relative">
       <Button
         type="button"
         size="sm"
         variant="ghost"
-        aria-label="Generate password"
-        onClick={() => setPopoverOpen((o) => !o)}
+        aria-label={t('generator.generatePassword')}
+        onClick={() => setOpen(!popoverOpen)}
       >
         <Wand2 size={14} /> Generate
       </Button>
       {popoverOpen && (
         <div
+          ref={panelRef}
           role="dialog"
-          aria-label="Password generator"
+          aria-label={t('generator.title')}
+          data-generator-popover
+          onKeyDown={onPanelKeyDown}
           className="absolute right-0 z-20 mt-1 w-80 rounded-lg border border-border bg-panel p-4 shadow-xl"
         >
           {content}
