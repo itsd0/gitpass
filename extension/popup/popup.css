@@ -239,6 +239,22 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .gen-toggles { gap: 16px; }
 .gen-acts { display: flex; align-items: center; gap: 8px; margin-top: auto; }
 .gen-acts .btn-link { margin-right: auto; padding-left: 0; }
+.panel:has(.gen-recent) { overflow-y: auto; }
+.gen-recent { border-top: 1px solid rgb(var(--border)); padding-top: 8px; flex: none; }
+.gen-recent-toggle { display: flex; align-items: center; justify-content: space-between; width: 100%; background: none; border: 0; color: rgb(var(--fg)); font: inherit; font-size: 12px; font-weight: 600; padding: 4px 0; cursor: pointer; border-radius: 6px; }
+.gen-recent-toggle:focus-visible, .gen-recent-row:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 1px; }
+.gen-recent-chev svg.ui { width: 14px; height: 14px; transition: transform .15s; }
+.gen-recent-chev.open svg.ui { transform: rotate(180deg); }
+.gen-recent-body { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.gen-recent-note { font-size: 12px; }
+.gen-recent-list { list-style: none; margin: 0; padding: 0; max-height: 168px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+.gen-recent-row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; border: 1px solid rgb(var(--border)); background: rgb(var(--card)); }
+.gen-recent-row:hover { background: rgb(var(--hover)); }
+.gen-recent-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.gen-recent-val { font-family: ui-monospace, Menlo, monospace; font-size: 12px; word-break: break-all; }
+.gen-recent-meta { font-size: 11px; color: rgb(var(--muted)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gen-recent-acts { display: flex; gap: 2px; flex: none; }
+.gen-recent-all { align-self: flex-start; padding-left: 0; font-size: 12px; cursor: pointer; }
 .gen-row { display: flex; align-items: center; gap: 10px; }
 .gen-row input[type=range] { flex: 1; accent-color: rgb(var(--accent)); }
 .tog { display: flex; align-items: center; gap: 6px; font-size: 13px !important; color: rgb(var(--fg)) !important; }

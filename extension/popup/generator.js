@@ -37,7 +37,40 @@
 
   function strengthKey(score) { return score < 40 ? 'weak' : score < 70 ? 'fair' : score < 90 ? 'good' : 'excellent'; }
 
-  const api = { MODES, DEFAULTS, mode, clampLength, safeSettings, strengthScore, strengthKey };
+  /** Recent list (issue #226): masked value = bullets plus the last 4 characters; short values stay fully masked. */
+  const BULLETS = '\u2022'.repeat(8);
+  function maskValue(v) {
+    const s = String(v == null ? '' : v);
+    return s.length > 8 ? BULLETS + s.slice(-4) : BULLETS;
+  }
+
+  /** Relative age as {key, n}: key is a locale key (genAgoNow/Min/Hour/Day), n the count. Clock skew counts as "now". */
+  function ageParts(createdAtSecs, nowSecs) {
+    const d = Math.max(0, Math.floor(Number(nowSecs) - Number(createdAtSecs)) || 0);
+    if (d < 60) return { key: 'genAgoNow', n: 0 };
+    if (d < 3600) return { key: 'genAgoMin', n: Math.floor(d / 60) };
+    if (d < 86400) return { key: 'genAgoHour', n: Math.floor(d / 3600) };
+    return { key: 'genAgoDay', n: Math.floor(d / 86400) };
+  }
+
+  /** Fill is offered only when the entry's recorded host is the active tab's host (a leading www. is ignored). */
+  function hostMatches(entryHost, tabOrigin) {
+    if (!entryHost || !tabOrigin) return false;
+    let h;
+    try { h = new URL(tabOrigin).hostname; } catch (_) { return false; }
+    const norm = (x) => String(x).toLowerCase().replace(/^www\./, '');
+    return norm(h) === norm(entryHost);
+  }
+
+  /** Normalise the host reply: at most `limit` entries with string values, newest first. */
+  function cleanHistory(r, limit) {
+    const enabled = !r || r.enabled !== false;
+    const list = Array.isArray(r && r.entries) ? r.entries.filter((e) => e && typeof e.value === 'string' && e.id != null) : [];
+    list.sort((a, b) => (Number(b.created_at) || 0) - (Number(a.created_at) || 0));
+    return { enabled, entries: enabled ? list.slice(0, limit || 10) : [] };
+  }
+
+  const api = { MODES, DEFAULTS, mode, clampLength, safeSettings, strengthScore, strengthKey, maskValue, ageParts, hostMatches, cleanHistory };
   root.GitpassGenerator = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
