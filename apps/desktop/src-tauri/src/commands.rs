@@ -88,7 +88,20 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn list_devices(s: State<App>) -> R<Vec<a::DeviceInfo>> { s.list_devices().map_err(e) }
 #[tauri::command(async)] pub fn revoke_device(s: State<'_, App>, id: String, rotate_credentials: bool) -> R<()> { s.revoke_device(&id, rotate_credentials).map_err(e) }
 #[tauri::command] pub fn get_settings(s: State<App>) -> a::Settings { s.get_settings() }
-#[tauri::command(async)] pub fn set_settings(s: State<'_, App>, settings: a::Settings) -> R<a::Settings> { s.set_settings(settings).map_err(e) }
+/// Apply content protection to every open window (main, Quick Access, any secondary window).
+/// Best-effort per window: a window that cannot be protected must not fail the settings save.
+/// On macOS this sets NSWindow.sharingType = .none, so screenshots and screen shares show a
+/// blank window; other platforms report the call as unsupported and are ignored here.
+pub fn apply_content_protection(app: &tauri::AppHandle, on: bool) {
+    use tauri::Manager;
+    for w in app.webview_windows().values() { let _ = w.set_content_protected(on); }
+}
+#[tauri::command(async)] pub fn set_settings(app: tauri::AppHandle, s: State<'_, App>, settings: a::Settings) -> R<a::Settings> {
+    let on = settings.hide_from_screen_recording;
+    let saved = s.set_settings(settings).map_err(e)?;
+    apply_content_protection(&app, on);
+    Ok(saved)
+}
 #[tauri::command(async)] pub fn change_password(s: State<'_, App>, current: String, next: String) -> R<()> {
     let (c, n) = (Zeroizing::new(current), Zeroizing::new(next));
     s.change_password(&c, &n).map_err(e)
