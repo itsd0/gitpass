@@ -1,23 +1,50 @@
-# Quick Access window (admin stream → core stream wiring)
+# Quick Access window (implemented)
 
-Frontend exports `QuickAccessPage` (feature id `quick-access`, route `quick-access`). The shell should render it
-**instead of the normal layout** when `location.hash === '#/quick-access'` or `?window=quick-access` is present:
+Quick Access is a small always-on-top window for copying a password or username
+without opening the main window. It is fully wired up — there are no remaining
+"later" steps.
 
-```tsx
-if (isQuickAccessWindow()) root.render(<QuickAccessPage />);
-```
+## Frontend
 
-Rust side (core stream, later):
+`QuickAccessPage` (`QuickAccess.tsx`, exported from `index.ts`) renders the
+search-and-copy UI. `App.tsx` renders it instead of the normal layout when
+`isQuickAccessWindow()` is true, i.e. when the URL is `#/quick-access` or
+`?window=quick-access` (`index.ts`). When the vault is locked, the same window
+shows `QuickAccessUnlock` (`QuickAccessUnlock.tsx`) instead.
 
-1. `tauri.conf.json` → add a hidden window or create it lazily:
-   ```rust
-   WebviewWindowBuilder::new(app, "quick-access", WebviewUrl::App("index.html#/quick-access".into()))
-     .title("gitpass Quick Access").inner_size(680.0, 420.0).decorations(false).always_on_top(true)
-     .resizable(false).center().visible(false).skip_taskbar(true).build()?;
-   ```
-2. Register `Settings.quickAccessHotkey` (default `CmdOrCtrl+Shift+Space`) with `tauri-plugin-global-shortcut`;
-   on press: if vault locked show main window unlock, else `show()` + `set_focus()` the `quick-access` window.
-3. Hide the window on blur (`WindowEvent::Focused(false)`) and after a copy (the component calls
-   `getCurrentWindow().hide()` — requires `core:window:allow-hide` capability for the `quick-access` label).
-4. Capabilities for label `quick-access`: same commands as main (`list_items`, `get_item`, `copy_field`, `totp_now`).
-   Secrets still never reach JS: Enter → `copy_field` (password), Cmd/Ctrl+Enter → `copy_field` (username).
+The feature definition in `index.ts` (feature id `quick-access`, route
+`quick-access`) also adds an "Open Quick Access" command that calls
+`api.showQuickAccess()` inside Tauri and falls back to the in-app route in the
+browser mock.
+
+## Rust side
+
+- Window: `apps/desktop/src-tauri/tauri.conf.json` defines the `quick-access`
+  window (560×380, hidden at startup, undecorated, non-resizable,
+  always-on-top, centered, skipped from the taskbar) with URL
+  `index.html?window=quick-access`.
+- Hotkey: `apps/desktop/src-tauri/src/main.rs` registers
+  `tauri-plugin-global-shortcut` with a handler that calls
+  `commands::toggle_quick_access`. At startup, `main.rs` calls
+  `hotkey::register_startup_hotkey` (`src-tauri/src/hotkey.rs`), which reads
+  `Settings.quickAccessHotkey` (default `CmdOrCtrl+Shift+Space`) from the app
+  state, parses and validates it, and registers it.
+- Toggle: `commands::toggle_quick_access` (`src-tauri/src/commands.rs`) hides
+  the window when it is visible and focused, and otherwise shows it and
+  focuses it. Pressing the hotkey while the vault is locked shows the unlock
+  screen in the quick-access window.
+- Hide after copy: `QuickAccessPage` hides its window via
+  `getCurrentWindow().hide()` once a copy completes, and
+  `QuickAccessUnlock` hides it after a successful unlock.
+
+## Capabilities
+
+`apps/desktop/src-tauri/capabilities/default.json` covers both the `main` and
+`quick-access` windows and grants `core:window:allow-hide` (needed for the
+hide-after-copy behavior) alongside the `dialog` permissions.
+
+## Secrets
+
+Secrets still never reach JS: Enter copies the password and Cmd/Ctrl+Enter
+copies the username through the `copy_field` command, the same as the main
+window.
