@@ -188,6 +188,7 @@ async function popupRoute(msg) {
     case 'can_fill_generated': return canFillGenerated();
     case 'fill_generated': return fillGenerated(msg.password);
     case 'record_generated': return recordGenerated(msg.password);
+    case 'generator_history': return host('generator_history', { limit: 10 }); // read-only; values go to the popup only
     case 'open_fill': return openFill(msg);
   }
   throw new Error('unknown popup message');
