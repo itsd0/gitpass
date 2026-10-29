@@ -220,6 +220,7 @@ gitpass ssh list Personal
 gitpass ssh public Personal "GitHub deploy key"
 gitpass ssh config
 gitpass ssh agent                                  # foreground; the desktop app runs its own
+gitpass ssh git-signing Personal "GitHub deploy key"
 ```
 
 `ssh generate` creates an Ed25519 key in a new SSH Key item. `ssh import` reads an
@@ -228,6 +229,26 @@ are rejected; a passphrase comes from `GITPASS_SSH_PASSPHRASE` or a prompt). The
 RSA requests with `rsa-sha2-256` or `rsa-sha2-512` only (plain SHA-1 `ssh-rsa` is refused). `ssh public` prints the
 `authorized_keys` line; `ssh config` prints the `~/.ssh/config` `IdentityAgent` snippet
 (both `config` and `agent` accept `--socket PATH`).
+
+### Git commit signing
+
+```sh
+gitpass ssh git-signing Personal "GitHub deploy key"               # print Git signing config (default)
+gitpass ssh git-signing Personal "GitHub deploy key" --apply --yes # apply to ~/.gitconfig and allowed_signers
+gitpass ssh git-signing Personal "Deploy key" --local --apply --yes # apply to local repo (.git/config)
+```
+
+`ssh git-signing` configures Git to sign commits and tags with an SSH key stored in gitpass (Ed25519 or RSA):
+- Sets `gpg.format=ssh`
+- Sets `user.signingkey="key::<public key>"`
+- Sets `commit.gpgsign=true` and `tag.gpgsign=true`
+- Appends `<email> <public key>` to `allowed_signers` (default `~/.ssh/allowed_signers`)
+- Points `gpg.ssh.allowedSignersFile` at the allowed signers file
+- Includes `export SSH_AUTH_SOCK="<path>"` so your shell can communicate with the background gitpass SSH agent
+
+Because Git commit signing invokes `ssh-keygen -Y sign` (which communicates with an agent via `$SSH_AUTH_SOCK` rather than `ssh`'s `IdentityAgent`), `SSH_AUTH_SOCK` in your shell profile (`~/.zshrc` or `~/.bashrc`) must point to the gitpass agent socket. `gitpass ssh git-signing` accepts `--socket <PATH>`, and `--apply` warns if `SSH_AUTH_SOCK` is currently pointing elsewhere.
+
+`--print` (the default) only prints the configuration lines without writing. Applying to git config (`--apply` or `--write`) requires confirmation unless `--yes` is passed. Signing requests go through the gitpass SSH agent, preserving per-use approval and logging.
 
 ## Devices and identity
 
