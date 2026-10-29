@@ -239,6 +239,9 @@ gitpass ssh git-signing Personal "Deploy key" --local --apply --yes # apply to l
 - Sets `commit.gpgsign=true` and `tag.gpgsign=true`
 - Appends `<email> <public key>` to `allowed_signers` (default `~/.ssh/allowed_signers`)
 - Points `gpg.ssh.allowedSignersFile` at the allowed signers file
+- Includes `export SSH_AUTH_SOCK="<path>"` so your shell can communicate with the background gitpass SSH agent
+
+Because Git commit signing invokes `ssh-keygen -Y sign` (which communicates with an agent via `$SSH_AUTH_SOCK` rather than `ssh`'s `IdentityAgent`), `SSH_AUTH_SOCK` in your shell profile (`~/.zshrc` or `~/.bashrc`) must point to the gitpass agent socket. `gitpass ssh git-signing` accepts `--socket <PATH>`, and `--apply` warns if `SSH_AUTH_SOCK` is currently pointing elsewhere.
 
 `--print` (the default) only prints the configuration lines without writing. Applying to git config (`--apply` or `--write`) requires confirmation unless `--yes` is passed. Signing requests go through the gitpass SSH agent, preserving per-use approval and logging.
 

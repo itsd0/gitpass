@@ -350,6 +350,37 @@ pub fn default_allowed_signers_path() -> std::path::PathBuf {
         .unwrap_or_else(|| std::path::PathBuf::from(".ssh/allowed_signers"))
 }
 
+/// Default background SSH agent socket path (`~/Library/Application Support/gitpass/ssh-agent.sock` on macOS).
+pub fn default_ssh_agent_socket_path() -> std::path::PathBuf {
+    #[cfg(target_os = "macos")]
+    {
+        dirs::home_dir()
+            .unwrap_or_default()
+            .join("Library/Application Support/gitpass/ssh-agent.sock")
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        std::env::var_os("XDG_RUNTIME_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir)
+            .join("gitpass/ssh-agent.sock")
+    }
+}
+
+/// Check if the current `SSH_AUTH_SOCK` environment variable matches the target socket path.
+pub fn is_auth_sock_matching(socket_path: &std::path::Path) -> bool {
+    if let Ok(val) = std::env::var("SSH_AUTH_SOCK") {
+        let val_path = std::path::Path::new(&val);
+        if val_path == socket_path {
+            return true;
+        }
+        if let (Ok(c1), Ok(c2)) = (val_path.canonicalize(), socket_path.canonicalize()) {
+            return c1 == c2;
+        }
+    }
+    false
+}
+
 /// Display a path using `~` prefix if within the user's home directory.
 pub fn display_path(path: &std::path::Path) -> String {
     let home = dirs::home_dir().map(|h| h.display().to_string()).unwrap_or_default();
@@ -376,6 +407,22 @@ pub fn detect_git_email() -> Option<String> {
     None
 }
 
+/// Resolve the email to associate with the key in `allowed_signers`.
+/// Checks explicit parameter -> git `user.email` -> key comment (if valid email) -> fallback.
+pub fn resolve_signing_email(explicit: Option<&str>, key: &SshKey) -> String {
+    explicit
+        .map(String::from)
+        .or_else(detect_git_email)
+        .or_else(|| {
+            if key.info.comment.contains('@') && !key.info.comment.contains(' ') {
+                Some(key.info.comment.clone())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| "user@example.invalid".to_string())
+}
+
 /// Git commit signing configuration and allowed_signers entry.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -383,10 +430,13 @@ pub struct GitSigningConfig {
     pub key_type: String,
     pub public_key: String,
     pub signing_key: String,
+    pub socket_path: String,
+    pub export_auth_sock: String,
     pub allowed_signers_file: String,
     pub allowed_signers_line: String,
     pub config_lines: String,
     pub email: String,
+    pub auth_sock_active: bool,
 }
 
 /// Build the Git signing configuration lines without modifying any files.
@@ -394,6 +444,7 @@ pub fn build_git_signing_config(
     key: &SshKey,
     email: &str,
     allowed_signers_path: &std::path::Path,
+    socket_path: &std::path::Path,
 ) -> Result<GitSigningConfig> {
     check_git_signing_support(key)?;
 
@@ -406,14 +457,21 @@ pub fn build_git_signing_config(
         "gpg.format=ssh\nuser.signingkey=\"{signing_key}\"\ncommit.gpgsign=true\ntag.gpgsign=true\ngpg.ssh.allowedSignersFile={allowed_signers_file}"
     );
 
+    let socket_str = socket_path.display().to_string();
+    let export_auth_sock = format!("export SSH_AUTH_SOCK=\"{socket_str}\"");
+    let auth_sock_active = is_auth_sock_matching(socket_path);
+
     Ok(GitSigningConfig {
         key_type: key.info.key_type.clone(),
         public_key: pubkey.to_string(),
         signing_key,
+        socket_path: socket_str,
+        export_auth_sock,
         allowed_signers_file,
         allowed_signers_line,
         config_lines,
         email: email.to_string(),
+        auth_sock_active,
     })
 }
 
@@ -422,9 +480,10 @@ pub fn apply_git_signing(
     key: &SshKey,
     email: &str,
     allowed_signers_path: &std::path::Path,
+    socket_path: &std::path::Path,
     global: bool,
 ) -> Result<GitSigningConfig> {
-    let cfg = build_git_signing_config(key, email, allowed_signers_path)?;
+    let cfg = build_git_signing_config(key, email, allowed_signers_path, socket_path)?;
 
     // 1. Ensure allowed_signers parent directory exists with 0700 permissions
     if let Some(parent) = allowed_signers_path.parent() {
@@ -653,9 +712,12 @@ mod tests {
         assert!(check_git_signing_support(&ed).is_ok());
 
         let signers_path = std::path::Path::new("/tmp/test_signers");
-        let cfg = build_git_signing_config(&ed, "ed@example.invalid", signers_path).unwrap();
+        let sock_path = std::path::Path::new("/tmp/test_agent.sock");
+        let cfg = build_git_signing_config(&ed, "ed@example.invalid", signers_path, sock_path).unwrap();
         assert_eq!(cfg.key_type, "ssh-ed25519");
         assert_eq!(cfg.email, "ed@example.invalid");
+        assert_eq!(cfg.socket_path, "/tmp/test_agent.sock");
+        assert_eq!(cfg.export_auth_sock, "export SSH_AUTH_SOCK=\"/tmp/test_agent.sock\"");
         assert!(cfg.signing_key.starts_with("key::ssh-ed25519 AAAA"));
         assert!(cfg.config_lines.contains("gpg.format=ssh"));
         assert!(cfg.config_lines.contains(&format!("user.signingkey=\"{}\"", cfg.signing_key)));
@@ -664,13 +726,17 @@ mod tests {
         assert!(cfg.config_lines.contains("gpg.ssh.allowedSignersFile="));
         assert!(cfg.allowed_signers_line.starts_with("ed@example.invalid ssh-ed25519 AAAA"));
 
+        // Helper: resolve_signing_email
+        assert_eq!(resolve_signing_email(Some("custom@example.invalid"), &ed), "custom@example.invalid");
+        assert_eq!(resolve_signing_email(None, &ed), "ed@example.invalid");
+
         // 2. RSA 2048 works
         use ssh_key::private::{KeypairData, RsaKeypair};
         let rsa_pair = RsaKeypair::random(&mut rand::rngs::OsRng, 2048).unwrap();
         let priv_rsa = PrivateKey::new(KeypairData::Rsa(rsa_pair), "rsa@example.invalid").unwrap();
         let rsa_key = SshKey::from_key(priv_rsa).unwrap();
         assert!(check_git_signing_support(&rsa_key).is_ok());
-        let rsa_cfg = build_git_signing_config(&rsa_key, "rsa@example.invalid", signers_path).unwrap();
+        let rsa_cfg = build_git_signing_config(&rsa_key, "rsa@example.invalid", signers_path, sock_path).unwrap();
         assert_eq!(rsa_cfg.key_type, "ssh-rsa");
         assert!(rsa_cfg.signing_key.starts_with("key::ssh-rsa AAAA"));
 

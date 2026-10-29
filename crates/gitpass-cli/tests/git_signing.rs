@@ -134,10 +134,11 @@ fn git_signing_cli_workflow_and_git_verify_commit() {
         "error must be clear about supported keys: {err}"
     );
 
-    // 6. Test --print (the default) does NOT write config or allowed_signers
+    // 6. Test --print (the default) includes export SSH_AUTH_SOCK and does NOT write files
     let o = gp(&home, &root, &["ssh", "git-signing", "Dev", "Deploy Key"]);
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
     let print_out = String::from_utf8_lossy(&o.stdout);
+    assert!(print_out.contains("export SSH_AUTH_SOCK="), "{print_out}");
     assert!(print_out.contains("gpg.format=ssh"), "{print_out}");
     assert!(print_out.contains("user.signingkey=\"key::ssh-ed25519 AAAA"), "{print_out}");
     assert!(print_out.contains("commit.gpgsign=true"), "{print_out}");
@@ -182,7 +183,7 @@ fn git_signing_cli_workflow_and_git_verify_commit() {
     let mut _stream = wait_for_socket(&mut child, &sock, Duration::from_secs(30));
     let _guard = ChildGuard(child);
 
-    // 10. Create a temp Git repository and make a signed commit with the Ed25519 key
+    // 10. Create a temp Git repository and make a signed commit using instructions from --print
     let repo_dir = d.path().join("repo");
     std::fs::create_dir_all(&repo_dir).unwrap();
     assert!(Command::new("git")
@@ -218,12 +219,49 @@ fn git_signing_cli_workflow_and_git_verify_commit() {
         .unwrap()
         .success());
 
-    // Commit using the gitpass agent (SSH_AUTH_SOCK)
+    // Extract the printed export SSH_AUTH_SOCK instruction
+    let o = gp(
+        &home,
+        &root,
+        &[
+            "ssh",
+            "git-signing",
+            "Dev",
+            "Deploy Key",
+            "--socket",
+            sock.to_str().unwrap(),
+        ],
+    );
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let print_inst = String::from_utf8_lossy(&o.stdout);
+    let auth_sock_line = print_inst
+        .lines()
+        .find(|l| l.starts_with("export SSH_AUTH_SOCK="))
+        .expect("must output export SSH_AUTH_SOCK instruction");
+    let extracted_sock = auth_sock_line
+        .trim_start_matches("export SSH_AUTH_SOCK=\"")
+        .trim_end_matches('"');
+    assert_eq!(extracted_sock, sock.to_str().unwrap());
+
+    // Without SSH_AUTH_SOCK (or pointing to macOS default / unset), signing fails
+    let failed_commit = Command::new("git")
+        .args(["commit", "-m", "should fail without agent"])
+        .current_dir(&repo_dir)
+        .env("HOME", &home)
+        .env_remove("SSH_AUTH_SOCK")
+        .output()
+        .unwrap();
+    assert!(
+        !failed_commit.status.success(),
+        "git commit without SSH_AUTH_SOCK must fail because ssh-keygen cannot find key"
+    );
+
+    // Commit using the exact SSH_AUTH_SOCK path parsed from printed instructions
     let commit_out = Command::new("git")
         .args(["commit", "-m", "signed commit with ed25519"])
         .current_dir(&repo_dir)
         .env("HOME", &home)
-        .env("SSH_AUTH_SOCK", &sock)
+        .env("SSH_AUTH_SOCK", extracted_sock)
         .output()
         .unwrap();
     assert!(
@@ -237,7 +275,7 @@ fn git_signing_cli_workflow_and_git_verify_commit() {
         .args(["verify-commit", "HEAD"])
         .current_dir(&repo_dir)
         .env("HOME", &home)
-        .env("SSH_AUTH_SOCK", &sock)
+        .env("SSH_AUTH_SOCK", extracted_sock)
         .output()
         .unwrap();
     let verify_combined = format!(
@@ -254,22 +292,62 @@ fn git_signing_cli_workflow_and_git_verify_commit() {
         "expected good signature verification, got: {verify_combined}"
     );
 
-    // 11. Test RSA commit and tag signing
-    let o = gp(
-        &home,
-        &root,
-        &[
+    // 11. Test RSA commit and tag signing, plus warning behavior when SSH_AUTH_SOCK is inactive
+    // A. Applying when SSH_AUTH_SOCK != sock emits a warning on stderr
+    let o = Command::new(bin())
+        .args([
             "ssh",
             "git-signing",
             "Dev",
             "Deploy RSA",
             "--apply",
             "--yes",
+            "--socket",
+            sock.to_str().unwrap(),
             "--email",
             "rsa@example.invalid",
-        ],
-    );
+        ])
+        .env("HOME", &home)
+        .env("GITPASS_PATH", &root)
+        .env("GITPASS_PASSWORD", "fake-master-pw-123")
+        .env("GITPASS_DEVICE_NAME", "test-device")
+        .env_remove("SSH_AUTH_SOCK")
+        .output()
+        .unwrap();
     assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let warn_err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        warn_err.contains("Warning: SSH_AUTH_SOCK does not point to the gitpass SSH agent."),
+        "expected warning when SSH_AUTH_SOCK is not pointing to gitpass: {warn_err}"
+    );
+
+    // B. Applying when SSH_AUTH_SOCK == sock does NOT emit warning
+    let o = Command::new(bin())
+        .args([
+            "ssh",
+            "git-signing",
+            "Dev",
+            "Deploy RSA",
+            "--apply",
+            "--yes",
+            "--socket",
+            sock.to_str().unwrap(),
+            "--email",
+            "rsa@example.invalid",
+        ])
+        .env("HOME", &home)
+        .env("GITPASS_PATH", &root)
+        .env("GITPASS_PASSWORD", "fake-master-pw-123")
+        .env("GITPASS_DEVICE_NAME", "test-device")
+        .env("SSH_AUTH_SOCK", &sock)
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let clean_err = String::from_utf8_lossy(&o.stderr);
+    assert!(
+        !clean_err.contains("Warning: SSH_AUTH_SOCK does not point"),
+        "expected no warning when SSH_AUTH_SOCK is active: {clean_err}"
+    );
 
     assert!(Command::new("git")
         .args(["config", "user.email", "rsa@example.invalid"])

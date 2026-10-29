@@ -482,6 +482,9 @@ enum SshCmd {
     GitSigning {
         vault: String,
         query: String,
+        /// Path to gitpass SSH agent socket (defaults to standard agent socket)
+        #[arg(long)]
+        socket: Option<PathBuf>,
         /// Scope configuration to ~/.gitconfig (default)
         #[arg(long, conflicts_with = "local")]
         global: bool,
@@ -2036,10 +2039,7 @@ fn run() -> Result<()> {
 
 /// Default agent socket (same path the desktop app uses).
 fn default_ssh_socket() -> PathBuf {
-    #[cfg(target_os = "macos")]
-    { dirs::home_dir().unwrap_or_default().join("Library/Application Support/gitpass/ssh-agent.sock") }
-    #[cfg(not(target_os = "macos"))]
-    { std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).unwrap_or_else(std::env::temp_dir).join("gitpass/ssh-agent.sock") }
+    gitpass_core::ssh::default_ssh_agent_socket_path()
 }
 
 fn ssh_cmd(cli: &Cli, root: &Path, cmd: &SshCmd) -> Result<()> {
@@ -2113,7 +2113,7 @@ fn ssh_cmd(cli: &Cli, root: &Path, cmd: &SshCmd) -> Result<()> {
             }
             }
         }
-        SshCmd::GitSigning { vault, query, global: _, local, print: _, apply, yes, email, allowed_signers } => {
+        SshCmd::GitSigning { vault, query, socket, global: _, local, print: _, apply, yes, email, allowed_signers } => {
             let s = unlock(cli, root)?;
             let vid = s.resolve_vault(vault)?;
             let iid = s.resolve_item(&vid, query)?;
@@ -2121,23 +2121,16 @@ fn ssh_cmd(cli: &Cli, root: &Path, cmd: &SshCmd) -> Result<()> {
             let k = SshKey::from_record(&r)?;
             ssh::check_git_signing_support(&k)?;
 
+            let socket_path = socket.clone().unwrap_or_else(ssh::default_ssh_agent_socket_path);
             let allowed_signers_path = allowed_signers.clone().unwrap_or_else(ssh::default_allowed_signers_path);
-            let email_val = email.as_deref()
-                .map(String::from)
-                .or_else(ssh::detect_git_email)
-                .or_else(|| {
-                    if k.info.comment.contains('@') && !k.info.comment.contains(' ') {
-                        Some(k.info.comment.clone())
-                    } else {
-                        None
-                    }
-                })
-                .unwrap_or_else(|| "user@example.invalid".to_string());
+            let email_val = ssh::resolve_signing_email(email.as_deref(), &k);
 
-            let cfg = ssh::build_git_signing_config(&k, &email_val, &allowed_signers_path)?;
+            let cfg = ssh::build_git_signing_config(&k, &email_val, &allowed_signers_path, &socket_path)?;
 
             let should_apply = *apply;
             if !should_apply {
+                println!("{}", cfg.export_auth_sock);
+                println!();
                 println!("{}", cfg.config_lines);
                 return Ok(());
             }
@@ -2153,9 +2146,18 @@ fn ssh_cmd(cli: &Cli, root: &Path, cmd: &SshCmd) -> Result<()> {
                 }
             }
 
-            ssh::apply_git_signing(&k, &email_val, &allowed_signers_path, is_global)?;
+            ssh::apply_git_signing(&k, &email_val, &allowed_signers_path, &socket_path, is_global)?;
             eprintln!("Applied Git commit signing configuration to {target_desc}.");
             eprintln!("Updated allowed signers: {signers_disp}");
+            if !cfg.auth_sock_active {
+                eprintln!();
+                eprintln!("Warning: SSH_AUTH_SOCK does not point to the gitpass SSH agent.");
+                eprintln!("Git uses ssh-keygen to sign commits, which talks to $SSH_AUTH_SOCK.");
+                eprintln!("Add this line to your shell profile (~/.zshrc or ~/.bashrc):");
+                eprintln!("  {}", cfg.export_auth_sock);
+            }
+            println!("{}", cfg.export_auth_sock);
+            println!();
             println!("{}", cfg.config_lines);
         }
     }

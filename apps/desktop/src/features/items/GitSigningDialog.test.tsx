@@ -80,10 +80,13 @@ const mockConfig: GitSigningConfig = {
   keyType: 'ssh-ed25519',
   publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5FAKE deploy@example.invalid',
   signingKey: 'key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5FAKE deploy@example.invalid',
+  socketPath: '/Users/demo/Library/Application Support/gitpass/ssh-agent.sock',
+  exportAuthSock: 'export SSH_AUTH_SOCK="/Users/demo/Library/Application Support/gitpass/ssh-agent.sock"',
   allowedSignersFile: '~/.ssh/allowed_signers',
   allowedSignersLine: 'deploy@example.invalid ssh-ed25519 AAAAC3NzaC1lZDI1NTE5FAKE deploy@example.invalid',
   configLines: 'gpg.format=ssh\nuser.signingkey="key::ssh-ed25519 AAAAC3NzaC1lZDI1NTE5FAKE deploy@example.invalid"\ncommit.gpgsign=true\ntag.gpgsign=true\ngpg.ssh.allowedSignersFile=~/.ssh/allowed_signers',
   email: 'deploy@example.invalid',
+  authSockActive: false,
 };
 
 describe('GitSigningDialog', () => {
@@ -111,6 +114,54 @@ describe('GitSigningDialog', () => {
 
     expect(screen.getByTestId('git-signing-code')).toHaveTextContent('user.signingkey="key::ssh-ed25519');
     expect(screen.getByTestId('allowed-signers-line')).toHaveTextContent('deploy@example.invalid ssh-ed25519');
+    expect(screen.getByTestId('auth-sock-code')).toHaveTextContent('export SSH_AUTH_SOCK=');
+    expect(screen.getByTestId('auth-sock-warning')).toBeInTheDocument();
+  });
+
+  it('copies export auth sock command to clipboard on Copy button click', async () => {
+    vi.spyOn(api, 'sshGitSigningConfig').mockResolvedValue(mockConfig);
+    const writeTextSpy = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: writeTextSpy },
+      configurable: true,
+      writable: true,
+    });
+
+    render(
+      <GitSigningDialog
+        open={true}
+        onOpenChange={() => {}}
+        detail={mockSshKeyDetail}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('copy-auth-sock-btn')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByTestId('copy-auth-sock-btn'));
+    expect(writeTextSpy).toHaveBeenCalledWith(mockConfig.exportAuthSock);
+  });
+
+  it('hides auth sock warning when SSH_AUTH_SOCK is active', async () => {
+    vi.spyOn(api, 'sshGitSigningConfig').mockResolvedValue({
+      ...mockConfig,
+      authSockActive: true,
+    });
+
+    render(
+      <GitSigningDialog
+        open={true}
+        onOpenChange={() => {}}
+        detail={mockSshKeyDetail}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('auth-sock-code')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByTestId('auth-sock-warning')).toBeNull();
   });
 
   it('copies configuration to clipboard on Copy button click', async () => {

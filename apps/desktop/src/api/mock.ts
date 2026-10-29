@@ -671,6 +671,8 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     }
     const email = a.email || 'demo@example.com';
     const allowedSignersFile = '~/.ssh/allowed_signers';
+    const socketPath = '/Users/demo/Library/Application Support/gitpass/ssh-agent.sock';
+    const exportAuthSock = `export SSH_AUTH_SOCK="${socketPath}"`;
     const signingKey = `key::${pub.trim()}`;
     const allowedSignersLine = `${email} ${pub.trim()}`;
     const configLines = `gpg.format=ssh\nuser.signingkey="${signingKey}"\ncommit.gpgsign=true\ntag.gpgsign=true\ngpg.ssh.allowedSignersFile=${allowedSignersFile}`;
@@ -678,10 +680,13 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       keyType,
       publicKey: pub.trim(),
       signingKey,
+      socketPath,
+      exportAuthSock,
       allowedSignersFile,
       allowedSignersLine,
       configLines,
       email,
+      authSockActive: false,
     });
   },
   ssh_apply_git_signing: (a: { vaultId: string; itemId: string; email?: string | null; allowedSignersFile?: string | null; global?: boolean }) => {

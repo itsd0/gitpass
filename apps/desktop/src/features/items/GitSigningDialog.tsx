@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Check, Copy, GitBranch, Loader2 } from 'lucide-react';
+import { AlertTriangle, Check, Copy, GitBranch, Loader2, Terminal } from 'lucide-react';
 import { api } from '../../api/client';
 import type { GitSigningConfig, ItemDetail } from '../../api/types';
 import { useApp } from '../../lib/store';
@@ -23,6 +23,7 @@ export function GitSigningDialog({ open, onOpenChange, detail, triggerRef }: Git
   const [error, setError] = useState<string | null>(null);
   const [config, setConfig] = useState<GitSigningConfig | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedAuthSock, setCopiedAuthSock] = useState(false);
   const [confirmingApply, setConfirmingApply] = useState(false);
   const [applying, setApplying] = useState(false);
   const [applied, setApplied] = useState(false);
@@ -40,6 +41,7 @@ export function GitSigningDialog({ open, onOpenChange, detail, triggerRef }: Git
       setError(null);
       setConfig(null);
       setCopied(false);
+      setCopiedAuthSock(false);
       setConfirmingApply(false);
       setApplying(false);
       setApplied(false);
@@ -82,6 +84,18 @@ export function GitSigningDialog({ open, onOpenChange, detail, triggerRef }: Git
       setCopied(true);
       toast(t('ssh.copiedConfig'));
       setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleCopyAuthSock = async () => {
+    if (!config) return;
+    try {
+      await navigator.clipboard.writeText(config.exportAuthSock);
+      setCopiedAuthSock(true);
+      toast(t('ssh.copiedAuthSock'));
+      setTimeout(() => setCopiedAuthSock(false), 2000);
     } catch {
       // ignore
     }
@@ -136,6 +150,42 @@ export function GitSigningDialog({ open, onOpenChange, detail, triggerRef }: Git
             </div>
           ) : config ? (
             <>
+              {/* Shell environment / SSH agent socket */}
+              <div>
+                <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-fg/80">
+                  <span className="flex items-center gap-1.5">
+                    <Terminal size={13} className="text-accent" />
+                    {t('ssh.authSockTitle')}
+                  </span>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={handleCopyAuthSock}
+                    className="h-7 text-xs"
+                    data-testid="copy-auth-sock-btn"
+                  >
+                    {copiedAuthSock ? <Check size={12} className="text-accent" /> : <Copy size={12} />}
+                    {copiedAuthSock ? t('common.copied') : t('ssh.copyAuthSock')}
+                  </Button>
+                </div>
+                <pre
+                  className="overflow-x-auto rounded-lg border border-border bg-panel p-2.5 font-mono text-xs leading-relaxed text-fg select-all"
+                  data-testid="auth-sock-code"
+                >
+                  {config.exportAuthSock}
+                </pre>
+                {!config.authSockActive && (
+                  <div
+                    className="mt-2 flex items-start gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-800 dark:text-amber-300"
+                    data-testid="auth-sock-warning"
+                  >
+                    <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+                    <span>{t('ssh.authSockWarning')}</span>
+                  </div>
+                )}
+              </div>
+
               {/* Git configuration lines */}
               <div>
                 <div className="mb-1.5 flex items-center justify-between text-xs font-medium text-fg/80">
@@ -209,11 +259,18 @@ export function GitSigningDialog({ open, onOpenChange, detail, triggerRef }: Git
                 </div>
               ) : applied ? (
                 <div
-                  className="flex items-center gap-2 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-xs font-medium text-green-700 dark:text-green-400"
+                  className="space-y-1.5 rounded-lg border border-green-500/30 bg-green-500/10 p-3 text-xs font-medium text-green-700 dark:text-green-400"
                   data-testid="applied-success-box"
                 >
-                  <Check size={15} />
-                  <span>{t('ssh.gitSigningApplied')}</span>
+                  <div className="flex items-center gap-2">
+                    <Check size={15} />
+                    <span>{t('ssh.gitSigningApplied')}</span>
+                  </div>
+                  {!config.authSockActive && (
+                    <div className="text-[11px] text-green-800/90 dark:text-green-300/90 pl-6 font-normal">
+                      {t('ssh.appliedAuthSockHint')}
+                    </div>
+                  )}
                 </div>
               ) : null}
 
