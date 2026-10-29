@@ -1,6 +1,6 @@
 /* global chrome, GitpassI18n, GitpassPopupIcons, GitpassView, GitpassNewItem */
 'use strict';
-// gitpass popup v0.6: 1Password-style 2-pane UI. All host calls go through background.js as `popup:*` messages.
+// gitpass popup v0.6: 2-pane UI. All host calls go through background.js as `popup:*` messages.
 const $ = (id) => document.getElementById(id);
 const t = (k, f, subs) => GitpassI18n.t(k, f, subs);
 const V = typeof GitpassView !== 'undefined' ? GitpassView : (typeof require !== 'undefined' ? require('./view.js') : null);
