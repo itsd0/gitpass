@@ -69,6 +69,7 @@ async function fillTab(tabId, origin, itemId, extra) {
   if (!GitpassPolicy.isFillableOrigin(origin)) throw new Error('refusing to fill: page is not https');
   const creds = await host('fill', { item_id: itemId, origin }); // host enforces origin match
   const via = extra && extra.via === 'command' ? { via: 'command' } : {};
+  if (globalThis.GitpassPage) GitpassPage.rememberFilled(tabId, origin, itemId); // ids only: offers the one-time code on the next page
   await chrome.tabs.sendMessage(tabId, { type: 'gitpass-fill', origin, username: creds.username, password: creds.password, ...via }, { frameId: 0 });
   return true;
 }

@@ -2,7 +2,7 @@
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const root = path.join(__dirname, '..');
 const m = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
-const files = new Set(['background.js', 'content.js', 'lib/policy.js', 'lib/banner.js', 'popup/popup.js', 'popup/generator.js', 'lib/i18n.js', 'lib/icons.js', 'popup/view.js', 'popup/icons.js', 'popup/mock.js', 'popup/newitem.js', 'lib/forms.js', 'bg-page.js', 'bg-onboard.js', 'bg-passkey.js', 'bg-command.js', 'popup/passkey.js', 'lib/passkey-main.js', 'lib/passkey-bridge.js', 'options/options.js', 'lib/onboard-common.js']);
+const files = new Set(['background.js', 'content.js', 'lib/policy.js', 'lib/banner.js', 'lib/totp-chip.js', 'popup/popup.js', 'popup/generator.js', 'lib/i18n.js', 'lib/icons.js', 'popup/view.js', 'popup/icons.js', 'popup/mock.js', 'popup/newitem.js', 'lib/forms.js', 'bg-page.js', 'bg-onboard.js', 'bg-passkey.js', 'bg-command.js', 'popup/passkey.js', 'lib/passkey-main.js', 'lib/passkey-bridge.js', 'options/options.js', 'lib/onboard-common.js']);
 for (const cs of m.content_scripts) cs.js.forEach((f) => files.add(f));
 let bad = 0;
 for (const f of files) {

@@ -827,5 +827,17 @@
   },
   "sortTitle": {
     "message": "ชื่อ"
+  },
+  "csTotpOffer": {
+    "message": "กรอกรหัสใช้ครั้งเดียว"
+  },
+  "csTotpDismiss": {
+    "message": "ปิด"
+  },
+  "optAutoTotp": {
+    "message": "กรอกรหัสใช้ครั้งเดียวอัตโนมัติ"
+  },
+  "optAutoTotpBody": {
+    "message": "หลังจาก gitpass กรอกข้อมูลเข้าสู่ระบบแล้ว ให้กรอกรหัสใช้ครั้งเดียวในหน้าถัดไปโดยไม่ต้องถาม"
   }
 }
