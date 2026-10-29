@@ -10,6 +10,8 @@ import { Badge, Button, Dialog, DialogContent, DropdownMenu, DropdownMenuContent
 import { ItemIcon } from './categories';
 import { FieldRow } from './FieldView';
 import { ItemEditor } from './ItemEditor';
+import { SafeMarkdown } from './SafeMarkdown';
+import { useSettings } from '../settings/useSettings';
 import { errText } from './actions';
 import { EmptyIllustration } from './EmptyIllustration';
 import { useItemsUI } from './state';
@@ -175,6 +177,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
     };
   }, [detail.id, detail.vaultId, deleted]);
 
+  const renderNotesMarkdown = useSettings((s) => s.settings?.renderNotesMarkdown ?? true);
   const findings = detail.findings ?? [];
   const canChangePassword = !!detail.changePasswordUrl && findings.some((f) => ['weak', 'reused', 'pwned', 'insecure_url'].includes(f.kind));
   const changePassword = () => api.openChangePassword({ vaultId: detail.vaultId, itemId: detail.id }).catch((e) => toast(errText(e), 'danger'));
@@ -335,9 +338,30 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
           ))}
 
           {detail.notes && (
-            <div className="mb-4 rounded-lg border border-border bg-card px-4 py-2.5">
-              <div className="text-xs text-label">{t('detail.notes')}</div>
-              <div className="whitespace-pre-wrap text-[14px]">{detail.notes}</div>
+            <div className="mb-4 rounded-lg border border-border bg-card px-4 py-2.5" data-testid="detail-notes">
+              <div className="flex items-center justify-between pb-1">
+                <div className="text-xs text-label">{t('detail.notes')}</div>
+                <Tooltip content={t('common.copy')}>
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
+                    aria-label={`Copy ${t('detail.notes')}`}
+                    data-testid="copy-notes-btn"
+                    onClick={() =>
+                      navigator.clipboard
+                        ?.writeText(detail.notes ?? '')
+                        .then(() => toast(t('common.copied')))
+                    }
+                  >
+                    <Copy size={13} />
+                  </Button>
+                </Tooltip>
+              </div>
+              {renderNotesMarkdown ? (
+                <SafeMarkdown content={detail.notes} />
+              ) : (
+                <div className="whitespace-pre-wrap text-[14px]">{detail.notes}</div>
+              )}
             </div>
           )}
 

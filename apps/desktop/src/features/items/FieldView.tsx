@@ -10,6 +10,8 @@ import { cn } from '../../lib/utils';
 import { Badge, Button, Tooltip, toast } from '../../ui';
 import { errText } from './actions';
 import { groupCardNumber } from '../../lib/cardMask';
+import { SafeMarkdown } from './SafeMarkdown';
+import { useSettings } from '../settings/useSettings';
 
 export const REVEAL_MS = 30_000;
 const DOTS = '••••••••••';
@@ -37,13 +39,20 @@ function CopyBtn({ ctx, fieldId, label }: { ctx: Ctx; fieldId: string; label: st
 
 function PlainValue({ field, ctx, category }: { field: Field; ctx: Ctx; category?: ItemCategory }) {
   const t = useT();
+  const renderNotesMarkdown = useSettings((s) => s.settings?.renderNotesMarkdown ?? true);
   const v = field.value ?? '';
   const isExp = isExpiryField(field, category);
   const expiry = isExp && v ? checkExpiry(v, field.kind, undefined, t) : null;
+  const isNoteField = field.kind === 'multiline' && (
+    category === 'secure_note' ||
+    field.id === 'note' ||
+    field.id === 'notes' ||
+    /note/i.test(field.label)
+  );
 
   return (
     <div className="flex items-start gap-2">
-      <div className={cn('min-w-0 flex-1 break-words text-[14px]', field.kind === 'multiline' && 'whitespace-pre-wrap font-mono text-xs', field.kind === 'url' && 'text-accent')}>
+      <div className={cn('min-w-0 flex-1 break-words text-[14px]', field.kind === 'multiline' && !isNoteField && 'whitespace-pre-wrap font-mono text-xs', field.kind === 'multiline' && isNoteField && !renderNotesMarkdown && 'whitespace-pre-wrap font-mono text-xs', field.kind === 'url' && 'text-accent')}>
         {v ? (
           expiry ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -57,6 +66,8 @@ function PlainValue({ field, ctx, category }: { field: Field; ctx: Ctx; category
               </Badge>
               <span className="text-xs text-muted" data-testid="expiry-hint">{expiry.relativeHint}</span>
             </div>
+          ) : isNoteField && renderNotesMarkdown ? (
+            <SafeMarkdown content={v} />
           ) : (
             v
           )
