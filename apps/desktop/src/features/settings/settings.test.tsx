@@ -37,6 +37,17 @@ describe('settings', () => {
     await u.click(sw);
     expect(await screen.findByText(/not supported yet/)).toBeTruthy();
   });
+  it('menu bar icon toggle is on by default and saved when toggled', async () => {
+    const spy = vi.spyOn(api, 'setSettings').mockResolvedValue(undefined as any);
+    const u = userEvent.setup();
+    render(<SettingsPage initialTab="general" />);
+    const sw = await screen.findByTestId('show-menu-bar-icon-switch');
+    expect(sw).toHaveAttribute('aria-checked', 'true');
+    expect(sw).toBeEnabled();
+    await u.click(sw);
+    await waitFor(() => expect(spy).toHaveBeenCalled());
+    expect(spy.mock.calls[spy.mock.calls.length - 1]![0].settings.showMenuBarIcon).toBe(false);
+  });
   it('website icons toggle is off by default and saved when enabled', async () => {
     const spy = vi.spyOn(api, 'setSettings').mockResolvedValue(undefined as any);
     const u = userEvent.setup();

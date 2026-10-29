@@ -81,6 +81,8 @@ export const en = {
   'settings.showWebsiteIconsHelp': 'Fetch icons for websites over HTTPS. Off by default because fetching tells each site you have an account there. Turning this off clears the cache.',
   'settings.renderNotesMarkdown': 'Render notes as Markdown',
   'settings.renderNotesMarkdownHelp': 'Format headings, lists, code blocks and links safely in notes. Raw HTML and remote images are never loaded.',
+  'settings.showMenuBarIcon': 'Show gitpass in the menu bar',
+  'settings.showMenuBarIconHelp': 'Keep gitpass accessible from the menu bar when the window is closed',
   'editor.edit': 'Edit',
   'editor.preview': 'Preview',
   'editor.notesMode': 'Notes mode',

@@ -205,6 +205,8 @@ pub struct Settings {
     #[serde(default)] pub show_website_icons: bool,
     /// Display: render notes and secure notes as safe Markdown (default on).
     #[serde(default = "default_true")] pub render_notes_markdown: bool,
+    /// Menu bar: Show gitpass in the macOS menu bar (default on).
+    #[serde(default = "default_true")] pub show_menu_bar_icon: bool,
 }
 impl Default for Settings {
     fn default() -> Self {
@@ -214,7 +216,7 @@ impl Default for Settings {
             hide_from_screen_recording: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
-            show_website_icons: false, render_notes_markdown: true }
+            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true }
     }
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]

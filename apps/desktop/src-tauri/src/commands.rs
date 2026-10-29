@@ -34,7 +34,7 @@ impl a::Clipboard for SysClipboard {
     s.create_account(&vault_path, &password, save_secret_key).map_err(e)
 }
 #[tauri::command(async)] pub fn unlock_biometric(s: State<'_, App>, vault_path: String) -> R<a::UnlockState> { s.unlock_biometric(&vault_path).map_err(e) }
-#[tauri::command] pub fn lock(s: State<App>) { s.lock() }
+#[tauri::command] pub fn lock(app: tauri::AppHandle, s: State<App>) { s.lock(); crate::tray::update_tray(&app); }
 #[tauri::command] pub fn list_vaults(s: State<App>) -> R<Vec<a::VaultInfo>> { s.list_vaults().map_err(e) }
 #[tauri::command] pub fn update_vault(s: State<App>, vault_id: String, name: String, description: Option<String>, icon: Option<String>, color: Option<String>) -> R<a::VaultInfo> { s.update_vault(&vault_id, &name, description, icon, color).map_err(e) }
 #[tauri::command] pub fn delete_vault(s: State<App>, vault_id: String, confirm_name: String) -> R<()> { s.delete_vault(&vault_id, &confirm_name).map_err(e) }
@@ -100,6 +100,7 @@ pub fn apply_content_protection(app: &tauri::AppHandle, on: bool) {
     let on = settings.hide_from_screen_recording;
     let saved = s.set_settings(settings).map_err(e)?;
     apply_content_protection(&app, on);
+    crate::tray::update_tray(&app);
     Ok(saved)
 }
 #[tauri::command(async)] pub fn change_password(s: State<'_, App>, current: String, next: String) -> R<()> {
@@ -209,9 +210,15 @@ pub fn spawn_idle_watcher(app: AppHandle) {
                 reason = "idle";
             }
             let unlocked = st.state.is_unlocked();
-            if was_unlocked && !unlocked && !locked_by_system { let _ = app.emit("locked", reason); }
+            if was_unlocked && !unlocked && !locked_by_system {
+                let _ = app.emit("locked", reason);
+                crate::tray::update_tray(&app);
+            }
             // Unlocked elsewhere (extension Touch ID / request_unlock): the UI refreshes in place.
-            if !was_unlocked && unlocked { let _ = app.emit("unlocked", "watcher"); }
+            if !was_unlocked && unlocked {
+                let _ = app.emit("unlocked", "watcher");
+                crate::tray::update_tray(&app);
+            }
             // Live sync: any vault write (this window, the extension via the agent, CLI, git sync) changes the
             // sealed manifest; the UI refetches the item list (src/lib/agentEvents.ts `vault-changed`).
             let stamp = st.state.change_stamp();

@@ -13,7 +13,7 @@ description = "gitpass desktop GUI (Tauri 2)"
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
 gitpass-gui-core = { path = "../gui-core" }
 gitpass-core = { path = "../../../crates/gitpass-core" }
 gitpass-pasteboard = { path = "../../../crates/gitpass-pasteboard" }
@@ -35,4 +35,4 @@ objc2-foundation = { version = "0.3", features = ["NSString", "NSError", "NSData
 objc2-local-authentication = { version = "0.3", features = ["LAContext", "LAError", "block2"] }
 
 [dev-dependencies]
-tauri = { version = "2", features = ["test"] }
+tauri = { version = "2", features = ["test", "tray-icon", "image-png"] }

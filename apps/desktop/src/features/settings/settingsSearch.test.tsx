@@ -253,6 +253,21 @@ describe('Settings search and consistent layout', () => {
     expect(row?.className).toContain('ring-accent');
   });
 
+  it('searches for menu bar / tray icon and targets menu bar row', async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage initialTab="security" />);
+    const searchInput = await screen.findByTestId('settings-search-input');
+
+    await user.type(searchInput, 'menu bar');
+    const result = await screen.findByRole('option', { name: /menu bar/i });
+    expect(result).toBeTruthy();
+    await user.click(result);
+
+    const row = document.getElementById('setting-show-menu-bar-icon');
+    expect(row).toBeTruthy();
+    expect(row?.className).toContain('ring-accent');
+  });
+
   it('searches for setup guide and highlights the row in General tab', async () => {
     const user = userEvent.setup();
     render(<SettingsPage initialTab="security" />);

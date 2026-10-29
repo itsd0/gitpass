@@ -41,6 +41,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['notes', 'markdown', 'formatting', 'preview', 'rich text', 'code block', 'checklist'],
   },
   {
+    id: 'setting-show-menu-bar-icon',
+    tab: 'general',
+    labelKey: 'settings.showMenuBarIcon',
+    descriptionKey: 'settings.showMenuBarIconHelp',
+    keywords: ['menu bar', 'status bar', 'tray', 'icon', 'menu bar icon', 'system tray'],
+  },
+  {
     id: 'setting-quick-access-hotkey',
     tab: 'general',
     labelKey: 'settings.quickAccessHotkey',

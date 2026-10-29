@@ -87,6 +87,8 @@ export const my: Partial<Record<Key, string>> = {
   'settings.showWebsiteIconsHelp': 'ဝဘ်ဆိုက်များအတွက် အိုင်ကွန်များကို HTTPS ဖြင့် ရယူသည်။ ဤသို့ရယူခြင်းက သက်ဆိုင်ရာဆိုက်များသို့ အကောင့်ရှိကြောင်း သိစေနိုင်သဖြင့် မူလအတိုင်း ပိတ်ထားသည်။ ပိတ်လိုက်ပါက အိုင်ကွန် ကက်ရှ်ကို ရှင်းလင်းပေးမည်။',
   'settings.renderNotesMarkdown': 'မှတ်စုများကို Markdown အဖြစ် ပြသပါ',
   'settings.renderNotesMarkdownHelp': 'မှတ်စုများတွင် ခေါင်းစဉ်များ၊ စာရင်းများ၊ ကုဒ်ကွက်များနှင့် လင့်ခ်များကို လုံခြုံစွာ ပုံစံချပါ။ Raw HTML နှင့် အဝေးမှပုံများကို ဘယ်တော့မှ မဖွင့်ပါ။',
+  'settings.showMenuBarIcon': 'gitpass ကို မီနူးဘားတွင် ပြသရန်',
+  'settings.showMenuBarIconHelp': 'ဝင်းဒိုးကို ပိတ်ထားသည့်အခါ မီနူးဘားမှ gitpass ကို အသုံးပြုနိုင်ရန် ထားရှိပါ',
   'editor.edit': 'ပြင်ဆင်ရန်',
   'editor.preview': 'အကြိုကြည့်ရန်',
   'editor.notesMode': 'မှတ်စု မုဒ်',
