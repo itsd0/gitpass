@@ -14,29 +14,14 @@
   "masterPassword": {
     "message": "Master password"
   },
-  "secretKey": {
-    "message": "Secret Key"
-  },
-  "skHint": {
-    "message": "Used once to unlock. It's kept only in memory while unlocked and never saved."
-  },
   "unlock": {
     "message": "Unlock"
-  },
-  "touchIdSoon": {
-    "message": "Touch ID unlock is coming soon. Your Secret Key is in your Emergency Kit."
   },
   "searchPh": {
     "message": "Search vault"
   },
   "lock": {
     "message": "Lock"
-  },
-  "forThisSite": {
-    "message": "For this site"
-  },
-  "searchResults": {
-    "message": "Search results"
   },
   "generator": {
     "message": "Password generator"
@@ -116,17 +101,11 @@
   "copyTotp": {
     "message": "Copy TOTP"
   },
-  "totpCopied": {
-    "message": "TOTP copied"
-  },
   "copyTotpCode": {
     "message": "Copy one-time code"
   },
   "totpUnavailable": {
     "message": "Code unavailable"
-  },
-  "notHttps": {
-    "message": "not an https page"
   },
   "noMatches": {
     "message": "No saved logins for this site"
@@ -148,9 +127,6 @@
   },
   "csNoLogins": {
     "message": "No gitpass logins for this site"
-  },
-  "csLocked": {
-    "message": "gitpass is locked. Unlock it from the toolbar icon."
   },
   "extDesc": {
     "message": "gitpass autofill. Keys stay in the local gitpass-host process."
@@ -184,9 +160,6 @@
   },
   "newItem": {
     "message": "New item"
-  },
-  "newLogin": {
-    "message": "New Login"
   },
   "filterSuggested": {
     "message": "Suggestions for this site"
@@ -338,9 +311,6 @@
   },
   "saved": {
     "message": "Saved"
-  },
-  "needUrlPw": {
-    "message": "Website and password are required"
   },
   "csSuggest": {
     "message": "Suggest strong password"
@@ -549,14 +519,6 @@
   "pkGetTitle": {
     "message": "Sign in with a passkey?"
   },
-  "pkFor": {
-    "message": "for $SITE$",
-    "placeholders": {
-      "site": {
-        "content": "$1"
-      }
-    }
-  },
   "pkSite": {
     "message": "Site"
   },
@@ -699,5 +661,98 @@
   },
   "optFillShortcutBody": {
     "message": "Fills the best-matching login on the current page without opening the popup."
+  },
+  "watchtowerWarnings": {
+    "message": "Watchtower warnings"
+  },
+  "watchtowerWarning": {
+    "message": "Security warning"
+  },
+  "watchtowerWeak": {
+    "message": "Weak password"
+  },
+  "watchtowerReused": {
+    "message": "Reused password"
+  },
+  "watchtowerReusedN": {
+    "message": "Reused on $1 items",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerPwned": {
+    "message": "In a data breach"
+  },
+  "watchtowerOld": {
+    "message": "Old password"
+  },
+  "watchtowerOld1Yr": {
+    "message": "Not changed in 1 year"
+  },
+  "watchtowerOldNYrs": {
+    "message": "Not changed in $1 years",
+    "placeholders": {
+      "years": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerOldNDays": {
+    "message": "Not changed in $1 days",
+    "placeholders": {
+      "days": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerInsecureUrl": {
+    "message": "Insecure website (HTTP)"
+  },
+  "watchtowerMissingTotp": {
+    "message": "2FA not configured"
+  },
+  "watchtowerTotpAvailable": {
+    "message": "2FA available on site"
+  },
+  "watchtowerPasskeyAvailable": {
+    "message": "Passkey available"
+  },
+  "watchtowerExpired": {
+    "message": "Expired"
+  },
+  "watchtowerExpiringSoon": {
+    "message": "Expiring soon"
+  },
+  "watchtowerDuplicate": {
+    "message": "Duplicate login"
+  },
+  "generateAndUpdate": {
+    "message": "Generate & update"
+  },
+  "changeOnSite": {
+    "message": "Change on site"
+  },
+  "openInGitpass": {
+    "message": "Open in gitpass"
+  },
+  "passwordUpdated": {
+    "message": "Password updated"
+  },
+  "updatePassword": {
+    "message": "Update password"
+    },
+  "sortBy": {
+    "message": "Sort by"
+  },
+  "sortUpdated": {
+    "message": "Last edited"
+  },
+  "sortCreated": {
+    "message": "Date created"
+  },
+  "sortTitle": {
+    "message": "Title"
   }
 }

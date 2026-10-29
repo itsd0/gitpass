@@ -429,4 +429,22 @@ describe('drag and drop on sidebar', () => {
       });
     });
   });
+
+  it('rows are draggable with copyMove in All Items', async () => {
+    render(<TooltipProvider><ItemList /></TooltipProvider>);
+    const rows = await screen.findAllByTestId('item-row');
+    expect(rows[0].getAttribute('draggable')).toBe('true');
+    const dt = { data: {} as Record<string, string>, setData(k: string, v: string) { this.data[k] = v; }, getData(k: string) { return this.data[k] ?? ''; }, dropEffect: 'none', effectAllowed: 'none', setDragImage: vi.fn() };
+    fireEvent.dragStart(rows[0], { dataTransfer: dt });
+    expect(dt.effectAllowed).toBe('copyMove');
+  });
+
+  it.each(['deleted', 'archive'] as const)('rows are not draggable in %s', async (kind) => {
+    useApp.setState({ route: { name: 'items', filter: { kind, sort: 'updated' } } as any });
+    render(<TooltipProvider><ItemList /></TooltipProvider>);
+    const rows = await screen.findAllByTestId('item-row');
+    for (const r of rows) expect(r.getAttribute('draggable')).not.toBe('true');
+    fireEvent.dragStart(rows[0], { dataTransfer: { setData: vi.fn(), setDragImage: vi.fn() } });
+    expect(useDragStore.getState().dragged).toBeFalsy();
+  });
 });

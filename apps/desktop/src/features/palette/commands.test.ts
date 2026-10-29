@@ -27,4 +27,12 @@ describe('palette builtin commands with selection', () => {
     expect(cmds.some((c) => c.id === 'move-to-vault')).toBe(true);
     expect(cmds.some((c) => c.id === 'add-tag')).toBe(true);
   });
+
+  it.each(['deleted', 'archive'] as const)('hides move-to-vault and add-tag in %s', (kind) => {
+    useApp.setState({ route: { name: 'items', filter: { kind } } as any, selectedItemId: 'item-1', multiIds: ['item-1', 'item-2'] });
+    const cmds = builtinCommands();
+    expect(cmds.some((c) => c.id === 'move-to-vault')).toBe(false);
+    expect(cmds.some((c) => c.id === 'add-tag')).toBe(false);
+    useApp.setState({ route: { name: 'items', filter: { kind: 'all' } } as any });
+  });
 });

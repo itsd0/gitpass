@@ -75,6 +75,8 @@ export function ItemList() {
     setLoading,
   } = useItemsUI();
   const base: Filter = route.name === "items" ? route.filter : { kind: "all" };
+  // Trashed or archived items must not be dragged onto a vault/tag (moving would bypass restore).
+  const canDrag = base.kind !== "deleted" && base.kind !== "archive";
 
   // debounce query (200ms) then call api.listItems
   const debounced = useDebounced(query, 200);
@@ -145,7 +147,7 @@ export function ItemList() {
     try {
       e.dataTransfer.setData("application/json", JSON.stringify({ itemIds: draggedItems.map((x) => x.id) }));
       e.dataTransfer.setData("text/plain", draggedItems.map((x) => x.id).join(","));
-      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.effectAllowed = "copyMove"; // vault drop = move, tag drop = copy
     } catch {
       // ignore
     }
@@ -165,6 +167,11 @@ export function ItemList() {
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
       e.preventDefault();
       applySel(selectAll(order, readSel()));
+      return;
+    }
+    if (e.key === " " && selectedItemId) {
+      e.preventDefault();
+      applySel(clickSelect(order, readSel(), selectedItemId, { toggle: true }));
       return;
     }
     if (e.key === "Escape" && multiOn) {
@@ -273,8 +280,9 @@ export function ItemList() {
         ref={parentRef}
         tabIndex={items.length === 0 ? -1 : 0}
         onKeyDown={onKey}
-        className="flex-1 overflow-y-auto outline-none"
+        className="flex-1 overflow-y-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
         role="listbox"
+        aria-multiselectable="true"
         aria-label={t("items.ariaLabel")}
         data-item-list
       >
@@ -317,65 +325,66 @@ export function ItemList() {
                     >
                       {r.label}
                     </div>
-                  ) : (
-                    <div
-                      role="option"
-                      data-testid="item-row"
-                      draggable
-                      onDragStart={(e) => onRowDragStart(e, r.item)}
-                      onDragEnd={onRowDragEnd}
-                      aria-selected={
-                        multiOn
-                          ? multiSet.has(r.item.id)
-                          : r.item.id === selectedItemId
-                      }
-                      onClick={(e) => onRowClick(e, r.item.id)}
-                      onMouseDown={(e) => {
-                        if (e.shiftKey) e.preventDefault();
-                      }}
-                      style={{ height: ITEM_H - 2 }}
-                      className={cn(
-                        "group mx-1.5 my-px box-border flex cursor-default items-center gap-3 overflow-hidden rounded-md px-2.5",
-                        (
-                          multiOn
-                            ? multiSet.has(r.item.id)
-                            : r.item.id === selectedItemId
-                        )
-                          ? "bg-active"
-                          : "hover:bg-hover",
-                        multiOn &&
-                          multiSet.has(r.item.id) &&
-                          "ring-1 ring-inset ring-accent/50"
-                      )}
-                    >
-                      <span
-                        role="checkbox"
-                        aria-checked={multiOn && multiSet.has(r.item.id)}
-                        aria-label={t("items.selectItem", {
-                          title: r.item.title,
-                        })}
-                        data-testid="row-check"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          applySel(
-                            clickSelect(order, readSel(), r.item.id, {
-                              toggle: true,
-                            })
-                          );
-                          parentRef.current?.focus();
+                  ) : (() => {
+                    const isChecked = multiOn && multiSet.has(r.item.id);
+                    const isSelected = multiOn
+                      ? multiSet.has(r.item.id)
+                      : r.item.id === selectedItemId;
+                    return (
+                      <div
+                        role="option"
+                        data-testid="item-row"
+                        draggable={canDrag}
+                        onDragStart={canDrag ? (e) => onRowDragStart(e, r.item) : undefined}
+                        onDragEnd={canDrag ? onRowDragEnd : undefined}
+                        aria-selected={isSelected}
+                        onClick={(e) => onRowClick(e, r.item.id)}
+                        onMouseDown={(e) => {
+                          if (e.shiftKey) e.preventDefault();
                         }}
+                        style={{ height: ITEM_H - 2 }}
                         className={cn(
-                          "-ml-1 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-opacity",
-                          multiOn && multiSet.has(r.item.id)
-                            ? "border-accent bg-accent text-white opacity-100"
-                            : "border-border opacity-0 group-hover:opacity-100",
-                          multiOn && "opacity-100"
+                          "group mx-1.5 my-px box-border flex cursor-default items-center gap-2.5 overflow-hidden rounded-md px-2.5 transition-colors",
+                          isSelected
+                            ? "bg-accent/15 ring-1 ring-inset ring-accent hover:bg-accent/20"
+                            : "hover:bg-hover"
                         )}
                       >
-                        {multiOn && multiSet.has(r.item.id) && (
-                          <Check size={11} strokeWidth={3} />
-                        )}
-                      </span>
+                        <button
+                          type="button"
+                          role="checkbox"
+                          tabIndex={-1}
+                          aria-checked={isChecked}
+                          aria-label={t(
+                            isChecked ? "items.deselectItem" : "items.selectItem",
+                            { title: r.item.title }
+                          )}
+                          data-testid="row-check"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            applySel(
+                              clickSelect(order, readSel(), r.item.id, {
+                                toggle: true,
+                              })
+                            );
+                            parentRef.current?.focus();
+                          }}
+                          className="flex h-full w-6 shrink-0 cursor-pointer items-center justify-center -ml-1 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                        >
+                          <span
+                            className={cn(
+                              "flex h-4 w-4 items-center justify-center rounded border transition-opacity",
+                              isChecked
+                                ? "border-accent bg-accent text-white opacity-100"
+                                : "border-border opacity-0 group-hover:opacity-100",
+                              multiOn && "opacity-100"
+                            )}
+                          >
+                            {isChecked && (
+                              <Check size={11} strokeWidth={3} />
+                            )}
+                          </span>
+                        </button>
                       <ItemIcon item={r.item} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[14px] font-medium leading-5">
@@ -421,7 +430,8 @@ export function ItemList() {
                         />
                       )}
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })}

@@ -26,6 +26,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     descriptionKey: 'settings.languageHelp',
     keywords: ['locale', 'translation', 'burmese', 'thai', 'english'],
   },
+  {
+    id: 'setting-setup-guide',
+    tab: 'general',
+    labelKey: 'settings.showSetupGuide',
+    descriptionKey: 'settings.showSetupGuideHelp',
+    keywords: ['onboarding', 'checklist', 'welcome', 'guide', 'get started', 'setup'],
+  },
   // Security
   {
     id: 'setting-autolock',

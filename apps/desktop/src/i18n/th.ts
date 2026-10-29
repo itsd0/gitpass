@@ -368,6 +368,7 @@ export const th: Partial<Record<Key, string>> = {
   "items.sortTitle": "ชื่อ",
   "items.ariaLabel": "รายการ",
   "items.selectItem": "เลือก {title}",
+  "items.deselectItem": "ยกเลิกการเลือก {title}",
   "items.search.resultCount": "ผลลัพธ์ {count} รายการ",
   "items.search.resultOne": "ผลลัพธ์ 1 รายการ",
   // category labels
@@ -530,4 +531,15 @@ export const th: Partial<Record<Key, string>> = {
   "import.doneSummary": "นำเข้าแล้ว {added} จาก {parsed} รายการ (ข้ามรายการซ้ำ {duplicates} รายการ)",
   "import.doneTip": "ลบไฟล์ส่งออกที่ไม่ได้เข้ารหัสออกจากดิสก์ของคุณ",
   "import.viewItems": "ดูรายการที่นำเข้า",
+  "onboarding.title": "เริ่มต้นใช้งาน",
+  "onboarding.subtitle": "เราจะแนะนำขั้นตอนที่สำคัญที่สุดในการตั้งค่า gitpass และทำให้ vault ของคุณปลอดภัยและซิงค์อยู่เสมอ",
+  "onboarding.dismiss": "ปิดการแจ้งเตือน",
+  "onboarding.dismissedToast": "ซ่อนคู่มือการตั้งค่าแล้ว",
+  "onboarding.restoredToast": "กู้คืนคู่มือการตั้งค่าแล้ว",
+  "onboarding.extTitle": "ติดตั้งส่วนขยายเบราว์เซอร์ gitpass",
+  "onboarding.extDesc": "คุณจำเป็นต้องใช้เพื่อกรอก บันทึก และอัปเดตรหัสผ่านขณะท่องเว็บ",
+  "onboarding.extInstalled": "ติดตั้งแล้ว",
+  "onboarding.extGet": "ติดตั้งเลย",
+  "settings.showSetupGuide": "แสดงคู่มือการตั้งค่า",
+  "settings.showSetupGuideHelp": "แสดงรายการตรวจสอบการตั้งค่าบนหน้าแรก",
 };

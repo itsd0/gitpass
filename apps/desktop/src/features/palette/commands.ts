@@ -23,8 +23,11 @@ export function builtinCommands(): PaletteCommand[] {
     { id: 'sync', labelKey: 'cmd.sync', icon: RefreshCw, keywords: ['git', 'push', 'pull'], run: async () => { try { toast((await api.sync({ merge: false })).message); } catch (e) { toast(String((e as Error).message ?? e), 'danger'); } } },
     { id: 'shortcuts', labelKey: 'cmd.shortcuts', icon: Keyboard, keywords: ['help', 'keys'], shortcut: '?', run: openShortcutsHelp },
   ];
-    const hasSelection = Boolean(app.selectedItemId || app.multiIds.length > 0);
-  if (hasSelection) {
+  const hasSelection = Boolean(app.selectedItemId || app.multiIds.length > 0);
+  // No move/tag for items in Recently Deleted or Archive: restore them first.
+  const kind = app.route.name === 'items' ? app.route.filter.kind : null;
+  const movable = kind !== 'deleted' && kind !== 'archive';
+  if (hasSelection && movable) {
     cmds.push({
       id: 'move-to-vault',
       labelKey: 'cmd.moveToVault',

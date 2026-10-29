@@ -181,7 +181,7 @@ function SidebarTagItem({
         e.dataTransfer.dropEffect = 'copy';
         setHovered(true);
       }}
-      onDragLeave={() => setHovered(false)}
+      onDragLeave={(e) => { const next = e.relatedTarget as Node | null; if (next && e.currentTarget.contains(next)) return; setHovered(false); }}
       onDrop={(e) => {
         if (!dragged) return;
         e.preventDefault();
@@ -298,7 +298,7 @@ function SidebarVaultItem({
         e.dataTransfer.dropEffect = 'move';
         setHovered(true);
       }}
-      onDragLeave={() => setHovered(false)}
+      onDragLeave={(e) => { const next = e.relatedTarget as Node | null; if (next && e.currentTarget.contains(next)) return; setHovered(false); }}
       onDrop={(e) => {
         if (!dragged) return;
         e.preventDefault();
