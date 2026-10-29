@@ -902,5 +902,29 @@
   "csRulesTooShort": {
     "message": "กฎรหัสผ่านของเว็บไซต์นี้สั้นเกินไปสำหรับรหัสผ่านที่รัดกุม",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "ctxGitpass": {
+    "message": "gitpass"
+  },
+  "ctxFillLogin": {
+    "message": "กรอกข้อมูลเข้าสู่ระบบ"
+  },
+  "ctxSearchGitpass": {
+    "message": "ค้นหาใน gitpass…"
+  },
+  "ctxSuggestPassword": {
+    "message": "แนะนำรหัสผ่านที่รัดกุม"
+  },
+  "ctxFillCard": {
+    "message": "กรอกบัตร"
+  },
+  "ctxFillIdentity": {
+    "message": "กรอกข้อมูลประจำตัว"
+  },
+  "ctxOpenGitpass": {
+    "message": "เปิด gitpass"
+  },
+  "ctxUnlockGitpass": {
+    "message": "ปลดล็อก gitpass…"
   }
 }

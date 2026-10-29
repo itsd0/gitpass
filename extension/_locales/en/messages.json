@@ -823,5 +823,29 @@
   },
   "csRulesTooShort": {
     "message": "This site's password rules are too short for a strong password"
+  },
+  "ctxGitpass": {
+    "message": "gitpass"
+  },
+  "ctxFillLogin": {
+    "message": "Fill login"
+  },
+  "ctxSearchGitpass": {
+    "message": "Search gitpass…"
+  },
+  "ctxSuggestPassword": {
+    "message": "Suggest strong password"
+  },
+  "ctxFillCard": {
+    "message": "Fill card"
+  },
+  "ctxFillIdentity": {
+    "message": "Fill identity"
+  },
+  "ctxOpenGitpass": {
+    "message": "Open gitpass"
+  },
+  "ctxUnlockGitpass": {
+    "message": "Unlock gitpass…"
   }
 }
