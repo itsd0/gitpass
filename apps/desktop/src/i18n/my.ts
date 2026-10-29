@@ -81,7 +81,7 @@ export const my: Partial<Record<Key, string>> = {
   'ssh.copy': 'Config ကူးယူရန်', 'ssh.copied': 'ကလစ်ဘုတ်သို့ ကူးယူပြီးပါပြီ', 'ssh.approve': 'အသုံးပြုမှုတိုင်းကို အတည်ပြုချက်တောင်းရန်',
   'ssh.approveHelp': 'လက်မှတ်ထိုးမှုတိုင်း (ဥပမာ- git push သို့မဟုတ် ssh login တိုင်း) မတိုင်မီ ခွင့်ပြုချက်တောင်းပါ။',
   'ssh.cli': 'Command line', 'ssh.cliHelp': 'gitpass ssh generate | import | list | public | config | agent',
-  'passkey.detail.site': 'ဆိုက်', 'passkey.detail.account': 'အကောင့်', 'passkey.detail.created': 'ဖန်တီးခဲ့သည့်ရက်',
+  'passkey.detail.account': 'အကောင့်', 'passkey.detail.created': 'ဖန်တီးခဲ့သည့်ရက်',
   'passkey.detail.lastUsed': 'နောက်ဆုံးအသုံးပြုခဲ့ချိန်', 'passkey.detail.neverUsed': 'တစ်ခါမျှအသုံးမပြုရသေး',
   'passkey.detail.credentialId': 'အထောက်အထားနံပါတ်', 'passkey.detail.signCount': 'လက်မှတ်ထိုးအရေအတွက်',
   'passkey.detail.copyAccount': 'အကောင့်ကို ကူးယူရန်', 'passkey.detail.copyCredentialId': 'အထောက်အထားနံပါတ်ကို ကူးယူရန်',

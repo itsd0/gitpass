@@ -78,7 +78,7 @@ export const th: Partial<Record<Key, string>> = {
   'ssh.copy': 'คัดลอก config', 'ssh.copied': 'คัดลอกไปยังคลิปบอร์ดแล้ว', 'ssh.approve': 'อนุมัติการใช้งานทุกครั้ง',
   'ssh.approveHelp': 'ถามก่อนการลงลายมือชื่อทุกครั้ง (เช่น ทุกครั้งที่ git push หรือ ssh เข้าสู่ระบบ)',
   'ssh.cli': 'คอมมานด์ไลน์', 'ssh.cliHelp': 'gitpass ssh generate | import | list | public | config | agent',
-  'passkey.detail.site': 'เว็บไซต์', 'passkey.detail.account': 'บัญชี', 'passkey.detail.created': 'สร้างเมื่อ',
+  'passkey.detail.account': 'บัญชี', 'passkey.detail.created': 'สร้างเมื่อ',
   'passkey.detail.lastUsed': 'ใช้งานล่าสุด', 'passkey.detail.neverUsed': 'ยังไม่เคยใช้',
   'passkey.detail.credentialId': 'รหัสข้อมูลประจำตัว', 'passkey.detail.signCount': 'จำนวนการลงนาม',
   'passkey.detail.copyAccount': 'คัดลอกบัญชี', 'passkey.detail.copyCredentialId': 'คัดลอกรหัสข้อมูลประจำตัว',

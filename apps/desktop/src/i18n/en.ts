@@ -86,7 +86,7 @@ export const en = {
   'ssh.configHelp': 'Add this to ~/.ssh/config so ssh and git use keys from gitpass. Keys are only offered while gitpass is unlocked.',
   'ssh.copy': 'Copy config', 'ssh.copied': 'Copied to clipboard', 'ssh.approve': 'Approve each use', 'ssh.approveHelp': 'Ask before every signature (e.g. each git push or ssh login).',
   'ssh.cli': 'Command line', 'ssh.cliHelp': 'gitpass ssh generate | import | list | public | config | agent',
-  'passkey.detail.site': 'Site', 'passkey.detail.account': 'Account', 'passkey.detail.created': 'Created',
+  'passkey.detail.account': 'Account', 'passkey.detail.created': 'Created',
   'passkey.detail.lastUsed': 'Last used', 'passkey.detail.neverUsed': 'Never used',
   'passkey.detail.credentialId': 'Credential ID', 'passkey.detail.signCount': 'Sign count',
   'passkey.detail.copyAccount': 'Copy account', 'passkey.detail.copyCredentialId': 'Copy credential ID',
