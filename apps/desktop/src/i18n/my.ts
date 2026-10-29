@@ -633,4 +633,18 @@ export const my: Partial<Record<Key, string>> = {
   "onboarding.extGet": "ယခုပဲ ရယူပါ",
   "settings.showSetupGuide": "စတင်ပြင်ဆင်မှု လမ်းညွှန်ကို ပြသရန်",
   "settings.showSetupGuideHelp": "ပင်မစာမျက်နှာတွင် စတင်ပြင်ဆင်မှု စာရင်းကို ပြသပါ",
+  // item keyboard shortcuts + palette actions
+  "itemKeys.copyPassword": "စကားဝှက် ကူးယူရန်",
+  "itemKeys.copyUsername": "အသုံးပြုသူအမည် ကူးယူရန်",
+  "itemKeys.copyTotp": "တစ်ကြိမ်သုံးကုဒ် ကူးယူရန်",
+  "itemKeys.edit": "အရာကို ပြင်ရန်",
+  "itemKeys.openWebsite": "ဝက်ဘ်ဆိုက် ဖွင့်ရန်",
+  "itemKeys.passwordCopied": "စကားဝှက် ကူးယူပြီး",
+  "itemKeys.secretCopied": "လျှို့ဝှက်ချက် ကူးယူပြီး",
+  "itemKeys.usernameCopied": "အသုံးပြုသူအမည် ကူးယူပြီး",
+  "itemKeys.totpCopied": "တစ်ကြိမ်သုံးကုဒ် ကူးယူပြီး",
+  "itemKeys.noSecret": "ဤအရာတွင် စကားဝှက် မရှိပါ",
+  "itemKeys.noUsername": "အသုံးပြုသူအမည် မရှိပါ",
+  "itemKeys.noTotp": "ဤအရာတွင် တစ်ကြိမ်သုံးကုဒ် မရှိပါ",
+  "itemKeys.noWebsite": "ဤအရာတွင် ဝက်ဘ်ဆိုက် မရှိပါ",
 };
