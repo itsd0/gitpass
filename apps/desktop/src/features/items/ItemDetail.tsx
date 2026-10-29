@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Archive, ArchiveRestore, ChevronRight, Copy, Download, ExternalLink, Eye, EyeOff, FolderInput, MoreVertical, Paperclip, Pencil, Plus, RotateCcw, Share2, ShieldAlert, Star, Trash2, Users } from 'lucide-react';
 import { api } from '../../api/client';
 import type { ItemDetail as Detail, VaultInfo } from '../../api/types';
@@ -63,6 +63,15 @@ function EmptyState() {
   );
 }
 
+/** True when a native (Tauri, physical-pixel) drop position lands inside `el`. */
+export function dropInsideElement(el: HTMLElement | null, pos?: { x: number; y: number }, scale = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1): boolean {
+  if (!el || !pos) return false;
+  const r = el.getBoundingClientRect();
+  const x = pos.x / scale;
+  const y = pos.y / scale;
+  return x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+}
+
 function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultInfo; vaults: VaultInfo[] }) {
   const t = useT();
   const { setEditing, refreshItems, selectItem } = useApp();
@@ -70,6 +79,101 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
   const deleted = !!detail.deletedAt;
   const run = (p: Promise<unknown>, msg: string, deselect = false) => p.then(() => { toast(msg); if (deselect) selectItem(null); refreshItems(); }, (e) => toast(errText(e), 'danger'));
   const [confirmPurge, setConfirmPurge] = useState(false);
+  const [removingAtt, setRemovingAtt] = useState<Detail['attachments'][number] | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const dropPaneRef = useRef<HTMLDivElement>(null);
+
+  const isTauri = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
+  const doAddAttachment = async (path: string) => {
+    try {
+      const a = await api.addAttachment({ ...ctx, path });
+      toast(t('detail.toast.addedAttachment', { name: a.name }));
+      refreshItems();
+    } catch (e) {
+      toast(errText(e), 'danger');
+    }
+  };
+
+  const onAddFile = async () => {
+    if (isTauri()) {
+      try {
+        const { open } = await import('@tauri-apps/plugin-dialog');
+        const res = await open({ multiple: false });
+        if (typeof res === 'string' && res) {
+          await doAddAttachment(res);
+        }
+      } catch (e) {
+        toast(errText(e), 'danger');
+      }
+    } else {
+      fileInputRef.current?.click();
+    }
+  };
+
+  const doSaveAttachment = async (a: Detail['attachments'][number]) => {
+    try {
+      let destPath = `~/Downloads/${a.name}`;
+      if (isTauri()) {
+        const { save } = await import('@tauri-apps/plugin-dialog');
+        const chosen = await save({ defaultPath: a.name });
+        if (!chosen) return;
+        destPath = chosen;
+      }
+      await api.saveAttachment({ ...ctx, attachmentId: a.id, destPath });
+      toast(t('detail.toast.savedAttachment', { name: a.name }));
+    } catch (e) {
+      toast(errText(e), 'danger');
+    }
+  };
+
+  const doRemoveAttachment = async (a: Detail['attachments'][number]) => {
+    try {
+      await api.removeAttachment({ ...ctx, attachmentId: a.id });
+      toast(t('detail.toast.removedAttachment', { name: a.name }));
+      refreshItems();
+    } catch (e) {
+      toast(errText(e), 'danger');
+    }
+  };
+
+  useEffect(() => {
+    if (!isTauri() || deleted) return;
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+    const inPane = (pos?: { x: number; y: number }) => dropInsideElement(dropPaneRef.current, pos);
+    import('@tauri-apps/api/webview')
+      .then(({ getCurrentWebview }) => {
+        if (cancelled) return;
+        return getCurrentWebview()
+          .onDragDropEvent((event) => {
+            const pl = event.payload as { type: string; paths?: string[]; position?: { x: number; y: number } };
+            if (pl.type === 'over') {
+              setIsDragging(inPane(pl.position));
+            } else if (pl.type === 'leave') {
+              setIsDragging(false);
+            } else if (pl.type === 'drop') {
+              setIsDragging(false);
+              if (!inPane(pl.position)) return;
+              const p = pl.paths?.[0];
+              if (p) void doAddAttachment(p);
+            }
+          })
+          .then((u) => {
+            // The effect may have been cleaned up while the subscription was pending.
+            if (cancelled) u();
+            else unlisten = u;
+          });
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      unlisten?.();
+      setIsDragging(false);
+    };
+  }, [detail.id, detail.vaultId, deleted]);
+
   const findings = detail.findings ?? [];
   const canChangePassword = !!detail.changePasswordUrl && findings.some((f) => ['weak', 'reused', 'pwned', 'insecure_url'].includes(f.kind));
   const changePassword = () => api.openChangePassword({ vaultId: detail.vaultId, itemId: detail.id }).catch((e) => toast(errText(e), 'danger'));
@@ -110,7 +214,45 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
         </DropdownMenu>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-6">
+      <div
+        ref={dropPaneRef}
+        className="flex-1 overflow-y-auto px-6 py-6"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (!deleted) setIsDragging(true);
+        }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragging(false);
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setIsDragging(false);
+          if (deleted) return;
+          const file = e.dataTransfer.files?.[0];
+          if (file) {
+            const p = (file as any).path || file.name;
+            void doAddAttachment(p);
+          }
+        }}
+      >
+        <input
+          type="file"
+          ref={fileInputRef}
+          className="hidden"
+          data-testid="attachment-file-input"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file) {
+              const p = (file as any).path || file.name;
+              void doAddAttachment(p);
+              e.target.value = '';
+            }
+          }}
+        />
         <div className="mx-auto max-w-3xl">
           <div className="mb-6 flex items-center gap-4">
             <ItemIcon item={detail} size={48} />
@@ -191,18 +333,83 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
             </div>
           )}
 
-          {detail.attachments.length > 0 && (
-            <div className="mb-4 overflow-hidden rounded-lg border border-border bg-card">
-              <div className="px-4 pt-2.5 text-xs text-label">{t('detail.attachments')}</div>
-              {detail.attachments.map((a) => (
-                <div key={a.id} className="group flex items-center gap-3 px-4 py-2">
-                  <Paperclip size={14} className="text-muted" />
-                  <div className="flex-1 truncate">{a.name}</div><span className="text-xs text-muted">{fmtBytes(a.size)}</span>
-                  <Button variant="ghost" size="iconSm" aria-label={t('detail.saveAttachment', { name: a.name })} onClick={() => api.saveAttachment({ ...ctx, attachmentId: a.id, destPath: `~/Downloads/${a.name}` }).then(() => toast(t('detail.toast.savedAttachment', { name: a.name })), (e) => toast(errText(e), 'danger'))}><Download size={13} /></Button>
-                </div>
-              ))}
+          <div
+            className={cn(
+              "mb-4 overflow-hidden rounded-lg border bg-card transition-colors",
+              isDragging ? "border-accent bg-accent/5 ring-2 ring-accent/30" : "border-border"
+            )}
+            data-testid="attachments-card"
+          >
+            <div className="flex items-center justify-between px-4 pt-2.5 pb-1">
+              <div className="text-xs text-label">{t('detail.attachments')}</div>
+              {!deleted && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs text-accent hover:text-accent font-medium gap-1 px-1.5"
+                  onClick={onAddFile}
+                >
+                  <Plus size={12} />
+                  {t('detail.addAttachment')}
+                </Button>
+              )}
             </div>
-          )}
+
+            {isDragging && (
+              <div className="mx-4 my-2 rounded-md border border-dashed border-accent bg-accent/10 p-3 text-center text-xs font-medium text-accent">
+                {t('detail.dragDropHint')}
+              </div>
+            )}
+
+            {detail.attachments.length > 0 ? (
+              <div className="divide-y divide-border/50">
+                {detail.attachments.map((a) => (
+                  <div
+                    key={a.id}
+                    tabIndex={0}
+                    role="row"
+                    aria-label={a.name}
+                    onKeyDown={(e) => {
+                      if (!deleted && (e.key === 'Delete' || e.key === 'Backspace')) {
+                        e.preventDefault();
+                        setRemovingAtt(a);
+                      }
+                    }}
+                    className="group flex items-center gap-3 px-4 py-2 outline-none focus-visible:bg-hover hover:bg-hover/50"
+                  >
+                    <Paperclip size={14} className="text-muted group-focus-visible:text-accent" />
+                    <div className="flex-1 truncate text-sm">{a.name}</div>
+                    <span className="text-xs text-muted">{fmtBytes(a.size)}</span>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        aria-label={t('detail.saveAttachment', { name: a.name })}
+                        onClick={() => void doSaveAttachment(a)}
+                      >
+                        <Download size={13} />
+                      </Button>
+                      {!deleted && (
+                        <Button
+                          variant="ghost"
+                          size="iconSm"
+                          className="text-muted hover:text-danger"
+                          aria-label={t('detail.removeAttachment', { name: a.name })}
+                          onClick={() => setRemovingAtt(a)}
+                        >
+                          <Trash2 size={13} />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="px-4 pb-3 pt-1 text-xs text-muted">
+                {t('detail.noAttachments')}
+              </div>
+            )}
+          </div>
 
           {detail.tags.length > 0 && <div className="mb-4 flex flex-wrap gap-1.5 px-1">{detail.tags.map((t) => <Badge key={t} tone="accent">{t}</Badge>)}</div>}
 
@@ -215,6 +422,29 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setConfirmPurge(false)}>{t('common.cancel')}</Button>
             <Button variant="danger" onClick={() => { setConfirmPurge(false); void run(api.purgeItem(ctx), t('detail.toast.purged'), true); }}>{t('detail.purgeConfirm')}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!removingAtt} onOpenChange={(open) => !open && setRemovingAtt(null)}>
+        <DialogContent
+          title={t('detail.removeAttachmentTitle')}
+          description={t('detail.removeAttachmentDesc', { name: removingAtt?.name ?? '' })}
+        >
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setRemovingAtt(null)}>
+              {t('common.cancel')}
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => {
+                const target = removingAtt;
+                setRemovingAtt(null);
+                if (target) void doRemoveAttachment(target);
+              }}
+            >
+              {t('detail.removeAttachmentConfirm')}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
