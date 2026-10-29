@@ -267,3 +267,81 @@ fn walk(p: &Path) -> Vec<std::path::PathBuf> {
     if let Ok(rd) = std::fs::read_dir(p) { for e in rd.flatten() { let q = e.path(); if q.is_dir() { v.extend(walk(&q)); } v.push(q); } }
     v
 }
+
+#[test]
+#[cfg(unix)]
+fn run_inherited_env_end_to_end() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Dev"], None).status.success());
+    assert!(gp(&root, &["add", "Dev", "--title", "Postgres", "--username", "app"], Some("pg-FAKE-s3cret-9")).status.success());
+    assert!(gp(&root, &["add", "Dev", "--title", "GitHub", "--username", "octocat"], Some("ghp_FAKE_secret_token")).status.success());
+
+    // 1. Inherited references resolved and masked without --env-file
+    let mut c = Command::new(bin());
+    c.args(["run", "--", "sh", "-c",
+        r#"test "$DB_PASSWORD" = pg-FAKE-s3cret-9 && test "$GH_TOKEN" = ghp_FAKE_secret_token && echo "pw=$DB_PASSWORD tok=$GH_TOKEN" && echo "err=$DB_PASSWORD" >&2; exit 5"#])
+        .env("GITPASS_PATH", &root)
+        .env("GITPASS_PASSWORD", "fake-master-pw-123")
+        .env("GITPASS_DEVICE_NAME", "test")
+        .env("DB_PASSWORD", "gp://Dev/Postgres/password")
+        .env("GH_TOKEN", "gp://Dev/GitHub/password");
+    let o = c.output().unwrap();
+    let out = String::from_utf8_lossy(&o.stdout);
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert_eq!(o.status.code(), Some(5), "exit code propagated; stderr={err}");
+    assert!(out.contains(&format!("pw={MASK} tok={MASK}")), "stdout={out}");
+    assert!(err.contains(&format!("err={MASK}")), "stderr={err}");
+    assert!(!out.contains("pg-FAKE-s3cret-9") && !out.contains("ghp_FAKE_secret_token"));
+    assert!(!err.contains("pg-FAKE-s3cret-9") && !err.contains("ghp_FAKE_secret_token"));
+
+    // 2. Inherited with --no-masking passes plain secret through
+    let mut c = Command::new(bin());
+    c.args(["run", "--no-masking", "--", "sh", "-c", "echo $GH_TOKEN"])
+        .env("GITPASS_PATH", &root)
+        .env("GITPASS_PASSWORD", "fake-master-pw-123")
+        .env("GITPASS_DEVICE_NAME", "test")
+        .env("GH_TOKEN", "gp://Dev/GitHub/password");
+    let o = c.output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "ghp_FAKE_secret_token");
+
+    // 3. Env file overrides inherited environment variable
+    let envf = d.path().join("override.env");
+    std::fs::write(&envf, "GH_TOKEN=overridden-token-value\n").unwrap();
+    let mut c = Command::new(bin());
+    c.args(["run", "--no-masking", "--env-file", envf.to_str().unwrap(), "--", "sh", "-c", "echo $GH_TOKEN"])
+        .env("GITPASS_PATH", &root)
+        .env("GITPASS_PASSWORD", "fake-master-pw-123")
+        .env("GITPASS_DEVICE_NAME", "test")
+        .env("GH_TOKEN", "gp://Dev/GitHub/password");
+    let o = c.output().unwrap();
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "overridden-token-value");
+
+    // 4. No env-file and no gp:// in environment fails before child runs
+    let mut c = Command::new(bin());
+    c.args(["run", "--", "sh", "-c", "echo RAN"])
+        .env("GITPASS_PATH", &root)
+        .env("GITPASS_PASSWORD", "fake-master-pw-123")
+        .env("GITPASS_DEVICE_NAME", "test");
+    let o = c.output().unwrap();
+    assert!(!o.status.success(), "must fail without env file or gp:// references");
+    assert!(!String::from_utf8_lossy(&o.stdout).contains("RAN"));
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("no gp:// references found"), "stderr={err}");
+
+    // 5. Unresolvable inherited reference fails before child runs, naming variable with no secret
+    let mut c = Command::new(bin());
+    c.args(["run", "--", "sh", "-c", "echo RAN"])
+        .env("GITPASS_PATH", &root)
+        .env("GITPASS_PASSWORD", "fake-master-pw-123")
+        .env("GITPASS_DEVICE_NAME", "test")
+        .env("BAD_TOKEN_VAR", "gp://Dev/NoSuchItem/password");
+    let o = c.output().unwrap();
+    assert!(!o.status.success(), "must fail on unresolvable reference");
+    assert!(!String::from_utf8_lossy(&o.stdout).contains("RAN"));
+    let err = String::from_utf8_lossy(&o.stderr);
+    assert!(err.contains("BAD_TOKEN_VAR"), "stderr must name variable: {err}");
+    assert!(err.contains("NoSuchItem"), "stderr must contain reason: {err}");
+    assert!(!err.contains("FAKE-s3cret") && !err.contains("ghp_FAKE"), "no secrets in stderr: {err}");
+}

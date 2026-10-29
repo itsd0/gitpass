@@ -954,6 +954,7 @@
   "badgeAppNotRunning": {
     "message": "แอป gitpass ไม่ได้ทำงานอยู่"
   },
+
   "optAutoSubmit": {
     "message": "ส่งแบบฟอร์มหลังจากกรอกข้อมูลเข้าสู่ระบบ"
   },
@@ -983,6 +984,12 @@
   },
   "pkPasskeysCount": {
     "message": "พาสคีย์ {n} รายการสำหรับไซต์นี้"
+  },
+  "catBankAccount": {
+    "message": "บัญชีธนาคาร"
+  },
+  "catServer": {
+    "message": "เซิร์ฟเวอร์"
   },
   "genRecent": {
     "message": "ล่าสุด"

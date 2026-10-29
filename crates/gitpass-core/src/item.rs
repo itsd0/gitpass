@@ -21,22 +21,175 @@ pub enum Category {
     SshKey,
     Wifi,
     Passkey,
+    BankAccount,
+    Server,
+    #[serde(other)]
+    Other,
 }
 impl Category {
-    pub const ALL: [Category; 9] = [Category::Login, Category::CreditCard, Category::SecureNote, Category::Identity,
-        Category::ApiCredential, Category::Document, Category::SshKey, Category::Wifi, Category::Passkey];
+    pub const ALL: [Category; 11] = [Category::Login, Category::CreditCard, Category::SecureNote, Category::Identity,
+        Category::ApiCredential, Category::Document, Category::SshKey, Category::Wifi, Category::Passkey,
+        Category::BankAccount, Category::Server];
     pub fn as_str(&self) -> &'static str {
         match self {
             Category::Login => "login", Category::CreditCard => "credit_card", Category::SecureNote => "secure_note",
             Category::Identity => "identity", Category::ApiCredential => "api_credential", Category::Document => "document",
             Category::SshKey => "ssh_key", Category::Wifi => "wifi", Category::Passkey => "passkey",
+            Category::BankAccount => "bank_account", Category::Server => "server",
+            Category::Other => "other",
+        }
+    }
+
+    /// Default section and field templates for this category.
+    pub fn field_template(&self) -> Vec<Section> {
+        match self {
+            Category::Login => vec![Section {
+                id: "login".into(),
+                title: None,
+                fields: vec![
+                    Field { id: "username".into(), label: "username".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "password".into(), label: "password".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                    Field { id: "website".into(), label: "website".into(), kind: FieldKind::Url, value: None, removed: false },
+                    Field { id: "otp".into(), label: "one-time password".into(), kind: FieldKind::Totp, value: None, removed: false },
+                ],
+            }],
+            Category::CreditCard => vec![Section {
+                id: "main".into(),
+                title: None,
+                fields: vec![
+                    Field { id: "cardholder".into(), label: "cardholder name".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "type".into(), label: "type".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "number".into(), label: "number".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                    Field { id: "cvv".into(), label: "verification number".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                    Field { id: "expiry".into(), label: "expiry date".into(), kind: FieldKind::MonthYear, value: None, removed: false },
+                    Field { id: "valid_from".into(), label: "valid from".into(), kind: FieldKind::MonthYear, value: None, removed: false },
+                    Field { id: "pin".into(), label: "PIN".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                ],
+            }],
+            Category::SecureNote => vec![Section {
+                id: "main".into(),
+                title: None,
+                fields: vec![
+                    Field { id: "note".into(), label: "note".into(), kind: FieldKind::Multiline, value: None, removed: false },
+                ],
+            }],
+            Category::Identity => vec![
+                Section {
+                    id: "name".into(),
+                    title: Some("Identification".into()),
+                    fields: vec![
+                        Field { id: "first".into(), label: "first name".into(), kind: FieldKind::Text, value: None, removed: false },
+                        Field { id: "last".into(), label: "last name".into(), kind: FieldKind::Text, value: None, removed: false },
+                        Field { id: "birth".into(), label: "birth date".into(), kind: FieldKind::Date, value: None, removed: false },
+                    ],
+                },
+                Section {
+                    id: "address".into(),
+                    title: Some("Address".into()),
+                    fields: vec![
+                        Field { id: "address".into(), label: "address".into(), kind: FieldKind::Multiline, value: None, removed: false },
+                    ],
+                },
+                Section {
+                    id: "contact".into(),
+                    title: Some("Contact".into()),
+                    fields: vec![
+                        Field { id: "email".into(), label: "email".into(), kind: FieldKind::Email, value: None, removed: false },
+                        Field { id: "phone".into(), label: "phone".into(), kind: FieldKind::Phone, value: None, removed: false },
+                    ],
+                },
+            ],
+            Category::ApiCredential => vec![Section {
+                id: "main".into(),
+                title: None,
+                fields: vec![
+                    Field { id: "username".into(), label: "username".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "credential".into(), label: "credential".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                    Field { id: "type".into(), label: "type".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "hostname".into(), label: "hostname".into(), kind: FieldKind::Url, value: None, removed: false },
+                    Field { id: "expires".into(), label: "expires".into(), kind: FieldKind::Date, value: None, removed: false },
+                ],
+            }],
+            Category::Document => vec![],
+            Category::SshKey => vec![Section {
+                id: "main".into(),
+                title: None,
+                fields: vec![
+                    Field { id: "private_key".into(), label: "private key".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                    Field { id: "public_key".into(), label: "public key".into(), kind: FieldKind::Multiline, value: None, removed: false },
+                    Field { id: "fingerprint".into(), label: "fingerprint".into(), kind: FieldKind::Text, value: None, removed: false },
+                ],
+            }],
+            Category::Wifi => vec![Section {
+                id: "main".into(),
+                title: None,
+                fields: vec![
+                    Field { id: "ssid".into(), label: "network name".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "password".into(), label: "wireless password".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                    Field { id: "security".into(), label: "security".into(), kind: FieldKind::Text, value: None, removed: false },
+                ],
+            }],
+            Category::Passkey => vec![Section {
+                id: "main".into(),
+                title: None,
+                fields: vec![
+                    Field { id: "rp_id".into(), label: "rp_id".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "credential_id".into(), label: "credential_id".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "private_key".into(), label: "private_key".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                ],
+            }],
+            Category::BankAccount => vec![Section {
+                id: "main".into(),
+                title: None,
+                fields: vec![
+                    Field { id: "bank_name".into(), label: "bank name".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "account_holder".into(), label: "account holder".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "account_type".into(), label: "account type".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "account_number".into(), label: "account number".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                    Field { id: "routing_number".into(), label: "routing / SWIFT / IBAN".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "pin".into(), label: "PIN".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                    Field { id: "branch_phone".into(), label: "branch phone".into(), kind: FieldKind::Phone, value: None, removed: false },
+                    Field { id: "branch_address".into(), label: "branch address".into(), kind: FieldKind::Multiline, value: None, removed: false },
+                ],
+            }],
+            Category::Server => vec![Section {
+                id: "main".into(),
+                title: None,
+                fields: vec![
+                    Field { id: "url".into(), label: "URL or hostname".into(), kind: FieldKind::Url, value: None, removed: false },
+                    Field { id: "username".into(), label: "username".into(), kind: FieldKind::Text, value: None, removed: false },
+                    Field { id: "password".into(), label: "password".into(), kind: FieldKind::Concealed, value: None, removed: false },
+                    Field { id: "admin_console_url".into(), label: "admin console URL".into(), kind: FieldKind::Url, value: None, removed: false },
+                    Field { id: "hosting_provider".into(), label: "hosting provider".into(), kind: FieldKind::Text, value: None, removed: false },
+                ],
+            }],
+            Category::Other => vec![],
         }
     }
 }
 impl std::str::FromStr for Category {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> anyhow::Result<Self> {
-        Category::ALL.into_iter().find(|c| c.as_str() == s).ok_or_else(|| anyhow::anyhow!("unknown category '{s}'"))
+        let norm = s.trim().to_ascii_lowercase();
+        if norm == "bank-account" || norm == "bank_account" || norm == "bank" {
+            return Ok(Category::BankAccount);
+        }
+        if norm == "server" {
+            return Ok(Category::Server);
+        }
+        if norm == "credit-card" || norm == "credit_card" || norm == "card" {
+            return Ok(Category::CreditCard);
+        }
+        if norm == "secure-note" || norm == "secure_note" || norm == "note" {
+            return Ok(Category::SecureNote);
+        }
+        if norm == "api-credential" || norm == "api_credential" || norm == "api" {
+            return Ok(Category::ApiCredential);
+        }
+        if norm == "ssh-key" || norm == "ssh_key" || norm == "ssh" {
+            return Ok(Category::SshKey);
+        }
+        Category::ALL.into_iter().find(|c| c.as_str() == norm).ok_or_else(|| anyhow::anyhow!("unknown category '{s}'"))
     }
 }
 
