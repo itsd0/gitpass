@@ -300,6 +300,8 @@ export const my: Partial<Record<Key, string>> = {
   "watchtower.expiringSoonDesc": "ရက် ၃၀ အတွင်း သက်တမ်းကုန်ဆုံးမည့် အရာများ။",
   "watchtower.insecureUrls": "လုံခြုံရေးမရှိသော ဝဘ်ဆိုက်များ",
   "watchtower.insecureUrlsDesc": "မလုံခြုံသော http:// လိပ်စာများဖြင့် သိမ်းထားသော လော့ဂ်အင်များ။ HTTPS သို့ အဆင့်မြှင့်တင်ပါ။",
+  "watchtower.weakSshKey": "အားနည်းသော SSH သော့များ",
+  "watchtower.weakSshKeyDesc": "၃၀၇၂ ဘစ်အောက် RSA သော့များ။ ၃၀၇၂+ ဘစ် သို့မဟုတ် Ed25519 သို့ အဆင့်မြှင့်ပါ။",
   "watchtower.openHttps": "HTTPS ဗားရှင်းကို ဖွင့်ရန်",
   "watchtower.editUrl": "URL ပြင်ဆင်ရန်",
   "watchtower.duplicates": "ထပ်နေသော လော့ဂ်အင်များ",

@@ -24,13 +24,13 @@ impl KeyProvider for AppKeys {
     fn identities(&self) -> Vec<(Vec<u8>, String)> {
         self.app.state.peek(|u| session_identities(&u.session)).map(|v| v.into_iter().map(|i| (i.blob, i.title)).collect()).unwrap_or_default()
     }
-    fn sign(&self, blob: &[u8], data: &[u8], _flags: u32) -> Result<Vec<u8>> {
+    fn sign(&self, blob: &[u8], data: &[u8], flags: u32) -> Result<Vec<u8>> {
         let id = self.app.state.peek(|u| session_identities(&u.session))?.into_iter().find(|i| i.blob == blob).ok_or_else(|| anyhow!("unknown key"))?;
         if self.app.get_settings().ssh_approve_each_use
             && !self.ui.approve("SSH key use", &format!("Allow an SSH signature with \u{201c}{}\u{201d} ({})?", id.title, id.key.info.fingerprint)) {
             bail!("denied by user");
         }
-        id.key.sign(data)
+        id.key.sign_with_flags(data, flags)
     }
 }
 

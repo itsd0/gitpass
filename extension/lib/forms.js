@@ -522,7 +522,62 @@
     return null;
   }
 
-  const api = { RX, classifyField, detectForms, locate, anchorFields, isVisible, hints, setValue, fillLogin, fillNewPassword, fillTotp, fillCard, fillCardDocument, paymentFrames, fillIdentity, cardValues, identityValues, captureCredentials, findHiddenUsername, CARD_ROLES, ID_ROLES, luhnCard, normCardExpiry, normCardExpiryParts };
+  /** Visible submit controls of a <form>: <input type=submit|image>, and <button> that would
+   *  submit (type=submit, or no type, or an invalid type — the HTML default for <button> is
+   *  submit). Disabled, hidden, or display:none controls do not count. Non-<form> scopes
+   *  never submit. */
+  function visibleSubmitControls(scope, opts) {
+    if (!scope || !scope.querySelectorAll || scope.tagName !== 'FORM') return [];
+    const out = [];
+    for (const el of scope.querySelectorAll('button, input')) {
+      const tag = (el.tagName || '').toLowerCase();
+      const type = ((el.getAttribute && el.getAttribute('type')) || '').toLowerCase();
+      let submits = false;
+      if (tag === 'input') submits = type === 'submit' || type === 'image';
+      else if (tag === 'button') submits = type === 'submit' || !['button', 'reset'].includes(type);
+      if (submits && isVisible(el, opts)) out.push(el);
+    }
+    return out;
+  }
+
+  /**
+   * Auto-submit decision for issue #231 ("submit after fill", opt-in). Returns true only when
+   * ALL of these hold:
+   * - the detected form is a real <form> of kind login or login_username (cards, identities,
+   *   TOTP, signup and change-password forms never auto-submit; formless groups never submit)
+   * - the step that was filled is complete: a full login needs its username AND password filled;
+   *   a password-only step needs its password; a username-only step needs its username. A
+   *   partially filled form fills and stops.
+   * - the form has exactly one visible submit control
+   * - when origins are supplied, the fill origin attested by the background matches the page
+   *   origin (mismatch, or an origin known on only one side, refuses). The item-URL match
+   *   itself is enforced upstream: the host refuses a fill whose item URL does not match the
+   *   page origin unless the user explicitly confirmed that cross-site fill, so a fill that
+   *   reaches this decision was already approved for this page.
+   * Cross-origin iframes cannot reach this decision: the content script runs top-frame only
+   * (all_frames:false) and only fills forms in its own document.
+   * `filled` is { username: bool, password: bool } as observed on the fields after the fill.
+   * The caller still gates on the opt-in setting and the per-site exception list, and only
+   * calls this from an explicit user fill action (popup Fill, inline pick, ⌘⇧L, right-click).
+   */
+  function shouldAutoSubmit(form, filled, opts) {
+    if (!form || (form.kind !== 'login' && form.kind !== 'login_username')) return false;
+    const scope = form.scope;
+    if (!scope || scope.tagName !== 'FORM') return false;
+    const o = opts || {};
+    if ((o.pageOrigin || o.fillOrigin) && o.pageOrigin !== o.fillOrigin) return false;
+    const F = form.fields || {};
+    const hasUser = !!F.username;
+    const hasPw = !!(F.password || F.current);
+    const f = filled || {};
+    if (hasUser && hasPw) { if (!f.username || !f.password) return false; }
+    else if (hasPw) { if (!f.password) return false; }
+    else if (hasUser) { if (!f.username) return false; }
+    else return false;
+    return visibleSubmitControls(scope, o).length === 1;
+  }
+
+  const api = { RX, classifyField, detectForms, locate, anchorFields, isVisible, hints, setValue, fillLogin, fillNewPassword, fillTotp, fillCard, fillCardDocument, paymentFrames, fillIdentity, cardValues, identityValues, captureCredentials, findHiddenUsername, CARD_ROLES, ID_ROLES, luhnCard, normCardExpiry, normCardExpiryParts, visibleSubmitControls, shouldAutoSubmit };
   root.GitpassForms = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
