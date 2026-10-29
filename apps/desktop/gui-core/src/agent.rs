@@ -7,9 +7,9 @@
 //!   `hello` carrying the 32-byte pairing token from `agent.token` (0600, hex). The code-signature
 //!   check (SecCode) is not implemented, so the contract's pairing-token path is mandatory.
 //! * Events `{"event":"lock"}` / `{"event":"unlock"}` are pushed to every authenticated connection.
-use crate::api::{self, App};
+use crate::api::App;
 use anyhow::{bail, Result};
-use gitpass_core::item::{Category, FieldKind};
+use gitpass_core::item::Category;
 use gitpass_core::merge::ItemRecord;
 use gitpass_core::store::Item;
 use serde_json::{json, Value};
@@ -118,6 +118,7 @@ impl std::error::Error for AgentError {}
 fn err(code: &'static str, m: impl Into<String>) -> anyhow::Error { anyhow::Error::new(AgentError { code, message: m.into() }) }
 fn classify(e: &anyhow::Error) -> (&'static str, String) {
     if let Some(a) = e.downcast_ref::<AgentError>() { return (a.code, a.message.clone()); }
+    if let Some(c) = e.downcast_ref::<gitpass_host::handler::CodedError>() { return (c.code, c.message.clone()); }
     let m = e.to_string();
     let l = m.to_lowercase();
     let code = if l.contains("vault is locked") { "locked" } else if l.contains("not found") || l.contains("no such") || l.contains("unknown vault") { "not_found" }
@@ -294,48 +295,22 @@ impl Agent {
                 Ok(json!({"vaults": v.iter().map(|x| json!({"id": x.id, "name": x.name, "item_count": x.item_count})).collect::<Vec<_>>()}))
             }
             "list_items" => {
-                let cat = match s("category") { Some(c) if !c.is_empty() => Some(c.parse::<Category>().map_err(|e| err("bad_request", e.to_string()))?), _ => None };
-                let query = s("query").unwrap_or_default().trim().to_lowercase();
-                let vault = s("vault_id").filter(|v| !v.is_empty());
-                let limit = q.get("limit").and_then(|l| l.as_u64()).map(|l| l as usize).unwrap_or(usize::MAX);
+                let records = self.records()?;
+                let iter = records.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
                 let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
-                let mut items: Vec<(Value, String)> = self.records()?.into_iter()
-                    .filter(|(vid, _, _, r)| vault.as_ref().is_none_or(|v| v == vid) && cat.is_none_or(|c| c == r.category))
-                    .map(|(vid, vname, iid, r)| {
-                        let mut s = summary(&vid, &vname, &iid, &r);
-                        if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
-                        (s, r.item.title.to_lowercase())
-                    })
-                    .filter(|(v, _)| query.is_empty() || ["title", "subtitle", "url"].iter().any(|k| v[*k].as_str().unwrap_or("").to_lowercase().contains(&query)))
-                    .collect();
-                items.sort_by(|a, b| a.1.cmp(&b.1));
-                Ok(json!({"items": items.into_iter().take(limit).map(|x| x.0).collect::<Vec<_>>()}))
+                gitpass_host::protocol::list_items(iter, q, &usage)
             }
             "match" => {
-                let origin = req("origin")?;
-                if gitpass_host::origin::parse_request_origin(&origin).is_none() { return Err(err("origin_mismatch", "origin must be https:// (or http:// on loopback)")); }
+                let records = self.records()?;
+                let iter = records.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
                 let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
-                let matches_url = |u: &str| gitpass_host::origin::origin_matches(u, &origin);
-                // Passkeys only on request (popup site list): fill flows keep getting logins only.
-                let passkeys = q.get("include_passkeys").and_then(|v| v.as_bool()) == Some(true);
-                let items: Vec<Value> = self.records()?.into_iter()
-                    .filter(|(_, _, _, r)| (r.category == Category::Login && (r.item.url.as_deref().is_some_and(matches_url) || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == gitpass_core::item::FieldKind::Url && f.value.as_deref().is_some_and(matches_url))))
-                        || (passkeys && gitpass_host::passkey::record_matches_origin(r, &origin)))
-                    .map(|(vid, vname, iid, r)| {
-                        let mut s = summary(&vid, &vname, &iid, &r);
-                        if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
-                        s
-                    }).collect();
-                Ok(json!({"items": items}))
+                gitpass_host::protocol::match_items(iter, q, &usage)
             }
             "get_item" => {
                 let (vid, iid) = split_id(&req("item_id")?)?;
                 let (vname, r) = self.record(&vid, &iid)?;
-                let mut d = detail(&vid, &vname, &iid, &r);
-                if let Ok(Some(lu)) = self.app.state.with(|x| Ok(x.session.last_used(&iid))) {
-                    d["last_used"] = json!(lu);
-                }
-                Ok(json!({"item": d}))
+                let lu = self.app.state.with(|x| Ok(x.session.last_used(&iid))).ok().flatten();
+                Ok(gitpass_host::protocol::get_item(&vid, &vname, &iid, &r, lu))
             }
             "reveal" => {
                 if source != "popup" { return Err(err("denied", "reveal is allowed only from the popup")); }
@@ -366,12 +341,8 @@ impl Agent {
                 if source != "popup" && source != "inpage_click" { return Err(err("denied", "card/identity fill must be popup-initiated or follow an in-page click")); }
                 let (vid, iid) = split_id(&req("item_id")?)?;
                 let (_, r) = self.record(&vid, &iid)?;
-                let want = if cmd == "fill_card" { Category::CreditCard } else { Category::Identity };
-                if r.category != want { return Err(err("bad_request", format!("item is not a {}", want.as_str()))); }
                 let _ = self.app.state.with(|x| Ok(x.session.touch_item_used(&iid)));
-                let mut m = serde_json::Map::new();
-                for f in r.view_sections().into_iter().flat_map(|s| s.fields) { if let Some(v) = f.value { m.insert(f.id, json!(v)); } }
-                Ok(Value::Object(m))
+                gitpass_host::protocol::fill_card_or_identity(&r, cmd == "fill_card")
             }
             "totp" => { let (vid, iid) = split_id(&req("item_id")?)?; let t = self.app.totp_now(&vid, &iid)?; Ok(json!({"code": t.code, "remaining": t.remaining, "period": t.period})) }
             "save_login" => {
@@ -469,15 +440,7 @@ impl Agent {
                 self.poll_state();
                 Ok(json!({"favorite": fav}))
             }
-            "generate" => {
-                use gitpass_core::generate::{Mode, Request};
-                let b = |k: &str| q.get(k).and_then(|v| v.as_bool()).unwrap_or(true);
-                let pin = q.get("pin").and_then(|v| v.as_bool()).unwrap_or(false);
-                let words = q.get("words").and_then(|v| v.as_bool()).unwrap_or(false);
-                let mode = if pin { Mode::Pin } else if words { Mode::Words } else { Mode::Random };
-                let r = Request { mode, length: q.get("len").and_then(|v| v.as_u64()).map(|v| v as usize), symbols: b("symbols"), digits: b("digits"), ..Request::new(mode) };
-                Ok(json!({"password": api::generate(&r).map_err(|e| err("bad_request", e.to_string()))?}))
-            }
+            "generate" => gitpass_host::protocol::generate(q),
             "record_generated_password" => {
                 let pw = q.get("password").and_then(|v| v.as_str()).ok_or_else(|| err("bad_request", "password is required"))?;
                 let source = q.get("source").and_then(|v| v.as_str()).unwrap_or("extension");
@@ -539,36 +502,7 @@ impl Agent {
                         gitpass_core::audit::audit_with_passkeys(&items, &passkey_sites, &gitpass_core::audit::AuditOpts::default(), None)
                     })
                 })?;
-                let item_finding = rep.per_item.iter().find(|f| f.vault == vid && f.id == iid);
-                let change_pw_url = r.item.url.as_deref().and_then(gitpass_core::audit::change_password_url);
-                let mut kinds = vec![];
-                let mut reused_count = None;
-                let mut pwned_count = None;
-                let mut old_days = None;
-                let mut expiring_days = None;
-                let mut insecure_url_host = None;
-
-                if let Some(f) = item_finding {
-                    for finding in &f.findings {
-                        kinds.push(finding.kind().to_string());
-                        match finding {
-                            gitpass_core::audit::Finding::Reused { others, .. } => reused_count = Some(others + 1),
-                            gitpass_core::audit::Finding::Pwned { count } => pwned_count = Some(*count),
-                            gitpass_core::audit::Finding::Old { days } => old_days = Some(*days),
-                            gitpass_core::audit::Finding::ExpiringSoon { days, .. } => expiring_days = Some(*days),
-                            gitpass_core::audit::Finding::InsecureUrl { url_host } => insecure_url_host = Some(url_host.clone()),
-                            _ => {}
-                        }
-                    }
-                }
-                let mut out = json!({ "kinds": kinds });
-                if let Some(c) = reused_count { out["reused_count"] = json!(c); }
-                if let Some(c) = pwned_count { out["pwned_count"] = json!(c); }
-                if let Some(d) = old_days { out["old_days"] = json!(d); }
-                if let Some(d) = expiring_days { out["expiring_days"] = json!(d); }
-                if let Some(h) = insecure_url_host { out["insecure_url_host"] = json!(h); }
-                if let Some(u) = change_pw_url { out["change_password_url"] = json!(u); }
-                Ok(out)
+                Ok(gitpass_host::protocol::item_findings(&vid, &iid, &r, &rep))
             }
             "site_icon" => {
                 let host = req("host")?.trim().to_lowercase();
@@ -578,12 +512,12 @@ impl Agent {
                 }
                 let live_records = self.records()?;
                 let allowed = live_records.iter().any(|(_, _, _, r)| {
-                    if let Some(h) = r.item.url.as_deref().and_then(url_host) {
+                    if let Some(h) = r.item.url.as_deref().and_then(gitpass_host::protocol::url_host) {
                         if h.eq_ignore_ascii_case(&host) { return true; }
                     }
                     r.sections.iter().flat_map(|s| &s.fields).any(|f| {
                         f.kind == gitpass_core::item::FieldKind::Url
-                            && f.value.as_deref().and_then(url_host).is_some_and(|h| h.eq_ignore_ascii_case(&host))
+                            && f.value.as_deref().and_then(gitpass_host::protocol::url_host).is_some_and(|h| h.eq_ignore_ascii_case(&host))
                     })
                 });
                 if !allowed {
@@ -659,49 +593,6 @@ pub fn split_id(id: &str) -> Result<(String, String)> {
     let (v, i) = id.split_once(':').ok_or_else(|| err("bad_request", "item_id must be '<vault_id>:<item_id>'"))?;
     if v.is_empty() || i.is_empty() { return Err(err("bad_request", "item_id must be '<vault_id>:<item_id>'")); }
     Ok((v.into(), i.into()))
-}
-
-fn has_totp(r: &ItemRecord) -> bool { r.view_sections().iter().flat_map(|s| s.fields.iter()).any(|f| f.kind == FieldKind::Totp && f.value.as_deref().is_some_and(|v| !v.is_empty())) }
-
-fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
-    let subtitle = api::subtitle(r);
-    let favicon_host = r.item.url.as_deref().and_then(url_host);
-    let mut v = json!({"id": format!("{vid}:{iid}"), "vault_id": vid, "vault_name": vname, "category": r.category.as_str(), "title": r.item.title,
-        "subtitle": subtitle, "has_totp": has_totp(r), "favorite": r.favorite, "updated_at": ts(&r.item.updated_at)});
-    if let Some(u) = &r.item.url { v["url"] = json!(u); }
-    if let Some(h) = favicon_host { v["favicon_host"] = json!(h); }
-    v
-}
-fn url_host(u: &str) -> Option<String> {
-    let u = u.trim();
-    let p = if u.contains("://") { url::Url::parse(u).ok()? } else { url::Url::parse(&format!("https://{u}")).ok()? };
-    p.host_str().map(str::to_string)
-}
-fn ts(s: &str) -> String { s.trim().parse::<i64>().map(gitpass_core::device::iso8601).unwrap_or_else(|_| s.to_string()) }
-
-fn kind_name(cat: Category, f: &gitpass_core::item::Field) -> &'static str {
-    match f.kind {
-        FieldKind::Concealed | FieldKind::Text if cat == Category::CreditCard && api::is_card_number(f) => "card_number",
-        FieldKind::Concealed => "password", FieldKind::Totp => "totp", FieldKind::Url => "url", FieldKind::Email => "email",
-        FieldKind::Phone => "phone", FieldKind::Date | FieldKind::MonthYear => "date", FieldKind::Text | FieldKind::Multiline => "text",
-    }
-}
-fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
-    let mut v = summary(vid, vname, iid, r);
-    let mut fields: Vec<Value> = vec![];
-    if r.category == Category::Login { if let Some(u) = &r.item.url { fields.push(json!({"name": "url", "label": "website", "value": u, "concealed": false, "kind": "url"})); } }
-    for f in r.view_sections().into_iter().flat_map(|s| s.fields) {
-        let concealed = f.kind.is_secret();
-        let mut x = json!({"name": f.id, "label": f.label, "concealed": concealed, "kind": kind_name(r.category, &f)});
-        if !concealed { if let Some(val) = &f.value { x["value"] = json!(val); } }
-        else if x["kind"] == json!("card_number") { if let Some(d) = f.value.as_deref().and_then(api::card_digits_of) { x["masked"] = json!(api::card_mask(&d)); } }
-        fields.push(x);
-    }
-    v["fields"] = json!(fields);
-    if let Some(n) = &r.item.notes { v["notes"] = json!(n); }
-    v["tags"] = json!(r.tags);
-    v["created_at"] = json!(r.created_at.map(|c| gitpass_core::device::iso8601(c as i64)).unwrap_or_else(|| ts(&r.item.updated_at)));
-    v
 }
 
 /// Keep contract codes from gitpass-host's `CodedError` (e.g. `origin_mismatch`, `exists`).

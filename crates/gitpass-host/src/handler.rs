@@ -3,15 +3,14 @@
 //! Requests: `{"id":<any>,"cmd":"<name>", ...args}`.
 //! Responses: `{"id":<same>,"ok":true,"result":{...}}` or
 //! `{"id":<same>,"ok":false,"error":"<code>","message":"..."}`.
-use crate::origin::{origin_matches, parse_request_origin};
+use crate::origin::origin_matches;
 use anyhow::Result;
 use gitpass_core::crypto::{KdfParams, SecretKey};
 use gitpass_core::item::{Category, Field, FieldKind, Section};
 use gitpass_core::merge::ItemRecord;
 use gitpass_core::store::{self, Item, Session};
-use gitpass_core::audit::Finding;
 use std::sync::Arc;
-use serde_json::{json, Map, Value};
+use serde_json::{json, Value};
 use std::path::PathBuf;
 use std::time::{Duration, Instant, SystemTime};
 use zeroize::Zeroizing;
@@ -70,13 +69,7 @@ pub fn error_frame(id: Value, code: &str, message: &str) -> Value {
     json!({"id": id, "ok": false, "error": code, "message": message})
 }
 
-/// Validate a requesting page origin (https, or http on loopback). Used in both proxy and fallback mode.
-pub fn check_request_origin(origin: &str) -> Result<()> {
-    if parse_request_origin(origin).is_none() {
-        return Err(coded(code::ORIGIN_MISMATCH, format!("refused: origin must be https (or http://localhost): {origin}")));
-    }
-    Ok(())
-}
+pub use crate::protocol::check_request_origin;
 
 pub struct HostConfig {
     pub vault_path: PathBuf,
@@ -105,99 +98,10 @@ fn split_id(id: &str) -> Result<(&str, &str)> {
         .ok_or_else(|| coded(code::BAD_REQUEST, "bad item_id (expected <vault>:<item>)"))
 }
 
-fn nonempty(v: &Option<String>) -> Option<&str> { v.as_deref().filter(|s| !s.is_empty()) }
-
-fn url_host(u: &str) -> Option<String> {
-    let u = u.trim();
-    let p = if u.contains("://") { url::Url::parse(u).ok()? } else { url::Url::parse(&format!("https://{u}")).ok()? };
-    p.host_str().map(str::to_string)
-}
-
-/// Contract field kind for a gitpass-core field.
-fn kind_str(cat: Category, f: &Field) -> &'static str {
-    match f.kind {
-        FieldKind::Concealed if cat == Category::CreditCard && is_card_number(f) => "card_number",
-        FieldKind::Text if cat == Category::CreditCard && is_card_number(f) => "card_number",
-        FieldKind::Concealed => "password",
-        FieldKind::Totp => "totp",
-        FieldKind::Url => "url",
-        FieldKind::Email => "email",
-        FieldKind::Phone => "phone",
-        FieldKind::Date | FieldKind::MonthYear => "date",
-        FieldKind::Text | FieldKind::Multiline => "text",
-    }
-}
-fn is_card_number(f: &Field) -> bool { matches!(f.id.as_str(), "number" | "ccnum" | "card_number") }
-
-/// Preview of a long API secret: first 4 and last 4 characters (`abcd••••wxyz`). Secrets shorter than
-/// 12 characters get no preview, so a short token is never mostly revealed.
-fn secret_preview(v: &str) -> Option<String> {
-    let c: Vec<char> = v.chars().collect();
-    (c.len() >= 12).then(|| format!("{}••••{}", c[..4].iter().collect::<String>(), c[c.len() - 4..].iter().collect::<String>()))
-}
-
-fn fields_of(r: &ItemRecord) -> Vec<Field> { r.view_sections().into_iter().flat_map(|s| s.fields).collect() }
-
-fn field_val(r: &ItemRecord, ids: &[&str]) -> Option<String> {
-    let fs = fields_of(r);
-    ids.iter().find_map(|id| fs.iter().find(|f| f.id == *id).and_then(|f| f.value.clone()).filter(|v| !v.is_empty()))
-}
-
-fn subtitle(r: &ItemRecord) -> String {
-    match r.category {
-        Category::Login => r.item.username.clone().unwrap_or_default(),
-        Category::CreditCard => {
-            let n: String = field_val(r, &["number", "ccnum", "card_number"]).unwrap_or_default().chars().filter(|c| c.is_ascii_digit()).collect();
-            if n.len() >= 4 { format!("•••• {}", &n[n.len() - 4..]) } else { String::new() }
-        }
-        Category::Identity => field_val(r, &["name", "full_name"]).unwrap_or_else(|| {
-            [field_val(r, &["first", "first_name", "firstname"]), field_val(r, &["last", "last_name", "lastname"])]
-                .into_iter().flatten().collect::<Vec<_>>().join(" ")
-        }),
-        Category::Wifi => field_val(r, &["ssid"]).unwrap_or_default(),
-        _ => fields_of(r).into_iter().find(|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty()))
-            .and_then(|f| f.value).map(|v| v.lines().next().unwrap_or("").chars().take(80).collect()).unwrap_or_default(),
-    }
-}
-
-fn has_totp(r: &ItemRecord) -> bool {
-    nonempty(&r.item.totp).is_some() || fields_of(r).iter().any(|f| f.kind == FieldKind::Totp && f.value.as_deref().is_some_and(|v| !v.is_empty()))
-}
-
-/// ItemSummary (contract).
-pub fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
-    let url = nonempty(&r.item.url);
-    json!({
-        "id": format!("{vid}:{iid}"), "vault_id": vid, "vault_name": vname,
-        "category": r.category.as_str(), "title": r.item.title, "subtitle": subtitle(r),
-        "url": url, "favicon_host": url.and_then(url_host), "has_totp": has_totp(r),
-        "favorite": r.favorite, "updated_at": r.item.updated_at, "created_at": r.created_at,
-    })
-}
-
-/// ItemDetail (contract): summary + fields with secrets omitted (`concealed:true`, no value).
-pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
-    let mut v = summary(vid, vname, iid, r);
-    let mut fields = vec![];
-    if let Some(u) = nonempty(&r.item.url) {
-        fields.push(json!({"name": "url", "label": "website", "value": u, "concealed": false, "kind": "url"}));
-    }
-    for f in fields_of(r) {
-        let secret = f.kind.is_secret();
-        let mut o = json!({"name": f.id, "label": f.label, "concealed": secret, "kind": kind_str(r.category, &f)});
-        if !secret { o["value"] = json!(f.value); }
-        else if r.category == Category::ApiCredential {
-            if let Some(m) = f.value.as_deref().and_then(secret_preview) { o["masked"] = json!(m); }
-        }
-        fields.push(o);
-    }
-    let m = v.as_object_mut().unwrap();
-    m.insert("fields".into(), json!(fields));
-    m.insert("notes".into(), json!(nonempty(&r.item.notes)));
-    m.insert("tags".into(), json!(r.tags));
-    m.insert("created_at".into(), json!(r.created_at));
-    v
-}
+pub use crate::protocol::{
+    detail, field_val, fields_of, has_totp, is_card_number, kind_str, nonempty, secret_preview,
+    subtitle, summary, url_host,
+};
 
 fn visible(r: &ItemRecord) -> bool { r.deleted_at.is_none() && !r.archived }
 
@@ -481,54 +385,16 @@ impl Host {
             "request_unlock" => Err(coded(code::APP_NOT_RUNNING, "the gitpass app is not running; open it or unlock with password")),
             "lock" => { self.session = None; Ok(json!({"unlocked": false})) }
             "list_items" => {
-                let vault = req.get("vault_id").and_then(Value::as_str);
-                let cat = req.get("category").and_then(Value::as_str);
-                if let Some(c) = cat { c.parse::<Category>().map_err(|e| coded(code::BAD_REQUEST, e.to_string()))?; }
-                let q = req.get("query").and_then(Value::as_str).map(str::to_lowercase).filter(|q| !q.is_empty());
-                // No cap unless the caller asks for one: the popup lists every item (a silent default cap dropped items past the 500th title).
-                let limit = req.get("limit").and_then(Value::as_u64).map(|n| n as usize);
-                // Paging: a reply is capped at 1 MiB (framing::MAX_OUT), so big vaults are fetched in pages via `offset`.
-                let offset = req.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
                 let usage = self.sess()?.all_last_used();
-                let mut out = vec![];
-                for (vid, vname, iid, r) in self.all_records(vault)? {
-                    if cat.is_some_and(|c| c != r.category.as_str()) { continue; }
-                    let mut s = summary(&vid, &vname, &iid, &r);
-                    if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
-                    if let Some(q) = &q {
-                        let hay = format!("{} {} {}", r.item.title, s["subtitle"].as_str().unwrap_or(""), r.item.url.as_deref().unwrap_or("")).to_lowercase();
-                        if !hay.contains(q.as_str()) { continue; }
-                    }
-                    out.push(s);
-                }
-                out.sort_by(|a, b| a["title"].as_str().unwrap_or("").to_lowercase().cmp(&b["title"].as_str().unwrap_or("").to_lowercase()));
-                let total = out.len();
-                let out: Vec<Value> = out.into_iter().skip(offset).take(limit.unwrap_or(usize::MAX)).collect();
-                let end = offset.saturating_add(out.len());
-                let next_offset = (end < total).then_some(end);
-                Ok(json!({"items": out, "total": total, "next_offset": next_offset}))
+                let records = self.all_records(None)?;
+                let iter = records.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                crate::protocol::list_items(iter, req, &usage)
             }
             "match" => {
-                // `url` accepted for 0.5 extensions.
-                let origin = req.get("origin").or_else(|| req.get("url")).and_then(Value::as_str)
-                    .ok_or_else(|| coded(code::BAD_REQUEST, "missing string argument 'origin'"))?;
-                check_request_origin(origin)?;
                 let usage = self.sess()?.all_last_used();
-                let matches_url = |u: &str| origin_matches(u, origin);
-                // Passkeys only on request (popup site list): fill flows must keep getting logins only.
-                let passkeys = req.get("include_passkeys").and_then(Value::as_bool) == Some(true);
-                let mut out = vec![];
-                for (vid, vname, iid, r) in self.all_records(None)? {
-                    let login = r.category == Category::Login
-                        && (r.item.url.as_deref().is_some_and(matches_url)
-                            || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == FieldKind::Url && f.value.as_deref().is_some_and(matches_url)));
-                    if login || (passkeys && crate::passkey::record_matches_origin(&r, origin)) {
-                        let mut s = summary(&vid, &vname, &iid, &r);
-                        if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
-                        out.push(s);
-                    }
-                }
-                Ok(json!({"items": out}))
+                let records = self.all_records(None)?;
+                let iter = records.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                crate::protocol::match_items(iter, req, &usage)
             }
             "search" => {
                 // 0.5 compatibility.
@@ -545,11 +411,9 @@ impl Host {
             }
             "get_item" => {
                 let (vid, iid, r) = self.record(arg_str(req, "item_id")?)?;
-                let mut d = detail(&vid, &self.vault_name(&vid)?, &iid, &r);
-                if let Some(lu) = self.sess()?.last_used(&iid) {
-                    d["last_used"] = json!(lu);
-                }
-                Ok(json!({"item": d}))
+                let vname = self.vault_name(&vid)?;
+                let lu = self.sess()?.last_used(&iid);
+                Ok(crate::protocol::get_item(&vid, &vname, &iid, &r, lu))
             }
             "reveal" => {
                 if req.get("source").and_then(Value::as_str) != Some("popup") {
@@ -584,15 +448,9 @@ impl Host {
             }
             "fill_card" | "fill_identity" => {
                 Self::require_user_action(req, cmd)?;
-                let want = if cmd == "fill_card" { Category::CreditCard } else { Category::Identity };
                 let (_, iid, r) = self.record(arg_str(req, "item_id")?)?;
-                if r.category != want { return Err(coded(code::BAD_REQUEST, format!("item is a {}, not a {}", r.category.as_str(), want.as_str()))); }
                 let _ = self.sess()?.touch_item_used(&iid);
-                let mut m = Map::new();
-                for f in fields_of(&r) {
-                    if let Some(v) = f.value.filter(|v| !v.is_empty()) { m.entry(f.id).or_insert(json!(v)); }
-                }
-                Ok(Value::Object(m))
+                crate::protocol::fill_card_or_identity(&r, cmd == "fill_card")
             }
             "totp" => {
                 let (_, _, r) = self.record(arg_str(req, "item_id")?)?;
@@ -677,25 +535,7 @@ impl Host {
                 self.audit_cache = None;
                 Ok(json!({"favorite": fav}))
             }
-            "generate" => {
-                use gitpass_core::generate::{Mode, Request};
-                let flag = |k: &str, default: bool| req.get(k).and_then(Value::as_bool).unwrap_or(default);
-                let (words, pin) = (flag("words", false), flag("pin", false));
-                let r = Request {
-                    mode: if pin { Mode::Pin } else if words { Mode::Words } else { Mode::Random },
-                    length: req.get("len").and_then(Value::as_u64).map(|v| v as usize),
-                    symbols: flag("symbols", true),
-                    digits: flag("digits", true),
-                    separator: None,
-                    capitalize: false,
-                };
-                if let Some(rules) = req.get("rules").filter(|r| !r.is_null()) {
-                    if words || pin { return Err(coded(code::BAD_REQUEST, "rules apply to random passwords only")); }
-                    let len = gitpass_core::generate::Options::for_request(&r).map_err(|m| coded(code::BAD_REQUEST, m))?.length;
-                    return Ok(json!({"password": generate_for_rules(len, rules)?}));
-                }
-                Ok(json!({"password": generate(&r)?}))
-            }
+            "generate" => crate::protocol::generate(req),
             "record_generated_password" => {
                 let pw = arg_str(req, "password")?;
                 let source = req.get("source").and_then(Value::as_str).unwrap_or("extension");
@@ -750,36 +590,7 @@ impl Host {
                 let (vid, iid) = split_id(item_id_str)?;
                 let (_, _, rec) = self.record(item_id_str)?;
                 let report = self.get_audit_report()?;
-                let item_finding = report.per_item.iter().find(|f| f.vault == vid && f.id == iid);
-                let change_pw_url = rec.item.url.as_deref().and_then(gitpass_core::audit::change_password_url);
-                let mut kinds = vec![];
-                let mut reused_count = None;
-                let mut pwned_count = None;
-                let mut old_days = None;
-                let mut expiring_days = None;
-                let mut insecure_url_host = None;
-
-                if let Some(f) = item_finding {
-                    for finding in &f.findings {
-                        kinds.push(finding.kind().to_string());
-                        match finding {
-                            Finding::Reused { others, .. } => reused_count = Some(others + 1),
-                            Finding::Pwned { count } => pwned_count = Some(*count),
-                            Finding::Old { days } => old_days = Some(*days),
-                            Finding::ExpiringSoon { days, .. } => expiring_days = Some(*days),
-                            Finding::InsecureUrl { url_host } => insecure_url_host = Some(url_host.clone()),
-                            _ => {}
-                        }
-                    }
-                }
-                let mut out = json!({ "kinds": kinds });
-                if let Some(c) = reused_count { out["reused_count"] = json!(c); }
-                if let Some(c) = pwned_count { out["pwned_count"] = json!(c); }
-                if let Some(d) = old_days { out["old_days"] = json!(d); }
-                if let Some(d) = expiring_days { out["expiring_days"] = json!(d); }
-                if let Some(h) = insecure_url_host { out["insecure_url_host"] = json!(h); }
-                if let Some(u) = change_pw_url { out["change_password_url"] = json!(u); }
-                Ok(out)
+                Ok(crate::protocol::item_findings(vid, iid, &rec, &report))
             }
             "site_icon" => {
                 let s = self.sess()?;

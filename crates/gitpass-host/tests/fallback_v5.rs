@@ -18,7 +18,7 @@ fn categories_summaries_and_detail() {
     assert_eq!(by("GitHub")["has_totp"], true);
     assert_eq!(by("GitHub")["vault_name"], "Personal");
     assert_eq!(by("Visa")["category"], "credit_card");
-    assert_eq!(by("Visa")["subtitle"], "•••• 1234");
+    assert_eq!(by("Visa")["subtitle"], "Visa •••• 1234");
     assert_eq!(by("Me")["category"], "identity");
     assert_eq!(by("Me")["subtitle"], "Test Person");
     assert_eq!(by("Wifi notes")["category"], "secure_note");

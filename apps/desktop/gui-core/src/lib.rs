@@ -325,5 +325,7 @@ mod tests;
 mod api_tests;
 #[cfg(all(test, unix))]
 mod agent_tests;
+#[cfg(all(test, unix))]
+mod shared_protocol_tests;
 #[cfg(all(test, unix))] // uses the UNIX-socket agent
 mod ssh_tests;
