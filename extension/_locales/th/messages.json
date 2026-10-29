@@ -95,6 +95,18 @@
   "copyPassword": {
     "message": "คัดลอกรหัสผ่าน"
   },
+  "copyUsername": {
+    "message": "คัดลอกชื่อผู้ใช้"
+  },
+  "copyNumber": {
+    "message": "คัดลอกหมายเลขบัตร"
+  },
+  "copyCredential": {
+    "message": "คัดลอกข้อมูลประจำตัว"
+  },
+  "openWebsite": {
+    "message": "เปิดเว็บไซต์"
+  },
   "passwordCopied": {
     "message": "คัดลอกรหัสผ่านแล้ว"
   },

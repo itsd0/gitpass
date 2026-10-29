@@ -60,6 +60,15 @@ describe('i18n', () => {
       }
     }
   });
+  it("covers all watchtower.* strings in my and th", () => {
+    const keys = Object.keys(en).filter((k) => k.startsWith("watchtower."));
+    expect(keys.length).toBeGreaterThan(20);
+    for (const d of [dictionaries.my, dictionaries.th]) {
+      for (const k of keys) {
+        expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+      }
+    }
+  });
   it("covers all items.empty.* and category.* strings in my and th", () => {
     const keys = Object.keys(en).filter((k) => k.startsWith("items.empty.") || k.startsWith("category."));
     for (const d of [dictionaries.my, dictionaries.th]) {
