@@ -164,6 +164,7 @@ pub enum Theme { Dark, Light, System }
 #[serde(rename_all = "lowercase")]
 pub enum Language { En, My, Th }
 fn default_true() -> bool { true }
+fn default_quick_access_hotkey() -> String { "CommandOrControl+Shift+Space".into() }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -177,7 +178,7 @@ pub enum LockTrigger {
 #[serde(rename_all = "camelCase")]
 pub struct Settings {
     pub auto_lock_minutes: u64, pub clipboard_clear_secs: u64, pub theme: Theme, pub language: Language,
-    pub biometric_unlock: bool, pub quick_access_hotkey: String,
+    pub biometric_unlock: bool, #[serde(default = "default_quick_access_hotkey")] pub quick_access_hotkey: String,
     /// Opt-in Have I Been Pwned k-anonymity range check in Watchtower. Default off; older settings
     /// files without the field deserialize to off.
     #[serde(default)] pub hibp_check: bool,
@@ -514,11 +515,7 @@ fn annotate_diff(d: &mut ItemDetail, snap: &ItemRecord, cur: &ItemRecord) {
 }
 
 fn mime_for(name: &str) -> &'static str {
-    match Path::new(name).extension().and_then(|e| e.to_str()).map(|e| e.to_ascii_lowercase()).as_deref() {
-        Some("pdf") => "application/pdf", Some("png") => "image/png", Some("jpg") | Some("jpeg") => "image/jpeg",
-        Some("gif") => "image/gif", Some("txt") => "text/plain", Some("json") => "application/json", Some("zip") => "application/zip",
-        _ => "application/octet-stream",
-    }
+    item::mime_for(name)
 }
 
 /// Generate a password (`words`: `length` words from a 128-word list joined by '-', ~7 bits/word, `pin`: `length` digits).
@@ -716,7 +713,7 @@ impl App {
     }
 
     // ---------------- items
-    fn all_records(s: &Session) -> Result<Vec<(String, String, ItemRecord)>> {
+    pub(crate) fn all_records(s: &Session) -> Result<Vec<(String, String, ItemRecord)>> {
         let mut out = vec![];
         for (vid, _) in s.list_vaults()? { for (iid, _, r) in s.list_records(&vid)? { out.push((vid.clone(), iid, r)); } }
         Ok(out)
@@ -1013,6 +1010,9 @@ impl App {
     pub fn save_attachment(&self, vault_id: &str, item_id: &str, attachment_id: &str, dest_path: &str) -> Result<()> {
         let data = self.with(|u| Ok(Zeroizing::new(u.session.read_attachment(vault_id, item_id, attachment_id)?)))?;
         std::fs::write(dest_path, &*data).with_context(|| format!("cannot write {dest_path}"))
+    }
+    pub fn remove_attachment(&self, vault_id: &str, item_id: &str, attachment_id: &str) -> Result<()> {
+        self.write(|u| u.session.remove_attachment(vault_id, item_id, attachment_id))
     }
     pub fn list_tags(&self) -> Result<Vec<String>> {
         self.with(|u| Ok(Self::all_records(&u.session)?.iter().filter(|(_, _, r)| r.deleted_at.is_none())

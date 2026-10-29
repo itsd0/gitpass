@@ -66,6 +66,18 @@
       case 'list_items': return ok({ items });
       case 'match_active': return ok({ origin: 'https://github.com', items: items.filter((i) => i.favicon_host === 'github.com') });
       case 'get_item': return ok({ item: detail(items.find((i) => i.id === msg.item_id)) });
+      case 'item_findings': {
+        const it = items.find((i) => i.id === msg.item_id);
+        if (!it) return err('not_found');
+        if (it.id === 'v1:i0') {
+          return ok({
+            kinds: ['weak', 'reused'],
+            reused_count: 3,
+            change_password_url: 'https://github.com/.well-known/change-password',
+          });
+        }
+        return ok({ kinds: [] });
+      }
       case 'reveal': detail(items.find((i) => i.id === msg.item_id)); return ok({ value: secrets[msg.field] || '' });
       case 'totp': { const s = Math.floor(Date.now() / 1000); return ok({ code: String(100000 + (Math.floor(s / 30) * 7919) % 900000), remaining: 30 - (s % 30), period: 30 }); }
       case 'generate': return ok({ password: 'Xk7#pQ2m-Vr9!tLz4wNb' });

@@ -1291,7 +1291,7 @@ impl Session {
         let mut cmp_new = new.snapshot(); cmp_new.item.updated_at.clear();
         let mut cmp_old = old.snapshot(); cmp_old.item.updated_at.clear();
         new.history = old.history.clone();
-        if cmp_new != cmp_old {
+        if cmp_new != cmp_old || old.attachments != new.attachments {
             new.history.push(crate::item::HistoryEntry { version: v, updated_at: old.item.updated_at.clone(), snapshot: old.snapshot() });
             let n = new.history.len();
             if n > crate::item::HISTORY_LIMIT { new.history.drain(..n - crate::item::HISTORY_LIMIT); }
@@ -1300,7 +1300,10 @@ impl Session {
             new.item.updated_at = old.item.updated_at.clone();
         }
         new.created_at = old.created_at.or(new.created_at);
-        if new.attachments.is_empty() { new.attachments = old.attachments.clone(); }
+        if new.removed_attachments.is_empty() { new.removed_attachments = old.removed_attachments.clone(); }
+        if new.attachments.is_empty() {
+            new.attachments = old.attachments.iter().filter(|a| !new.removed_attachments.contains(&a.id)).cloned().collect();
+        }
         new.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &new.item, now));
         merge::stamp_ext(Some(&old), &mut new, now);
         Ok((v + 1, new))
@@ -1478,6 +1481,8 @@ impl Session {
         new.archived = old.archived;
         new.ignored_findings = old.ignored_findings.clone();
         new.attachments = old.attachments.clone();
+        // Keep attachment tombstones so a merge with a stale copy can't resurrect a removed file.
+        new.removed_attachments = old.removed_attachments.clone();
         new.created_at = old.created_at;
         new.history = old.history.clone();
         new.history.push(crate::item::HistoryEntry {
@@ -1524,7 +1529,9 @@ impl Session {
     /// is recorded in the manifest.
     pub fn add_attachment(&self, vid: &str, iid: &str, name: &str, mime: &str, data: &[u8]) -> Result<crate::item::AttachmentMeta> {
         self.ensure_not_revoked()?;
-        if data.len() > crate::item::MAX_ATTACHMENT_BYTES { bail!("attachment too large ({} bytes > {} byte limit)", data.len(), crate::item::MAX_ATTACHMENT_BYTES); }
+        if data.len() > crate::item::MAX_ATTACHMENT_BYTES {
+            bail!("attachment too large ({} bytes exceeds {} MiB limit)", data.len(), crate::item::MAX_ATTACHMENT_BYTES / (1024 * 1024));
+        }
         let (_, mut rec) = self.read_record(vid, iid)?;
         let vk = self.vault_key(vid)?;
         let fid = uuid::Uuid::new_v4().to_string();
@@ -1560,6 +1567,46 @@ impl Session {
         let vk = self.vault_key(vid)?;
         let padded = zeroize::Zeroizing::new(open(&vk, &b.envelope, &file_aad(vid, iid, fid)).context("attachment failed authentication")?);
         unpad(&padded)
+    }
+
+    /// Remove an attachment from item `iid`: deletes the encrypted blob from `files/<fid>.enc`,
+    /// removes the file from the manifest, removes the attachment metadata, and records the prior state
+    /// in the item's history.
+    pub fn remove_attachment(&self, vid: &str, iid: &str, fid: &str) -> Result<()> {
+        self.ensure_not_revoked()?;
+        let (v, old) = self.read_record(vid, iid)?;
+        let idx = old.attachments.iter().position(|a| a.id == fid).ok_or_else(|| anyhow!("item has no attachment {fid}"))?;
+        let now = merge::now_ms();
+        let mut rec = old.clone();
+        rec.attachments.remove(idx);
+        if !rec.removed_attachments.iter().any(|x| x == fid) { rec.removed_attachments.push(fid.to_string()); }
+        rec.history.push(crate::item::HistoryEntry {
+            version: v,
+            updated_at: old.item.updated_at.clone(),
+            snapshot: old.snapshot(),
+        });
+        let n = rec.history.len();
+        if n > crate::item::HISTORY_LIMIT { rec.history.drain(..n - crate::item::HISTORY_LIMIT); }
+        rec.item.updated_at = (now / 1000).to_string();
+        rec.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &rec.item, now));
+        merge::stamp_ext(Some(&old), &mut rec, now);
+        let vk = self.vault_key(vid)?;
+        let d = self.vdir(vid);
+        let fp = d.join(FILES_DIR).join(format!("{fid}.enc"));
+        // One manifest commit: the new record (without the attachment, with its tombstone), the blob
+        // deletion and the manifest `files` entry all land together, like `remove_item`.
+        self.commit(|m| {
+            let ve = m.vaults.get_mut(vid).ok_or_else(|| anyhow!("vault {vid} not in manifest"))?;
+            let hash = Self::write_item_in(&d, &vk, vid, iid, v + 1, &rec)?;
+            ve.items.insert(iid.to_string(), ItemEntry { version: v + 1, hash });
+            if fp.exists() {
+                fs::remove_file(&fp)?;
+                if let Some(parent) = fp.parent() { fsutil::fsync_dir(parent); }
+            }
+            ve.files.remove(fid);
+            Ok(())
+        })?;
+        Ok(())
     }
 }
 

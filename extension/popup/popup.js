@@ -124,7 +124,7 @@ function show(view) {
 }
 
 // ---------- state ----------
-const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', sort: 'updated', query: '', rows: [], sel: -1, detail: null, revealed: {}, totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null, neverSave: [], edit: null };
+const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', sort: 'updated', query: '', rows: [], sel: -1, detail: null, revealed: {}, findingsCache: {}, totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null, neverSave: [], edit: null };
 
 async function refreshNeverSave() {
   if (window.__gitpassMockNeverSave) {
@@ -210,7 +210,7 @@ function showNoHost(e) {
 
 function showLocked(view, st) {
   stopTotp(); stopListTotp(); clearTotpCache();
-  S.revealed = {}; S.edit = null; $('detail').textContent = '';
+  S.revealed = {}; S.edit = null; S.findingsCache = {}; $('detail').textContent = '';
   show('locked');
   $('unlockErr').textContent = '';
   $('unlockForm').classList.add('hidden'); $('primaryBox').classList.remove('hidden');
@@ -501,6 +501,29 @@ function applyFilter(selectFirst) {
   $('list').scrollTop = 0;
   renderList();
   select(idx);
+  fetchFindingsForVisibleRows();
+}
+
+let findingsFetchSeq = 0;
+const FINDINGS_MAX_ROWS = 60;
+async function fetchFindingsForVisibleRows() {
+  const seq = ++findingsFetchSeq;
+  const need = S.rows.filter((r) => r.category === 'login' && !S.findingsCache[r.id]);
+  if (!need.length) return;
+  // Bounded fan-out: first lookup warms the host's audit cache, then at most 3 in flight.
+  // Only the first FINDINGS_MAX_ROWS rows are fetched; the rest load when the user selects them.
+  await V.mapLimit(need.slice(0, FINDINGS_MAX_ROWS), 3, async (r) => {
+    if (seq !== findingsFetchSeq) return;
+    try {
+      const res = await send({ type: 'popup:item_findings', item_id: r.id });
+      if (V.cacheableFindings(res)) S.findingsCache[r.id] = res;
+    } catch (_) {
+      // Leave uncached so dots and the strip appear once the audit is ready.
+    }
+  });
+  if (seq === findingsFetchSeq) {
+    renderList();
+  }
 }
 
 function renderHighlight(text, query) {
@@ -560,6 +583,14 @@ function renderList() {
     row.append(ic, meta);
     if (it.favorite) { const f = el('span', 'fav'); f.innerHTML = UI.star; row.append(f); }
     if (it.has_totp) row.append(totpChip(it));
+    const findings = S.findingsCache[it.id];
+    if (it.category === 'login' && V.hasWatchtowerFindings(findings)) {
+      const isDanger = findings.kinds.some((k) => V.findingSeverity(k) === 'danger');
+      const dot = el('span', 'warn-dot ' + (isDanger ? 'danger' : 'warn'));
+      dot.setAttribute('role', 'img');
+      dot.setAttribute('aria-label', t('watchtowerWarning', 'Security warning'));
+      row.append(dot);
+    }
     row.onclick = () => select(i);
     row.ondblclick = () => openAndFill();
     inner.append(row);
@@ -753,10 +784,23 @@ async function select(idx) {
   const seq = ++detailSeq;
   renderDetailSkeleton(it);
 
-  let d;
+  let d, findings;
   try {
-    const res = await send({ type: 'popup:get_item', item_id: it.id });
+    const findingsPromise = it.category === 'login'
+      ? (S.findingsCache[it.id]
+          ? Promise.resolve(S.findingsCache[it.id])
+          : send({ type: 'popup:item_findings', item_id: it.id }).catch(() => null))
+      : Promise.resolve({ kinds: [] });
+
+    const [res, findingsRes] = await Promise.all([
+      send({ type: 'popup:get_item', item_id: it.id }),
+      findingsPromise,
+    ]);
     d = res.item;
+    findings = findingsRes || { kinds: [] };
+    if (it.category === 'login' && V.cacheableFindings(findingsRes)) {
+      S.findingsCache[it.id] = findingsRes;
+    }
   } catch (e) {
     if (seq !== detailSeq) return;
     pane.removeAttribute('aria-busy');
@@ -770,6 +814,7 @@ async function select(idx) {
   if (seq !== detailSeq) return;
   pane.removeAttribute('aria-busy');
   pane.removeAttribute('aria-label');
+  d.findings = findings;
   S.detail = d;
   renderDetail(d);
 }
@@ -781,6 +826,52 @@ function renderDetail(d) {
   const g = el('div', 'grow'); g.append(el('h2', null, d.title), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
   head.append(ic, g, moreMenu(d));
   pane.append(head);
+
+  if (d.category === 'login' && V.hasWatchtowerFindings(d.findings)) {
+    const strip = el('div', 'warning-strip');
+    strip.setAttribute('role', 'status');
+    strip.setAttribute('aria-label', t('watchtowerWarnings', 'Watchtower warnings'));
+
+    const chips = el('div', 'warning-chips');
+    chips.setAttribute('role', 'list');
+    for (const k of d.findings.kinds) {
+      const sev = V.findingSeverity(k);
+      const chip = el('span', 'warning-chip ' + sev, V.findingLabel(k, d.findings, t));
+      chip.setAttribute('role', 'listitem');
+      chip.setAttribute('tabindex', '0');
+      chips.append(chip);
+    }
+    strip.append(chips);
+
+    const warnActs = el('div', 'warning-actions');
+    const genBtn = el('button', 'btn btn-primary warn-action', t('generateAndUpdate', 'Generate & update'));
+    genBtn.type = 'button';
+    genBtn.onclick = () => openGenerator({ updateItem: d });
+    warnActs.append(genBtn);
+
+    if (d.findings.change_password_url) {
+      const siteBtn = el('button', 'btn warn-action', t('changeOnSite', 'Change on site'));
+      siteBtn.type = 'button';
+      siteBtn.onclick = () => {
+        if (globalThis.chrome && chrome.tabs && chrome.tabs.create) {
+          chrome.tabs.create({ url: d.findings.change_password_url, active: true });
+        } else {
+          window.open(d.findings.change_password_url, '_blank', 'noopener');
+        }
+      };
+      warnActs.append(siteBtn);
+    }
+
+    const appBtn = el('button', 'btn btn-link warn-action', t('openInGitpass', 'Open in gitpass'));
+    appBtn.type = 'button';
+    appBtn.onclick = () => {
+      send({ type: 'popup:open_in_app', item_id: d.id }).catch(showErr);
+    };
+    warnActs.append(appBtn);
+
+    strip.append(warnActs);
+    pane.append(strip);
+  }
   const acts = el('div', 'd-actions');
   if (V.fillKind(d.category)) {
     const fillLabel = d.category === 'login' && d.url ? t('openFill', 'Open & Fill') : t('fill', 'Fill');
@@ -1206,7 +1297,9 @@ async function generate(len, digits, symbols, extra) {
 
 let genSeq = 0;
 const GEN_LABELS = { random: ['genModeRandom', 'Random'], memorable: ['genModeMemorable', 'Memorable'], pin: ['genModePin', 'PIN'] };
-async function openGenerator(onUse) {
+async function openGenerator(opts) {
+  const onUse = typeof opts === 'function' ? opts : (opts && opts.onUse);
+  const updateItem = opts && typeof opts === 'object' ? opts.updateItem : null;
   const p = $('panel'); p.textContent = ''; p.classList.remove('hidden'); S.panel = 'gen';
   const saved = await generatorSettings();
   if (S.panel !== 'gen') return; // closed while settings loaded
@@ -1268,9 +1361,35 @@ async function openGenerator(onUse) {
     useBtn = el('button', 'btn', t('useGenerated', 'Use password')); useBtn.type = 'button';
     useBtn.onclick = () => { if (!pw) return; const v = pw; closePanel(); onUse(v); };
   }
-  const copyBtn = el('button', 'btn btn-primary', t('copy', 'Copy')); copyBtn.type = 'button';
+  let updateBtn = null;
+  if (updateItem) {
+    updateBtn = el('button', 'btn btn-primary', t('updatePassword', 'Update password'));
+    updateBtn.type = 'button';
+    updateBtn.onclick = async () => {
+      if (!pw || updateBtn.disabled) return;
+      updateBtn.disabled = true;
+      const prevHtml = updateBtn.innerHTML;
+      updateBtn.innerHTML = '<span class="spinner"></span> <span>' + t('saving', 'Saving…') + '</span>';
+      try {
+        await send({ type: 'popup:update_login', item_id: updateItem.id, password: pw });
+        toast(t('passwordUpdated', 'Password updated'));
+        closePanel();
+        // Reuse findings change for every login that shared the old password.
+        S.findingsCache = {};
+        await select(S.sel);
+        renderList();
+      } catch (err) {
+        toast(errText(err));
+      } finally {
+        updateBtn.innerHTML = prevHtml;
+        updateBtn.disabled = false;
+      }
+    };
+  }
+  const copyBtn = el('button', 'btn ' + (updateItem ? '' : 'btn-primary'), t('copy', 'Copy')); copyBtn.type = 'button';
   acts.append(fillBtn, saveBtn);
   if (useBtn) acts.append(useBtn);
+  if (updateBtn) acts.append(updateBtn);
   acts.append(copyBtn); p.append(acts);
 
   const persist = () => saveGeneratorSettings(st).catch(() => {});
@@ -1307,7 +1426,7 @@ async function openGenerator(onUse) {
     meterLab.textContent = text;
     meter.setAttribute('aria-valuenow', String(score));
     meter.setAttribute('aria-valuetext', text);
-    for (const b of [fillBtn, saveBtn, copyBtn, useBtn].filter(Boolean)) b.disabled = !pw;
+    for (const b of [fillBtn, saveBtn, copyBtn, useBtn, updateBtn].filter(Boolean)) b.disabled = !pw;
   }
 
   async function run() {
@@ -1545,6 +1664,7 @@ function liveReload() {
   if (S.panel === 'new' || S.edit) { livePending = true; return; }
   clearTimeout(liveT);
   liveT = setTimeout(async () => {
+    S.findingsCache = {};
     const [all, match] = await Promise.all([
       listAllItems().catch(() => null),
       send({ type: 'popup:match_active' }).catch(() => null),

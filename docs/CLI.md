@@ -104,6 +104,25 @@ gitpass restore github --version 3
 - `list`, `find`, `get` and `get --json` skip archived and deleted items unless
   `--include-archived` is passed.
 
+## Attachments
+
+```sh
+gitpass attach add Personal github ./recovery-codes.pdf
+gitpass attach ls Personal github
+gitpass attach ls Personal github --json
+gitpass attach get Personal github recovery-codes.pdf
+gitpass attach get Personal github recovery-codes.pdf -o ~/Desktop/codes.pdf --force
+gitpass attach rm Personal github recovery-codes.pdf
+```
+
+- Files are encrypted under the vault key; the limit is 25 MiB per attachment.
+- `get` and `rm` take an attachment id, unique id prefix, or name (ambiguous names need the id).
+- Without `-o`, `get` writes into the current directory using only the final component of the
+  stored name (a name like `../x` or `/etc/x` is saved as `x`), and refuses to overwrite an
+  existing file unless `--force` is passed.
+- `rm` deletes the encrypted file and records a tombstone so a concurrent edit synced from another
+  device does not bring the attachment back.
+
 ## TOTP and password generator
 
 ```sh
