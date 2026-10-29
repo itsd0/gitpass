@@ -10,6 +10,7 @@ import {
   ExternalLink,
   EyeOff,
   Globe,
+  Key,
   KeyRound,
   Layers,
   MoreVertical,
@@ -101,6 +102,7 @@ const ISSUE_TO_KIND: Record<IssueKey, string> = {
   expired: "expired",
   expiringSoon: "expiring_soon",
   insecureUrls: "insecure_url",
+  weakSshKey: "weak_ssh_key",
 };
 
 export function WatchtowerPage() {
@@ -113,6 +115,7 @@ export function WatchtowerPage() {
     { key: "expired" as const, title: t("watchtower.expired"), desc: t("watchtower.expiredDesc"), Icon: CalendarX },
     { key: "expiringSoon" as const, title: t("watchtower.expiringSoon"), desc: t("watchtower.expiringSoonDesc"), Icon: CalendarClock },
     { key: "insecureUrls" as const, title: t("watchtower.insecureUrls"), desc: t("watchtower.insecureUrlsDesc"), Icon: Globe },
+    { key: "weakSshKey" as const, title: t("watchtower.weakSshKey"), desc: t("watchtower.weakSshKeyDesc"), Icon: Key },
   ];
   const { selectItem, setRoute, setEditing } = useApp();
   const settings = useSettings((st) => st.settings);

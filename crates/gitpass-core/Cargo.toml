@@ -27,11 +27,12 @@ sha1 = "0.10"
 x25519-dalek = { version = "2.0.1", features = ["static_secrets", "zeroize"] }
 csv = "1.3"
 zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
-ssh-key = { version = "0.6", features = ["ed25519", "ecdsa", "p256", "encryption", "std", "rand_core"] }
+ssh-key = { version = "0.6", features = ["ed25519", "ecdsa", "p256", "encryption", "std", "rand_core", "rsa"] }
 p256 = { version = "0.14", features = ["ecdsa", "pkcs8"] }
 ed25519-dalek = { version = "2", features = ["rand_core", "zeroize"] }
 ssh-encoding = { version = "0.2", features = ["alloc"] }
 signature = "2"
+rsa = { version = "0.9", features = ["sha2"] }
 
 [dev-dependencies]
 hex = "0.4.3"

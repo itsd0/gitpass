@@ -956,5 +956,8 @@
   },
   "optNeverAutoSubmitAdd": {
     "message": "เพิ่มไซต์"
+  },
+  "watchtowerWeakSshKey": {
+    "message": "คีย์ SSH ที่ไม่ปลอดภัย"
   }
 }
