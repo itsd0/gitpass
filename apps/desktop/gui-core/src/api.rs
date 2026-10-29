@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use zeroize::Zeroizing;
+pub use crate::qr::ScannedTotp;
 
 // ------------------------------------------------------------------ DTOs (contract types.ts)
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -322,6 +323,13 @@ pub struct LocalFile {
     #[serde(default)] pub last_vault_path: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClipboardImage {
+    pub width: usize,
+    pub height: usize,
+    pub bytes: Vec<u8>,
+}
+
 // ------------------------------------------------------------------ clipboard
 pub trait Clipboard: Send + Sync {
     fn set_text(&self, s: &str) -> Result<()>;
@@ -329,20 +337,35 @@ pub trait Clipboard: Send + Sync {
     /// Copy a secret: macOS implementations declare the nspasteboard.org markers so clipboard
     /// managers do not record or sync it. The default (and non-macOS) writes plain text.
     fn set_marked(&self, s: &str, _markers: PasteboardMarkers) -> Result<()> { self.set_text(s) }
+    fn get_image(&self) -> Option<ClipboardImage> { None }
+    fn set_image(&self, _img: ClipboardImage) -> Result<()> { Ok(()) }
 }
 
 /// In-memory clipboard (tests / headless).
 #[derive(Default)]
-pub struct MemClipboard { text: Mutex<Option<String>>, markers: Mutex<Option<PasteboardMarkers>> }
+pub struct MemClipboard {
+    text: Mutex<Option<String>>,
+    markers: Mutex<Option<PasteboardMarkers>>,
+    image: Mutex<Option<ClipboardImage>>,
+}
 impl MemClipboard {
     pub fn markers(&self) -> Option<PasteboardMarkers> { *self.markers.lock().unwrap() }
+    pub fn set_test_image(&self, img: ClipboardImage) { *self.image.lock().unwrap() = Some(img); }
 }
 impl Clipboard for MemClipboard {
-    fn set_text(&self, s: &str) -> Result<()> { *self.text.lock().unwrap() = Some(s.to_string()); *self.markers.lock().unwrap() = None; Ok(()) }
+    fn set_text(&self, s: &str) -> Result<()> { *self.text.lock().unwrap() = Some(s.to_string()); *self.markers.lock().unwrap() = None; *self.image.lock().unwrap() = None; Ok(()) }
     fn get_text(&self) -> Option<String> { self.text.lock().unwrap().clone() }
     fn set_marked(&self, s: &str, markers: PasteboardMarkers) -> Result<()> {
         self.set_text(s)?;
         *self.markers.lock().unwrap() = Some(markers);
+        *self.image.lock().unwrap() = None;
+        Ok(())
+    }
+    fn get_image(&self) -> Option<ClipboardImage> { self.image.lock().unwrap().clone() }
+    fn set_image(&self, img: ClipboardImage) -> Result<()> {
+        *self.image.lock().unwrap() = Some(img);
+        *self.text.lock().unwrap() = None;
+        *self.markers.lock().unwrap() = None;
         Ok(())
     }
 }
@@ -1564,6 +1587,16 @@ impl App {
     }
     pub fn ssh_agent_info(&self, socket: &std::path::Path, running: bool) -> SshAgentInfo {
         SshAgentInfo { socket_path: socket.display().to_string(), config_line: gitpass_core::ssh::identity_agent_line(socket), running, approve_each_use: self.get_settings().ssh_approve_each_use }
+    }
+
+    pub fn scan_totp_screen(&self) -> Result<crate::qr::ScannedTotp> {
+        crate::qr::scan_totp_screen()
+    }
+    pub fn scan_totp_clipboard(&self) -> Result<crate::qr::ScannedTotp> {
+        crate::qr::scan_totp_clipboard(&*self.clipboard)
+    }
+    pub fn scan_totp_image(&self, data_base64: &str) -> Result<crate::qr::ScannedTotp> {
+        crate::qr::decode_qr_base64(data_base64)
     }
 }
 

@@ -31,6 +31,7 @@ export const api = {
   revealField: (a:{vaultId:string; itemId:string; fieldId:string; version?:number|null}) => call<string>('reveal_field', a),
   copyField: (a:{vaultId:string; itemId:string; fieldId:string}) => call<void>('copy_field', a),
   totpNow: (a:{vaultId:string; itemId:string}) => call<{code:string; remaining:number; period:number}>('totp_now', a),
+  scanTotp: (a: { source: 'screen' | 'clipboard' | 'image'; dataBase64?: string }) => call<T.ScannedTotp>('scan_totp', a),
   createItem: (a:{input:T.ItemInput}) => call<T.ItemSummary>('create_item', a),
   updateItem: (a:{itemId:string; input:T.ItemInput}) => call<T.ItemSummary>('update_item', a),
   setFavorite: (a:{vaultId:string; itemId:string; favorite:boolean}) => call<void>('set_favorite', a),

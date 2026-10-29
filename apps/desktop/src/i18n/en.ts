@@ -185,6 +185,18 @@ export const en = {
   'field.openLink': 'Open link',
   // one-time password countdown
   'totp.remaining': '{n} seconds remaining',
+  'totp.scanQr': 'Scan QR code',
+  'totp.scanScreen': 'From screen',
+  'totp.scanClipboard': 'From clipboard image',
+  'totp.dropHint': 'Drop an image here to scan',
+  'totp.noQrFound': 'No QR code found',
+  'totp.notTotp': "This QR code isn't a one-time code",
+  'totp.captureCancelled': 'Screen capture was cancelled',
+  'totp.autofillOffer': 'Fill title as “{title}” and username as “{username}”?',
+  'totp.autofillTitleOnly': 'Fill title as “{title}”?',
+  'totp.autofillUsernameOnly': 'Fill username as “{username}”?',
+  'totp.autofillApply': 'Fill',
+  'totp.autofillDismiss': 'Dismiss',
   'shortcuts.title': 'Keyboard shortcuts', 'shortcuts.palette': 'Open command palette', 'shortcuts.help': 'Show this help', 'shortcuts.newItem': 'New item', 'shortcuts.lock': 'Lock',
   // quick access
   'qa.placeholder': 'Search gitpass', 'qa.label': 'Quick Access', 'qa.copyPassword': 'Copy password', 'qa.copyUsername': 'Copy username', 'qa.passwordCopied': 'Password copied',

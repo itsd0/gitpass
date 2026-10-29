@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Dices, Eye, EyeOff, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../api/client';
-import type { Field, FieldKind, ItemDetail, ItemInput, Section, VaultInfo } from '../../api/types';
+import type { Field, FieldKind, ItemDetail, ItemInput, ScannedTotp, Section, VaultInfo } from '../../api/types';
+import { cn } from '../../lib/utils';
+import { TotpAutofillOffer, TotpScanButton, handleTotpImageDrop } from './TotpScanButton';
 import { useApp } from '../../lib/store';
 import { useT } from '../../i18n';
 import { Button, Input, toast } from '../../ui';
@@ -37,6 +39,26 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') { if ((e.target as HTMLElement | null)?.closest?.('[data-generator-popover]')) return; setEditing(false); } if ((e.metaKey || e.ctrlKey) && e.key === 's') { e.preventDefault(); void save(); } };
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
   });
+
+  const applyAutofill = (s: { title?: string; username?: string }) => {
+    if (s.title && (!draft.title.trim() || draft.title === 'Untitled')) {
+      upd({ title: s.title });
+    }
+    if (s.username) {
+      let filled = false;
+      const newSections = draft.sections.map((sec) => ({
+        ...sec,
+        fields: sec.fields.map((fl) => {
+          if (!filled && (fl.id === 'username' || fl.label.toLowerCase() === 'username') && !fl.value?.trim()) {
+            filled = true;
+            return { ...fl, value: s.username! };
+          }
+          return fl;
+        }),
+      }));
+      if (filled) upd({ sections: newSections });
+    }
+  };
 
   async function save() {
     setBusy(true);
@@ -76,7 +98,20 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
                 {draft.sections.length > 1 && <Button variant="ghost" size="iconSm" aria-label="Remove section" onClick={() => upd({ sections: draft.sections.filter((_, i) => i !== si) })}><X size={13} /></Button>}
               </div>
               <div className="space-y-2">
-                {s.fields.map((f, fi) => <FieldEditor key={f.id} field={f} onChange={(p) => updField(si, fi, p)} onRemove={() => updSection(si, { fields: s.fields.filter((_, i) => i !== fi) })} />)}
+                {s.fields.map((f, fi) => {
+                  const hasEmptyUser = draft.sections.flatMap((sec) => sec.fields).some((fl) => (fl.id === 'username' || fl.label.toLowerCase() === 'username') && !fl.value?.trim());
+                  return (
+                    <FieldEditor
+                      key={f.id}
+                      field={f}
+                      onChange={(p) => updField(si, fi, p)}
+                      onRemove={() => updSection(si, { fields: s.fields.filter((_, i) => i !== fi) })}
+                      currentTitle={draft.title}
+                      hasEmptyUsername={hasEmptyUser}
+                      onAutofill={applyAutofill}
+                    />
+                  );
+                })}
               </div>
               <Button variant="ghost" size="sm" className="mt-2 text-accent" onClick={() => updSection(si, { fields: [...s.fields, { id: newId('f'), label: 'new field', kind: 'text', value: '' }] })}><Plus size={13} />Add field</Button>
             </div>
@@ -92,12 +127,42 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
   );
 }
 
-function FieldEditor({ field, onChange, onRemove }: { field: Field; onChange: (p: Partial<Field>) => void; onRemove: () => void }) {
+function FieldEditor({
+  field,
+  onChange,
+  onRemove,
+  currentTitle,
+  hasEmptyUsername,
+  onAutofill,
+}: {
+  field: Field;
+  onChange: (p: Partial<Field>) => void;
+  onRemove: () => void;
+  currentTitle?: string;
+  hasEmptyUsername?: boolean;
+  onAutofill?: (s: { title?: string; username?: string }) => void;
+}) {
   const t = useT();
   const secret = field.kind === 'concealed' || field.kind === 'totp';
   const [show, setShow] = useState(false);
   const [score, setScore] = useState<number | null>(null);
   const [genOpen, setGenOpen] = useState(false);
+  const [totpDragOver, setTotpDragOver] = useState(false);
+  const [totpSuggestion, setTotpSuggestion] = useState<{ title?: string | null; username?: string | null } | null>(null);
+
+  const onTotpScanned = (scanned: ScannedTotp) => {
+    onChange({ value: scanned.uri });
+    const needTitle = (!currentTitle?.trim() || currentTitle === 'Untitled') && Boolean(scanned.issuer?.trim());
+    const needUser = Boolean(hasEmptyUsername && scanned.account?.trim());
+    if (needTitle || needUser) {
+      setTotpSuggestion({
+        title: needTitle ? scanned.issuer : null,
+        username: needUser ? scanned.account : null,
+      });
+    } else {
+      setTotpSuggestion(null);
+    }
+  };
   const fieldInputRef = useRef<HTMLInputElement>(null);
   const closeGen = () => { setGenOpen(false); fieldInputRef.current?.focus(); };
   const onFieldKeyDown = (e: React.KeyboardEvent) => {
@@ -118,7 +183,22 @@ function FieldEditor({ field, onChange, onRemove }: { field: Field; onChange: (p
         <Button variant="ghost" size="iconSm" aria-label="Remove field" onClick={onRemove}><Trash2 size={13} /></Button>
       </div>
       <div className="relative mt-1.5">
-        <div className="flex items-center gap-1">
+        <div
+          className={cn('flex items-center gap-1 rounded-md transition-colors', totpDragOver && 'border border-accent ring-2 ring-accent/30 bg-accent/5')}
+          onDragOver={(e) => {
+            if (field.kind === 'totp' && e.dataTransfer.types.includes('Files')) {
+              e.preventDefault();
+              setTotpDragOver(true);
+            }
+          }}
+          onDragLeave={() => setTotpDragOver(false)}
+          onDrop={(e) => {
+            if (field.kind === 'totp') {
+              setTotpDragOver(false);
+              void handleTotpImageDrop(e, onTotpScanned, t);
+            }
+          }}
+        >
           {field.kind === 'multiline' ? (
             <div className="w-full">
               <NotesEditorField
@@ -136,7 +216,20 @@ function FieldEditor({ field, onChange, onRemove }: { field: Field; onChange: (p
           )}
           {secret && <Button variant="ghost" size="iconSm" aria-label={show ? 'Hide' : 'Show'} onClick={() => setShow(!show)}>{show ? <EyeOff size={13} /> : <Eye size={13} />}</Button>}
           {field.kind === 'concealed' && <Button variant="ghost" size="iconSm" aria-label={t('generator.generatePassword')} onClick={() => setGenOpen((o) => !o)}><Dices size={13} /></Button>}
+          {field.kind === 'totp' && (
+            <TotpScanButton compact onScan={onTotpScanned} />
+          )}
         </div>
+        {field.kind === 'totp' && totpSuggestion && (
+          <TotpAutofillOffer
+            suggestion={totpSuggestion}
+            onApply={(s) => {
+              onAutofill?.(s);
+              setTotpSuggestion(null);
+            }}
+            onDismiss={() => setTotpSuggestion(null)}
+          />
+        )}
         {field.kind === 'concealed' && (
           <PasswordGenerator
             open={genOpen}

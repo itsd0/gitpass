@@ -21,6 +21,15 @@ impl a::Clipboard for SysClipboard {
     fn set_marked(&self, s: &str, markers: gitpass_pasteboard::PasteboardMarkers) -> anyhow::Result<()> {
         gitpass_pasteboard::write(s, markers)
     }
+    fn get_image(&self) -> Option<a::ClipboardImage> {
+        let mut c = arboard::Clipboard::new().ok()?;
+        let img = c.get_image().ok()?;
+        Some(a::ClipboardImage {
+            width: img.width,
+            height: img.height,
+            bytes: img.bytes.into_owned(),
+        })
+    }
 }
 
 #[tauri::command] pub fn status(s: State<App>) -> R<a::UnlockState> { s.status().map_err(e) }
@@ -46,6 +55,18 @@ impl a::Clipboard for SysClipboard {
 /// Copies in Rust; cleared after clipboardClearSecs only if the clipboard still holds our value.
 #[tauri::command] pub fn copy_field(s: State<App>, vault_id: String, item_id: String, field_id: String) -> R<()> { s.copy_field(&vault_id, &item_id, &field_id).map_err(e) }
 #[tauri::command] pub fn totp_now(s: State<App>, vault_id: String, item_id: String) -> R<a::TotpNow> { s.totp_now(&vault_id, &item_id).map_err(e) }
+#[tauri::command(async)]
+pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>) -> R<a::ScannedTotp> {
+    match source.as_str() {
+        "screen" => s.scan_totp_screen().map_err(e),
+        "clipboard" => s.scan_totp_clipboard().map_err(e),
+        "image" => {
+            let data = data_base64.ok_or_else(|| "missing image data".to_string())?;
+            s.scan_totp_image(&data).map_err(e)
+        }
+        other => Err(format!("unknown scan source {other}")),
+    }
+}
 #[tauri::command] pub fn create_item(s: State<App>, input: a::ItemInput) -> R<a::ItemSummary> { s.create_item(&input).map_err(e) }
 #[tauri::command] pub fn update_item(s: State<App>, item_id: String, input: a::ItemInput) -> R<a::ItemSummary> { s.update_item(&item_id, &input).map_err(e) }
 #[tauri::command] pub fn set_favorite(s: State<App>, vault_id: String, item_id: String, favorite: bool) -> R<()> { s.set_favorite(&vault_id, &item_id, favorite).map_err(e) }

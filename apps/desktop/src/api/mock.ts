@@ -329,6 +329,17 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     return delay(undefined);
   },
   totp_now: () => { const period = 30; const now = Math.floor(Date.now() / 1000); const code = String((Math.floor(now / period) * 7919) % 1000000).padStart(6, '0'); return delay({ code, remaining: period - (now % period), period }, 10); },
+  scan_totp: (_a: { source: 'screen' | 'clipboard' | 'image'; dataBase64?: string }) => {
+    return delay<T.ScannedTotp>({
+      uri: 'otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub&algorithm=SHA1&digits=6&period=30',
+      secret: 'JBSWY3DPEHPK3PXP',
+      issuer: 'GitHub',
+      account: 'octocat',
+      digits: 6,
+      period: 30,
+      algorithm: 'SHA1',
+    }, 20);
+  },
   create_item: ({ input }: { input: T.ItemInput }) => {
     const now = new Date().toISOString();
     const r: Rec = { secrets: {}, versions: [], detail: { id: uid('i'), vaultId: input.vaultId, category: input.category, title: input.title, subtitle: '', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: now, createdAt: now, url: null, sections: [], notes: null, attachments: [], history: [{ version: 1, updatedAt: now }], passwordStrength: null, hasTotp: false, passwordChangedAt: null } };

@@ -546,6 +546,18 @@ export const my: Partial<Record<Key, string>> = {
   'field.openLink': 'လင့်ခ်ဖွင့်ရန်',
   // one-time password countdown
   'totp.remaining': '{n} စက္ကန့် ကျန်သေးသည်',
+  'totp.scanQr': 'QR ကုဒ် စကင်ဖတ်ရန်',
+  'totp.scanScreen': 'မျက်နှာပြင်မှ',
+  'totp.scanClipboard': 'ကလစ်ဘုတ် ပုံမှ',
+  'totp.dropHint': 'စကင်ဖတ်ရန် ပုံကို ဤနေရာတွင် ချပါ',
+  'totp.noQrFound': 'QR ကုဒ် မတွေ့ပါ',
+  'totp.notTotp': 'ဤ QR ကုဒ်သည် တစ်ကြိမ်သုံးကုဒ် မဟုတ်ပါ',
+  'totp.captureCancelled': 'မျက်နှာပြင် ဖမ်းယူခြင်းကို ပယ်ဖျက်လိုက်သည်',
+  'totp.autofillOffer': 'ခေါင်းစဉ်ကို “{title}” နှင့် အသုံးပြုသူအမည်ကို “{username}” အဖြစ် ဖြည့်မလား။',
+  'totp.autofillTitleOnly': 'ခေါင်းစဉ်ကို “{title}” အဖြစ် ဖြည့်မလား။',
+  'totp.autofillUsernameOnly': 'အသုံးပြုသူအမည်ကို “{username}” အဖြစ် ဖြည့်မလား။',
+  'totp.autofillApply': 'ဖြည့်မည်',
+  'totp.autofillDismiss': 'ပယ်ဖျက်ရန်',
   'cmd.showLargeType': 'စကားဝှက်ကို စာလုံးကြီးဖြင့် ကြည့်ရန်',
 
   // TODO(i18n-review): unlock and sidebar strings
