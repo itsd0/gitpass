@@ -35,6 +35,8 @@ describe('i18n', () => {
     const keys = Object.keys(en).filter((k) => k.startsWith('settings.section') || k.startsWith('settings.search') || k.endsWith('Help'));
     expect(keys.length).toBeGreaterThan(0);
     for (const d of [dictionaries.my, dictionaries.th]) for (const k of keys) expect(d[k as keyof typeof en], `missing key ${k}`).toBeTruthy();
+    expect(dictionaries.my['settings.showMenuBarIcon']).toBeTruthy();
+    expect(dictionaries.th['settings.showMenuBarIcon']).toBeTruthy();
   });
   it('covers all trash.* strings in my and th', () => {
     const trashKeys = Object.keys(en).filter((k) => k.startsWith('trash.'));
