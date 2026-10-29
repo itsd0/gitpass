@@ -24,6 +24,11 @@ fn clean_host(s: &str) -> Option<String> {
 }
 
 
+/// `limit` of the `generator_history` command: default 10, clamped to 1..=100.
+pub fn history_limit(req: &Value) -> usize {
+    req.get("limit").and_then(Value::as_u64).map(|n| n.clamp(1, 100) as usize).unwrap_or(10)
+}
+
 /// Contract error codes.
 pub mod code {
     pub const LOCKED: &str = "locked";
@@ -677,6 +682,17 @@ impl Host {
                 let host = origin_or_host.and_then(clean_host);
                 self.sess()?.record_generated_password(pw, source, host)?;
                 Ok(json!({"ok": true}))
+            }
+            "generator_history" => {
+                // Read-only, popup-facing: newest first, never logged. Refused while locked (`sess()`).
+                let limit = history_limit(req);
+                let mut entries = self.sess()?.read_generator_history()?.entries;
+                entries.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                let out: Vec<Value> = entries.iter().take(limit).map(|e| json!({
+                    "id": e.id, "value": e.value, "created_at": e.created_at, "source": e.source, "host": e.host,
+                })).collect();
+                // The standalone host has no desktop settings, so history is always on here.
+                Ok(json!({"enabled": true, "entries": out}))
             }
             "list_vaults" => {
                 let s = self.sess()?;

@@ -236,3 +236,32 @@ fn item_findings_contract_and_security() {
     assert!(!kinds1_after.contains(&"weak"), "ignored finding must be hidden: {f1_after:?}");
     assert!(kinds1_after.contains(&"reused"), "non-ignored finding must still be visible");
 }
+
+#[test]
+fn generator_history_is_read_only_newest_first_and_locked_refused() {
+    let mut f = setup();
+    assert!(err(&mut f.host, json!({"cmd":"generator_history"})).contains("locked"));
+    ok(&mut f.host, json!({"cmd":"unlock","password":PW}));
+    let r = ok(&mut f.host, json!({"cmd":"generator_history"}));
+    assert_eq!(r["entries"].as_array().unwrap().len(), 0, "{r}");
+    assert_eq!(r["enabled"], true);
+
+    for i in 1..=12 {
+        ok(&mut f.host, json!({"cmd":"record_generated_password","password":format!("FAKE-gen-{i:02}"),"origin":"https://www.example.invalid/signup"}));
+    }
+    // default limit 10, newest first (ties on the same second keep insertion order: newest is index 0)
+    let r = ok(&mut f.host, json!({"cmd":"generator_history"}));
+    let e = r["entries"].as_array().unwrap();
+    assert_eq!(e.len(), 10, "{r}");
+    assert_eq!(e[0]["value"], "FAKE-gen-12");
+    assert_eq!(e[0]["host"], "example.invalid");
+    assert_eq!(e[0]["source"], "extension");
+    assert!(e[0]["created_at"].as_u64().unwrap() > 0 && e[0]["id"].as_str().is_some());
+    let w = ok(&mut f.host, json!({"cmd":"generator_history","limit":3}));
+    assert_eq!(w["entries"].as_array().unwrap().len(), 3);
+    // limit is clamped to 1..=100
+    assert_eq!(ok(&mut f.host, json!({"cmd":"generator_history","limit":0}))["entries"].as_array().unwrap().len(), 1);
+    assert_eq!(ok(&mut f.host, json!({"cmd":"generator_history","limit":9999}))["entries"].as_array().unwrap().len(), 12);
+    // read-only: reading does not add or remove entries
+    assert_eq!(ok(&mut f.host, json!({"cmd":"generator_history","limit":100}))["entries"].as_array().unwrap().len(), 12);
+}

@@ -935,5 +935,47 @@
   },
   "badgeAppNotRunning": {
     "message": "แอป gitpass ไม่ได้ทำงานอยู่"
+  },
+  "genRecent": {
+    "message": "ล่าสุด"
+  },
+  "genRecentEmpty": {
+    "message": "ยังไม่มีรหัสผ่านที่สร้างไว้"
+  },
+  "genRecentOff": {
+    "message": "ประวัติตัวสร้างรหัสผ่านปิดอยู่"
+  },
+  "genRecentViewAll": {
+    "message": "ดูทั้งหมดใน gitpass"
+  },
+  "genRecentHide": {
+    "message": "ซ่อน"
+  },
+  "genAgoNow": {
+    "message": "เมื่อสักครู่"
+  },
+  "genAgoMin": {
+    "message": "$1 นาทีที่แล้ว",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "genAgoHour": {
+    "message": "$1 ชม. ที่แล้ว",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "genAgoDay": {
+    "message": "$1 วันที่แล้ว",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
   }
 }

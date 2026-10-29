@@ -81,6 +81,14 @@
       case 'reveal': detail(items.find((i) => i.id === msg.item_id)); return ok({ value: secrets[msg.field] || '' });
       case 'totp': { const s = Math.floor(Date.now() / 1000); return ok({ code: String(100000 + (Math.floor(s / 30) * 7919) % 900000), remaining: 30 - (s % 30), period: 30 }); }
       case 'generate': return ok({ password: 'Xk7#pQ2m-Vr9!tLz4wNb' });
+      case 'generator_history': {
+        const n = Math.floor(Date.now() / 1000);
+        return ok({ enabled: true, entries: [
+          { id: 'h1', value: 'Fake-Pw-aB3$kLm9QzXv', created_at: n - 120, source: 'extension', host: 'github.com' },
+          { id: 'h2', value: 'Fake-Pw-7rTn!eWp2YcD', created_at: n - 3 * 3600, source: 'extension', host: 'example.invalid' },
+          { id: 'h3', value: 'Fake-Pw-Zq8&uHs4LbNf', created_at: n - 2 * 86400, source: 'desktop' },
+        ] });
+      }
       case 'save_login': return ok({ item_id: 'v1:new' });
       case 'update_login': {
         const it = items.find((i) => i.id === msg.item_id);

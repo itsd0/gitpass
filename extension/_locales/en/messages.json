@@ -856,5 +856,47 @@
   },
   "badgeAppNotRunning": {
     "message": "gitpass app not running"
+  },
+  "genRecent": {
+    "message": "Recent"
+  },
+  "genRecentEmpty": {
+    "message": "No generated passwords yet"
+  },
+  "genRecentOff": {
+    "message": "Generator history is off"
+  },
+  "genRecentViewAll": {
+    "message": "View all in gitpass"
+  },
+  "genRecentHide": {
+    "message": "Hide"
+  },
+  "genAgoNow": {
+    "message": "just now"
+  },
+  "genAgoMin": {
+    "message": "$1 min ago",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "genAgoHour": {
+    "message": "$1 h ago",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
+  },
+  "genAgoDay": {
+    "message": "$1 d ago",
+    "placeholders": {
+      "n": {
+        "content": "$1"
+      }
+    }
   }
 }

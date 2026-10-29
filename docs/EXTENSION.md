@@ -41,7 +41,10 @@ Open it from the toolbar icon, or with the keyboard command below.
 - **New item.** Create a login (and other item types) from the popup
   without opening the desktop app.
 - **Generator.** Generate a strong password from the popup and use it in
-  the page or when creating an item.
+  the page or when creating an item. Under it, **Recent** lists your last
+  10 generated passwords (masked until you reveal one; copy, reveal, and
+  fill when it was generated on the current site). It is hidden while locked
+  and shows "Generator history is off" when the desktop setting is off.
 
 When the vault is locked, the popup shows the unlock screen instead of
 your items.

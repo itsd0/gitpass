@@ -438,3 +438,34 @@ fn item_findings_agent_contract_and_security() {
     e.app.lock();
     assert_eq!(c.err("item_findings", json!({"item_id": id1})), "locked");
 }
+
+#[test]
+fn generator_history_command_is_read_only_gated_by_lock_and_setting() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+    for i in 1..=12 {
+        c.ok("record_generated_password", json!({"password": format!("FAKE-gen-{i:02}"), "origin": "https://www.example.invalid/signup"}));
+    }
+    let r = c.ok("generator_history", json!({}));
+    assert_eq!(r["enabled"], json!(true));
+    let list = r["entries"].as_array().unwrap();
+    assert_eq!(list.len(), 10, "default limit: {r}");
+    assert_eq!(list[0]["value"], json!("FAKE-gen-12"));
+    assert_eq!(list[0]["host"], json!("example.invalid"));
+    assert_eq!(list[0]["source"], json!("extension"));
+    assert_eq!(c.ok("generator_history", json!({"limit": 2}))["entries"].as_array().unwrap().len(), 2);
+    assert_eq!(c.ok("generator_history", json!({"limit": 500}))["entries"].as_array().unwrap().len(), 12);
+
+    // Setting off: the popup gets `enabled: false` and no values.
+    let mut s = e.app.get_settings();
+    s.remember_generated_passwords = false;
+    e.app.set_settings(s).unwrap();
+    let off = c.ok("generator_history", json!({}));
+    assert_eq!(off["enabled"], json!(false));
+    assert!(off["entries"].as_array().unwrap().is_empty());
+    assert!(!off.to_string().contains("FAKE-gen"));
+
+    // Locked: refused.
+    e.app.lock();
+    assert_eq!(c.err("generator_history", json!({})), "locked");
+}
