@@ -728,7 +728,8 @@ mod tests {
 
         // Helper: resolve_signing_email
         assert_eq!(resolve_signing_email(Some("custom@example.invalid"), &ed), "custom@example.invalid");
-        assert_eq!(resolve_signing_email(None, &ed), "ed@example.invalid");
+        let expected = detect_git_email().unwrap_or_else(|| "ed@example.invalid".to_string());
+        assert_eq!(resolve_signing_email(None, &ed), expected);
 
         // 2. RSA 2048 works
         use ssh_key::private::{KeypairData, RsaKeypair};
