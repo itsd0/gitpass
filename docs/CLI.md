@@ -135,9 +135,11 @@ gitpass gen --pin 6
 gitpass gen --copy 32 --clear-secs 30
 ```
 
-`gen` defaults to a 24-character random password. `--words N` makes a passphrase from the
-128-word list (3-20 words), `--pin N` a digits-only PIN (4-16 digits); `--no-symbols` and
-`--no-digits` apply to random passwords. `--clear-secs` requires `--copy`.
+`gen` defaults to a 24-character random password (8-128 characters). `--words N` makes a
+passphrase from the 128-word list (3-20 words, joined with `-`, or `.` with `--no-symbols`),
+`--pin N` a digits-only PIN (4-16 digits); `--no-symbols` and `--no-digits` apply to random
+passwords. A length outside these ranges is an error (the desktop app and the browser host
+use the same limits and defaults). `--clear-secs` requires `--copy`.
 
 ## Secrets in commands and templates
 
