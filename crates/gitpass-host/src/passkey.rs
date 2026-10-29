@@ -31,6 +31,16 @@ pub fn check_rp(origin: &str, rp_id: Option<&str>) -> Result<String> {
     Ok(rp)
 }
 
+/// True when a passkey stored for `rp_id` is usable on `origin` (same rules as registration/sign-in).
+pub fn rp_matches_origin(rp_id: &str, origin: &str) -> bool {
+    !rp_id.trim().is_empty() && check_rp(origin, Some(rp_id)).is_ok()
+}
+/// A live passkey item whose stored rpId is valid for `origin` (popup "this site" list).
+pub fn record_matches_origin(r: &gitpass_core::merge::ItemRecord, origin: &str) -> bool {
+    r.category == Category::Passkey && r.deleted_at.is_none() && !r.archived
+        && r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value).is_some_and(|rp| rp_matches_origin(&rp, origin))
+}
+
 fn client_data(ty: &str, challenge: &str, origin: &str) -> Vec<u8> {
     // Key order matches browsers: type, challenge, origin, crossOrigin.
     serde_json::to_vec(&json!({"type": ty, "challenge": challenge, "origin": origin.trim_end_matches('/'), "crossOrigin": false})).unwrap()
