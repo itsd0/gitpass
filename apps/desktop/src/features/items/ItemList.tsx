@@ -22,7 +22,7 @@ import { CATEGORIES, ItemIcon } from "./categories";
 import { CategoryIcon } from "../../components/CategoryIcon";
 import { groupRows, type Row } from "./grouping";
 import { useItemsUI } from "./state";
-import { copyPrimarySecret, errText } from "./actions";
+import { errText } from "./actions";
 import {
   applySel,
   arrowSelect,
@@ -223,14 +223,6 @@ export function ItemList() {
       (
         document.querySelector("[data-detail-pane]") as HTMLElement | null
       )?.focus();
-    } else if (
-      (e.metaKey || e.ctrlKey) &&
-      e.key.toLowerCase() === "c" &&
-      idx >= 0 &&
-      !window.getSelection()?.toString()
-    ) {
-      e.preventDefault();
-      void copyPrimarySecret(items[idx].vaultId, items[idx].id);
     }
   }
 

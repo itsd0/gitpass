@@ -12,6 +12,7 @@ import { builtinCommands, type PaletteCommand } from './commands';
 import { rank } from './fuzzy';
 import { formatCombo, listShortcuts, registerShortcut, useGlobalShortcuts } from './shortcuts';
 import { Modal } from '../../ui';
+import { itemShortcuts } from '../items/itemShortcuts';
 
 type Entry = { kind: 'cmd'; cmd: PaletteCommand } | { kind: 'item'; item: ItemSummary };
 export function buildEntries(query: string, cmds: PaletteCommand[], items: ItemSummary[], label: (c: PaletteCommand) => string): Entry[] {
@@ -76,6 +77,7 @@ export function PaletteHost() {
     registerShortcut({ id: 'help', combo: '?', labelKey: 'shortcuts.help', run: () => app().openModal('shortcuts-help') }),
     registerShortcut({ id: 'new-item', combo: 'mod+n', labelKey: 'shortcuts.newItem', run: () => app().openModal('new-item') }),
     registerShortcut({ id: 'generate-password', combo: 'mod+shift+g', labelKey: 'shortcuts.generatePassword', run: () => app().openModal('password-generator') }),
+    ...itemShortcuts.map(registerShortcut),
     registerShortcut({ id: 'lock', combo: 'mod+shift+l', labelKey: 'shortcuts.lock', run: () => { void api.lock().catch(() => {}); app().lock(); }, allowInInput: true }),
   ]; return () => offs.forEach((f) => f()); }, []);
   useEffect(() => { if (modal?.id === 'palette') { setOpen(true); closeModal(); } }, [modal, closeModal]);

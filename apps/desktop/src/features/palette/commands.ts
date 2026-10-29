@@ -1,9 +1,10 @@
-import { FolderInput, Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap } from 'lucide-react';
+import { AtSign, Copy, FolderInput, Globe, Pencil, Timer, Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap } from 'lucide-react';
 import { api } from '../../api/client';
 import { translate, useI18n, type Key } from '../../i18n';
 import type { PaletteCommand } from '../registry';
 import { useApp } from '../../lib/store';
 import { useItemsUI } from '../items/state';
+import { copyPasswordSelected, copyTotpSelected, copyUsernameSelected, editSelectedItem, openWebsiteSelected, shortcutTarget } from '../items/itemShortcuts';
 import { toast } from '../../ui';
 import { isDark } from '../settings/theme';
 import { useSettings } from '../settings/useSettings';
@@ -76,6 +77,17 @@ export function builtinCommands(): PaletteCommand[] {
         }
       },
     });
+  }
+  // Item actions: enabled only while exactly one item is selected (same guard as the keyboard shortcuts).
+  const target = shortcutTarget({ ignoreModal: true });
+  if (target) {
+    cmds.push(
+      { id: 'item-copy-password', labelKey: 'itemKeys.copyPassword', icon: Copy, keywords: ['copy', 'secret'], shortcut: 'mod+c', run: copyPasswordSelected },
+      { id: 'item-copy-username', labelKey: 'itemKeys.copyUsername', icon: AtSign, keywords: ['copy', 'email', 'login'], shortcut: 'mod+shift+c', run: copyUsernameSelected },
+      { id: 'item-copy-totp', labelKey: 'itemKeys.copyTotp', icon: Timer, keywords: ['copy', 'otp', '2fa', 'code'], shortcut: 'mod+alt+c', run: copyTotpSelected },
+      { id: 'item-open-website', labelKey: 'itemKeys.openWebsite', icon: Globe, keywords: ['url', 'browser', 'link'], shortcut: 'mod+shift+o', run: openWebsiteSelected },
+    );
+    if (!target.deleted) cmds.push({ id: 'item-edit', labelKey: 'itemKeys.edit', icon: Pencil, keywords: ['change', 'modify'], shortcut: 'mod+e', run: editSelectedItem });
   }
   return cmds.map((c) => ({ ...c, label: translate(lang, c.labelKey) }));
 }
