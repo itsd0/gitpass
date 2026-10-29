@@ -170,8 +170,6 @@ pub fn scan_totp_clipboard(clipboard: &dyn crate::api::Clipboard) -> Result<Scan
 
 /// Capture screen selection interactively via macOS `/usr/sbin/screencapture -i -x`
 /// into a private temp dir (mode 0700), decode it, and delete the image file right away.
-/// Capture screen selection interactively via macOS `/usr/sbin/screencapture -i -x`
-/// into a private temp dir (mode 0700), decode it, and delete the image file right away.
 pub fn scan_totp_screen() -> Result<ScannedTotp> {
     scan_totp_screen_with(None)
 }
