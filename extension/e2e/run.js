@@ -455,6 +455,20 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
           rec('popup watchtower findings e2e', false, e.message);
         }
 
+        // --- Website icons and monograms (#201): popup shows site icon or monogram on logins
+        try {
+          const iconStatus = await until(async () => {
+            return pop.eval(`(() => {
+              const rows = [...document.querySelectorAll('#listInner .row')];
+              const loginRow = rows.find((r) => /Localhost Test Login|GitHub/.test(r.innerText));
+              return Boolean(loginRow && (loginRow.querySelector('.site-icon-img') || loginRow.querySelector('.monogram')));
+            })()`);
+          }, T(4000));
+          rec('popup list shows site icon / monogram on logins and category glyph on non-logins', !!iconStatus);
+        } catch (e) {
+          rec('popup watchtower findings e2e', false, e.message);
+        }
+
         // --- New item (#41): the popup's New item form sends exactly one create_item per item, with the
         // desktop New Item template's category/section/field ids and kinds.
         const panel = () => pop.eval(`(() => {
@@ -685,10 +699,20 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
       badgeInfo = `; badge found=${badge.length}`;
       if (badge.length) { await page.mouse.click(badge[0].x, badge[0].y); await sleep(800); badgeInfo += '; menu text=' + JSON.stringify((await findInShadow(page, /\S/)).map((h) => h.text).slice(0, 6)); hitsUsed = await until(async () => { const h = await findInShadow(page, /Localhost Test Login|alice@example\.com/); return h.length && h; }, T(4000)); }
     }
+    // In-page dropdown shows site icon or monogram on logins (#201)
+    const inpageIcon = await until(async () => {
+      const img = await shadowNode(page, '.site-icon-img');
+      const mono = await shadowNode(page, '.monogram');
+      return (img != null || mono != null);
+    }, T(3000));
+    rec('in-page dropdown shows site icon or monogram on login rows', !!inpageIcon);
+
     if (hitsUsed) await page.mouse.click(hitsUsed[0].x, hitsUsed[0].y);
     const hits2 = hitsUsed;
     const inpage = await until(isFilled, T(3000));
     rec('fill via in-page dropdown', !!inpage, (hits2 ? `clicked ${hits2[0].tag} "${hits2[0].text}"` : 'no dropdown entry found in shadow DOM') + badgeInfo + `; u=${JSON.stringify(await page.inputValue('#u'))}`);
+
+
     // Keyboard regression (#74): the theme work is CSS-only; the menu still opens with Alt+ArrowDown
     // and closes with Escape, leaving the field value untouched.
     await page.focus('#u');
@@ -1291,6 +1315,41 @@ const cmdsIn = (dir) => mockLog(dir).filter((e) => e.dir === 'in').map((e) => e.
     const reenabledBanner = await until(async () => { const h = await findInShadow(page, /^\s*(Save|บันทึก|သိမ်းရန်)\s*$/i); return h.length && h; }, T(6000));
     rec('removing exception in options re-enables save banner', !!reenabledBanner, reenabledBanner ? `button "${reenabledBanner[0].text}"` : 'banner did not reappear');
     if (reenabledBanner) await page.mouse.click(reenabledBanner[0].x, reenabledBanner[0].y);
+
+    // --- Auto-submit after fill (#231): opt-in toggle, one-submit form submits on
+    // dropdown fill; a never-auto-submit exception fills but does not submit.
+    try {
+      await popup.bringToFront();
+      const autoToggle = popup.locator('#autoSubmitAfterFill');
+      const autoToggleOk = await until(async () => (await autoToggle.count()) > 0, T(4000));
+      rec('options page: auto-submit toggle exists', !!autoToggleOk, autoToggleOk ? '' : 'no #autoSubmitAfterFill checkbox');
+      if (autoToggleOk) {
+        await autoToggle.check();
+        await sleep(500);
+        await page.bringToFront(); await page.goto(LOGIN); await sleep(1000);
+        await page.click('#u'); await sleep(800);
+        const autoHits = await until(async () => { const h = await findInShadow(page, /Localhost Test Login|alice@example\.com/); return h.length && h; }, T(5000));
+        if (autoHits) await page.mouse.click(autoHits[0].x, autoHits[0].y);
+        const autoSubmitted = await until(async () => (await page.textContent('#msg')) === 'signed in as alice@example.com', T(4000));
+        rec('auto-submit after fill: dropdown fill submits the one-submit login form', !!autoSubmitted,
+          autoSubmitted ? 'submit handler ran' : `msg=${JSON.stringify(await page.textContent('#msg'))}; u=${JSON.stringify(await page.inputValue('#u'))}`);
+
+        // Except localhost from auto-submit, then fill again: values fill, form does not submit.
+        await popup.bringToFront();
+        await popup.fill('#never-auto-submit-add', 'localhost');
+        await popup.click('#never-auto-submit-add-btn');
+        await sleep(500);
+        await page.bringToFront(); await page.goto(LOGIN); await sleep(1000);
+        await page.click('#u'); await sleep(800);
+        const autoHits2 = await until(async () => { const h = await findInShadow(page, /Localhost Test Login|alice@example\.com/); return h.length && h; }, T(5000));
+        if (autoHits2) await page.mouse.click(autoHits2[0].x, autoHits2[0].y);
+        const filledNoSubmit = await until(async () => (await page.inputValue('#u')) === 'alice@example.com' && (await page.inputValue('#p')) === PW, T(4000));
+        await sleep(800);
+        const msgAfter = await page.textContent('#msg');
+        rec('never-auto-submit site: fill happens but the form is not submitted', !!filledNoSubmit && msgAfter !== 'signed in as alice@example.com',
+          `filled=${!!filledNoSubmit}; msg=${JSON.stringify(msgAfter)}`);
+      }
+    } catch (e) { rec('auto-submit after fill (#231)', false, e.message); }
     const failed = results.filter((r) => !r.ok && r.kind !== 'info');
     exitCode = failed.length ? 1 : 0;
   } catch (e) { rec('harness', false, e.message); } finally {

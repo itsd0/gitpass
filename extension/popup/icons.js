@@ -3,6 +3,8 @@
   'use strict';
   // Category glyphs live in lib/icons.js (shared with the in-page UI).
   const categoryIcon = (cat, size) => root.GitpassIcons.categoryIcon(cat, size);
+  const monogramIcon = (title, size) => root.GitpassIcons.monogramIcon(title, size);
+  const getMonogram = (title) => root.GitpassIcons.getMonogram(title);
   const s = (d) => `<svg class="ui" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
   const UI = {
     copy: s('<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>'),
@@ -22,5 +24,5 @@
     link: s('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     alert: s('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>'),
   };
-  root.GitpassPopupIcons = { categoryIcon, UI };
+  root.GitpassPopupIcons = { categoryIcon, monogramIcon, getMonogram, UI };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

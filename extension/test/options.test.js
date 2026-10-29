@@ -133,6 +133,7 @@ function bootOptions(options = {}) {
   const w = dom.window;
 
   let storedNeverSave = [...(options.neverSave || ['alpha.com', 'beta.org'])];
+  let storedNeverAutoSubmit = [...(options.neverAutoSubmit || [])];
   let storedSettings = { ...(options.settings || { autolockFollowsApp: true, autofill: true, savePrompts: true }) };
   let probeResult = options.probeResult || { host: true, app: true, unlocked: true };
   const messageListeners = [];
@@ -143,14 +144,17 @@ function bootOptions(options = {}) {
         get: (keys, cb) => {
           if (Array.isArray(keys) && keys.includes('neverSave')) {
             cb({ neverSave: storedNeverSave });
+          } else if (Array.isArray(keys) && keys.includes('neverAutoSubmit')) {
+            cb({ neverAutoSubmit: storedNeverAutoSubmit });
           } else if (keys === 'settings' || (Array.isArray(keys) && keys.includes('settings'))) {
             cb({ settings: storedSettings });
           } else {
-            cb({ settings: storedSettings, neverSave: storedNeverSave });
+            cb({ settings: storedSettings, neverSave: storedNeverSave, neverAutoSubmit: storedNeverAutoSubmit });
           }
         },
         set: (data, cb) => {
           if (data.neverSave) storedNeverSave = data.neverSave;
+          if (data.neverAutoSubmit) storedNeverAutoSubmit = data.neverAutoSubmit;
           if (data.settings) storedSettings = data.settings;
           if (cb) cb();
         },
@@ -191,6 +195,7 @@ function bootOptions(options = {}) {
     w,
     setProbe: (p) => { probeResult = p; },
     getStoredNeverSave: () => storedNeverSave,
+    getStoredNeverAutoSubmit: () => storedNeverAutoSubmit,
     getStoredSettings: () => storedSettings,
     dispatchMessage: (msg) => {
       for (const fn of messageListeners) fn(msg);
@@ -340,4 +345,48 @@ test('options CSS: tokens match #74 and provide light/dark themes with high cont
   // Focus rings and reduced motion
   assert.ok(/:focus-visible/.test(css), 'accessible focus-visible styles');
   assert.ok(/prefers-reduced-motion/.test(css), 'respects prefers-reduced-motion');
+});
+
+test('options DOM: auto-submit toggle defaults off and persists onchange (#231)', async () => {
+  const { w, getStoredSettings } = bootOptions();
+  await new Promise((r) => setTimeout(r, 80));
+
+  const toggle = w.document.getElementById('autoSubmitAfterFill');
+  assert.ok(toggle, 'autoSubmitAfterFill checkbox exists');
+  assert.strictEqual(toggle.checked, false, 'off by default');
+
+  toggle.checked = true;
+  toggle.dispatchEvent(new w.Event('change'));
+  await new Promise((r) => setTimeout(r, 80));
+
+  assert.strictEqual(getStoredSettings().autoSubmitAfterFill, true);
+  w.close();
+});
+
+test('options DOM: never-auto-submit list add (normalized) and remove (#231)', async () => {
+  const { w, getStoredNeverAutoSubmit } = bootOptions({ neverAutoSubmit: ['alpha.com'] });
+  await new Promise((r) => setTimeout(r, 80));
+
+  const list = w.document.getElementById('never-auto-submit-list');
+  assert.strictEqual(list.querySelectorAll('.never-save-row').length, 1);
+
+  const input = w.document.getElementById('never-auto-submit-add');
+  const addBtn = w.document.getElementById('never-auto-submit-add-btn');
+  input.value = '  WWW.Beta.ORG ';
+  addBtn.click();
+  await new Promise((r) => setTimeout(r, 80));
+  assert.strictEqual(getStoredNeverAutoSubmit().join(','), 'alpha.com,beta.org');
+  assert.strictEqual(list.querySelectorAll('.never-save-row').length, 2);
+
+  // Adding a duplicate does not duplicate the row
+  input.value = 'beta.org';
+  addBtn.click();
+  await new Promise((r) => setTimeout(r, 80));
+  assert.strictEqual(getStoredNeverAutoSubmit().join(','), 'alpha.com,beta.org');
+
+  const removeBtn = list.querySelectorAll('.never-save-row')[0].querySelector('button.sec');
+  removeBtn.click();
+  await new Promise((r) => setTimeout(r, 80));
+  assert.strictEqual(getStoredNeverAutoSubmit().join(','), 'beta.org');
+  w.close();
 });
