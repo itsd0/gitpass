@@ -74,6 +74,8 @@ fn match_fill_totp_generate_lock() {
     let r = ok(&mut f.host, json!({"cmd":"fill","item_id":f.paypal,"origin":"https://www.paypal.com"}));
     assert_eq!(r["username"], "leeky@pp");
     assert_eq!(r["password"], "PayPal-pw");
+    let item_resp = ok(&mut f.host, json!({"cmd":"get_item","item_id":f.paypal}));
+    assert!(item_resp["item"]["last_used"].as_u64().is_some(), "fill must update last_used");
     assert!(err(&mut f.host, json!({"cmd":"fill","item_id":f.paypal,"origin":"https://paypal.com.evil.io"})).contains("refused"));
     assert!(err(&mut f.host, json!({"cmd":"fill","item_id":f.paypal,"origin":"http://paypal.com"})).contains("refused"));
     assert!(err(&mut f.host, json!({"cmd":"match","url":"http://paypal.com"})).contains("refused"));

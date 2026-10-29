@@ -1382,6 +1382,57 @@ fn system_lock_event_dispatch_enabled_and_disabled() {
     assert_eq!(e.clip.get_text().as_deref(), Some(""));
 }
 
+#[test]
+fn last_used_tracking_and_sort_recent() {
+    let e = env();
+    let l1 = login(&e, "Beta App", "u1", "FAKE-pw1");
+    let l2 = login(&e, "Alpha App", "u2", "FAKE-pw2");
+    let l3 = login(&e, "Gamma App", "u3", "FAKE-pw3");
+
+    // 1. Initial items have no last_used
+    let detail1 = e.app.get_item(&e.vault, &l1.id).unwrap();
+    assert_eq!(detail1.summary.last_used, None);
+
+    // 2. Revealing l1 updates last_used
+    let _ = e.app.reveal_field(&e.vault, &l1.id, "password").unwrap();
+    let detail1_after = e.app.get_item(&e.vault, &l1.id).unwrap();
+    let t1 = detail1_after.summary.last_used.expect("l1 should have last_used after reveal");
+    assert!(t1 > 0);
+
+    // 3. Copying field on l3 updates last_used
+    std::thread::sleep(std::time::Duration::from_millis(1100));
+    e.app.copy_field(&e.vault, &l3.id, "password").unwrap();
+    let detail3_after = e.app.get_item(&e.vault, &l3.id).unwrap();
+    let t3 = detail3_after.summary.last_used.expect("l3 should have last_used after copy");
+    assert!(t3 >= t1);
+
+    // 4. Sort::Recent returns l3, l1, then l2 (never used)
+    let recent_items = e.app.list_items(&Filter {
+        kind: FilterKind::All,
+        vault_id: None,
+        tag: None,
+        category: None,
+        query: None,
+        sort: Some(Sort::Recent),
+    }).unwrap();
+    assert_eq!(recent_items[0].id, l3.id);
+    assert_eq!(recent_items[1].id, l1.id);
+    assert_eq!(recent_items[2].id, l2.id);
+
+    // 5. Sort::Title returns Alpha, Beta, Gamma
+    let title_items = e.app.list_items(&Filter {
+        kind: FilterKind::All,
+        vault_id: None,
+        tag: None,
+        category: None,
+        query: None,
+        sort: Some(Sort::Title),
+    }).unwrap();
+    assert_eq!(title_items[0].id, l2.id);
+    assert_eq!(title_items[1].id, l1.id);
+    assert_eq!(title_items[2].id, l3.id);
+}
+
 struct LocalMockHttp {
     addr: std::net::SocketAddr,
     shutdown: std::sync::Arc<std::sync::atomic::AtomicBool>,
