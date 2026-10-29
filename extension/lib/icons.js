@@ -15,6 +15,37 @@
     bank_account: ['<path d="m3 9 9-7 9 7v2H3V9z"/><path d="M4 22h16"/><path d="M19 11v9M5 11v9M10 11v9M14 11v9"/>', `<circle cx="12" cy="5.5" r="1.3" fill="${A}"/>`],
     server: ['<rect x="2.5" y="3.5" width="19" height="7" rx="2"/><rect x="2.5" y="13.5" width="19" height="7" rx="2"/><path d="M6 7h.01M6 17h.01"/>', `<circle cx="18" cy="7" r="1.2" fill="${A}"/><circle cx="18" cy="17" r="1.2" fill="${A}"/>`],
   };
+  function escapeXml(str) {
+    return String(str || '').replace(/[&<>"']/g, (c) => {
+      switch (c) {
+        case '&': return '&amp;';
+        case '<': return '&lt;';
+        case '>': return '&gt;';
+        case '"': return '&quot;';
+        case "'": return '&apos;';
+        default: return c;
+      }
+    });
+  }
+
+  function getMonogram(title) {
+    const t = String(title || '').trim();
+    if (!t) return '?';
+    return Array.from(t)[0].toUpperCase();
+  }
+
+  function monogramIcon(title, size) {
+    const letter = getMonogram(title);
+    const s = size || 24;
+    const fs = Math.max(10, Math.round(s * 0.45));
+    const r = (s / 2) - 1;
+    const c = s / 2;
+    return `<svg viewBox="0 0 ${s} ${s}" width="${s}" height="${s}" aria-hidden="true" style="flex-shrink:0" class="monogram-svg">` +
+      `<circle cx="${c}" cy="${c}" r="${r}" fill="${A}" fill-opacity="0.15" stroke="${A}" stroke-opacity="0.3" stroke-width="1"/>` +
+      `<text x="${c}" y="${c}" dy="0.36em" text-anchor="middle" fill="${A}" font-size="${fs}" font-family="Inter,ui-sans-serif,system-ui,-apple-system,sans-serif" font-weight="600">${escapeXml(letter)}</text>` +
+      `</svg>`;
+  }
+
   function categoryIcon(cat, size) {
     const g = G[cat] || G.secure_note, sw = size <= 20 ? 1.9 : size <= 28 ? 1.7 : 1.5;
     return `<svg viewBox="0 0 64 64" width="${size}" height="${size}" aria-hidden="true" style="flex-shrink:0">` +
@@ -22,6 +53,6 @@
       `<g transform="translate(14 14) scale(1.5)" fill="none" stroke="${S}" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${g[0]}</g>` +
       `<g transform="translate(14 14) scale(1.5)" fill="none" stroke="${A}" stroke-width="${sw}" stroke-linecap="round">${g[1]}</g></svg>`;
   }
-  root.GitpassIcons = { categoryIcon, CATEGORIES: Object.keys(G) };
+  root.GitpassIcons = { categoryIcon, getMonogram, monogramIcon, CATEGORIES: Object.keys(G) };
   if (typeof module !== 'undefined' && module.exports) module.exports = root.GitpassIcons;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
