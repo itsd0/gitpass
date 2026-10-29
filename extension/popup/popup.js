@@ -124,7 +124,7 @@ function show(view) {
 }
 
 // ---------- state ----------
-const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', sort: 'updated', query: '', rows: [], sel: -1, detail: null, revealed: {}, findingsCache: {}, totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null, neverSave: [], edit: null };
+const S = { all: [], suggested: [], origin: null, vaults: [], filter: 'suggested', sort: 'updated', query: '', rows: [], sel: -1, detail: null, revealed: {}, findingsCache: {}, iconCache: new Map(), iconPending: new Set(), totpCache: {}, totpFetching: {}, totpGen: 0, totpTimer: null, listTotpTimer: null, panel: null, view: null, neverSave: [], edit: null };
 
 async function refreshNeverSave() {
   if (window.__gitpassMockNeverSave) {
@@ -210,6 +210,8 @@ function showNoHost(e) {
 
 function showLocked(view, st) {
   stopTotp(); stopListTotp(); clearTotpCache();
+  if (S.iconCache) S.iconCache.clear();
+  if (S.iconPending) S.iconPending.clear();
   S.revealed = {}; S.edit = null; S.findingsCache = {}; $('detail').textContent = '';
   show('locked');
   $('unlockErr').textContent = '';
@@ -493,6 +495,81 @@ if (undoExceptedBtn) {
   };
 }
 
+function createMonogramSpan(title, size = 20) {
+  const span = el('span', 'monogram');
+  span.setAttribute('aria-hidden', 'true');
+  const letter = V && V.getMonogram ? V.getMonogram(title) : (String(title || '').trim().charAt(0).toUpperCase() || '?');
+  span.textContent = letter;
+  if (size !== 20) {
+    span.style.width = size + 'px';
+    span.style.height = size + 'px';
+    span.style.fontSize = Math.max(10, Math.round(size * 0.45)) + 'px';
+  }
+  return span;
+}
+
+function renderRowIcon(container, it, size = 20) {
+  container.textContent = '';
+  if (!it || it.category !== 'login') {
+    container.innerHTML = categoryIcon((it && it.category) || 'login', size >= 28 ? 44 : 32);
+    return;
+  }
+  const host = (it.favicon_host || (it.url && V && V.hostOfUrl(it.url)) || '').toLowerCase();
+  const title = it.title || host || '';
+  container.dataset.iconHost = host;
+
+  if (host && S.iconCache && S.iconCache.has(host)) {
+    const cached = S.iconCache.get(host);
+    if (cached) {
+      const img = el('img', 'site-icon-img');
+      img.src = cached;
+      img.alt = '';
+      img.setAttribute('aria-hidden', 'true');
+      img.width = size;
+      img.height = size;
+      img.onerror = () => {
+        if (S.iconCache) S.iconCache.set(host, null);
+        container.replaceChildren(createMonogramSpan(title, size));
+      };
+      container.appendChild(img);
+      return;
+    }
+  }
+
+  // Fallback to monogram
+  container.appendChild(createMonogramSpan(title, size));
+
+  if (host && S.iconCache && !S.iconCache.has(host) && S.iconPending && !S.iconPending.has(host)) {
+    S.iconPending.add(host);
+    send({ type: 'popup:site_icon', host })
+      .then((res) => {
+        if (S.iconPending) S.iconPending.delete(host);
+        if (res && res.data_url) {
+          if (S.iconCache) S.iconCache.set(host, res.data_url);
+          if (container.isConnected && container.dataset.iconHost === host) {
+            const img = el('img', 'site-icon-img');
+            img.src = res.data_url;
+            img.alt = '';
+            img.setAttribute('aria-hidden', 'true');
+            img.width = size;
+            img.height = size;
+            img.onerror = () => {
+              if (S.iconCache) S.iconCache.set(host, null);
+              container.replaceChildren(createMonogramSpan(title, size));
+            };
+            container.replaceChildren(img);
+          }
+        } else {
+          if (S.iconCache) S.iconCache.set(host, null);
+        }
+      })
+      .catch(() => {
+        if (S.iconPending) S.iconPending.delete(host);
+        if (S.iconCache) S.iconCache.set(host, null);
+      });
+  }
+}
+
 function renderRecent() {
   const sec = $('recentSection');
   const rList = $('recentList');
@@ -522,7 +599,7 @@ function renderRecent() {
     row.setAttribute('tabindex', '-1');
     row.dataset.itemId = it.id;
     const ic = el('span', 'ic');
-    ic.innerHTML = categoryIcon(it.category, 32);
+    renderRowIcon(ic, it, 20);
     const meta = el('div', 'meta');
     const tDiv = el('div', 't');
     tDiv.textContent = it.title;
@@ -623,7 +700,7 @@ function renderList() {
     row.setAttribute('aria-selected', isSel ? 'true' : 'false');
     row.setAttribute('tabindex', '-1');
     row.dataset.idx = i;
-    const ic = el('span', 'ic'); ic.innerHTML = categoryIcon(it.category, 32);
+    const ic = el('span', 'ic'); renderRowIcon(ic, it, 20);
     const meta = el('div', 'meta');
     const tDiv = el('div', 't');
     if (S.query) tDiv.append(renderHighlight(it.title, S.query));
@@ -876,7 +953,7 @@ async function select(idx) {
 function renderDetail(d) {
   const pane = $('detail'); pane.textContent = '';
   const head = el('div', 'd-head');
-  const ic = el('span', 'ic'); ic.innerHTML = categoryIcon(d.category, 44);
+  const ic = el('span', 'ic'); renderRowIcon(ic, d, 28);
   const g = el('div', 'grow'); g.append(el('h2', null, d.title), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
   head.append(ic, g, moreMenu(d));
   pane.append(head);
@@ -979,7 +1056,7 @@ function startEdit() {
 function renderEditForm(d) {
   const pane = $('detail'); pane.textContent = '';
   const head = el('div', 'd-head');
-  const ic = el('span', 'ic'); ic.innerHTML = categoryIcon(d.category, 44);
+  const ic = el('span', 'ic'); renderRowIcon(ic, d, 28);
   const g = el('div', 'grow');
   g.append(el('h2', null, t('editLogin', 'Edit login')), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
   head.append(ic, g);
@@ -1832,6 +1909,8 @@ if (globalThis.chrome && chrome.runtime && chrome.runtime.onMessage) {
     if (msg.event === 'unlock') refresh();
     else if (msg.event === 'changed') liveReload();
     else if (msg.event === 'lock') {
+      if (S.iconCache) S.iconCache.clear();
+      if (S.iconPending) S.iconPending.clear();
       clearClipboardIfOurs();
       popupSettings().then((st) => { if (st.autolockFollowsApp !== false) refresh(); });
     }

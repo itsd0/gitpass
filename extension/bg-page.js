@@ -226,6 +226,29 @@
     const a = msg || {};
     switch (a.type) {
       case 'page:status': return host('status');
+      case 'page:site_icon': {
+        const h = String(a.host || '').trim().toLowerCase();
+        if (!h) throw err('bad_request', 'empty host');
+        const bgCache = globalThis.GitpassSiteIconCache;
+        if (bgCache && bgCache.has(h)) {
+          const cached = bgCache.get(h);
+          if (!cached) throw err('not_found', 'icon not cached');
+          return { data_url: cached };
+        }
+        try {
+          const res = await host('site_icon', { host: h });
+          if (res && res.data_url) {
+            if (bgCache) bgCache.set(h, res.data_url);
+            return res;
+          }
+        } catch (e) {
+          if (e && (e.code === 'not_found' || String(e.message).includes('not_found') || String(e.message).includes('not cached'))) {
+            if (bgCache) bgCache.set(h, null);
+          }
+          throw e;
+        }
+        throw err('not_found', 'icon not cached');
+      }
       case 'page:match': return { origin, items: await matchItems(host, origin) };
       case 'page:search_enable': {
         if (!a.user_click) throw err('denied', 'search needs a user click');

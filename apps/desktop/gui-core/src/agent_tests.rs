@@ -471,6 +471,81 @@ fn generator_history_command_is_read_only_gated_by_lock_and_setting() {
 }
 
 #[test]
+fn site_icon_agent_contract_and_security() {
+    let e = env();
+    let cache_dir = tempfile::tempdir().unwrap();
+    e.app.set_favicon_cache_dir(cache_dir.path().to_path_buf());
+    let (mut c, _) = Client::connect(&e);
+
+    // 1. Refused when the setting is off (default is false)
+    assert_eq!(c.err("site_icon", json!({"host": "github.com"})), "denied");
+
+    // Enable show_website_icons
+    let mut s = e.app.get_settings();
+    s.show_website_icons = true;
+    e.app.set_settings(s).unwrap();
+
+    // 2. Refused for a host not in any item
+    assert_eq!(c.err("site_icon", json!({"host": "evil.invalid"})), "denied");
+
+    // Add an item with github.com
+    c.ok("save_login", json!({
+        "source": "popup",
+        "origin": "https://github.com",
+        "username": "alice",
+        "password": "secret123"
+    }));
+
+    // 3. not_found when uncached
+    assert_eq!(c.err("site_icon", json!({"host": "github.com"})), "not_found");
+
+    // 4. Returns cached icon
+    let fake_data_url = "data:image/png;base64,FAKEICON";
+    crate::favicon::save_cached(cache_dir.path(), "github.com", Some(fake_data_url.to_string())).unwrap();
+
+    let res = c.ok("site_icon", json!({"host": "github.com"}));
+    assert_eq!(res["data_url"], fake_data_url);
+
+    // Case-insensitive host
+    let res_caps = c.ok("site_icon", json!({"host": "GitHub.com"}));
+    assert_eq!(res_caps["data_url"], fake_data_url);
+
+    // Also allowed when allow_favicons is true even if show_website_icons is false
+    let mut s_off = e.app.get_settings();
+    s_off.show_website_icons = false;
+    e.app.set_settings(s_off).unwrap();
+    assert_eq!(c.err("site_icon", json!({"host": "github.com"})), "denied");
+    e.app.update_local(|l| l.allow_favicons = true).unwrap();
+    // Toggling show_website_icons off cleared cache; re-save cached icon
+    crate::favicon::save_cached(cache_dir.path(), "github.com", Some(fake_data_url.to_string())).unwrap();
+    let res_dev = c.ok("site_icon", json!({"host": "github.com"}));
+    assert_eq!(res_dev["data_url"], fake_data_url);
+
+    // 5. Refused when locked
+    e.app.lock();
+    assert_eq!(c.err("site_icon", json!({"host": "github.com"})), "locked");
+}
+
+#[test]
+fn shared_favicon_cache_file_format_pinned_for_gitpass_host() {
+    let cache_dir = tempfile::tempdir().unwrap();
+    let host = "github.com";
+    let fake_data_url = "data:image/png;base64,PINNED_ICON";
+
+    // 1. Write via gui-core
+    crate::favicon::save_cached(cache_dir.path(), host, Some(fake_data_url.to_string())).unwrap();
+
+    // 2. Read raw JSON and verify schema pinned with crates/gitpass-host/src/handler.rs
+    let host_hash = gitpass_core::store::hash_bytes(host.as_bytes());
+    let file_path = cache_dir.path().join(format!("{host_hash}.json"));
+    let bytes = std::fs::read(&file_path).expect("cache file must exist with <sha256(host)>.json filename");
+    let json_val: serde_json::Value = serde_json::from_slice(&bytes).expect("valid JSON");
+
+    assert!(json_val.get("ts").and_then(|v| v.as_u64()).is_some(), "must have numeric ts timestamp");
+    assert_eq!(json_val.get("data_url").and_then(|v| v.as_str()), Some(fake_data_url), "must have data_url string");
+}
+
+#[test]
 fn record_generated_password_agent_contract_and_settings() {
     let e = env();
     let (mut c, _) = Client::connect(&e);

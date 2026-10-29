@@ -22,6 +22,56 @@ body { background: rgb(var(--bg)); color: rgb(var(--fg)); font: 13px/1.4 ui-sans
 .hidden { display: none !important; }
 svg.ui { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .ic { display: inline-flex; }
+.site-icon-img {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  object-fit: contain;
+  display: block;
+  flex-shrink: 0;
+}
+.d-head .site-icon-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+}
+.monogram {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgb(var(--accent) / .16);
+  border: 1px solid rgb(var(--accent) / .3);
+  color: rgb(var(--accent));
+  font-weight: 600;
+  font-size: 11px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  flex-shrink: 0;
+}
+.d-head .monogram {
+  width: 28px;
+  height: 28px;
+  font-size: 14px;
+}
+.row .ic {
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.d-head .ic {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
 .view { height: 100%; }
 .center-view { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 32px 160px; text-align: center; }
 .center-view h1 { font-size: 18px; margin: 4px 0 0; }

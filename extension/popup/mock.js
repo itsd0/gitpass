@@ -62,6 +62,13 @@
     if (!unlocked) return err('locked');
     switch (t) {
       case 'lock': unlocked = false; return ok({ unlocked: false });
+      case 'site_icon': {
+        const h = String(msg.host || '').toLowerCase();
+        if (h === 'github.com') {
+          return ok({ data_url: 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiiciHI9IjEwIiBmaWxsPSIjZjI4YzI4Ii8+PC9zdmc+' });
+        }
+        return err('not_found');
+      }
       case 'list_vaults': return ok({ vaults: V });
       case 'list_items': return ok({ items });
       case 'match_active': return ok({ origin: 'https://github.com', items: items.filter((i) => i.favicon_host === 'github.com') });
