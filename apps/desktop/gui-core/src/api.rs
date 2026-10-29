@@ -1641,6 +1641,7 @@ impl App {
     }
     pub fn scan_totp_image(&self, data_base64: &str) -> Result<crate::qr::ScannedTotp> {
         crate::qr::decode_qr_base64(data_base64)
+    }
 
     /// Get the Git commit signing configuration for an SSH key item.
     pub fn ssh_git_signing_config(&self, vault_id: &str, item_id: &str, email: Option<&str>, socket: Option<&str>) -> Result<gitpass_core::ssh::GitSigningConfig> {
