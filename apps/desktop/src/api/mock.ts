@@ -242,7 +242,7 @@ function mockFindings(id: string): T.FindingInfo[] {
   }
   return out;
 }
-function genPw(length: number, symbols: boolean, digits: boolean, words?: boolean, pin?: boolean) {  const rnd = (n: number) => crypto.getRandomValues(new Uint32Array(1))[0] % n;
+function genPw(length: number, symbols: boolean, digits: boolean, words?: boolean, pin?: boolean, separator?: string, capitalize?: boolean) {  const rnd = (n: number) => crypto.getRandomValues(new Uint32Array(1))[0] % n;
   if (pin) {
     const d = '0123456789';
     return Array.from({ length: Math.max(4, Math.min(16, length)) }, () => d[rnd(d.length)]).join('');
@@ -250,12 +250,15 @@ function genPw(length: number, symbols: boolean, digits: boolean, words?: boolea
   if (words) {
     const w = ['apple', 'river', 'stone', 'cloud', 'tiger', 'maple', 'ocean', 'pixel', 'lunar', 'cedar'];
     const count = Math.max(3, Math.min(20, length));
-    const chosen = Array.from({ length: count }, () => w[rnd(w.length)]);
+    const chosen = Array.from({ length: count }, () => {
+      const word = w[rnd(w.length)];
+      return capitalize ? word.charAt(0).toUpperCase() + word.slice(1) : word;
+    });
     if (digits && chosen.length > 0) {
       const idx = rnd(chosen.length);
       chosen[idx] = chosen[idx] + rnd(10);
     }
-    return chosen.join(symbols ? '-' : '.');
+    return chosen.join(separator ?? (symbols ? '-' : '.'));
   }
   const cs = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ' + (digits ? '23456789' : '') + (symbols ? '!@#$%^&*-_+=' : '');
   return Array.from({ length }, () => cs[rnd(cs.length)]).join('');
@@ -433,7 +436,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     }
     return delay({ count: items.length, items });
   },
-  generate_password: (a: { length: number; symbols: boolean; digits: boolean; words?: boolean; pin?: boolean }) => delay(genPw(a.length, a.symbols, a.digits, a.words, a.pin), 5),
+  generate_password: (a: { length: number; symbols: boolean; digits: boolean; words?: boolean; pin?: boolean; separator?: string; capitalize?: boolean }) => delay(genPw(a.length, a.symbols, a.digits, a.words, a.pin, a.separator, a.capitalize), 5),
   copy_password: (a: { password: string }) => {
     navigator.clipboard?.writeText(a.password).catch(() => {});
     return delay(undefined);

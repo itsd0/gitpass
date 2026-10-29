@@ -325,14 +325,36 @@ fn attachments_via_paths() {
 }
 
 #[test]
+fn generate_words_separator_capitalize_and_rejection() {
+    // Explicit separator joins the words; capitalize upper-cases each word's first letter.
+    let p = generate(5, true, false, true, false, Some('_'), Some(true)).unwrap();
+    let words: Vec<&str> = p.split('_').collect();
+    assert_eq!(words.len(), 5);
+    assert!(words.iter().all(|w| w.chars().next().unwrap().is_ascii_uppercase()
+        && w[1..].chars().all(|c| c.is_ascii_lowercase())), "{p}");
+    let spaced = generate(4, true, false, true, false, Some(' '), None).unwrap();
+    assert_eq!(spaced.split(' ').count(), 4);
+    // Omitted values keep the historical defaults: '-' with symbols, '.' without, no capitalization.
+    assert_eq!(generate(3, true, false, true, false, None, None).unwrap().split('-').count(), 3);
+    let dotted = generate(3, false, false, true, false, None, None).unwrap();
+    assert_eq!(dotted.split('.').count(), 3);
+    assert!(dotted.chars().all(|c| c.is_ascii_lowercase() || c == '.'));
+    // Anything outside the offered separators is a bad request.
+    assert!(generate(3, true, false, true, false, Some('!'), None).is_err());
+    assert!(generate(3, true, false, true, false, Some('/'), None).is_err());
+    // Separator/capitalize do not change the random-mode shape (still 20 characters).
+    assert_eq!(generate(20, true, true, false, false, Some('_'), Some(true)).unwrap().len(), 20);
+}
+
+#[test]
 fn tools_generate_strength_watchtower_hibp() {
     let e = env();
-    let p = e.app.generate_password(24, true, true, false, false);
+    let p = generate(24, true, true, false, false, None, None).unwrap();
     assert_eq!(p.len(), 24);
     assert!(p.chars().any(|c| c.is_ascii_digit()) && p.chars().any(|c| "!@#$%^&*-_=+?".contains(c)));
-    assert!(e.app.generate_password(20, false, false, false, false).chars().all(|c| c.is_ascii_alphabetic()));
-    assert_eq!(e.app.generate_password(5, true, false, true, false).split('-').count(), 5);
-    let pin = e.app.generate_password(6, false, false, false, true);
+    assert!(generate(20, false, false, false, false, None, None).unwrap().chars().all(|c| c.is_ascii_alphabetic()));
+    assert_eq!(generate(5, true, false, true, false, None, None).unwrap().split('-').count(), 5);
+    let pin = generate(6, false, false, false, true, None, None).unwrap();
     assert_eq!(pin.len(), 6);
     assert!(pin.chars().all(|c| c.is_ascii_digit()));
     assert!(e.app.password_strength("password") <= 10);
