@@ -72,6 +72,7 @@ pub struct Host {
     last_activity: Instant,
     last_activity_wall: SystemTime,
     audit_cache: Option<Arc<gitpass_core::audit::AuditReport>>,
+    pub favicon_cache_dir: Option<PathBuf>,
 }
 
 fn arg_str<'a>(req: &'a Value, k: &str) -> Result<&'a str> {
@@ -314,7 +315,9 @@ pub fn add_url_to_record(r: &mut ItemRecord, url: &str) {
 }
 
 impl Host {
-    pub fn new(cfg: HostConfig) -> Self { Host { cfg, session: None, last_activity: Instant::now(), last_activity_wall: SystemTime::now(), audit_cache: None } }
+    pub fn new(cfg: HostConfig) -> Self { Host { cfg, session: None, last_activity: Instant::now(), last_activity_wall: SystemTime::now(), audit_cache: None, favicon_cache_dir: None } }
+
+    pub fn set_favicon_cache_dir(&mut self, dir: PathBuf) { self.favicon_cache_dir = Some(dir); }
 
     pub fn is_unlocked(&self) -> bool { self.session.is_some() }
 
@@ -736,6 +739,86 @@ impl Host {
                 if let Some(h) = insecure_url_host { out["insecure_url_host"] = json!(h); }
                 if let Some(u) = change_pw_url { out["change_password_url"] = json!(u); }
                 Ok(out)
+            }
+            "site_icon" => {
+                let s = self.sess()?;
+                let host_arg = arg_str(req, "host")?.trim().to_lowercase();
+                if host_arg.is_empty() { return Err(coded(code::BAD_REQUEST, "empty host")); }
+                let settings_path = self.cfg.vault_path.join(".gitpass-settings.json");
+                let show_icons = std::fs::read_to_string(&settings_path)
+                    .ok()
+                    .and_then(|str| serde_json::from_str::<serde_json::Value>(&str).ok())
+                    .map(|v| {
+                        // Desktop gui-core serializes LocalFile as camelCase:
+                        // `settings.showWebsiteIcons` (user setting) and top-level `allowFavicons` (dev flag).
+                        let nested = v.get("settings")
+                            .and_then(|s| s.get("showWebsiteIcons").or_else(|| s.get("show_website_icons")))
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false);
+                        let allow_favicons = v.get("allowFavicons")
+                            .or_else(|| v.get("allow_favicons"))
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false);
+                        let top_level = v.get("showWebsiteIcons")
+                            .or_else(|| v.get("show_website_icons"))
+                            .and_then(serde_json::Value::as_bool)
+                            .unwrap_or(false);
+                        nested || allow_favicons || top_level
+                    })
+                    .unwrap_or(false);
+                if !show_icons {
+                    return Err(coded(code::DENIED, "website icons are disabled"));
+                }
+                let mut host_found = false;
+                for (vid, _) in s.list_vaults()? {
+                    for (_iid, _, rec) in s.list_records(&vid)? {
+                        if rec.deleted_at.is_some() || rec.archived { continue; }
+                        if let Some(h) = rec.item.url.as_deref().and_then(url_host) {
+                            if h.eq_ignore_ascii_case(&host_arg) {
+                                host_found = true;
+                                break;
+                            }
+                        }
+                        for field in rec.view_sections().into_iter().flat_map(|sec| sec.fields) {
+                            if field.kind == gitpass_core::item::FieldKind::Url && field.value.is_some() {
+                                if let Some(h) = url_host(field.value.as_ref().unwrap()) {
+                                    if h.eq_ignore_ascii_case(&host_arg) {
+                                        host_found = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if host_found { break; }
+                }
+                if !host_found {
+                    return Err(coded(code::DENIED, format!("refusing host '{host_arg}' not in any item")));
+                }
+                let cache_dir = self.favicon_cache_dir.clone().unwrap_or_else(|| {
+                    dirs::cache_dir()
+                        .unwrap_or_else(std::env::temp_dir)
+                        .join("gitpass")
+                        .join("favicons")
+                });
+                // Cache file schema and 30-day TTL are shared with `apps/desktop/gui-core/src/favicon.rs`.
+                // Cache file name: <sha256(host)>.json; entry: {"ts": <unix_secs>, "data_url": <string or null>}.
+                const FAVICON_TTL_SECS: u64 = 30 * 24 * 60 * 60;
+                let host_hash = gitpass_core::store::hash_bytes(host_arg.as_bytes());
+                let p = cache_dir.join(format!("{host_hash}.json"));
+                if let Ok(bytes) = std::fs::read(&p) {
+                    #[derive(serde::Deserialize)]
+                    struct CachedFaviconEntry { ts: u64, data_url: Option<String> }
+                    if let Ok(entry) = serde_json::from_slice::<CachedFaviconEntry>(&bytes) {
+                        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
+                        if now.saturating_sub(entry.ts) <= FAVICON_TTL_SECS {
+                            if let Some(data_url) = entry.data_url {
+                                return Ok(json!({ "data_url": data_url }));
+                            }
+                        }
+                    }
+                }
+                Err(coded(code::NOT_FOUND, "site icon not cached"))
             }
             "open_in_app" => {
                 crate::agent::launch_app().map_err(|e| coded(code::APP_NOT_RUNNING, format!("could not launch the gitpass app: {e:#}")))?;
