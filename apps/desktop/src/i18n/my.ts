@@ -613,6 +613,8 @@ export const my: Partial<Record<Key, string>> = {
   "sidebar.newVault": "သော့ခတ်သေတ္တာ အသစ်",
   "sidebar.newVaultEllipsis": "သော့ခတ်သေတ္တာ အသစ်…",
   "sidebar.sharedVault": "မျှဝေထားသော သော့ခတ်သေတ္တာ",
+  "sidebar.collapseSection": "{section} ကို ချုံ့ရန်",
+  "sidebar.expandSection": "{section} ကို ဖြန့်ရန်",
   "sidebar.lightTheme": "အလင်း သင်းမ်",
   "sidebar.darkTheme": "အမှောင် သင်းမ်",
   "tag.renameAria": "တဂ် {tag} ကို အမည်ပြောင်းရန်",
