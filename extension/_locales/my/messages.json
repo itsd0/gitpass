@@ -1025,5 +1025,37 @@
         "content": "$1"
       }
     }
+  },
+  "largeType": {
+    "message": "စာလုံးကြီး"
+  },
+  "largeTypeView": {
+    "message": "စာလုံးကြီးမြင်ကွင်း"
+  },
+  "largeTypeField": {
+    "message": "$1 ကို စာလုံးကြီးဖြင့် ကြည့်ရန်",
+    "placeholders": {
+      "label": {
+        "content": "$1"
+      }
+    }
+  },
+  "largeTypeEmpty": {
+    "message": "စာလုံးကြီးဖြင့် ပြရန် မရှိပါ"
+  },
+  "largeTypeNone": {
+    "message": "စာလုံးကြီးဖြင့် ပြရန် စကားဝှက် သို့မဟုတ် တစ်ခါသုံးကုဒ် မရှိပါ"
+  },
+  "shortcutLargeType": {
+    "message": "စာလုံးကြီးဖြင့် ကြည့်ရန်"
+  },
+  "moveToTrash": {
+    "message": "မကြာသေးမီက ဖျက်လိုက်သည်များသို့ ရွှေ့ရန်"
+  },
+  "movedToTrash": {
+    "message": "မကြာသေးမီက ဖျက်လိုက်သည်များသို့ ရွှေ့ပြီးပါပြီ"
+  },
+  "itemRestored": {
+    "message": "မူလအတိုင်း ပြန်လည်ရယူပြီးပါပြီ"
   }
 }

@@ -469,6 +469,22 @@ impl Agent {
                 self.poll_state();
                 Ok(json!({"favorite": fav}))
             }
+            // Same soft delete as the GUI's Recently Deleted (deleted_at + 30-day purge).
+            "trash_item" | "restore_item" => {
+                if source != "popup" { return Err(err("denied", format!("{cmd} is allowed only from the popup"))); }
+                let (vid, iid) = split_id(&req("item_id")?)?;
+                if cmd == "trash_item" {
+                    self.record(&vid, &iid)?; // live items only; already-deleted ones are not_found
+                    self.app.delete_item(&vid, &iid).map_err(host_err)?;
+                } else {
+                    // The deleted record must still exist; anyhow's Display hides the io error, so map it here.
+                    self.app.state.with(|x| x.session.read_record(&vid, &iid).map(|_| ())
+                        .map_err(|e| err("not_found", format!("item not found: {e:#}"))))?;
+                    self.app.restore_item(&vid, &iid).map_err(host_err)?;
+                }
+                self.poll_state();
+                Ok(json!({"ok": true}))
+            }
             "generate" => {
                 use gitpass_core::generate::{Mode, Request};
                 let b = |k: &str| q.get(k).and_then(|v| v.as_bool()).unwrap_or(true);
