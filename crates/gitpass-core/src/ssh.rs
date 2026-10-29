@@ -328,6 +328,162 @@ pub fn identity_agent_line(socket: &std::path::Path) -> String {
     format!("Host *\n  IdentityAgent \"{s}\"")
 }
 
+// ------------------------------------------------------------------ Git commit signing (v0.7)
+
+/// Check whether the key type is supported for Git commit and tag signing.
+/// Ed25519 and RSA (2048+ bits) are supported. Other key types (e.g. ECDSA) are refused.
+pub fn check_git_signing_support(key: &SshKey) -> Result<()> {
+    match key.key.algorithm() {
+        Algorithm::Ed25519 => Ok(()),
+        Algorithm::Rsa { .. } => Ok(()),
+        other => bail!(
+            "Git commit signing supports Ed25519 and RSA keys; found {}",
+            other.as_str()
+        ),
+    }
+}
+
+/// Default allowed_signers path (`~/.ssh/allowed_signers`).
+pub fn default_allowed_signers_path() -> std::path::PathBuf {
+    dirs::home_dir()
+        .map(|h| h.join(".ssh/allowed_signers"))
+        .unwrap_or_else(|| std::path::PathBuf::from(".ssh/allowed_signers"))
+}
+
+/// Display a path using `~` prefix if within the user's home directory.
+pub fn display_path(path: &std::path::Path) -> String {
+    let home = dirs::home_dir().map(|h| h.display().to_string()).unwrap_or_default();
+    let s = path.display().to_string();
+    if !home.is_empty() && s.starts_with(&home) {
+        format!("~{}", &s[home.len()..])
+    } else {
+        s
+    }
+}
+
+/// Detect the user's email from `git config --get user.email`.
+pub fn detect_git_email() -> Option<String> {
+    let out = std::process::Command::new("git")
+        .args(["config", "--get", "user.email"])
+        .output()
+        .ok()?;
+    if out.status.success() {
+        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+        if !s.is_empty() {
+            return Some(s);
+        }
+    }
+    None
+}
+
+/// Git commit signing configuration and allowed_signers entry.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GitSigningConfig {
+    pub key_type: String,
+    pub public_key: String,
+    pub signing_key: String,
+    pub allowed_signers_file: String,
+    pub allowed_signers_line: String,
+    pub config_lines: String,
+    pub email: String,
+}
+
+/// Build the Git signing configuration lines without modifying any files.
+pub fn build_git_signing_config(
+    key: &SshKey,
+    email: &str,
+    allowed_signers_path: &std::path::Path,
+) -> Result<GitSigningConfig> {
+    check_git_signing_support(key)?;
+
+    let pubkey = key.info.public_key.trim();
+    let signing_key = format!("key::{pubkey}");
+    let allowed_signers_file = display_path(allowed_signers_path);
+    let allowed_signers_line = format!("{email} {pubkey}");
+
+    let config_lines = format!(
+        "gpg.format=ssh\nuser.signingkey=\"{signing_key}\"\ncommit.gpgsign=true\ntag.gpgsign=true\ngpg.ssh.allowedSignersFile={allowed_signers_file}"
+    );
+
+    Ok(GitSigningConfig {
+        key_type: key.info.key_type.clone(),
+        public_key: pubkey.to_string(),
+        signing_key,
+        allowed_signers_file,
+        allowed_signers_line,
+        config_lines,
+        email: email.to_string(),
+    })
+}
+
+/// Write `<email> <public key>` to `allowed_signers_path` and apply `git config` settings.
+pub fn apply_git_signing(
+    key: &SshKey,
+    email: &str,
+    allowed_signers_path: &std::path::Path,
+    global: bool,
+) -> Result<GitSigningConfig> {
+    let cfg = build_git_signing_config(key, email, allowed_signers_path)?;
+
+    // 1. Ensure allowed_signers parent directory exists with 0700 permissions
+    if let Some(parent) = allowed_signers_path.parent() {
+        std::fs::create_dir_all(parent)?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(parent, std::fs::Permissions::from_mode(0o700));
+        }
+    }
+
+    // 2. Read existing allowed_signers lines to avoid duplicate entries
+    let line_to_add = cfg.allowed_signers_line.trim();
+    let existing = if allowed_signers_path.exists() {
+        std::fs::read_to_string(allowed_signers_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+
+    let already_present = existing.lines().any(|l| l.trim() == line_to_add);
+    if !already_present {
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(allowed_signers_path)?;
+        if !existing.is_empty() && !existing.ends_with('\n') {
+            writeln!(f)?;
+        }
+        writeln!(f, "{line_to_add}")?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(allowed_signers_path, std::fs::Permissions::from_mode(0o600));
+        }
+    }
+
+    // 3. Apply git config settings
+    let scope_arg = if global { "--global" } else { "--local" };
+    let git_configs = [
+        ("gpg.format", "ssh"),
+        ("user.signingkey", &cfg.signing_key),
+        ("commit.gpgsign", "true"),
+        ("tag.gpgsign", "true"),
+        ("gpg.ssh.allowedSignersFile", &cfg.allowed_signers_file),
+    ];
+
+    for (k, v) in git_configs {
+        let status = std::process::Command::new("git")
+            .args(["config", scope_arg, k, v])
+            .status()
+            .with_context(|| format!("run git config {scope_arg} {k}"))?;
+        if !status.success() {
+            bail!("git config {scope_arg} {k} failed with status {status}");
+        }
+    }
+
+    Ok(cfg)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -488,5 +644,41 @@ mod tests {
         let err = SshKey::import_openssh(&pem1024, None).unwrap_err();
         assert!(err.to_string().contains("RSA key is too short"), "expected too short error, got: {err}");
         assert!(err.to_string().contains("1024"));
+    }
+
+    #[test]
+    fn git_signing_key_types_and_config() {
+        // 1. Ed25519 works
+        let ed = SshKey::generate_ed25519("ed@example.invalid").unwrap();
+        assert!(check_git_signing_support(&ed).is_ok());
+
+        let signers_path = std::path::Path::new("/tmp/test_signers");
+        let cfg = build_git_signing_config(&ed, "ed@example.invalid", signers_path).unwrap();
+        assert_eq!(cfg.key_type, "ssh-ed25519");
+        assert_eq!(cfg.email, "ed@example.invalid");
+        assert!(cfg.signing_key.starts_with("key::ssh-ed25519 AAAA"));
+        assert!(cfg.config_lines.contains("gpg.format=ssh"));
+        assert!(cfg.config_lines.contains(&format!("user.signingkey=\"{}\"", cfg.signing_key)));
+        assert!(cfg.config_lines.contains("commit.gpgsign=true"));
+        assert!(cfg.config_lines.contains("tag.gpgsign=true"));
+        assert!(cfg.config_lines.contains("gpg.ssh.allowedSignersFile="));
+        assert!(cfg.allowed_signers_line.starts_with("ed@example.invalid ssh-ed25519 AAAA"));
+
+        // 2. RSA 2048 works
+        use ssh_key::private::{KeypairData, RsaKeypair};
+        let rsa_pair = RsaKeypair::random(&mut rand::rngs::OsRng, 2048).unwrap();
+        let priv_rsa = PrivateKey::new(KeypairData::Rsa(rsa_pair), "rsa@example.invalid").unwrap();
+        let rsa_key = SshKey::from_key(priv_rsa).unwrap();
+        assert!(check_git_signing_support(&rsa_key).is_ok());
+        let rsa_cfg = build_git_signing_config(&rsa_key, "rsa@example.invalid", signers_path).unwrap();
+        assert_eq!(rsa_cfg.key_type, "ssh-rsa");
+        assert!(rsa_cfg.signing_key.starts_with("key::ssh-rsa AAAA"));
+
+        // 3. ECDSA is refused
+        let ecdsa = PrivateKey::random(&mut rand::rngs::OsRng, Algorithm::Ecdsa { curve: ssh_key::EcdsaCurve::NistP256 }).unwrap();
+        let ecdsa_key = SshKey::from_key(ecdsa).unwrap();
+        let err = check_git_signing_support(&ecdsa_key).unwrap_err();
+        assert!(err.to_string().contains("Git commit signing supports Ed25519 and RSA keys"), "got: {err}");
+        assert!(err.to_string().contains("ecdsa"));
     }
 }
