@@ -133,6 +133,8 @@ export const my: Partial<Record<Key, string>> = {
   'qa.usernameCopied': 'အသုံးပြုသူအမည် ကူးယူပြီး', 'qa.noResults': 'ကိုက်ညီသော အရာ မရှိပါ', 'qa.totp': 'တစ်ကြိမ်သုံး စကားဝှက်',
   'share.labelPlaceholder': 'ဥပမာ- Alex ၏ laptop', 'sync.ahead': '{n} ခု ရှေ့ရောက်နေသည်', 'sync.behind': '{n} ခု နောက်ကျနေသည်', 'sync.dirty': 'commit မလုပ်ရသေးသော ပြောင်းလဲမှုများ',
   'palette.label': 'Command palette', 'cmd.watchtower': 'Watchtower သို့', 'shortcuts.palette': 'Command palette ဖွင့်ရန်', 'shortcuts.help': 'ဤအကူအညီကို ပြရန်',
+  // TODO(i18n-review): native Burmese review of the palette actions wording
+  'palette.actions': 'လုပ်ဆောင်ချက်များ', 'palette.actionsFor': '{title} အတွက် လုပ်ဆောင်ချက်များ', 'palette.openItem': 'အရာကို ဖွင့်ရန်', 'palette.run': 'လုပ်ဆောင်ရန်', 'palette.back': 'နောက်သို့',
   'shortcuts.newItem': 'အရာအသစ်', 'shortcuts.lock': 'သော့ခတ်ရန်', 'qa.label': 'အမြန်ဝင်ရောက်ရန်', 'qa.hint': 'သော့ခတ်သေတ္တာများတွင် ရှာရန် စာရိုက်ပါ',
   // TODO(i18n-review): drafted by agy; needs native Burmese speaker sign-off:
   'settings.rotateKeyHelp': 'Secret Key အသစ်တစ်ခု ထုတ်ပေးမည်။ အခြားစက်များ ဝင်ရောက်ရန် Emergency Kit အသစ် လိုအပ်ပါမည်။',
