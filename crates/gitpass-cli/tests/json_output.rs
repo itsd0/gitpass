@@ -45,6 +45,8 @@ const SECRET_TOTP: &str = "otpauth://totp/fake:alice?secret=JBSWY3DPEHPK3PXP";
 const SECRET_NOTES: &str = "FAKE-secret-note-recovery-codes";
 const SECRET_CARD_NUM: &str = "4111222233334444";
 const SECRET_CVV: &str = "999";
+// The CVV is matched as a whole JSON string: a bare "999" can appear in random ids/timestamps.
+const SECRET_CVV_JSON: &str = "\"999\"";
 const SECRET_ARCHIVED_PW: &str = "FAKE-archived-pw-111";
 const SECRET_DELETED_PW: &str = "FAKE-deleted-pw-222";
 
@@ -142,7 +144,7 @@ fn list_and_find_json_schema_and_secrecy() {
     let raw = String::from_utf8_lossy(&out.stdout).to_string();
 
     // Prove NO secrets ever appear in list output
-    for secret in [SECRET_PW, SECRET_TOTP, SECRET_NOTES, SECRET_CARD_NUM, SECRET_CVV, SECRET_ARCHIVED_PW, SECRET_DELETED_PW] {
+    for secret in [SECRET_PW, SECRET_TOTP, SECRET_NOTES, SECRET_CARD_NUM, SECRET_CVV_JSON, SECRET_ARCHIVED_PW, SECRET_DELETED_PW] {
         assert!(!raw.contains(secret), "secret '{secret}' leaked in list --json!");
     }
 
@@ -252,7 +254,7 @@ fn get_json_without_reveal_masks_secrets() {
     assert!(out_card.status.success());
     let raw_card = String::from_utf8_lossy(&out_card.stdout);
     assert!(!raw_card.contains(SECRET_CARD_NUM));
-    assert!(!raw_card.contains(SECRET_CVV));
+    assert!(!raw_card.contains(SECRET_CVV_JSON));
 
     let val_card: serde_json::Value = serde_json::from_str(&raw_card).unwrap();
     let card_fields = val_card["fields"].as_array().unwrap();
