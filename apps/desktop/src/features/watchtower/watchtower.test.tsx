@@ -27,8 +27,8 @@ import { ScoreGauge, WatchtowerPage } from './WatchtowerPage';
 import { useApp } from '../../lib/store';
 describe('watchtower score', () => {
   it('bands and clamps', () => {
-    expect(scoreBand(92).label).toBe('Excellent'); expect(scoreBand(70).label).toBe('Good');
-    expect(scoreBand(50).label).toBe('Fair'); expect(scoreBand(10).label).toBe('Poor');
+    expect(scoreBand(92).labelKey).toBe('excellent'); expect(scoreBand(70).labelKey).toBe('good');
+    expect(scoreBand(50).labelKey).toBe('fair'); expect(scoreBand(10).labelKey).toBe('poor');
     expect(scoreBand(150).score).toBe(100); expect(scoreBand(-3).score).toBe(0);
     const d = gaugeDash(50); expect(d.filled).toBeCloseTo(d.arc / 2);
   });
@@ -44,6 +44,17 @@ describe('watchtower score', () => {
   it('renders gauge', () => {
     render(<ScoreGauge score={71} />);
     expect(screen.getByRole('img', { name: 'Security score 71 of 100, Good' })).toBeTruthy();
+  });
+  it('renders gauge localized in Burmese and Thai', () => {
+    useI18n.getState().setLang('my');
+    render(<ScoreGauge score={71} />);
+    expect(screen.getByRole('img', { name: 'လုံခြုံရေးရမှတ် 100 တွင် 71၊ ကောင်း' })).toBeTruthy();
+    expect(screen.getByText('ကောင်း')).toBeTruthy();
+    cleanup();
+    useI18n.getState().setLang('th');
+    render(<ScoreGauge score={92} />);
+    expect(screen.getByRole('img', { name: 'คะแนนความปลอดภัย 92 จาก 100, ยอดเยี่ยม' })).toBeTruthy();
+    expect(screen.getByText('ยอดเยี่ยม')).toBeTruthy();
   });
   it('page renders counts, HIBP opt-in, and selects item on click', async () => {
     render(<WatchtowerPage />);

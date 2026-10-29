@@ -37,13 +37,15 @@ import { gaugeDash, issueIds, scoreBand, type IssueKey } from "./score";
 import { cn } from "../../lib/utils";
 
 export function ScoreGauge({ score }: { score: number }) {
+  const t = useT();
   const b = scoreBand(score);
   const d = gaugeDash(score);
+  const label = t(`watchtower.score.${b.labelKey}` as 'watchtower.score.excellent');
   return (
     <div
       className="relative h-40 w-40"
       role="img"
-      aria-label={`Security score ${b.score} of 100, ${b.label}`}
+      aria-label={t('watchtower.score.aria', { score: b.score, label })}
     >
       <svg viewBox="0 0 120 120" className="h-full w-full rotate-[135deg]">
         <circle
@@ -72,7 +74,7 @@ export function ScoreGauge({ score }: { score: number }) {
           {b.score}
         </span>
         <span className="text-sm" style={{ color: b.color }}>
-          {b.label}
+          {label}
         </span>
       </div>
     </div>
@@ -282,12 +284,12 @@ export function WatchtowerPage() {
               <input
                 type="checkbox"
                 role="switch"
-                aria-label="Check for breached passwords"
+                aria-label={t('watchtower.breachCheckAria')}
                 checked={hibp}
                 onChange={(e) => setHibp(e.target.checked)}
                 className="accent-accent"
               />{" "}
-              Check passwords against known breaches
+              {t('watchtower.breachCheckLabel')}
             </label>
             <p className="mt-1 text-xs text-muted">
               Off by default. When on, gitpass hashes each password with SHA-1 locally and sends only the{" "}
