@@ -75,8 +75,7 @@ fn test_host_and_agent_identical_protocol_json() {
         }],
         notes: Some("github dev note".into()),
         tags: Some(vec!["dev".into(), "vcs".into()]),
-        favorite: Some(true),
-    }).unwrap();
+        favorite: Some(true), related_item_ids: None }).unwrap();
 
     let _login2 = app.create_item(&ItemInput {
         vault_id: vid.clone(),
@@ -93,8 +92,7 @@ fn test_host_and_agent_identical_protocol_json() {
         }],
         notes: None,
         tags: None,
-        favorite: None,
-    }).unwrap();
+        favorite: None, related_item_ids: None }).unwrap();
 
     let card = app.create_item(&ItemInput {
         vault_id: vid.clone(),
@@ -113,8 +111,7 @@ fn test_host_and_agent_identical_protocol_json() {
         }],
         notes: None,
         tags: None,
-        favorite: None,
-    }).unwrap();
+        favorite: None, related_item_ids: None }).unwrap();
 
     let ident = app.create_item(&ItemInput {
         vault_id: vid.clone(),
@@ -132,8 +129,7 @@ fn test_host_and_agent_identical_protocol_json() {
         }],
         notes: None,
         tags: None,
-        favorite: None,
-    }).unwrap();
+        favorite: None, related_item_ids: None }).unwrap();
 
     let passkey = app.create_item(&ItemInput {
         vault_id: vid.clone(),
@@ -151,8 +147,7 @@ fn test_host_and_agent_identical_protocol_json() {
         }],
         notes: None,
         tags: None,
-        favorite: None,
-    }).unwrap();
+        favorite: None, related_item_ids: None }).unwrap();
 
     // Touch last_used on GitHub login item
     let _ = app.state.with(|x| Ok(x.session.touch_item_used(&login1.id))).unwrap();
@@ -228,6 +223,9 @@ fn test_host_and_agent_identical_protocol_json() {
 
         // 17. list_deleted
         json!({"cmd": "list_deleted"}),
+
+        // 18. audit_summary (vault-wide watchtower overview)
+        json!({"cmd": "audit_summary"}),
     ];
 
     for (idx, req) in fixtures.iter().enumerate() {

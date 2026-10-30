@@ -31,7 +31,17 @@ pub struct ItemSummary {
     pub ignored_findings: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_used: Option<u64>,
+    /// The login's "change password every N days" reminder (30, 90, 180 or 365); absent when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotate_every_days: Option<u32>,
+    /// Set when that reminder is due, or falls due within 14 days (drives the list/detail pill).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<RotationInfo>,
 }
+/// Rotation reminder state: `state` is `"due"` (`days` = age of the password) or `"soon"` (`days` = days left).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RotationInfo { pub state: String, pub every_days: u32, pub days: u64 }
 /// Active Watchtower finding for the item-detail banner (description is English, like the audit text).
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -39,6 +49,25 @@ pub struct FindingInfo { pub kind: String, pub description: String }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryRef { pub version: u64, pub updated_at: String }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RelatedItem {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vault_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<Category>,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    pub available: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordHistoryRef {
+    pub replaced_at: String,
+}
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDetail {
@@ -53,6 +82,12 @@ pub struct ItemDetail {
     pub findings: Vec<FindingInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password_changed_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_items: Vec<RelatedItem>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_item_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub password_history: Vec<PasswordHistoryRef>,
 }
 /// One item reference for bulk commands.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -92,6 +127,7 @@ pub struct ItemInput {
     pub vault_id: String, pub category: Category, pub title: String, pub sections: Vec<Section>,
     #[serde(default)] pub notes: Option<String>, #[serde(default)] pub tags: Option<Vec<String>>,
     #[serde(default)] pub favorite: Option<bool>, #[serde(default)] pub url: Option<String>,
+    #[serde(default)] pub related_item_ids: Option<Vec<String>>,
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -126,6 +162,15 @@ pub struct IgnoredFindingItem {
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct RotationItem {
+    pub item_id: String,
+    pub every_days: u32,
+    /// Due: whole days since the password changed. Soon: whole days until the reminder is due.
+    pub days: u64,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct UnusedItem {
     pub item_id: String,
     /// Whole days since the last use, or since the last edit/creation when the item was never used here.
@@ -145,6 +190,12 @@ pub struct WatchtowerReport {
     pub weak_ssh_keys: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unused: Vec<UnusedItem>,
+    /// Logins past their own "change password every N days" reminder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rotation_due: Vec<RotationItem>,
+    /// Logins whose reminder falls due within 14 days.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rotation_soon: Vec<RotationItem>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub weak_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

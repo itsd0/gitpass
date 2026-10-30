@@ -102,7 +102,7 @@ fn export_selected_cross_vault_csv_and_duplicates() {
     let v2 = e.app.create_vault("Second", None, None, None).unwrap();
     let b = e.app.create_item(&ItemInput { vault_id: v2.id.clone(), category: Category::Login, title: "Second Login".into(), url: Some("https://second.example.invalid".into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("bob@example.invalid")), fld("password", FieldKind::Concealed, Some("FAKE-Second-Pass-2!"))] }],
-        notes: None, tags: None, favorite: None }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let _unselected = login(&e, "Unselected", "carol@example.invalid", "FAKE-Unselected-Pass-3!");
     let ref_a = ItemRef { vault_id: e.vault.clone(), item_id: a.id.clone() };
     let ref_b = ItemRef { vault_id: v2.id.clone(), item_id: b.id.clone() };

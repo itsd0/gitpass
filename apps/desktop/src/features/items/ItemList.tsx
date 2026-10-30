@@ -1,8 +1,9 @@
 import { useI18n, useT } from "../../i18n";
 import { getItemExpiry } from "./expiry";
+import { rotationLabel } from "./rotation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer, defaultRangeExtractor } from "@tanstack/react-virtual";
-import { ArrowDownUp, Check, ChevronDown, LayoutGrid, Star } from "lucide-react";
+import { ArrowDownUp, Check, ChevronDown, LayoutGrid, ShieldAlert, Star } from "lucide-react";
 import { api } from "../../api/client";
 import type { Filter } from "../../api/types";
 import { useApp } from "../../lib/store";
@@ -41,6 +42,8 @@ import { getCategoryLabel } from "./categoryLabel";
 import { TrashBar } from "./TrashBar";
 import { ItemContextMenu, type ItemMenuTarget } from "./ItemContextMenu";
 import { trashHint } from "./trash";
+import { rowFindingsMap, useBreachedIds, useRowWarnings, type RowFinding } from "./rowFindings";
+import type { WatchtowerReport } from "../../api/types";
 
 /** Every row has a fixed, explicit height (the DOM enforces it), so virtual offsets are exact: no overlap, no stray gaps. */
 export const HEADER_H = 32,
@@ -110,6 +113,21 @@ export function ItemList() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(base), debounced, sort, category, version]);
+
+  // Watchtower status icons: one report per list refresh (no HIBP lookup), mapped once, so rows only do a Map lookup.
+  const rowWarnings = useRowWarnings((s) => s.enabled);
+  const rememberedBreached = useBreachedIds((s) => s.breached);
+  const [report, setReport] = useState<WatchtowerReport | null>(null);
+  useEffect(() => {
+    if (!rowWarnings) return;
+    let on = true;
+    api.watchtower({ hibp: false }).then((r) => on && setReport(r)).catch(() => on && setReport(null));
+    return () => { on = false; };
+  }, [rowWarnings, version]);
+  const findingsById = useMemo(
+    () => (rowWarnings ? rowFindingsMap(report, rememberedBreached) : new Map<string, RowFinding>()),
+    [rowWarnings, report, rememberedBreached]
+  );
 
   const lang = useI18n((s) => s.lang);
   const showRecentSection = base.kind === "all" && !searchQuery && sort !== "recent";
@@ -408,6 +426,11 @@ export function ItemList() {
                     </div>
                   ) : (() => {
                     const isChecked = multiOn && multiSet.has(r.item.id);
+                    const finding = findingsById.get(r.item.id);
+                    const findingText = finding?.kinds.map((k) => t(`rowFinding.${k}` as "rowFinding.weak")).join(" · ");
+                    const rowName = finding
+                      ? [r.item.title, r.item.subtitle, t(finding.kinds.length === 1 ? "rowFinding.issueOne" : "rowFinding.issueMany", { n: finding.kinds.length })].filter(Boolean).join(", ")
+                      : undefined;
                     const isSelected = multiOn
                       ? multiSet.has(r.item.id)
                       : r.item.id === selectedItemId;
@@ -420,6 +443,7 @@ export function ItemList() {
                         onDragStart={canDrag ? (e) => onRowDragStart(e, r.item) : undefined}
                         onDragEnd={canDrag ? onRowDragEnd : undefined}
                         aria-selected={isSelected}
+                        aria-label={rowName}
                         aria-describedby={r.headerKey ? `header-${r.headerKey}` : undefined}
                         onClick={(e) => onRowClick(e, r.item.id)}
                         onMouseDown={(e) => {
@@ -522,6 +546,40 @@ export function ItemList() {
                             }
                             className="shrink-0 text-[11px] px-1.5 py-0"
                             data-testid="expiry-pill"
+                            aria-label={label}
+                          >
+                            {label}
+                          </Badge>
+                        );
+                      })()}
+                      {finding && (
+                        <span
+                          data-testid="finding-icon"
+                          data-severity={finding.severity}
+                          title={findingText}
+                          aria-hidden="true"
+                          className={cn("shrink-0", finding.severity === "danger" ? "text-danger" : "text-warn")}
+                        >
+                          <ShieldAlert size={compact ? 14 : 16} />
+                        </span>
+                      )}
+                      {(() => {
+                        const rotation = r.item.rotation;
+                        const label = rotationLabel(rotation, t);
+                        if (!rotation || !label) return null;
+                        if (compact) return (
+                          <span
+                            data-testid="rotation-dot"
+                            aria-label={label}
+                            title={label}
+                            className="h-2 w-2 shrink-0 rounded-full bg-accent"
+                          />
+                        );
+                        return (
+                          <Badge
+                            tone="accent"
+                            className="shrink-0 text-[11px] px-1.5 py-0"
+                            data-testid="rotation-pill"
                             aria-label={label}
                           >
                             {label}

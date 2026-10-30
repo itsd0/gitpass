@@ -11,6 +11,7 @@ const DYNAMIC_PREFIXES = [
   'category.',
   'generator.mode.',
   'itemKeys.',
+  'rowFinding.',
   'settings.',
   'settings.theme.',
   'watchtower.score.',

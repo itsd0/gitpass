@@ -398,3 +398,148 @@ fn settings_last_seen_version_roundtrip() {
     let de_with_ver: Settings = serde_json::from_str(&json_with_ver).unwrap();
     assert_eq!(de_with_ver.last_seen_version, Some("0.6.5".to_string()));
 }
+
+#[test]
+fn set_rotation_stores_validates_and_clears_the_reminder() {
+    let e = env();
+    let a = login(&e, "Rotating", "me@example.invalid", "FAKE-Rotation-Pass-7");
+    assert_eq!(e.app.get_item(&e.vault, &a.id).unwrap().summary.rotate_every_days, None);
+    assert!(e.app.set_rotation(&e.vault, &a.id, Some(45)).is_err(), "only 30/90/180/365 are accepted");
+    e.app.set_rotation(&e.vault, &a.id, Some(90)).unwrap();
+    let d = e.app.get_item(&e.vault, &a.id).unwrap();
+    assert_eq!(d.summary.rotate_every_days, Some(90));
+    assert_eq!(d.summary.rotation, None, "a fresh password is neither due nor soon");
+    // listing carries it too, and an ordinary edit keeps it
+    assert_eq!(e.app.list_items(&Filter { kind: FilterKind::All, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap().iter().find(|i| i.id == a.id).unwrap().rotate_every_days, Some(90));
+    e.app.update_item(&a.id, &ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "Rotating 2".into(), url: None,
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("password", FieldKind::Concealed, Some("FAKE-Rotation-Pass-7"))] }],
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
+    assert_eq!(e.app.get_item(&e.vault, &a.id).unwrap().summary.rotate_every_days, Some(90));
+    e.app.set_rotation(&e.vault, &a.id, None).unwrap();
+    assert_eq!(e.app.get_item(&e.vault, &a.id).unwrap().summary.rotate_every_days, None);
+    let r = e.app.watchtower(false).unwrap();
+    assert!(r.rotation_due.is_empty() && r.rotation_soon.is_empty());
+}
+
+#[test]
+fn related_items_lifecycle_linking_unlinking_missing_state_and_cross_vault() {
+    let e = env();
+    // 1. Create two login items and an API credential in the default vault
+    let item_a = login(&e, "GitHub Login", "octocat", "correct horse");
+    let item_b = login(&e, "Google Login", "alice", "battery staple");
+    let item_c = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::ApiCredential,
+        title: "GitHub API Token".into(),
+        url: Some("https://api.github.com".into()),
+        sections: vec![Section {
+            id: "creds".into(),
+            title: None,
+            fields: vec![fld("credential", FieldKind::Concealed, Some("ghp_fake_token_1234567890"))],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+        related_item_ids: None,
+    }).unwrap();
+
+    // 2. Old items without related_item_ids load with empty relatedItems and relatedItemIds
+    let detail_a = e.app.get_item(&e.vault, &item_a.id).unwrap();
+    assert!(detail_a.related_items.is_empty());
+    assert!(detail_a.related_item_ids.is_empty());
+
+    // 3. Link item A to item C (GitHub API Token) and item B (Google Login)
+    e.app.add_related_item(&e.vault, &item_a.id, &item_c.id).unwrap();
+    e.app.add_related_item(&e.vault, &item_a.id, &item_b.id).unwrap();
+
+    // Linking again is idempotent
+    e.app.add_related_item(&e.vault, &item_a.id, &item_b.id).unwrap();
+
+    // Cannot link an item to itself
+    let self_err = e.app.add_related_item(&e.vault, &item_a.id, &item_a.id);
+    assert!(self_err.is_err());
+    assert!(self_err.unwrap_err().to_string().contains("cannot link an item to itself"));
+
+    // Check detail A
+    let detail_a = e.app.get_item(&e.vault, &item_a.id).unwrap();
+    assert_eq!(detail_a.related_item_ids, vec![item_c.id.clone(), item_b.id.clone()]);
+    assert_eq!(detail_a.related_items.len(), 2);
+
+    let rel_c = &detail_a.related_items[0];
+    assert_eq!(rel_c.id, item_c.id);
+    assert_eq!(rel_c.vault_id.as_deref(), Some(e.vault.as_str()));
+    assert_eq!(rel_c.category, Some(Category::ApiCredential));
+    assert_eq!(rel_c.title, "GitHub API Token");
+    assert!(rel_c.available);
+
+    let rel_b = &detail_a.related_items[1];
+    assert_eq!(rel_b.id, item_b.id);
+    assert_eq!(rel_b.vault_id.as_deref(), Some(e.vault.as_str()));
+    assert_eq!(rel_b.category, Some(Category::Login));
+    assert_eq!(rel_b.title, "Google Login");
+    assert_eq!(rel_b.subtitle.as_deref(), Some("alice"));
+    assert!(rel_b.available);
+
+    // 4. Cross-vault linking: create a second vault and an item in it
+    let v2 = e.app.create_vault("Work Vault", None, None, None).unwrap();
+    let v2_id = v2.id;
+    let item_v2 = e.app.create_item(&ItemInput {
+        vault_id: v2_id.clone(),
+        category: Category::Server,
+        title: "Deploy Server".into(),
+        url: Some("192.168.1.100".into()),
+        sections: vec![Section {
+            id: "server".into(),
+            title: None,
+            fields: vec![fld("username", FieldKind::Text, Some("deploy"))],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+        related_item_ids: None,
+    }).unwrap();
+
+    e.app.add_related_item(&e.vault, &item_a.id, &item_v2.id).unwrap();
+    let detail_a = e.app.get_item(&e.vault, &item_a.id).unwrap();
+    assert_eq!(detail_a.related_items.len(), 3);
+    let rel_v2 = &detail_a.related_items[2];
+    assert_eq!(rel_v2.id, item_v2.id);
+    assert_eq!(rel_v2.vault_id.as_deref(), Some(v2_id.as_str()));
+    assert_eq!(rel_v2.title, "Deploy Server");
+    assert!(rel_v2.available);
+
+    // 5. Missing / deleted state: delete item B (soft-delete)
+    e.app.delete_item(&e.vault, &item_b.id).unwrap();
+    let detail_a = e.app.get_item(&e.vault, &item_a.id).unwrap();
+    assert_eq!(detail_a.related_items.len(), 3);
+    let rel_b_del = &detail_a.related_items[1];
+    assert_eq!(rel_b_del.id, item_b.id);
+    assert!(!rel_b_del.available);
+    assert_eq!(rel_b_del.title, "Item not available");
+    assert_eq!(rel_b_del.vault_id, None);
+    assert_eq!(rel_b_del.category, None);
+
+    // 6. Remove missing link: remove item B from item A
+    e.app.remove_related_item(&e.vault, &item_a.id, &item_b.id).unwrap();
+    let detail_a = e.app.get_item(&e.vault, &item_a.id).unwrap();
+    assert_eq!(detail_a.related_items.len(), 2);
+    assert!(!detail_a.related_item_ids.contains(&item_b.id));
+
+    // 7. Update item with related_item_ids via ItemInput
+    let updated_input = ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "GitHub Login Updated".into(),
+        sections: detail_a.sections.clone(),
+        notes: detail_a.notes.clone(),
+        tags: Some(detail_a.summary.tags.clone()),
+        favorite: Some(detail_a.summary.favorite),
+        url: detail_a.summary.url.clone(),
+        related_item_ids: Some(vec![item_v2.id.clone()]),
+    };
+    e.app.update_item(&item_a.id, &updated_input).unwrap();
+    let detail_a_updated = e.app.get_item(&e.vault, &item_a.id).unwrap();
+    assert_eq!(detail_a_updated.related_item_ids, vec![item_v2.id.clone()]);
+    assert_eq!(detail_a_updated.related_items.len(), 1);
+    assert_eq!(detail_a_updated.related_items[0].id, item_v2.id);
+}

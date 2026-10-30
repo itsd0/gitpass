@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Copy, Eye, EyeOff, ExternalLink, Link2, Maximize2, MoreHorizontal, QrCode } from 'lucide-react';
 import { api } from '../../api/client';
-import type { Field, ItemCategory } from '../../api/types';
+import type { Field, ItemCategory, PasswordHistoryRef } from '../../api/types';
 import { useT } from '../../i18n';
 import { checkExpiry, isExpiryField } from './expiry';
 import { formatRelativePasswordChanged } from './passwordAge';
 import { LargeTypeDialog } from './LargeType';
 import { FieldQrDialog } from './FieldQrDialog';
 import { isQrSupportedField } from './fieldQr';
+import { PasswordHistory } from './PasswordHistory';
 import { cn } from '../../lib/utils';
 import { Badge, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, toast } from '../../ui';
 import { errText } from './actions';
@@ -31,6 +32,8 @@ export function FieldRow({
   refTarget,
   itemTitle,
   username,
+  passwordHistory,
+  onHistoryCleared,
 }: {
   field: Field;
   ctx: Ctx;
@@ -41,6 +44,8 @@ export function FieldRow({
   refTarget?: RefTarget | null;
   itemTitle?: string;
   username?: string;
+  passwordHistory?: PasswordHistoryRef[];
+  onHistoryCleared?: () => void;
 }) {
   const t = useT();
   const [qrOpen, setQrOpen] = useState(false);
@@ -90,6 +95,8 @@ export function FieldRow({
           refTarget={refTarget}
           isQrSupported={isQrSupported}
           onOpenQr={openQr}
+          passwordHistory={passwordHistory}
+          onHistoryCleared={onHistoryCleared}
           />
       ) : field.kind === 'totp' ? (
         <TotpValue
@@ -382,6 +389,8 @@ export function ConcealedValue({
   refTarget,
   isQrSupported = false,
   onOpenQr,
+  passwordHistory,
+  onHistoryCleared,
   }: {
   field: Field;
   ctx: Ctx;
@@ -391,6 +400,8 @@ export function ConcealedValue({
   refTarget?: RefTarget | null;
   isQrSupported?: boolean;
   onOpenQr?: (trigger?: HTMLElement | null) => void;
+  passwordHistory?: PasswordHistoryRef[];
+  onHistoryCleared?: () => void;
 }) {
   const t = useT();
   const [revealed, setRevealed] = useState<string | null>(null);
@@ -504,6 +515,9 @@ export function ConcealedValue({
         <div className="mt-1 text-xs text-muted" data-testid="password-changed-at">
           {formatRelativePasswordChanged(passwordChangedAt, undefined, t)}
         </div>
+      )}
+      {passwordHistory && passwordHistory.length > 0 && /password/i.test(field.label) && (
+        <PasswordHistory history={passwordHistory} ctx={ctx} onCleared={onHistoryCleared} />
       )}
       {largeTypeOpen && largeTypeValue !== null && (
         <LargeTypeDialog

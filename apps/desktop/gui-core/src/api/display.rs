@@ -4,7 +4,7 @@ use anyhow::Result;
 use gitpass_core::audit::{self, AuditOpts};
 use gitpass_core::device::iso8601;
 use gitpass_core::item::{self, Category, FieldKind};
-use gitpass_core::merge::ItemRecord;
+use gitpass_core::merge::{ItemRecord, RotationStatus};
 use gitpass_core::store::Session;
 use std::collections::BTreeSet;
 
@@ -150,12 +150,48 @@ pub(crate) fn summary(vid: &str, iid: &str, r: &ItemRecord, last_used: Option<u6
         change_password_url: r.item.url.as_deref().and_then(audit::change_password_url),
         ignored_findings: r.ignored_findings.clone(),
         last_used,
+        rotate_every_days: r.rotate_every_days,
+        rotation: if r.is_finding_ignored("rotation_due") || r.is_finding_ignored("rotation_soon") { None } else {
+            match r.rotation_status(now_secs()) {
+                Some(RotationStatus::Due { every_days, days }) => Some(RotationInfo { state: "due".into(), every_days, days }),
+                Some(RotationStatus::Soon { every_days, in_days }) => Some(RotationInfo { state: "soon".into(), every_days, days: in_days }),
+                None => None,
+            }
+        },
     }
 }
 
+pub(crate) fn now_secs() -> u64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) }
+
 pub(crate) fn has_totp(r: &ItemRecord) -> bool { r.view_sections().iter().flat_map(|s| s.fields.iter()).any(|f| f.kind == FieldKind::Totp && f.value.is_some()) }
 
-pub(crate) fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>) -> ItemDetail {
+pub(crate) fn resolve_related_items(s: &Session, ids: &[String]) -> Vec<RelatedItem> {
+    ids.iter().map(|rid| {
+        match s.get_record_by_id(rid) {
+            Ok(Some((vid, _, r))) if r.deleted_at.is_none() => {
+                let sub = subtitle(&r);
+                RelatedItem {
+                    id: rid.clone(),
+                    vault_id: Some(vid),
+                    category: Some(r.category),
+                    title: r.item.title.clone(),
+                    subtitle: if sub.is_empty() { None } else { Some(sub) },
+                    available: true,
+                }
+            }
+            _ => RelatedItem {
+                id: rid.clone(),
+                vault_id: None,
+                category: None,
+                title: "Item not available".to_string(),
+                subtitle: None,
+                available: false,
+            },
+        }
+    }).collect()
+}
+
+pub(crate) fn detail(s: &Session, vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>) -> ItemDetail {
     let pw = r.view_sections().into_iter().flat_map(|s| s.fields).find(|f| f.kind == FieldKind::Concealed && f.value.is_some());
     ItemDetail {
         summary: summary(vid, iid, r, last_used), version, sections: to_dto_sections(r), notes: r.item.notes.clone(),
@@ -165,6 +201,13 @@ pub(crate) fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, finding
         has_totp: has_totp(r),
         findings,
         password_changed_at: r.password_changed_at().map(|t| iso8601(t as i64)),
+        related_items: resolve_related_items(s, &r.related_item_ids),
+        related_item_ids: r.related_item_ids.clone(),
+        password_history: if r.category == Category::Login {
+            r.password_history.iter().map(|h| PasswordHistoryRef { replaced_at: ts(&h.replaced_at) }).collect()
+        } else {
+            vec![]
+        },
     }
 }
 
@@ -234,3 +277,45 @@ pub(crate) fn mime_for(name: &str) -> &'static str {
     item::mime_for(name)
 }
 
+#[cfg(test)]
+mod rotation_summary_tests {
+    use super::*;
+    use gitpass_core::store::Item;
+
+    fn old_login(days_ago: u64, every: Option<u32>) -> ItemRecord {
+        let changed = now_secs() - days_ago * 86400;
+        let mut it = Item::default();
+        it.title = "FAKE Bank".into();
+        it.password = Some("FAKE-Rotation-Pass-1".into());
+        it.updated_at = changed.to_string();
+        let mut r = ItemRecord::new(it);
+        r.created_at = Some(changed);
+        r.rotate_every_days = every;
+        r
+    }
+
+    #[test]
+    fn summary_reports_due_soon_and_unset() {
+        let due = summary("v", "i", &old_login(95, Some(90)), None);
+        assert_eq!(due.rotate_every_days, Some(90));
+        assert_eq!(due.rotation, Some(RotationInfo { state: "due".into(), every_days: 90, days: 95 }));
+        let soon = summary("v", "i", &old_login(80, Some(90)), None);
+        assert_eq!(soon.rotation, Some(RotationInfo { state: "soon".into(), every_days: 90, days: 10 }));
+        let fine = summary("v", "i", &old_login(10, Some(365)), None);
+        assert_eq!((fine.rotate_every_days, fine.rotation), (Some(365), None));
+        let unset = summary("v", "i", &old_login(500, None), None);
+        assert_eq!((unset.rotate_every_days, unset.rotation.clone()), (None, None));
+        let json = serde_json::to_value(&unset).unwrap();
+        assert!(json.get("rotateEveryDays").is_none() && json.get("rotation").is_none());
+        let json = serde_json::to_value(&due).unwrap();
+        assert_eq!(json["rotateEveryDays"], 90);
+        assert_eq!(json["rotation"]["state"], "due");
+    }
+
+    #[test]
+    fn ignoring_the_finding_hides_the_pill() {
+        let mut r = old_login(95, Some(90));
+        r.ignore_finding("rotation_due");
+        assert_eq!(summary("v", "i", &r, None).rotation, None);
+    }
+}

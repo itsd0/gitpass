@@ -19,7 +19,7 @@ fn card_brand_and_labels() {
 fn card_subtitle_with_cardholder_first_and_imported_labels() {
     let e = env();
     let mk = |fields: Vec<Field>| e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "C".into(), url: None,
-        sections: vec![Section { id: "main".into(), title: None, fields }], notes: None, tags: None, favorite: None }).unwrap();
+        sections: vec![Section { id: "main".into(), title: None, fields }], notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     // template order: cardholder name comes before the number
     let a = mk(vec![Field { id: "cardholder".into(), label: "cardholder name".into(), kind: FieldKind::Text, value: Some("Demo User".into()), masked: None, diff: None },
                     Field { id: "type".into(), label: "type".into(), kind: FieldKind::Text, value: Some("Visa".into()), masked: None, diff: None },
@@ -56,8 +56,7 @@ fn bank_account_and_server_crud_masking_and_subtitles() {
         }],
         notes: Some("Checking account".into()),
         tags: Some(vec!["finance".into()]),
-        favorite: Some(true),
-    }).unwrap();
+        favorite: Some(true), related_item_ids: None }).unwrap();
 
     assert_eq!(bank_item.category, Category::BankAccount);
     assert_eq!(bank_item.subtitle, "Checking •••• 9012");
@@ -120,8 +119,7 @@ fn bank_account_and_server_crud_masking_and_subtitles() {
         }],
         notes: None,
         tags: None,
-        favorite: None,
-    }).unwrap();
+        favorite: None, related_item_ids: None }).unwrap();
 
     assert_eq!(srv_item.category, Category::Server);
     assert_eq!(srv_item.subtitle, "ubuntu@10.0.0.50");

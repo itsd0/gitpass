@@ -41,20 +41,20 @@ fn fld(id: &str, kind: FieldKind, v: Option<&str>) -> Field { Field { id: id.int
 fn login(e: &Env, title: &str, user: &str, pw: &str) -> ItemSummary {
     e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some("https://example.invalid".into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some(user)), fld("password", FieldKind::Concealed, Some(pw))] }],
-        notes: None, tags: Some(vec!["work".into()]), favorite: None }).unwrap()
+        notes: None, tags: Some(vec!["work".into()]), favorite: None, related_item_ids: None }).unwrap()
 }
 fn card(e: &Env) -> ItemSummary {
     e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "Example Bank".into(), url: None,
         sections: vec![Section { id: "card".into(), title: Some("Card".into()), fields: vec![fld("number", FieldKind::Concealed, Some("4111 1111 1111 1111")),
             fld("cvv", FieldKind::Concealed, Some("123")), fld("expiry", FieldKind::MonthYear, Some("12/30"))] }],
-        notes: Some("fake".into()), tags: None, favorite: Some(true) }).unwrap()
+        notes: Some("fake".into()), tags: None, favorite: Some(true), related_item_ids: None }).unwrap()
 }
 fn api_cred(e: &Env, title: &str, user: &str, cred: &str, expires: &str) -> ItemSummary {
     e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::ApiCredential, title: title.into(), url: Some("https://api.example.invalid".into()),
         sections: vec![Section { id: "main".into(), title: None, fields: vec![
             fld("username", FieldKind::Text, Some(user)), fld("credential", FieldKind::Concealed, Some(cred)),
             fld("type", FieldKind::Text, Some("token")), fld("expires", FieldKind::Date, Some(expires))] }],
-        notes: None, tags: None, favorite: None }).unwrap()
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap()
 }
 
 struct MemBio(std::sync::Mutex<Option<(String, String, String)>>);

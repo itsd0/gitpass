@@ -8,7 +8,7 @@ const delay = <R>(v: R, ms = 60): Promise<R> => new Promise((r) => setTimeout(()
 let seq = 1000;
 const uid = (p: string) => `${p}_${(seq++).toString(36)}`;
 
-interface Rec { detail: T.ItemDetail; secrets: Record<string, string>; versions: T.ItemDetail[] }
+interface Rec { detail: T.ItemDetail; secrets: Record<string, string>; versions: T.ItemDetail[]; passwordHistory?: { value: string; replacedAt: string }[] }
 
 // Fake keys in the real wire format (base64 of 32 bytes, optional `gitpass-x25519:` prefix).
 const PUB_RE = /^(gitpass-x25519:)?[A-Za-z0-9+/]{43}=$/;
@@ -58,7 +58,8 @@ function add(vaultId: string, category: T.ItemCategory, title: string, subtitle:
     history: [{ version: 1, updatedAt: ts }], passwordStrength: pwField ? strength(secrets[pwField.id]) : null, passwordChangedAt: pwField ? ts : null,
     hasTotp: fs.some((x) => x.kind === 'totp'), ignoredFindings: [], ...extra,
   };
-  db.set(d.id, { detail: d, secrets, versions: [] });
+  const pwHistory = extra.passwordHistory ? extra.passwordHistory.map((h, i) => ({ value: `old-fake-pw-${i + 1}`, replacedAt: h.replacedAt })) : [];
+  db.set(d.id, { detail: d, secrets, versions: [], passwordHistory: pwHistory });
   return d;
 }
 
@@ -128,6 +129,18 @@ const devices: T.DeviceInfo[] = [
   { id: 'd1', name: 'Demo MacBook (this device)', lastSeen: new Date().toISOString(), revoked: false, current: true },
   { id: 'd2', name: 'Example Linux Desktop', lastSeen: '2026-10-20T10:00:00Z', revoked: false, current: false },
 ];
+
+/** Browser-mock copy of core `ItemRecord::rotation_status` (the real one runs in Rust). */
+function rotationFor(d: T.ItemDetail, now = Date.now()): T.RotationInfo | null {
+  const every = d.rotateEveryDays;
+  if (!every || d.category !== 'login' || d.archived || d.deletedAt || !d.passwordChangedAt) return null;
+  const changed = Date.parse(d.passwordChangedAt);
+  if (!Number.isFinite(changed)) return null;
+  const age = Math.max(0, now - changed);
+  if (age >= every * 86400000) return { state: 'due', everyDays: every, days: Math.floor(age / 86400000) };
+  const left = Math.ceil((every * 86400000 - age) / 86400000);
+  return left <= 14 ? { state: 'soon', everyDays: every, days: left } : null;
+}
 
 const summary = (d: T.ItemDetail): T.ItemSummary => {
   const { sections: _s, notes: _n, attachments: _a, history: _h, passwordStrength: _p, hasTotp: _t, findings: _fi, passwordChangedAt: _pca, ...s } = d;
@@ -220,10 +233,21 @@ function applyInput(r: Rec, input: T.ItemInput) {
   Object.assign(r.detail, { vaultId: input.vaultId, category: input.category, title: input.title, sections, notes: input.notes ?? null,
     tags: input.tags ?? [], favorite: input.favorite ?? r.detail.favorite, url: input.url ?? null, changePasswordUrl: changePwUrl(input.url),
     subtitle: subtitleFor(input) || r.detail.subtitle,
-    hasTotp: sections.some((s) => s.fields.some((x) => x.kind === 'totp')) });
+    hasTotp: sections.some((s) => s.fields.some((x) => x.kind === 'totp')),
+    ...(input.relatedItemIds !== undefined ? { relatedItemIds: [...input.relatedItemIds] } : {}) });
   const pw = sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed');
   r.detail.passwordStrength = pw && secrets[pw.id] ? strength(secrets[pw.id]) : null;
   if (pw && secrets[pw.id]) { if (!r.detail.passwordChangedAt) r.detail.passwordChangedAt = r.detail.updatedAt; } else { r.detail.passwordChangedAt = null; }
+  const oldPwFld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed' && /password/i.test(x.label));
+  const oldPw = oldPwFld ? r.secrets[oldPwFld.id] : undefined;
+  const newPwFld = sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed' && /password/i.test(x.label));
+  const newPw = newPwFld ? secrets[newPwFld.id] : undefined;
+  if (r.detail.category === 'login' && oldPw && newPw && oldPw !== newPw) {
+    if (!r.passwordHistory) r.passwordHistory = [];
+    r.passwordHistory.unshift({ value: oldPw, replacedAt: new Date().toISOString() });
+    if (r.passwordHistory.length > 20) r.passwordHistory.splice(20);
+    r.detail.passwordHistory = r.passwordHistory.map((h) => ({ replacedAt: h.replacedAt }));
+  }
 }
 /** Rough browser-mock copy of core `change_password_url` (the real derivation runs in Rust). */
 function changePwUrl(raw: string | null | undefined): string | undefined {
@@ -301,6 +325,24 @@ function genPw(length: number, symbols: boolean, digits: boolean, words?: boolea
 
 type A = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 let syncState: T.SyncStatus = { remote: 'git@example.com:demo/vault.git', lastSync: '2026-10-25T09:00:00Z', ahead: 0, behind: 1, dirty: false };
+function resolveMockRelated(ids?: string[]): T.RelatedItem[] {
+  if (!ids || ids.length === 0) return [];
+  return ids.map((rid) => {
+    const target = db.get(rid);
+    if (!target || target.detail.deletedAt) {
+      return { id: rid, title: "Item not available", available: false };
+    }
+    return {
+      id: rid,
+      vaultId: target.detail.vaultId,
+      category: target.detail.category,
+      title: target.detail.title,
+      subtitle: target.detail.subtitle,
+      available: true,
+    };
+  });
+}
+
 export const mock: Record<string, (a: A) => Promise<unknown>> = {
   status: () => delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: unlocked ? 'Demo Family' : null }),
   unlock: (a: { password: string }) => { if (!a.password) return Promise.reject(new Error('password required')); unlocked = true; return delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: 'Demo Family' }, 300); },
@@ -428,20 +470,40 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : sort === 'recent' ? (b.lastUsed ?? 0) - (a.lastUsed ?? 0) || a.title.localeCompare(b.title) : b.updatedAt.localeCompare(a.updatedAt));
     return delay(xs.map(summary));
   },
-  get_item: (a: { itemId: string }) => delay({ ...get(a.itemId).detail, findings: mockFindings(a.itemId) }),
+  get_item: (a: { itemId: string }) => {
+    const d = get(a.itemId).detail;
+    return delay({ ...d, relatedItems: resolveMockRelated(d.relatedItemIds), findings: mockFindings(a.itemId) });
+  },
   reveal_field: (a: { itemId: string; fieldId: string; version?: number | null }) => {
     const r = get(a.itemId);
     r.detail.lastUsed = Math.floor(Date.now() / 1000);
+    if (a.fieldId.startsWith('password_history:')) {
+      const idx = parseInt(a.fieldId.replace('password_history:', ''), 10);
+      const val = r.passwordHistory?.[idx]?.value;
+      return val == null ? Promise.reject(new Error('no password history at index')) : delay(val);
+    }
     const v = r.secrets[a.fieldId] ?? r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId)?.value;
     return v == null ? Promise.reject(new Error('not a concealed field')) : delay(v);
   },
   copy_field: (a: { itemId: string; fieldId: string }) => {
     const r = get(a.itemId);
     r.detail.lastUsed = Math.floor(Date.now() / 1000);
+    if (a.fieldId.startsWith('password_history:')) {
+      const idx = parseInt(a.fieldId.replace('password_history:', ''), 10);
+      const val = r.passwordHistory?.[idx]?.value ?? '';
+      navigator.clipboard?.writeText(val).catch(() => {});
+      return delay(undefined);
+    }
     const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId);
     const v = r.secrets[a.fieldId] ?? fld?.value ?? '';
     // In Tauri the copy happens in Rust; the browser mock best-effort uses the clipboard API.
     navigator.clipboard?.writeText(v).catch(() => {});
+    return delay(undefined);
+  },
+  clear_password_history: (a: { itemId: string }) => {
+    const r = get(a.itemId);
+    r.passwordHistory = [];
+    r.detail.passwordHistory = [];
     return delay(undefined);
   },
   totp_now: () => { const period = 30; const now = Math.floor(Date.now() / 1000); const code = String((Math.floor(now / period) * 7919) % 1000000).padStart(6, '0'); return delay({ code, remaining: period - (now % period), period }, 10); },
@@ -463,6 +525,12 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   },
   update_item: ({ itemId, input }: { itemId: string; input: T.ItemInput }) => { const r = get(itemId); touch(r); applyInput(r, input); return delay(summary(r.detail)); },
   set_favorite: (a: { itemId: string; favorite: boolean }) => { get(a.itemId).detail.favorite = a.favorite; return delay(undefined); },
+  set_rotation: (a: { itemId: string; days: number | null }) => {
+    if (a.days !== null && ![30, 90, 180, 365].includes(a.days)) return Promise.reject(new Error('rotation must be one of 30, 90, 180 or 365 days'));
+    const d = get(a.itemId).detail;
+    d.rotateEveryDays = a.days; d.rotation = rotationFor(d);
+    return delay(undefined);
+  },
   archive_item: (a: { itemId: string; archived: boolean }) => { get(a.itemId).detail.archived = a.archived; return delay(undefined); },
   delete_item: (a: { itemId: string }) => { get(a.itemId).detail.deletedAt = new Date().toISOString(); return delay(undefined); },
   restore_item: (a: { itemId: string }) => { const d = get(a.itemId).detail; d.deletedAt = null; d.archived = false; return delay(undefined); },
@@ -585,6 +653,22 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     const r = db.get(a.itemId);
     if (r) {
       r.detail.ignoredFindings = (r.detail.ignoredFindings ?? []).filter((k) => k !== a.kind);
+    }
+    return delay(undefined, 20);
+  },
+  add_related_item: (a: { vaultId: string; itemId: string; relatedId: string }) => {
+    if (a.itemId === a.relatedId) return Promise.reject(new Error("cannot link an item to itself"));
+    const r = db.get(a.itemId);
+    if (r) {
+      const cur = r.detail.relatedItemIds ?? [];
+      if (!cur.includes(a.relatedId)) r.detail.relatedItemIds = [...cur, a.relatedId];
+    }
+    return delay(undefined, 20);
+  },
+  remove_related_item: (a: { vaultId: string; itemId: string; relatedId: string }) => {
+    const r = db.get(a.itemId);
+    if (r) {
+      r.detail.relatedItemIds = (r.detail.relatedItemIds ?? []).filter((id) => id !== a.relatedId);
     }
     return delay(undefined, 20);
   },
@@ -756,6 +840,17 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     for (const u of unusedPool) checkOrIgnore(u.itemId, "unused", "Not used in a long time", activeUnusedIds);
     const activeUnused = unusedPool.filter((u) => activeUnusedIds.includes(u.itemId));
 
+    const rotationDue: T.RotationItem[] = [];
+    const rotationSoon: T.RotationItem[] = [];
+    for (const r of logins) {
+      const ro = rotationFor(r.detail);
+      if (!ro) continue;
+      const kind = ro.state === 'due' ? 'rotation_due' : 'rotation_soon';
+      const active: string[] = [];
+      checkOrIgnore(r.detail.id, kind, ro.state === 'due' ? 'Due for rotation' : 'Rotation due soon', active);
+      if (active.length) (ro.state === 'due' ? rotationDue : rotationSoon).push({ itemId: r.detail.id, everyDays: ro.everyDays, days: ro.days });
+    }
+
     const activeBreached: string[] = [];
     if (hibp && activeWeak.length > 0) {
       const candidate = activeWeak[0];
@@ -777,6 +872,8 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       duplicates,
       weakSshKeys: [],
       unused: activeUnused,
+      rotationDue,
+      rotationSoon,
       weakReasons: Object.fromEntries(activeWeak.map((id) => [id, "contains the username"])),
       ignored: ignoredList,
       checkedAt: new Date().toISOString(),

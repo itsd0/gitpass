@@ -43,7 +43,7 @@ fn items_crud_subtitles_and_no_secret_leak() {
     let mut secs = d.sections.clone();
     secs[0].fields.push(fld("pin", FieldKind::Concealed, Some("9876")));
     e.app.update_item(&c.id, &ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "Example Bank Visa".into(), sections: secs,
-        notes: None, tags: Some(vec!["finance".into()]), favorite: None, url: None }).unwrap();
+        notes: None, tags: Some(vec!["finance".into()]), favorite: None, url: None, related_item_ids: None }).unwrap();
     assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, "number").unwrap(), "4111 1111 1111 1111");
     assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, "pin").unwrap(), "9876");
     let d2 = e.app.get_item(&e.vault, &c.id).unwrap();
@@ -75,7 +75,7 @@ fn items_crud_subtitles_and_no_secret_leak() {
     e.app.restore_item(&e.vault, &c.id).unwrap();
     assert_eq!(e.app.list_tags().unwrap(), vec!["finance".to_string(), "work".to_string()]);
     // invalid input
-    assert!(e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::SecureNote, title: " ".into(), sections: vec![], notes: None, tags: None, favorite: None, url: None }).is_err());
+    assert!(e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::SecureNote, title: " ".into(), sections: vec![], notes: None, tags: None, favorite: None, url: None, related_item_ids: None }).is_err());
 }
 
 #[test]
@@ -84,7 +84,7 @@ fn filters_favorite_archive_delete_restore_purge_move_duplicate() {
     let a = login(&e, "Alpha", "a", "pw-a-FAKE-xx");
     let b = card(&e);
     let n = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::SecureNote, title: "Note".into(),
-        sections: vec![Section { id: "s".into(), title: None, fields: vec![fld("body", FieldKind::Multiline, Some("hello"))] }], notes: None, tags: None, favorite: None, url: None }).unwrap();
+        sections: vec![Section { id: "s".into(), title: None, fields: vec![fld("body", FieldKind::Multiline, Some("hello"))] }], notes: None, tags: None, favorite: None, url: None, related_item_ids: None }).unwrap();
     assert_eq!(n.subtitle, "hello");
     let f = |kind: FilterKind| Filter { kind, vault_id: Some(e.vault.clone()), tag: Some("work".into()), category: (kind == FilterKind::Category).then_some(Category::CreditCard), query: None, sort: Some(Sort::Title) };
     let ids = |v: Vec<ItemSummary>| v.into_iter().map(|s| s.title).collect::<Vec<_>>();
@@ -135,7 +135,7 @@ fn empty_trash_purges_only_trashed_items_in_one_commit() {
     let v2 = e.app.create_vault("Other", None, None, None).unwrap();
     let elsewhere = e.app.create_item(&ItemInput { vault_id: v2.id.clone(), category: Category::SecureNote, title: "Elsewhere".into(),
         sections: vec![Section { id: "s".into(), title: None, fields: vec![fld("body", FieldKind::Multiline, Some("FAKE"))] }],
-        notes: None, tags: None, favorite: None, url: None }).unwrap();
+        notes: None, tags: None, favorite: None, url: None, related_item_ids: None }).unwrap();
     e.app.delete_item(&v2.id, &elsewhere.id).unwrap();
 
     let epoch = e.app.session_epoch().unwrap();
@@ -246,8 +246,7 @@ fn item_summary_carries_expiry_for_card_and_api_credential_only() {
             fld("number", FieldKind::Concealed, Some("4111 2222 3333 4444")),
             fld("expiry", FieldKind::MonthYear, Some("   ")),
         ] }],
-        notes: None, tags: None, favorite: None,
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     assert_eq!(empty_expiry_card.expiry, None);
 
     // 5. Non-card/non-api categories (e.g. secure_note, identity) with an expiry field still give None
@@ -259,8 +258,7 @@ fn item_summary_carries_expiry_for_card_and_api_credential_only() {
         sections: vec![Section { id: "main".into(), title: None, fields: vec![
             fld("expiry", FieldKind::Text, Some("12/30")),
         ] }],
-        notes: None, tags: None, favorite: None,
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     assert_eq!(note.expiry, None);
 }
 
@@ -276,7 +274,7 @@ fn update_item_assigns_ids_for_new_fields_and_keeps_null_secrets() {
     secs[0].fields.push(fld("", FieldKind::Text, Some("note-a")));
     secs.push(Section { id: "".into(), title: Some("Extra".into()), fields: vec![fld("", FieldKind::Concealed, Some("s3cr3t-extra"))] });
     e.app.update_item(&c.id, &ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "Example Bank".into(), sections: secs,
-        notes: None, tags: None, favorite: None, url: None }).unwrap();
+        notes: None, tags: None, favorite: None, url: None, related_item_ids: None }).unwrap();
     assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, "number").unwrap(), "4111 1111 1111 1111");
     assert_eq!(&*e.app.reveal_field(&e.vault, &c.id, "cvv").unwrap(), "123");
     let d2 = e.app.get_item(&e.vault, &c.id).unwrap();
@@ -292,7 +290,7 @@ fn update_item_assigns_ids_for_new_fields_and_keeps_null_secrets() {
     // create_item with empty ids works too
     let n = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::ApiCredential, title: "API (fake)".into(), url: None,
         sections: vec![Section { id: "".into(), title: None, fields: vec![fld("", FieldKind::Concealed, Some("k1")), fld("", FieldKind::Concealed, Some("k2"))] }],
-        notes: None, tags: None, favorite: None }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let nd = e.app.get_item(&e.vault, &n.id).unwrap();
     assert_eq!(nd.sections[0].fields.len(), 2);
     assert_ne!(nd.sections[0].fields[0].id, nd.sections[0].fields[1].id);
@@ -317,8 +315,7 @@ fn api_credential_masked_hint_in_summary_and_detail_without_secret_leak() {
         }],
         notes: None,
         tags: None,
-        favorite: None,
-    }).unwrap();
+        favorite: None, related_item_ids: None }).unwrap();
 
     let d = e.app.get_item(&e.vault, &api.id).unwrap();
     assert_eq!(d.summary.subtitle, "sk-l••••••••efgh");
@@ -347,8 +344,7 @@ fn api_credential_masked_hint_in_summary_and_detail_without_secret_leak() {
         }],
         notes: None,
         tags: None,
-        favorite: None,
-    }).unwrap();
+        favorite: None, related_item_ids: None }).unwrap();
     let short_d = e.app.get_item(&e.vault, &short_api.id).unwrap();
     assert_eq!(short_d.summary.subtitle, "sh••••••••");
     assert_eq!(short_d.sections[0].fields[0].masked.as_deref(), Some("sh••••••••"));
@@ -366,8 +362,7 @@ fn api_credential_masked_hint_in_summary_and_detail_without_secret_leak() {
         }],
         notes: None,
         tags: None,
-        favorite: None,
-    }).unwrap();
+        favorite: None, related_item_ids: None }).unwrap();
     let tiny_d = e.app.get_item(&e.vault, &tiny_api.id).unwrap();
     assert_eq!(tiny_d.summary.subtitle, "••••••••");
     assert_eq!(tiny_d.sections[0].fields[0].masked.as_deref(), Some("••••••••"));
@@ -436,25 +431,21 @@ fn tag_rename_merge_delete_and_lifecycle() {
     // 1. Setup items across active, archived, and trashed states
     let item1 = e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(), category: Category::Login, title: "Item 1".into(),
-        url: None, sections: vec![], notes: None, tags: Some(vec!["alpha".into(), "beta".into()]), favorite: None,
-    }).unwrap();
+        url: None, sections: vec![], notes: None, tags: Some(vec!["alpha".into(), "beta".into()]), favorite: None, related_item_ids: None }).unwrap();
 
     let item2 = e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(), category: Category::Login, title: "Item 2".into(),
-        url: None, sections: vec![], notes: None, tags: Some(vec!["alpha".into()]), favorite: None,
-    }).unwrap();
+        url: None, sections: vec![], notes: None, tags: Some(vec!["alpha".into()]), favorite: None, related_item_ids: None }).unwrap();
     e.app.archive_item(&e.vault, &item2.id, true).unwrap();
 
     let item3 = e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(), category: Category::Login, title: "Item 3".into(),
-        url: None, sections: vec![], notes: None, tags: Some(vec!["alpha".into(), "gamma".into()]), favorite: None,
-    }).unwrap();
+        url: None, sections: vec![], notes: None, tags: Some(vec!["alpha".into(), "gamma".into()]), favorite: None, related_item_ids: None }).unwrap();
     e.app.delete_item(&e.vault, &item3.id).unwrap();
 
     let item4 = e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(), category: Category::Login, title: "Item 4".into(),
-        url: None, sections: vec![], notes: None, tags: Some(vec!["beta".into()]), favorite: None,
-    }).unwrap();
+        url: None, sections: vec![], notes: None, tags: Some(vec!["beta".into()]), favorite: None, related_item_ids: None }).unwrap();
 
     assert_eq!(e.app.list_tags().unwrap(), vec!["alpha", "beta"]);
 
@@ -540,8 +531,7 @@ fn test_list_items_with_search_query_operators() {
         sections: vec![],
         notes: None,
         tags: Some(vec!["work".into(), "code".into()]),
-        favorite: Some(true),
-    }).unwrap();
+        favorite: Some(true), related_item_ids: None }).unwrap();
 
     e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(),
@@ -551,8 +541,7 @@ fn test_list_items_with_search_query_operators() {
         sections: vec![],
         notes: None,
         tags: Some(vec!["finance".into()]),
-        favorite: Some(false),
-    }).unwrap();
+        favorite: Some(false), related_item_ids: None }).unwrap();
 
     let f = |q: &str| Filter {
         kind: FilterKind::All,

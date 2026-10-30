@@ -4,7 +4,7 @@ members = ["crates/gitpass-core", "crates/gitpass-cli", "crates/gitpass-host", "
 exclude = ["apps/desktop/src-tauri"]
 
 [workspace.package]
-version = "0.6.5"
+version = "0.6.7"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT"

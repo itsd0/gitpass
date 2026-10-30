@@ -525,3 +525,87 @@ test('page:generate ignores a non-object rules value instead of crashing', async
   await B.handle({ type: 'page:generate', rules: 'maxlength: 4' }, tab('https://site.example/signup'), h);
   assert.deepStrictEqual(h.calls[0], ['generate', { len: 20, rules: { classes: [{ kind: 'lower', required: false }, { kind: 'upper', required: false }, { kind: 'digit', required: true }, { kind: 'special', required: true }] } }]);
 });
+
+test('decide(): empty username with 0, 1, 2+ matching logins, preselection and unchanged password', async () => {
+  const origin = 'https://site.example';
+  const makeHost = (items, passwords = {}) => async (cmd, args) => {
+    if (cmd === 'match') return { items };
+    if (cmd === 'fill') return { username: 'user', password: passwords[args.item_id] || 'stored-pass' };
+    return {};
+  };
+
+  // 0 matching logins -> save prompt
+  const h0 = makeHost([]);
+  const d0 = await B.decide(h0, origin, { username: '', password: 'new-pass' });
+  assert.deepStrictEqual(d0, { prompt: 'save' });
+
+  // 1 matching login -> changed password yields update
+  const item1 = { id: 'v:1', category: 'login', title: 'Main', subtitle: 'user1@example.com' };
+  const h1 = makeHost([item1], { 'v:1': 'old-pass' });
+  const d1 = await B.decide(h1, origin, { username: '', password: 'new-pass' });
+  assert.strictEqual(d1.prompt, 'update');
+  assert.strictEqual(d1.item_id, 'v:1');
+  assert.strictEqual(d1.title, 'Main');
+  assert.strictEqual(d1.hasUser, true);
+
+  // 1 matching login -> unchanged password gives no prompt (null)
+  const h1same = makeHost([item1], { 'v:1': 'same-pass' });
+  const d1same = await B.decide(h1same, origin, { username: '', password: 'same-pass' });
+  assert.strictEqual(d1same, null);
+
+  // 2+ matching logins -> preselects most recently used when no lastFilled
+  const itemOld = { id: 'v:old', category: 'login', title: 'Old Acc', subtitle: 'old@example.com', last_used: 1000 };
+  const itemNew = { id: 'v:new', category: 'login', title: 'New Acc', subtitle: 'new@example.com', last_used: 5000 };
+  const itemNoUser = { id: 'v:blank', category: 'login', title: 'Blank Acc', subtitle: '', last_used: 2000 };
+  const h2 = makeHost([itemOld, itemNew, itemNoUser], { 'v:new': 'pass-old' });
+  const d2 = await B.decide(h2, origin, { username: '', password: 'changed-pass' }, 12);
+  assert.strictEqual(d2.prompt, 'update');
+  assert.strictEqual(d2.item_id, 'v:new', 'item with highest last_used preselected');
+  assert.deepStrictEqual(d2.accounts.map((a) => a.id), ['v:new', 'v:blank', 'v:old'], 'sorted newest last_used first');
+
+  // 2+ matching logins -> preselection from lastFilled
+  B.rememberFilled(12, origin, 'v:old');
+  const d2lf = await B.decide(h2, origin, { username: '', password: 'changed-pass' }, 12);
+  assert.strictEqual(d2lf.prompt, 'update');
+  assert.strictEqual(d2lf.item_id, 'v:old', 'lastFilled takes precedence over last_used');
+
+  // 2+ matching logins -> unchanged password on chosen login gives no prompt (null)
+  const h2same = makeHost([itemOld, itemNew], { 'v:old': 'unchanged-pass', 'v:new': 'other-pass' });
+  const d2same = await B.decide(h2same, origin, { username: '', password: 'unchanged-pass' }, 12);
+  assert.strictEqual(d2same, null, 'unchanged password on preselected login suppresses banner');
+});
+
+test('save decision: item_id not matching origin is rejected', async () => {
+  const origin = 'https://site.example';
+  const itemA = { id: 'v:a', category: 'login', title: 'Site A', subtitle: 'a@site.com' };
+  const itemB = { id: 'v:b', category: 'login', title: 'Site B', subtitle: 'b@site.com' };
+  const calls = [];
+  const h = async (cmd, args) => {
+    calls.push([cmd, args]);
+    if (cmd === 'match') return { items: args.origin === origin ? [itemA, itemB] : [] };
+    if (cmd === 'fill') return { username: 'a@site.com', password: 'old-password' };
+    if (cmd === 'update_password') return { ok: true };
+    if (cmd === 'list_vaults') return { vaults: VAULTS };
+    return {};
+  };
+
+  const s = tab(origin + '/account', 0, 42);
+  // Capture with empty username on a site with 2 matching logins
+  const capRes = await B.handle({ type: 'page:capture', kind: 'login', username: '', password: 'new-password' }, s, h);
+  assert.strictEqual(capRes.prompt, 'update');
+  assert.ok(capRes.accounts && capRes.accounts.length === 2);
+
+  // Attempt update with forged item_id from a different origin/item
+  await assert.rejects(
+    B.handle({ type: 'page:save_decision', action: 'update', item_id: 'v:foreign', user_click: true }, s, h),
+    (e) => e.code === 'origin_mismatch' || /item does not match/.test(e.message)
+  );
+
+  // Updating with one of the valid matching items succeeds
+  const okRes = await B.handle({ type: 'page:save_decision', action: 'update', item_id: 'v:b', user_click: true }, s, h);
+  assert.strictEqual(okRes.done, true);
+  assert.strictEqual(okRes.action, 'update');
+  assert.strictEqual(okRes.item_id, 'v:b');
+  const upCall = calls.find(([cmd]) => cmd === 'update_password');
+  assert.deepStrictEqual(upCall[1], { item_id: 'v:b', password: 'new-password' });
+});

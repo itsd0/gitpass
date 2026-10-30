@@ -30,7 +30,7 @@ fn accept_share_imports_vault() {
     let x = other.app.create_vault("Team", None, None, None).unwrap();
     let it = other.app.create_item(&ItemInput { vault_id: x.id.clone(), category: Category::Wifi, title: "Office WiFi".into(), url: None,
         sections: vec![Section { id: "w".into(), title: None, fields: vec![fld("ssid", FieldKind::Text, Some("FakeNet")), fld("pw", FieldKind::Concealed, Some("FAKE-wifi"))] }],
-        notes: None, tags: None, favorite: None }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let me = e.app.identity().unwrap();
     other.app.share_vault(&x.id, &me.public_key, None).unwrap();
     let share = other._vault.path().join("vaults").join(&x.id).join("members").join(format!("{}.enc", me.fingerprint));

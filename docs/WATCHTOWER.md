@@ -34,6 +34,7 @@ gitpass audit --json               # machine-readable report (counts + per-item 
 | `duplicate` | Login items with the same site and username in one vault | Duplicates | no |
 | `weak_ssh_key` | SSH key items with an RSA key under 3072 bits | Weak SSH keys | no |
 | `unused` | live Login items not used (or, if never used, not edited or created) for longer than the threshold (default 12 months) | Unused items | no |
+| `rotation_due` / `rotation_soon` | Login items with a "Change password every…" reminder (30, 90, 180 or 365 days) | Due for rotation / Rotation due soon | no |
 
 ## What gets audited
 
@@ -215,6 +216,23 @@ It is housekeeping advice to help you archive logins you no longer need; it **ne
 - Because last use is local, two devices can disagree about whether an item is unused. That is
   intentional: the finding answers "have *I* used this lately?" and never leaves the device.
 - In the desktop, each row offers **Archive** (with Undo) and **Ignore this warning**.
+
+## Per-login rotation reminders
+
+A Login can carry its own reminder, **Change password every…** (30, 90, 180 or 365 days; off by default):
+set it in the desktop editor or with `gitpass edit <item> --rotate-every 90d` (`none` clears it). It is
+stored with the item (`rotate_every_days`), syncs and survives history restore, copy, move and gitpass-json
+export/import, and vaults that never use it are unchanged.
+
+- `RotationDue { every_days, days }`: the password is at least `every_days` days old.
+- `RotationSoon { every_days, in_days }`: the reminder falls due within the next **14 days**.
+- Age is measured from when the **password** last changed (the same timestamp as `old`), not from the
+  last edit, so editing notes never resets it. Archived and recently deleted items are skipped.
+- Both are ignorable like any other finding (kinds `rotation_due`, `rotation_soon`) and **never change the
+  score**; the global `old` threshold keeps working independently.
+- In the desktop, a due or soon login shows an orange pill ("Due for rotation" / "Rotate in N days") in the
+  item list (a dot in compact density) and under the title in the detail, and the Watchtower page has a
+  card for each kind with the usual **Change password** action.
 
 ## Ignored findings
 

@@ -78,7 +78,7 @@ impl App {
             let (v, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
-            Ok(detail(vault_id, item_id, v, &r, findings, last_used))
+            Ok(detail(&u.session, vault_id, item_id, v, &r, findings, last_used))
         })
     }
     /// The ONLY call that returns a stored secret value.
@@ -91,6 +91,12 @@ impl App {
                 Some(v) => u.session.item_version(vault_id, item_id, v)?,
                 None => u.session.read_record(vault_id, item_id)?.1,
             };
+            if let Some(idx_str) = field_id.strip_prefix("password_history:") {
+                let idx: usize = idx_str.parse().map_err(|_| anyhow!("invalid history index"))?;
+                let entry = r.password_history.get(idx).ok_or_else(|| anyhow!("no password history at index {idx}"))?;
+                let _ = u.session.touch_item_used(item_id);
+                return Ok(Zeroizing::new(entry.value.clone()));
+            }
             let f = r.find_field(field_id).or_else(|| {
                 if version.is_some() {
                     u.session.read_record(vault_id, item_id).ok().and_then(|(_, cur)| cur.find_field(field_id))
@@ -108,6 +114,12 @@ impl App {
     pub fn copy_field(&self, vault_id: &str, item_id: &str, field_id: &str) -> Result<()> {
         let (v, markers) = self.with(|u| {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
+            if let Some(idx_str) = field_id.strip_prefix("password_history:") {
+                let idx: usize = idx_str.parse().map_err(|_| anyhow!("invalid history index"))?;
+                let entry = r.password_history.get(idx).ok_or_else(|| anyhow!("no password history at index {idx}"))?;
+                let _ = u.session.touch_item_used(item_id);
+                return Ok((Zeroizing::new(entry.value.clone()), Some(PasteboardMarkers::SECRET)));
+            }
             let f = r.find_field(field_id).ok_or_else(|| anyhow!("item has no field '{field_id}'"))?;
             let markers = is_secret_copy(r.category, &f).then_some(PasteboardMarkers::SECRET);
             let raw = f.value.clone().filter(|v| !v.is_empty()).ok_or_else(|| anyhow!("field '{field_id}' is empty"))?;
@@ -202,6 +214,11 @@ impl App {
         r.item.url = nonempty(input.url.clone());
         if let Some(t) = &input.tags { let mut t: Vec<String> = t.iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect(); t.dedup(); r.tags = t; }
         if let Some(f) = input.favorite { r.favorite = f; }
+        if let Some(rids) = &input.related_item_ids {
+            let mut ids: Vec<String> = rids.iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect();
+            ids.dedup();
+            r.related_item_ids = ids;
+        }
         let secs: Vec<item::Section> = input.sections.iter().map(|s| item::Section { id: s.id.clone(), title: s.title.clone(), fields: s.fields.iter().map(|f| {
             let value = match &f.value { None if f.kind.is_secret() => old.find_field(&f.id).and_then(|o| o.value), v => v.clone() };
             item::Field { id: f.id.clone(), label: f.label.clone(), kind: f.kind, value, removed: false }
@@ -231,12 +248,30 @@ impl App {
         })
     }
     pub fn set_favorite(&self, vault_id: &str, item_id: &str, favorite: bool) -> Result<()> { self.write(|u| u.session.set_favorite(vault_id, item_id, favorite)) }
+    /// Set or clear (`None`) the "change password every N days" reminder (30, 90, 180 or 365).
+    pub fn set_rotation(&self, vault_id: &str, item_id: &str, days: Option<u32>) -> Result<()> { self.write(|u| u.session.set_rotation(vault_id, item_id, days)) }
     pub fn archive_item(&self, vault_id: &str, item_id: &str, archived: bool) -> Result<()> { self.write(|u| u.session.set_archived(vault_id, item_id, archived)) }
     pub fn delete_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.soft_delete(vault_id, item_id)) }
     pub fn restore_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.restore(vault_id, item_id)) }
     pub fn purge_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.purge_item(vault_id, item_id)) }
     pub fn ignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.ignore_finding(vault_id, item_id, kind)) }
     pub fn unignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.unignore_finding(vault_id, item_id, kind)) }
+    pub fn add_related_item(&self, vault_id: &str, item_id: &str, related_id: &str) -> Result<()> {
+        if item_id == related_id {
+            anyhow::bail!("cannot link an item to itself");
+        }
+        self.write(|u| u.session.add_related_item(vault_id, item_id, related_id))
+    }
+    pub fn remove_related_item(&self, vault_id: &str, item_id: &str, related_id: &str) -> Result<()> {
+        self.write(|u| u.session.remove_related_item(vault_id, item_id, related_id))
+    }
+    pub fn clear_password_history(&self, vault_id: &str, item_id: &str) -> Result<()> {
+        self.write(|u| {
+            let (_, mut r) = u.session.read_record(vault_id, item_id)?;
+            r.password_history.clear();
+            u.session.update_record(vault_id, item_id, r)
+        })
+    }
     /// Permanently delete every item in Recently Deleted (all vaults) in one commit.
     /// Returns how many items were purged; an empty trash is a no-op.
     pub fn empty_trash(&self) -> Result<usize> {
@@ -311,7 +346,7 @@ impl App {
         self.with(|u| {
             let r = u.session.item_version(vault_id, item_id, version)?;
             let (_, cur) = u.session.read_record(vault_id, item_id)?;
-            let last_used = u.session.last_used(item_id); let mut d = detail(vault_id, item_id, version, &r, Vec::new(), last_used);
+            let last_used = u.session.last_used(item_id); let mut d = detail(&u.session, vault_id, item_id, version, &r, Vec::new(), last_used);
             d.history.clear();
             d.attachments.clear();
             if let Some(h) = cur.history.iter().find(|h| h.version == version) { d.summary.updated_at = ts(&h.updated_at); }
@@ -325,7 +360,7 @@ impl App {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
-            Ok(detail(vault_id, item_id, new_v, &r, findings, last_used))
+            Ok(detail(&u.session, vault_id, item_id, new_v, &r, findings, last_used))
         })
     }
     pub fn add_attachment(&self, vault_id: &str, item_id: &str, path: &str) -> Result<Attachment> {

@@ -10,8 +10,7 @@ fn watchtower_mfa_advice_and_passkey_suppression() {
         sections: vec![Section { id: "login".into(), title: None, fields: vec![
             fld("username", FieldKind::Text, Some("fake@example.invalid")),
             fld("password", FieldKind::Concealed, Some("FAKE-Xq7#vR2!mK9@pL4$wZ"))] }],
-        notes: None, tags: None, favorite: None,
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let r = e.app.watchtower(false).unwrap();
     assert!(r.totp_available.contains(&l.id));
     assert!(r.passkey_available.contains(&l.id));
@@ -20,8 +19,7 @@ fn watchtower_mfa_advice_and_passkey_suppression() {
     e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(), category: Category::Passkey, title: "GitHub passkey (fake)".into(), url: Some("https://github.com".into()),
         sections: vec![Section { id: "main".into(), title: None, fields: vec![fld("rp_id", FieldKind::Text, Some("github.com"))] }],
-        notes: None, tags: None, favorite: None,
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let r = e.app.watchtower(false).unwrap();
     assert!(r.totp_available.contains(&l.id));
     assert!(!r.passkey_available.contains(&l.id));
@@ -32,8 +30,7 @@ fn watchtower_mfa_advice_and_passkey_suppression() {
         sections: vec![Section { id: "login".into(), title: None, fields: vec![
             fld("username", FieldKind::Text, Some("fake@example.invalid")),
             fld("password", FieldKind::Concealed, Some("FAKE-Xq7#vR2!mK9@pL4$wZ"))] }],
-        notes: None, tags: None, favorite: None,
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let r = e.app.watchtower(false).unwrap();
     assert!(r.passkey_available.contains(&g.id));
     assert!(r.totp_available.contains(&g.id));
@@ -42,8 +39,7 @@ fn watchtower_mfa_advice_and_passkey_suppression() {
     e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(), category: Category::Passkey, title: "Google passkey (fake)".into(), url: Some("https://accounts.google.com".into()),
         sections: vec![Section { id: "main".into(), title: None, fields: vec![fld("rp_id", FieldKind::Text, Some("accounts.google.com"))] }],
-        notes: None, tags: None, favorite: None,
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let r = e.app.watchtower(false).unwrap();
     assert!(!r.passkey_available.contains(&g.id));
 }
@@ -69,8 +65,7 @@ fn item_change_password_url_and_detail_findings() {
             fld("username", FieldKind::Text, Some("fake@example.invalid")),
             fld("password", FieldKind::Concealed, Some("password")),
         ] }],
-        notes: None, tags: None, favorite: None,
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
 
     // http is upgraded, path/query dropped, and the URL travels on the summary + detail.
     let l = makelogin("Forum (fake)", "http://forum.example.com/login?token=fake");
@@ -122,7 +117,7 @@ fn watchtower_score_counts_documented_totp_sites_as_missing_2fa() {
     e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "GitHub Fake".into(),
         url: Some("https://github.com/login".into()), sections: vec![Section { id: "login".into(), title: None,
         fields: vec![fld("username", FieldKind::Text, Some("fake@example.invalid")),
-            fld("password", FieldKind::Concealed, Some("Xq7#vR2!mK9@pL4$wZ"))] }], notes: None, tags: None, favorite: None }).unwrap();
+            fld("password", FieldKind::Concealed, Some("Xq7#vR2!mK9@pL4$wZ"))] }], notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let r = e.app.watchtower(false).unwrap();
     assert_eq!((r.missing_totp.len(), r.totp_available.len()), (0, 1));
     assert_eq!(r.score, 90);
@@ -134,7 +129,7 @@ fn watchtower_score_without_passwords_and_with_an_old_password() {
     let e = env();
     e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "No password".into(),
         url: Some("https://example.invalid".into()), sections: vec![Section { id: "login".into(), title: None,
-        fields: vec![fld("username", FieldKind::Text, Some("nopw@example.invalid"))] }], notes: None, tags: None, favorite: None }).unwrap();
+        fields: vec![fld("username", FieldKind::Text, Some("nopw@example.invalid"))] }], notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let r = e.app.watchtower(false).unwrap();
     assert_eq!((r.missing_totp.len(), r.score), (1, 100));
 
@@ -156,24 +151,21 @@ fn watchtower_flags_insecure_http_urls() {
         title: "Insecure Forum".into(),
         url: Some("http://forum.example.org/login".into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("user")), fld("password", FieldKind::Concealed, Some("StrongPassword123!"))] }],
-        notes: None, tags: None, favorite: None
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let _l2 = e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(),
         category: Category::Login,
         title: "Secure Site".into(),
         url: Some("https://secure.example.org/login".into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("user")), fld("password", FieldKind::Concealed, Some("StrongPassword123!"))] }],
-        notes: None, tags: None, favorite: None
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let _l3 = e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(),
         category: Category::Login,
         title: "Localhost Site".into(),
         url: Some("http://localhost:8080".into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("user")), fld("password", FieldKind::Concealed, Some("StrongPassword123!"))] }],
-        notes: None, tags: None, favorite: None
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
 
     let rep = e.app.watchtower(false).unwrap();
     assert_eq!(rep.insecure_urls, vec![l1.id]);
@@ -198,8 +190,7 @@ fn watchtower_ignore_stop_ignoring_and_score_change() {
         notes: None,
         tags: None,
         favorite: None,
-        url: Some("http://router.example.com/admin".into()),
-    }).unwrap();
+        url: Some("http://router.example.com/admin".into()), related_item_ids: None }).unwrap();
 
     // 1. Initial watchtower run: weak, insecureUrls, and score penalized (< 100)
     let rep1 = e.app.watchtower(false).unwrap();
@@ -270,8 +261,7 @@ fn watchtower_flags_passwords_containing_personal_info() {
             title: None,
             fields: vec![fld("username", FieldKind::Text, Some("alice")), fld("password", FieldKind::Concealed, Some("github-alice-2024!"))],
         }],
-        notes: None, tags: None, favorite: None,
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
 
     let item2 = e.app.create_item(&ItemInput {
         vault_id: e.vault.clone(),
@@ -283,8 +273,7 @@ fn watchtower_flags_passwords_containing_personal_info() {
             title: None,
             fields: vec![fld("username", FieldKind::Text, Some("charlie")), fld("password", FieldKind::Concealed, Some("G1thub#99-Secure!"))],
         }],
-        notes: None, tags: None, favorite: None,
-    }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
 
     let rep = e.app.watchtower(false).unwrap();
     assert!(rep.weak.contains(&item1.id));

@@ -20,7 +20,7 @@ fn copied_secrets_carry_pasteboard_markers() {
     assert_eq!(e.clip.markers(), None, "expiry is not a secret");
     let api = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::ApiCredential, title: "API".into(), url: None,
         sections: vec![Section { id: "main".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("svc")), fld("credential", FieldKind::Concealed, Some("FAKE-token"))] }],
-        notes: None, tags: None, favorite: None }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     e.app.copy_field(&e.vault, &api.id, "credential").unwrap();
     assert_eq!(e.clip.markers(), Some(PasteboardMarkers::SECRET));
     e.app.copy_field(&e.vault, &api.id, "username").unwrap();
@@ -88,7 +88,7 @@ fn totp_now_and_totp_field_copy() {
     let e = env();
     let it = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "2FA".into(), url: None,
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("u")), fld("totp", FieldKind::Totp, Some("JBSWY3DPEHPK3PXP"))] }],
-        notes: None, tags: None, favorite: None }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     let d = e.app.get_item(&e.vault, &it.id).unwrap();
     assert!(d.has_totp);
     assert!(d.sections[0].fields.iter().all(|f| f.kind != FieldKind::Totp || f.value.is_none()));
@@ -98,7 +98,7 @@ fn totp_now_and_totp_field_copy() {
     assert_eq!(e.clip.get_text().unwrap().len(), 6);
     assert_eq!(e.clip.markers(), Some(PasteboardMarkers::SECRET));
     assert!(e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "bad".into(), url: None,
-        sections: vec![Section { id: "x".into(), title: None, fields: vec![fld("t", FieldKind::Totp, Some("not base32!!"))] }], notes: None, tags: None, favorite: None }).is_err());
+        sections: vec![Section { id: "x".into(), title: None, fields: vec![fld("t", FieldKind::Totp, Some("not base32!!"))] }], notes: None, tags: None, favorite: None, related_item_ids: None }).is_err());
 }
 
 #[test]

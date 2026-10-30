@@ -103,6 +103,8 @@ impl App {
                 duplicates: vec![],
                 weak_ssh_keys: vec![],
                 unused: vec![],
+                rotation_due: vec![],
+                rotation_soon: vec![],
                 weak_reasons: HashMap::new(),
                 ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
@@ -129,6 +131,8 @@ impl App {
                         Finding::Unused { days } => out.unused.push(UnusedItem {
                             item_id: f.id.clone(), days: *days, last_used: last_used.contains_key(&f.id),
                         }),
+                        Finding::RotationDue { every_days, days } => out.rotation_due.push(RotationItem { item_id: f.id.clone(), every_days: *every_days, days: *days }),
+                        Finding::RotationSoon { every_days, in_days } => out.rotation_soon.push(RotationItem { item_id: f.id.clone(), every_days: *every_days, days: *in_days }),
                     }
                 }
             }
