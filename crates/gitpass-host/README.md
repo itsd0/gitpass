@@ -33,7 +33,7 @@ Request `{"id": <any>, "cmd": "<name>", ...}` → `{"id", "ok": true, "result": 
 `origin_mismatch`, `bad_request`, `app_not_running`, `internal`.
 
 Commands (see the v0.6 contract): `hello`, `status`, `request_unlock`, `lock`, `list_items {vault_id?, category?,
-query?, limit?}`, `match {origin}`, `get_item {item_id}`, `reveal {item_id, field, source:"popup"}`,
+query?, limit?, state?}`, `list_archived {vault_id?}`, `list_deleted {vault_id?}`, `match {origin}`, `get_item {item_id, include_deleted?}`, `trash_item {item_id, source:"popup"}`, `restore_item {item_id, source:"popup"}`, `archive_item {item_id, source:"popup", archived?}`, `unarchive_item {item_id, source:"popup"}`, `reveal {item_id, field, source:"popup"}`,
 `fill {item_id, origin}` → `{username, password, totp?}`, `fill_card` / `fill_identity {item_id}` (needs
 `source:"popup"` or `source:"inpage_click"`) → `{<field id>: value}`, `totp` → `{code, remaining, period}`,
 `save_login {origin, title?, username, password, vault_id?}` → `{item_id}`, `update_password`, `item_findings {item_id}`,

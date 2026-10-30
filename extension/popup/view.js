@@ -45,8 +45,8 @@
     api_credential: 'catApi', document: 'catDocument', ssh_key: 'catSsh', wifi: 'catWifi', passkey: 'catPasskey', bank_account: 'catBankAccount', server: 'catServer', other: 'catOther',
   };
 
-  /** Filter dropdown entries: suggestions, all, favorites, one per category, one per vault. */
-  function buildFilters(vaults) {
+  /** Filter dropdown entries: suggestions, all, favorites, one per category, one per vault, plus archive and recently deleted when non-empty. */
+  function buildFilters(vaults, opts = {}) {
     const f = [
       { id: 'suggested', key: 'filterSuggested', label: 'Suggestions for this site' },
       { id: 'all', key: 'filterAll', label: 'All Items' },
@@ -54,6 +54,14 @@
     ];
     for (const c of CATEGORIES) f.push({ id: 'cat:' + c, key: CAT_KEY[c], label: CAT_LABEL[c], group: 'category' });
     for (const v of vaults || []) f.push({ id: 'vault:' + v.id, label: v.name, group: 'vault', count: v.item_count });
+    const archiveCount = typeof opts.archiveCount === 'number' ? opts.archiveCount : (opts.archived || []).length;
+    const deletedCount = typeof opts.deletedCount === 'number' ? opts.deletedCount : (opts.deleted || []).length;
+    if (archiveCount > 0) {
+      f.push({ id: 'archive', key: 'filterArchive', label: 'Archive', group: 'status', count: archiveCount });
+    }
+    if (deletedCount > 0) {
+      f.push({ id: 'deleted', key: 'filterDeleted', label: 'Recently Deleted', group: 'status', count: deletedCount });
+    }
     return f;
   }
 
@@ -80,10 +88,11 @@
 
   /** Filter chips for the popup row: suggestions (only with a current site, or
    *  when already selected), all, favorites, one per category that actually
-   *  has items, a Tags menu chip when any item has tags (plus an active-tag
-   *  chip showing the selected tag, which clears the filter), and a single
+*  has items, a Tags menu chip when any item has tags (plus an active-tag
+   *  chip showing the selected tag, which clears the filter), a single
    *  Vaults menu chip when there is more than one vault (or a vault filter
-   *  is already selected). The active filter is always present so
+   *  is already selected), and Archive and Recently Deleted chips when they
+   *  have items (or when active). The active filter is always present so
    *  re-rendering never drops the selection. */
   function buildFilterChips(items, vaults, opts = {}) {
     const present = new Set((items || []).map((i) => i.category));
@@ -108,6 +117,14 @@
     const vs = vaults || [];
     if (vs.length > 1 || current.startsWith('vault:')) {
       chips.push({ id: 'vaults', kind: 'vaults', key: 'vaults', label: 'Vaults', vaults: vs.map((v) => ({ id: 'vault:' + v.id, label: v.name })) });
+    }
+    const archiveCount = typeof opts.archiveCount === 'number' ? opts.archiveCount : (opts.archived || []).length;
+    const deletedCount = typeof opts.deletedCount === 'number' ? opts.deletedCount : (opts.deleted || []).length;
+    if (archiveCount > 0 || current === 'archive') {
+      chips.push({ id: 'archive', key: 'filterArchive', label: 'Archive', count: archiveCount });
+    }
+    if (deletedCount > 0 || current === 'deleted') {
+      chips.push({ id: 'deleted', key: 'filterDeleted', label: 'Recently Deleted', count: deletedCount });
     }
     return chips;
   }
@@ -139,19 +156,21 @@
   }
 
   /** Apply filter + query, then sort (`sort`: updated | created | title; default title). `suggested` is the list returned by match for the active tab. */
-  function filterItems(all, suggested, filter, query, sort = 'title') {
+  function filterItems(all, suggested, filter, query, sort = 'title', extra = {}) {
     let base;
-    if (filter === 'suggested') base = suggested || [];
-    else if (filter === 'favorites') base = all.filter((i) => i.favorite);
-    else if (filter && filter.startsWith('cat:')) base = all.filter((i) => i.category === filter.slice(4));
-    else if (filter && filter.startsWith('vault:')) base = all.filter((i) => i.vault_id === filter.slice(6));
-    else if (filter && filter.startsWith('tag:')) {
+if (filter === "suggested") base = (suggested || []).filter((i) => !i.archived && !i.deleted_at);
+    else if (filter === "favorites") base = (all || []).filter((i) => i.favorite && !i.archived && !i.deleted_at);
+    else if (filter === "archive") base = extra.archived || (all || []).filter((i) => i.archived && !i.deleted_at);
+    else if (filter === "deleted") base = extra.deleted || (all || []).filter((i) => Boolean(i.deleted_at));
+    else if (filter && filter.startsWith("cat:")) base = (all || []).filter((i) => i.category === filter.slice(4) && !i.archived && !i.deleted_at);
+    else if (filter && filter.startsWith("vault:")) base = (all || []).filter((i) => i.vault_id === filter.slice(6) && !i.archived && !i.deleted_at);
+    else if (filter && filter.startsWith("tag:")) {
       const want = filter.slice(4).trim().toLowerCase();
-      base = all.filter((i) => (i.tags || []).some((t) => String(t).trim().toLowerCase() === want));
+      base = (all || []).filter((i) => !i.archived && !i.deleted_at && (i.tags || []).some((t) => String(t).trim().toLowerCase() === want));
     }
-    else base = all;
-    // Searching from Suggestions searches everything, like other password managers.
-    if (query && filter === 'suggested') base = all;
+    else base = (all || []).filter((i) => !i.archived && !i.deleted_at);
+    // Searching from Suggestions searches everything (except archived and deleted).
+    if (query && filter === "suggested") base = (all || []).filter((i) => !i.archived && !i.deleted_at);
     return base.filter((i) => matchesQuery(i, query))
       .sort(compareBy(SORTS.includes(sort) ? sort : 'title'));
   }
@@ -167,6 +186,8 @@
       if (ctx.excepted) out.excepted = true;
       return out;
     }
+    if (ctx.filter === 'archive') return { kind: 'archive' };
+    if (ctx.filter === 'deleted') return { kind: 'deleted' };
     if (ctx.filter === 'all' && !ctx.count) return { kind: 'vault' };
     return { kind: 'none' };
   }
@@ -184,6 +205,54 @@
     if (top < scrollTop) return top;
     if (bot > scrollTop + viewport) return bot - viewport;
     return scrollTop;
+  }
+
+  const MS_PER_DAY = 24 * 60 * 60 * 1000;
+  const PURGE_AFTER_DAYS = 30;
+
+  function parseDeletedAt(v) {
+    if (!v) return null;
+    if (typeof v === 'number') return v < 1e11 ? v * 1000 : v;
+    const n = Date.parse(v);
+    if (!Number.isNaN(n)) return n;
+    const num = Number(v);
+    if (!Number.isNaN(num)) return num < 1e11 ? num * 1000 : num;
+    return null;
+  }
+
+  function daysUntilPurge(deletedAt, now = Date.now()) {
+    const t = parseDeletedAt(deletedAt);
+    if (t === null) return null;
+    return Math.max(0, Math.ceil((t + PURGE_AFTER_DAYS * MS_PER_DAY - now) / MS_PER_DAY));
+  }
+
+  function daysDeletedAgo(deletedAt, now = Date.now()) {
+    const t = parseDeletedAt(deletedAt);
+    if (t === null) return null;
+    return Math.max(0, Math.floor((now - t) / MS_PER_DAY));
+  }
+
+  function formatTrashSubtitle(deletedAt, now = Date.now(), t = (k, def, vars) => (Array.isArray(def) ? k : def)) {
+    const daysLeft = daysUntilPurge(deletedAt, now);
+    const daysAgo = daysDeletedAgo(deletedAt, now);
+    if (daysLeft === null || daysAgo === null) return null;
+
+    let agoText;
+    if (daysAgo === 0) agoText = t('deletedToday', 'Deleted today');
+    else if (daysAgo === 1) agoText = t('deletedDayOne', 'Deleted 1 day ago');
+    else agoText = t('deletedDaysAgo', `Deleted ${daysAgo} days ago`, [daysAgo]);
+
+    let purgeText;
+    if (daysLeft === 0) purgeText = t('deletesToday', 'Deletes today');
+    else if (daysLeft === 1) purgeText = t('deletesInDayOne', 'Deletes in 1 day');
+    else purgeText = t('deletesInDays', `Deletes in ${daysLeft} days`, [daysLeft]);
+
+    return {
+      text: `${agoText} · ${purgeText}`,
+      danger: daysLeft <= 3,
+      daysLeft,
+      daysAgo,
+    };
   }
 
   function moveSel(idx, delta, count) {
@@ -212,6 +281,7 @@
     if (mod && (e.key === 'c' || e.key === 'C') && !ctx.hasSelection) return 'copyPassword';
     if (mod && !e.shiftKey && (e.key === 'o' || e.key === 'O') && !ctx.hasSelection) return 'openWebsite';
     if (mod && e.altKey && !e.shiftKey && (e.key === 'l' || e.key === 'L') && !ctx.hasSelection) return 'largeType';
+    if (mod && (e.altKey || e.shiftKey) && (e.key === 'r' || e.key === 'R') && !ctx.hasSelection) return 'restore';
     if (mod && e.shiftKey && (e.key === 'g' || e.key === 'G') && !ctx.hasSelection) return 'generator';
     return null;
   }
@@ -303,7 +373,7 @@
    * credential; every other category gets none.
    */
   function quickActions(item) {
-    if (!item) return [];
+    if (!item || item.deleted_at) return [];
     if (item.category === 'login') {
       const acts = ['copyUsername', 'copyPassword'];
       if (isAllowedUrl(item.url)) acts.push('openWebsite');
@@ -498,7 +568,7 @@
     return Boolean(res && Array.isArray(res.kinds));
   }
 
-  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, collectTags, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, quickActions, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache };
+const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, collectTags, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, quickActions, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache, parseDeletedAt, daysUntilPurge, daysDeletedAgo, formatTrashSubtitle, PURGE_AFTER_DAYS };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

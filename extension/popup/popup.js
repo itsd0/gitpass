@@ -422,16 +422,22 @@ async function loadData() {
   let vaults = { vaults: [] };
   let all = null;
   let match = { items: [], origin: null };
+  let archivedRes = { items: [] };
+  let deletedRes = { items: [] };
 
   try {
     const results = await Promise.all([
       send({ type: 'popup:list_vaults' }).catch(() => ({ vaults: [] })),
       listAllItems(),
       send({ type: 'popup:match_active' }).catch(() => ({ items: [], origin: null })),
+      send({ type: 'popup:list_archived' }).catch(() => ({ items: [] })),
+      send({ type: 'popup:list_deleted' }).catch(() => ({ items: [] })),
     ]);
     vaults = results[0];
     all = results[1];
     match = results[2];
+    archivedRes = results[3];
+    deletedRes = results[4];
   } catch (err) {
     listError = err;
   } finally {
@@ -458,6 +464,8 @@ async function loadData() {
   S.all = (all && all.items) || [];
   S.suggested = (match && match.items) || [];
   S.origin = (match && match.origin) || null;
+  S.archived = (archivedRes && archivedRes.items) || [];
+  S.deleted = (deletedRes && deletedRes.items) || [];
   await refreshNeverSave();
   await loadSort();
   renderSort();
@@ -505,7 +513,14 @@ function renderFilter() {
   wrap.textContent = '';
   closeVaultMenu();
   closeTagMenu();
-  const chips = V.buildFilterChips(S.all, S.vaults, { origin: S.origin, currentFilter: S.filter });
+  const chips = V.buildFilterChips(S.all, S.vaults, {
+    origin: S.origin,
+    currentFilter: S.filter,
+    archived: S.archived,
+    deleted: S.deleted,
+    archiveCount: (S.archived || []).length,
+    deletedCount: (S.deleted || []).length,
+  });
   const setRoving = (focused) => {
     for (const c of wrap.querySelectorAll('.filter-chip')) c.tabIndex = c === focused ? 0 : -1;
   };
@@ -534,7 +549,11 @@ function renderFilter() {
       b.title = t('clearTag', 'Clear tag filter');
       b.setAttribute('aria-label', t('clearTag', 'Clear tag filter'));
     } else {
-      b.textContent = f.key ? t(f.key, f.label) : f.label;
+      let label = f.key ? t(f.key, f.label) : f.label;
+      if (typeof f.count === 'number' && (f.id === 'archive' || f.id === 'deleted')) {
+        label += ' (' + f.count + ')';
+      }
+      b.textContent = label;
     }
     b.onclick = () => {
       if (f.kind === 'vaults') {
@@ -776,14 +795,14 @@ function renderRecent() {
       const idx = S.rows.findIndex((r) => r.id === it.id);
       if (idx >= 0) select(idx);
     };
-    row.ondblclick = () => openAndFill();
+    row.ondblclick = () => { if (!it.deleted_at) openAndFill(); };
     rList.append(row);
   }
 }
 
 function applyFilter(selectFirst) {
   const prevId = S.rows[S.sel] && S.rows[S.sel].id;
-  S.rows = V.filterItems(S.all, S.suggested, S.filter, S.query, S.sort);
+  S.rows = V.filterItems(S.all, S.suggested, S.filter, S.query, S.sort, { archived: S.archived, deleted: S.deleted });
   let idx = prevId ? S.rows.findIndex((r) => r.id === prevId) : -1;
   if (idx < 0 && (selectFirst || prevId)) idx = S.rows.length ? 0 : -1;
   $('list').scrollTop = 0;
@@ -865,9 +884,19 @@ function renderList() {
     if (S.query) tDiv.append(renderHighlight(it.title, S.query));
     else tDiv.textContent = it.title;
     const uDiv = el('div', 'u');
-    const uText = V.rowSubtitle(it, S.query);
-    if (S.query && uText && uText !== '—') uDiv.append(renderHighlight(uText, S.query));
-    else uDiv.textContent = uText || '—';
+    if (it.deleted_at) {
+      const trashSub = V.formatTrashSubtitle(it.deleted_at, Date.now(), t);
+      if (trashSub) {
+        uDiv.textContent = trashSub.text;
+        if (trashSub.danger) uDiv.classList.add('text-danger');
+      } else {
+        uDiv.textContent = '—';
+      }
+    } else {
+      const uText = V.rowSubtitle(it, S.query);
+      if (S.query && uText && uText !== '—') uDiv.append(renderHighlight(uText, S.query));
+      else uDiv.textContent = uText || '—';
+    }
     meta.append(tDiv, uDiv);
     row.append(ic, meta);
     if (it.favorite) { const f = el('span', 'fav'); f.innerHTML = UI.star; row.append(f); }
@@ -898,13 +927,15 @@ function renderList() {
 function renderEmpty(inner) {
   const st = V.emptyState({ query: S.query, filter: S.filter, origin: S.origin, count: S.all.length, excepted: isSiteExcepted() });
   const box = el('div', 'empty');
-  const ic = st.kind === 'search' ? UI.search : st.kind === 'site' ? categoryIcon('login', 36) : st.kind === 'nofill' ? UI.external : st.kind === 'vault' ? UI.plus : null;
+  const ic = st.kind === 'search' ? UI.search : st.kind === 'site' ? categoryIcon('login', 36) : st.kind === 'nofill' ? UI.external : st.kind === 'vault' ? UI.plus : st.kind === 'archive' ? UI.archive : st.kind === 'deleted' ? UI.trash : null;
   if (ic) { const w = el('span', 'empty-ic'); w.innerHTML = ic; box.append(w); }
   const msg = {
     search: () => t('noResults', 'No items found'),
     site: () => t('noMatches', 'No saved logins for this site'),
     nofill: () => t('notFillable', 'Open an https page to fill'),
     vault: () => t('emptyVaultTitle', 'Your vault is empty'),
+    archive: () => t('emptyArchiveTitle', 'Nothing archived'),
+    deleted: () => t('emptyTrashTitle', 'Recently Deleted is empty'),
     none: () => t('noItems', 'No items'),
   }[st.kind]();
   box.append(el('p', null, msg));
@@ -927,6 +958,8 @@ function renderEmpty(inner) {
     }
   }
   if (st.kind === 'vault') box.append(el('p', 'empty-sub', t('emptyVaultBody', 'Items you add will appear here.')));
+  if (st.kind === 'archive') box.append(el('p', 'empty-sub', t('emptyArchiveBody', 'Items you archive will appear here.')));
+  if (st.kind === 'deleted') box.append(el('p', 'empty-sub', t('emptyTrashBody', 'Items you delete stay here for 30 days.')));
   const acts = el('div', 'empty-actions');
   const btn = (cls, label, fn) => { const b = el('button', cls, label); b.type = 'button'; b.onclick = fn; acts.append(b); };
   if (st.kind === 'search') btn('btn btn-primary', t('emptyCreateNamed', 'Create item named “$1”', [st.query]), () => openNewItem('login', { title: st.query }));
@@ -1090,7 +1123,7 @@ async function select(idx) {
       : Promise.resolve({ kinds: [] });
 
     const [res, findingsRes] = await Promise.all([
-      send({ type: 'popup:get_item', item_id: it.id }),
+      send({ type: 'popup:get_item', item_id: it.id, include_deleted: Boolean(it.deleted_at) }),
       findingsPromise,
     ]);
     d = res.item;
@@ -1123,6 +1156,20 @@ function renderDetail(d) {
   const g = el('div', 'grow'); g.append(el('h2', null, d.title), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
   head.append(ic, g, moreMenu(d));
   pane.append(head);
+
+  if (d.deleted_at) {
+    const banner = el('div', 'trash-banner');
+    const bannerMsg = el('div', null, t('inTrash', 'This item is in Recently Deleted.'));
+    const trashSub = V.formatTrashSubtitle(d.deleted_at, Date.now(), t);
+    const bannerSub = el('div', 'trash-sub' + (trashSub && trashSub.danger ? ' danger' : ''), trashSub ? trashSub.text : '');
+    banner.append(bannerMsg, bannerSub);
+    pane.append(banner);
+  } else if (d.archived) {
+    const banner = el('div', 'trash-banner');
+    const bannerMsg = el('div', null, t('inArchive', 'This item is archived.'));
+    banner.append(bannerMsg);
+    pane.append(banner);
+  }
 
   if (d.category === 'login' && V.hasWatchtowerFindings(d.findings)) {
     const strip = el('div', 'warning-strip');
@@ -1177,7 +1224,19 @@ function renderDetail(d) {
     pane.append(strip);
   }
   const acts = el('div', 'd-actions');
-  if (V.fillKind(d.category)) {
+  if (d.deleted_at) {
+    const restoreBtn = el('button', 'btn btn-primary', t('restore', 'Restore'));
+    restoreBtn.type = 'button';
+    restoreBtn.onclick = () => restoreItem(d);
+    acts.append(restoreBtn);
+  } else {
+    if (d.archived) {
+      const unarchiveBtn = el('button', 'btn btn-primary', t('unarchive', 'Unarchive'));
+      unarchiveBtn.type = 'button';
+      unarchiveBtn.onclick = () => unarchiveItem(d);
+      acts.append(unarchiveBtn);
+    }
+    if (V.fillKind(d.category)) {
     const fillLabel = d.category === 'login' && d.url ? t('openFill', 'Open & Fill') : t('fill', 'Fill');
     const b = el('button', 'btn btn-primary', fillLabel);
     b.onclick = async () => {
@@ -1203,6 +1262,7 @@ function renderDetail(d) {
     edit.title = t('shortcutEdit', 'Edit login') + ' (⌘E)';
     edit.onclick = () => startEdit();
     acts.append(edit);
+  }
   }
   if (acts.children.length) pane.append(acts);
   const box = el('div', 'fields');
@@ -1437,7 +1497,7 @@ function fieldRow(d, f) {
     lt.setAttribute('aria-label', label);
     acts.append(lt);
   }
-  acts.append(iconBtn(UI.copy, t('copy', 'Copy'), async (b) => {
+  const copyBtn = iconBtn(UI.copy, t('copy', 'Copy'), async (b) => {
     if (b.disabled) return;
     b.disabled = true;
     const prevHtml = b.innerHTML;
@@ -1451,7 +1511,12 @@ function fieldRow(d, f) {
       b.innerHTML = prevHtml;
       b.disabled = false;
     }
-  }));
+  });
+  if (d.deleted_at) {
+    copyBtn.disabled = true;
+    copyBtn.title = t('inTrash', 'This item is in Recently Deleted.');
+  }
+  acts.append(copyBtn);
   return row;
 }
 
@@ -1579,6 +1644,70 @@ function openLargeTypeForSelected() {
   return openLargeType(d, f, trigger);
 }
 
+
+async function restoreItem(d) {
+  const idx = Math.max(0, S.sel);
+  await send({ type: 'popup:restore_item', item_id: d.id });
+  delete S.findingsCache[d.id];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  await loadData();
+  if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('itemRestored', 'Item restored'), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:trash_item', item_id: d.id });
+    toast(t('movedToTrash', 'Moved to Recently Deleted'));
+    S.findingsCache = {};
+    await loadData();
+    const i = S.rows.findIndex((r) => r.id === d.id);
+    if (i >= 0) await select(i);
+  });
+}
+
+async function archiveItem(d) {
+  const idx = Math.max(0, S.sel);
+  await send({ type: 'popup:archive_item', item_id: d.id, archived: true });
+  delete S.findingsCache[d.id];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  await loadData();
+  if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('itemArchived', 'Item archived'), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:unarchive_item', item_id: d.id });
+    toast(t('itemUnarchived', 'Item unarchived'));
+    S.findingsCache = {};
+    await loadData();
+    const i = S.rows.findIndex((r) => r.id === d.id);
+    if (i >= 0) await select(i);
+  });
+}
+
+async function unarchiveItem(d) {
+  const idx = Math.max(0, S.sel);
+  await send({ type: 'popup:unarchive_item', item_id: d.id });
+  delete S.findingsCache[d.id];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  await loadData();
+  if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('itemUnarchived', 'Item unarchived'), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:archive_item', item_id: d.id, archived: true });
+    toast(t('itemArchived', 'Item archived'));
+    S.findingsCache = {};
+    await loadData();
+    const i = S.rows.findIndex((r) => r.id === d.id);
+    if (i >= 0) await select(i);
+  });
+}
+
 async function trashItem(d) {
   const idx = Math.max(0, S.sel);
   await send({ type: 'popup:trash_item', item_id: d.id });
@@ -1636,7 +1765,16 @@ function moreMenu(d) {
   const sep = el('div', 'menu-sep');
   sep.setAttribute('role', 'separator');
   m.append(sep);
-  item(UI.trash, t('moveToTrash', 'Move to Recently Deleted'), () => trashItem(d), { danger: true });
+  if (d.deleted_at) {
+    item(UI.restore, t('restore', 'Restore'), () => restoreItem(d));
+  } else {
+    if (d.archived) {
+      item(UI.archive, t('unarchive', 'Unarchive'), () => unarchiveItem(d));
+    } else {
+      item(UI.archive, t('archive', 'Archive'), () => archiveItem(d));
+    }
+    item(UI.trash, t('moveToTrash', 'Move to Recently Deleted'), () => trashItem(d), { danger: true });
+  }
   const trigger = iconBtn(UI.more, t('more', 'More'), () => (m.classList.contains('hidden') ? openMenu() : closeMenu()));
   trigger.setAttribute('aria-haspopup', 'menu');
   trigger.setAttribute('aria-expanded', 'false');
@@ -1657,13 +1795,13 @@ function moreMenu(d) {
 }
 
 async function openAndFill() {
-  const d = S.detail; if (!d) return;
+  const d = S.detail; if (!d || d.deleted_at) return;
   const kind = V.fillKind(d.category); if (!kind) return;
   await send({ type: 'popup:open_fill', item_id: d.id, kind, url: d.url || null }).then(() => window.close(), showErr);
 }
 
 async function copyPrimary() {
-  const d = S.detail; const f = V.primarySecretField(d); if (!f) return;
+  const d = S.detail; if (!d || d.deleted_at) return; const f = V.primarySecretField(d); if (!f) return;
   await copy(await secretValue(d, f), f.kind === 'password' ? t('passwordCopied', 'Password copied') : t('copied', 'Copied'));
 }
 
@@ -1797,6 +1935,7 @@ function openShortcuts() {
     { keys: [`${cmd}${alt}L`], label: t('shortcutLargeType', 'Show in large type') },
     { keys: [`${cmd}${shift}C`], label: t('shortcutCopyTotp', 'Copy one-time code (TOTP)') },
     { keys: [`${cmd}${shift}U`], label: t('shortcutCopyUser', 'Copy username') },
+    { keys: [`${cmd}${alt}R`], label: t('shortcutRestore', 'Restore item') },
     { keys: [`${cmd}O`], label: t('shortcutOpenUrl', 'Open website') },
     { keys: [`${cmd}E`], label: t('shortcutEdit', 'Edit login') },
     { keys: [`${cmd}${shift}G`], label: t('shortcutGen', 'Password generator') },
@@ -2361,6 +2500,12 @@ document.addEventListener('keydown', (e) => {
   else if (act === 'copyUsername') copyUsername().catch(showErr);
   else if (act === 'largeType') openLargeTypeForSelected();
   else if (act === 'openWebsite') openWebsite();
+  else if (act === 'restore') {
+    if (selected) {
+      if (selected.deleted_at) restoreItem(selected).catch(showErr);
+      else if (selected.archived) unarchiveItem(selected).catch(showErr);
+    }
+  }
   else if (act === 'generator') { if (S.panel === 'gen') closePanel(); else openGenerator(); }
 });
 
@@ -2418,6 +2563,12 @@ if (typeof document !== 'undefined') {
 
 if (typeof window !== 'undefined' && window.__gitpassMock) {
   window.__gitpassPopup = {
+  restoreItem,
+  archiveItem,
+  unarchiveItem,
+  trashItem,
+  renderFilter,
+  renderEmpty,
   copy,
   clearClipboardIfOurs,
   renderListSkeletons,
@@ -2435,6 +2586,12 @@ if (typeof window !== 'undefined' && window.__gitpassMock) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    restoreItem,
+    archiveItem,
+    unarchiveItem,
+    trashItem,
+    renderFilter,
+    renderEmpty,
     copy,
     clearClipboardIfOurs,
     renderListSkeletons,
