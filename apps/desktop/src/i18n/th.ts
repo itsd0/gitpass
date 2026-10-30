@@ -599,6 +599,17 @@ export const th: Partial<Record<Key, string>> = {
   'strength.label': 'ความแข็งแกร่งของรหัสผ่าน: {label}',
   // item detail field actions
   'field.open': 'เปิด',
+  'field.showQrCode': 'แสดงเป็นรหัส QR',
+  'field.showQrAria': 'แสดง {label} เป็นรหัส QR',
+  'field.qrDialogTitle': 'รหัส QR',
+  'field.qrWarning': 'ใครก็ตามที่สแกนรหัสนี้สามารถดูค่าได้',
+  'field.qrCodeAlt': 'รหัส QR สำหรับ {label}',
+  'field.qrTooLong': 'ค่านี้ยาวเกินไปที่จะแสดงเป็นรหัส QR',
+  'field.errorGeneratingQr': 'สร้างรหัส QR ไม่สำเร็จ',
+  'field.revealValue': 'แสดง {label}',
+  'field.concealValue': 'ซ่อน {label}',
+  'field.moreActions': 'การดำเนินการเพิ่มเติมสำหรับ {label}',
+  'field.menuLabel': 'การดำเนินการของ {label}',
   'field.openLink': 'เปิดลิงก์',
   // one-time password countdown
   'totp.remaining': 'เหลืออีก {n} วินาที',
