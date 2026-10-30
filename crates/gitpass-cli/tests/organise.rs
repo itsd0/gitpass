@@ -255,7 +255,8 @@ fn move_item_across_vaults_preserves_history_and_attachments() {
     let out_hist2 = gp(&root, &["history", &id_to, "--vault", "Work", "--json"], None);
     assert!(out_hist2.status.success(), "stderr: {}", String::from_utf8_lossy(&out_hist2.stderr));
     let h2: Vec<serde_json::Value> = serde_json::from_str(&String::from_utf8_lossy(&out_hist2.stdout)).unwrap();
-    assert_eq!(h2.len(), 4, "history entries must be kept after move");
+    assert_eq!(h2.len(), 3, "history entries must be kept after move");
+    assert_eq!(h2.len(), h1.len(), "moved item must have identical history length to original");
 
     // 7. Attachments are preserved and accessible
     let out_att = gp(&root, &["attach", "ls", "Work", &id_to, "--json"], None);
