@@ -130,6 +130,18 @@ const devices: T.DeviceInfo[] = [
   { id: 'd2', name: 'Example Linux Desktop', lastSeen: '2026-10-20T10:00:00Z', revoked: false, current: false },
 ];
 
+/** Browser-mock copy of core `ItemRecord::rotation_status` (the real one runs in Rust). */
+function rotationFor(d: T.ItemDetail, now = Date.now()): T.RotationInfo | null {
+  const every = d.rotateEveryDays;
+  if (!every || d.category !== 'login' || d.archived || d.deletedAt || !d.passwordChangedAt) return null;
+  const changed = Date.parse(d.passwordChangedAt);
+  if (!Number.isFinite(changed)) return null;
+  const age = Math.max(0, now - changed);
+  if (age >= every * 86400000) return { state: 'due', everyDays: every, days: Math.floor(age / 86400000) };
+  const left = Math.ceil((every * 86400000 - age) / 86400000);
+  return left <= 14 ? { state: 'soon', everyDays: every, days: left } : null;
+}
+
 const summary = (d: T.ItemDetail): T.ItemSummary => {
   const { sections: _s, notes: _n, attachments: _a, history: _h, passwordStrength: _p, hasTotp: _t, findings: _fi, passwordChangedAt: _pca, ...s } = d;
   const flds = d.sections?.flatMap((sec) => sec.fields) ?? [];
@@ -513,6 +525,12 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   },
   update_item: ({ itemId, input }: { itemId: string; input: T.ItemInput }) => { const r = get(itemId); touch(r); applyInput(r, input); return delay(summary(r.detail)); },
   set_favorite: (a: { itemId: string; favorite: boolean }) => { get(a.itemId).detail.favorite = a.favorite; return delay(undefined); },
+  set_rotation: (a: { itemId: string; days: number | null }) => {
+    if (a.days !== null && ![30, 90, 180, 365].includes(a.days)) return Promise.reject(new Error('rotation must be one of 30, 90, 180 or 365 days'));
+    const d = get(a.itemId).detail;
+    d.rotateEveryDays = a.days; d.rotation = rotationFor(d);
+    return delay(undefined);
+  },
   archive_item: (a: { itemId: string; archived: boolean }) => { get(a.itemId).detail.archived = a.archived; return delay(undefined); },
   delete_item: (a: { itemId: string }) => { get(a.itemId).detail.deletedAt = new Date().toISOString(); return delay(undefined); },
   restore_item: (a: { itemId: string }) => { const d = get(a.itemId).detail; d.deletedAt = null; d.archived = false; return delay(undefined); },
@@ -822,6 +840,17 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     for (const u of unusedPool) checkOrIgnore(u.itemId, "unused", "Not used in a long time", activeUnusedIds);
     const activeUnused = unusedPool.filter((u) => activeUnusedIds.includes(u.itemId));
 
+    const rotationDue: T.RotationItem[] = [];
+    const rotationSoon: T.RotationItem[] = [];
+    for (const r of logins) {
+      const ro = rotationFor(r.detail);
+      if (!ro) continue;
+      const kind = ro.state === 'due' ? 'rotation_due' : 'rotation_soon';
+      const active: string[] = [];
+      checkOrIgnore(r.detail.id, kind, ro.state === 'due' ? 'Due for rotation' : 'Rotation due soon', active);
+      if (active.length) (ro.state === 'due' ? rotationDue : rotationSoon).push({ itemId: r.detail.id, everyDays: ro.everyDays, days: ro.days });
+    }
+
     const activeBreached: string[] = [];
     if (hibp && activeWeak.length > 0) {
       const candidate = activeWeak[0];
@@ -843,6 +872,8 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       duplicates,
       weakSshKeys: [],
       unused: activeUnused,
+      rotationDue,
+      rotationSoon,
       weakReasons: Object.fromEntries(activeWeak.map((id) => [id, "contains the username"])),
       ignored: ignoredList,
       checkedAt: new Date().toISOString(),

@@ -1226,6 +1226,8 @@ pub struct ExportRecord {
     pub created_at: Option<u64>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub password_history: Vec<crate::item::PasswordHistoryEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotate_every_days: Option<u32>,
 }
 fn is_login(c: &Category) -> bool { *c == Category::Login }
 fn is_false(b: &bool) -> bool { !*b }
@@ -1233,18 +1235,18 @@ impl From<&ItemRecord> for ExportRecord {
     fn from(r: &ItemRecord) -> Self {
         let sections = r.sections.iter().map(|s| Section { id: s.id.clone(), title: s.title.clone(), fields: s.fields.iter().filter(|f| !f.removed).cloned().collect() })
             .filter(|s| !s.fields.is_empty() || s.title.is_some()).collect();
-        ExportRecord { item: r.item.clone(), category: r.category, sections, tags: r.tags.clone(), favorite: r.favorite, archived: r.archived, created_at: r.created_at, password_history: r.password_history.clone() }
+        ExportRecord { item: r.item.clone(), category: r.category, sections, tags: r.tags.clone(), favorite: r.favorite, archived: r.archived, created_at: r.created_at, password_history: r.password_history.clone(), rotate_every_days: r.rotate_every_days }
     }
 }
 impl From<ExportRecord> for ItemRecord {
     fn from(e: ExportRecord) -> Self {
         let mut r = ItemRecord::new(e.item); r.category = e.category; r.sections = e.sections; r.tags = e.tags;
-        r.favorite = e.favorite; r.archived = e.archived; r.created_at = e.created_at;
+        r.favorite = e.favorite; r.archived = e.archived; r.created_at = e.created_at; r.rotate_every_days = e.rotate_every_days;
         r.password_history = e.password_history; r
     }
 }
 fn plain_item(it: &Item) -> ExportRecord {
-    ExportRecord { item: it.clone(), category: Category::Login, sections: vec![], tags: vec![], favorite: false, archived: false, created_at: None, password_history: vec![] }
+    ExportRecord { item: it.clone(), category: Category::Login, sections: vec![], tags: vec![], favorite: false, archived: false, created_at: None, password_history: vec![], rotate_every_days: None }
 }
 
 #[derive(Serialize, Deserialize)]

@@ -15,6 +15,7 @@ import { NotesEditorField } from './NotesEditorField';
 import { errText } from './actions';
 import { FIELD_TYPES } from './fieldTypes';
 import { insertAt, moveItem } from './editorMove';
+import { ROTATION_CHOICES } from './rotation';
 import { parseTotp, totpCode, totpRemaining } from './totpPreview';
 
 type Drag = { type: 'field'; si: number; fi: number } | { type: 'section'; si: number } | null;
@@ -55,6 +56,7 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
   const { setEditing, refreshItems } = useApp();
   const [draft, setDraft] = useState<ItemInput>(() => toInput(detail));
   const [tagText, setTagText] = useState(detail.tags.join(', '));
+  const [rotateEvery, setRotateEvery] = useState<number | null>(detail.rotateEveryDays ?? null);
   const [showPicker, setShowPicker] = useState(false);
   const [relatedMap, setRelatedMap] = useState<Map<string, { id: string; category?: ItemCategory; title: string; subtitle?: string | null }>>(() => {
     const m = new Map();
@@ -163,6 +165,7 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
     try {
       const input = normalizeInput({ ...draft, tags: tagText.split(',').map((t) => t.trim()).filter(Boolean) });
       await api.updateItem({ itemId: detail.id, input });
+      if (detail.category === 'login' && rotateEvery !== (detail.rotateEveryDays ?? null)) await api.setRotation({ vaultId: detail.vaultId, itemId: detail.id, days: rotateEvery });
       if (input.vaultId !== detail.vaultId) await api.moveItem({ vaultId: detail.vaultId, itemId: detail.id, toVaultId: input.vaultId }).catch(() => {});
       toast(t('editor.saved')); setEditing(false); refreshItems();
     } catch (e) { toast(errText(e), 'danger'); } finally { setBusy(false); }
@@ -188,6 +191,14 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
               {vaults.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
             </select>
           </label>
+          {detail.category === 'login' && (
+            <label className="block text-xs text-muted">{t('editor.rotateEvery')}
+              <select data-testid="rotate-every" className="mt-1 block h-8 w-full rounded-md border border-border bg-bg px-2 text-sm text-fg" value={rotateEvery ?? ''} onChange={(e) => setRotateEvery(e.target.value ? Number(e.target.value) : null)}>
+                <option value="">{t('editor.rotateNone')}</option>
+                {ROTATION_CHOICES.map((n) => <option key={n} value={n}>{t('editor.rotateChoice', { n })}</option>)}
+              </select>
+            </label>
+          )}
 
           {draft.sections.map((s, si) => {
             const secKey = `s:${si}`;

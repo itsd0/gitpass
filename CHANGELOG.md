@@ -1,5 +1,80 @@
 # Changelog
 
+## 0.6.7 — 2026-10-30
+
+### Fixes
+- The "What's new" sheet now shows 0.6.6 highlights (0.6.6 shipped with only the 0.6.5 entry and fell back to it), and
+  a desktop test fails CI when the app version has no What's new entry (#362).
+
+## 0.6.6 — 2026-10-30
+
+### Desktop
+- "What's new" release sheet shown once after an update (#347).
+- Compact/comfortable list density setting (#222); Text size setting with ⌘+ / ⌘− / ⌘0 (#312).
+- Collapse the sidebar to an icon rail instead of hiding it (#283); collapsible Vaults/Tags sidebar sections with
+  item counts (#284).
+- Right-click context menu on the item list (#334); command palette recent items and actions (#269).
+- Show as QR code for item detail fields (#348); scan a TOTP QR code from the screen, clipboard or a dropped image (#276).
+- Colour-coded revealed passwords (desktop and extension) (#342).
+- SSH Key item detail with key-type badge, fingerprint, Copy public key and Add to GitHub (#252); recent SSH agent
+  activity in Settings (#256).
+- Passkey item detail section (#260).
+- Item editor field-type menu, reorder, undo and TOTP preview (#265).
+- macOS menu bar icon with lock state, quick actions and a settings toggle (#224).
+- Date section headers for date sorts (#247), and search results without date section headers (#299).
+- Localized Watchtower page (#261).
+
+### Extension / host
+- Per-site Site settings panel in the popup (#349).
+- Popup Archive and Recently Deleted views with restore and unarchive (#338); Large type and Move to Recently Deleted
+  with Undo (#298).
+- Attachments in popup item detail and a paperclip in list rows (#304).
+- Browse popup items by tag (#321); filter chips replace the popup filter dropdown (#239); popup row quick
+  actions (#266).
+- Popup generator: Recent generated passwords (#230) and memorable-mode separator and capitalize options (#333).
+- Choose between several passkeys for a site (#251).
+- Website icons with monogram fallbacks (#214).
+- Opt-in submit after fill for logins (#235).
+- Open Watchtower, Settings and generator history in the app from the extension (#234).
+
+### CLI
+- Tag, favorite, archive, undelete and move items between vaults (#316).
+- Create identity, Wi-Fi and SSH key items (#324).
+- Copy a secret reference (`gp://vault/item/field`) and `gitpass ref` (CLI and desktop) (#327).
+- `gitpass run` resolves `gp://` references from the inherited environment (#264).
+- Sign Git commits and tags with an SSH key (CLI and desktop) (#272).
+
+### Core / cross-platform
+- Search query operators in core, desktop, CLI and extension (#306).
+- Bank Account and Server categories (#240).
+- API keys show their first 4 characters in masked form (#301).
+- Import password-protected Bitwarden JSON exports (#285) and `.1pif` export files (#343).
+- Watchtower flags unused items with Archive and Ignore actions (#302); RSA SSH keys (2048+ bits) and a
+  weak_ssh_key finding (#245).
+
+### Security
+- Throttle repeated failed master-password unlocks with an increasing delay (core, CLI, desktop, extension) (#282).
+- Caps Lock hint on master-password fields (#329).
+
+### Fixes
+- Passkeys created by gitpass can now be registered by sites; saved passkeys show in the popup site list (#273).
+- Settings/Watchtower scrolling, Recently deleted type filter, and popup All items scrolling and paging (#275).
+- Removed unused i18n keys, added the Burmese about.license string and a key parity test (#257).
+- Rewrote the stale Quick Access README and used the typed plugin-dialog import in AcceptShare (#274).
+
+### Docs
+- EXTENSION.md updated for new popup features and the content script split (#353); submit-after-fill and website
+  icons documented (#246).
+- SECURITY_MODEL.md threat model (#250).
+- Release-notes template, auto-notes config and labelling convention (#305).
+
+### Maintenance
+- Removed third-party trademark references (#300).
+- Split popup.js (#328), content.js (#344), SettingsPage.tsx (#317) and core audit.rs (#337) into smaller modules;
+  shared extension protocol logic between host and desktop (#297).
+- Faster Rust CI with caching, nextest and split jobs (#323); GitHub Actions bumped to Node 24 majors (#311);
+  cargo-machete guard and unused dependencies removed (#291); release runner cleanup (#310).
+
 ## 0.6.5 — 2026-10-29
 
 The v0.6.4 tag has no published build: its release build failed on a Tauri npm/Rust version mismatch. 0.6.5 is the

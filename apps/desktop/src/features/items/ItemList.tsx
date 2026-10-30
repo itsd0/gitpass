@@ -1,5 +1,6 @@
 import { useI18n, useT } from "../../i18n";
 import { getItemExpiry } from "./expiry";
+import { rotationLabel } from "./rotation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer, defaultRangeExtractor } from "@tanstack/react-virtual";
 import { ArrowDownUp, Check, ChevronDown, LayoutGrid, Star } from "lucide-react";
@@ -522,6 +523,29 @@ export function ItemList() {
                             }
                             className="shrink-0 text-[11px] px-1.5 py-0"
                             data-testid="expiry-pill"
+                            aria-label={label}
+                          >
+                            {label}
+                          </Badge>
+                        );
+                      })()}
+                      {(() => {
+                        const rotation = r.item.rotation;
+                        const label = rotationLabel(rotation, t);
+                        if (!rotation || !label) return null;
+                        if (compact) return (
+                          <span
+                            data-testid="rotation-dot"
+                            aria-label={label}
+                            title={label}
+                            className="h-2 w-2 shrink-0 rounded-full bg-accent"
+                          />
+                        );
+                        return (
+                          <Badge
+                            tone="accent"
+                            className="shrink-0 text-[11px] px-1.5 py-0"
+                            data-testid="rotation-pill"
                             aria-label={label}
                           >
                             {label}
