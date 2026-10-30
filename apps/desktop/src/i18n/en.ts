@@ -190,11 +190,13 @@ export const en = {
   "onb.repo.stillNot": "Still not connected.",
   'update.title': 'Updates', 'update.check': 'Check for updates', 'update.checking': 'Checking for updates…', 'update.none': "You're on the latest version.", 'update.available': 'Version {version} is available.', 'update.install': 'Install and restart', 'update.installing': 'Downloading update… {pct}', 'update.error': 'Update check failed: {msg}', 'update.unsupported': 'Updates are only available in the desktop app.',
   'about.version': 'Version', 'about.repo': 'Source code', 'about.issues': 'Report an issue', 'about.license': 'Open-source password manager built on git.',
+  'about.whatsNew': "What's new", 'about.whatsNewDesc': 'Highlights and features from recent updates', 'about.viewWhatsNew': "View what's new",
+  'whatsNew.title': "What's new in gitpass {version}", 'whatsNew.releaseNotes': 'View full release notes', 'whatsNew.showMe': 'Show me', 'whatsNew.gotIt': 'Got it', 'whatsNew.noHighlights': 'No highlights available for this version.',
   // palette
   'palette.placeholder': 'Search items or type a command…', 'palette.commands': 'Commands', 'palette.items': 'Items', 'palette.empty': 'No results for “{q}”',
   'palette.label': 'Command palette', 'palette.actions': 'Actions', 'palette.actionsFor': 'Actions for {title}', 'palette.openItem': 'Open item', 'palette.run': 'Run', 'palette.back': 'Back',
   'cmd.newItem': 'New item', 'cmd.lock': 'Lock gitpass', 'cmd.watchtower': 'Go to Watchtower', 'cmd.settings': 'Go to Settings', 'cmd.people': 'Go to People',
-  'cmd.toggleTheme': 'Toggle theme', 'cmd.sync': 'Sync now', 'cmd.shortcuts': 'Keyboard shortcuts', 'cmd.home': 'Go to Home',
+  'cmd.toggleTheme': 'Toggle theme', 'cmd.sync': 'Sync now', 'cmd.shortcuts': 'Keyboard shortcuts', 'cmd.home': 'Go to Home', 'cmd.whatsNew': "What's new",
   'cmd.showLargeType': 'Show password in large type',
   // large type view
   'largetype.action': 'Show in large type',

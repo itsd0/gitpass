@@ -225,6 +225,8 @@ pub struct Settings {
     #[serde(default = "default_true")] pub remember_generated_passwords: bool,
     /// Watchtower "Unused items" threshold in months: 6, 12 or 24; 0 turns the check off (default 12).
     #[serde(default = "default_unused_months")] pub watchtower_unused_months: u64,
+    /// Last seen app version for showing the "What's new" release sheet once per upgrade.
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub last_seen_version: Option<String>,
 }
 fn default_unused_months() -> u64 { 12 }
 impl Default for Settings {
@@ -236,7 +238,7 @@ impl Default for Settings {
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
             show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, remember_generated_passwords: true,
-            watchtower_unused_months: 12 }
+            watchtower_unused_months: 12, last_seen_version: None }
     }
 }
 

@@ -215,6 +215,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['version', 'build', 'license'],
   },
   {
+    id: 'setting-about-whats-new',
+    tab: 'about',
+    labelKey: 'about.whatsNew',
+    descriptionKey: 'about.whatsNewDesc',
+    keywords: ['what', 'new', 'release', 'notes', 'changelog', 'highlights', 'updates'],
+  },
+  {
     id: 'setting-about-updates',
     tab: 'about',
     labelKey: 'update.title',

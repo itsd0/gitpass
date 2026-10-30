@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { useT } from '../../../i18n';
+import { Button } from '../../../ui';
+import { useApp } from '../../../lib/store';
 import { UpdateRow } from '../UpdateRow';
 import { getAppVersion } from '../../../lib/updater';
 import { SettingsSection, SettingsRow } from '../SettingsSection';
@@ -40,6 +42,20 @@ export function AboutTab({ highlightedId }: { highlightedId?: string | null }) {
           description={t('about.license')}
         >
           <span className="font-mono text-sm">{ver}</span>
+        </SettingsRow>
+        <SettingsRow
+          id="setting-about-whats-new"
+          highlighted={highlightedId === 'setting-about-whats-new'}
+          label={t('about.whatsNew')}
+          description={t('about.whatsNewDesc')}
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => useApp.getState().openModal('whats-new', { version: ver })}
+          >
+            {t('about.viewWhatsNew')}
+          </Button>
         </SettingsRow>
         <div
           id="setting-about-updates"
