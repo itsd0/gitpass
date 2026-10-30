@@ -12,14 +12,16 @@ fn generate_words_separator_capitalize_and_rejection() {
     let words: Vec<&str> = p.split('_').collect();
     assert_eq!(words.len(), 5);
     assert!(words.iter().all(|w| w.chars().next().unwrap().is_ascii_uppercase()
-        && w[1..].chars().all(|c| c.is_ascii_lowercase())), "{p}");
+        && w[1..].chars().all(|c| c.is_ascii_lowercase() || c == '-')), "{p}");
     let spaced = gen_pw(Mode::Words, 4, true, false, Some(' '), None).unwrap();
     assert_eq!(spaced.split(' ').count(), 4);
     // Omitted values keep the historical defaults: '-' with symbols, '.' without, no capitalization.
-    assert_eq!(gen_pw(Mode::Words, 3, true, false, None, None).unwrap().split('-').count(), 3);
+    // The `-` default is counted with passphrase_word_count: four EFF words contain a hyphen,
+    // so splitting on `-` is not a word count.
+    assert_eq!(gitpass_core::generate::passphrase_word_count(&gen_pw(Mode::Words, 3, true, false, None, None).unwrap()), Some(3));
     let dotted = gen_pw(Mode::Words, 3, false, false, None, None).unwrap();
     assert_eq!(dotted.split('.').count(), 3);
-    assert!(dotted.chars().all(|c| c.is_ascii_lowercase() || c == '.'));
+    assert!(dotted.chars().all(|c| c.is_ascii_lowercase() || c == '.' || c == '-'));
     // Anything outside the offered separators is a bad request.
     assert!(gen_pw(Mode::Words, 3, true, false, Some('!'), None).is_err());
     assert!(gen_pw(Mode::Words, 3, true, false, Some('/'), None).is_err());
@@ -34,7 +36,9 @@ fn tools_generate_strength_watchtower_hibp() {
     assert_eq!(p.len(), 24);
     assert!(p.chars().any(|c| c.is_ascii_digit()) && p.chars().any(|c| "!@#$%^&*-_=+?".contains(c)));
     assert!(gen_pw(Mode::Random, 20, false, false, None, None).unwrap().chars().all(|c| c.is_ascii_alphabetic()));
-    assert_eq!(gen_pw(Mode::Words, 5, true, false, None, None).unwrap().split('-').count(), 5);
+    // `.` counts words exactly. A `-` join cannot be counted by splitting, because four
+    // EFF words themselves contain a hyphen.
+    assert_eq!(gen_pw(Mode::Words, 5, true, false, Some('.'), None).unwrap().split('.').count(), 5);
     let pin = gen_pw(Mode::Pin, 6, false, false, None, None).unwrap();
     assert_eq!(pin.len(), 6);
     assert!(pin.chars().all(|c| c.is_ascii_digit()));
@@ -47,6 +51,14 @@ fn tools_generate_strength_watchtower_hibp() {
     assert!(e.app.password_strength("password") <= 10);
     assert!(e.app.password_strength(&p) >= 90);
     assert_eq!(e.app.password_strength(""), 0);
+    // 5 EFF words: 5 * log2(7776) bits, scaled to 0-100 over 128 bits, rounds to 50.
+    // Character-pool entropy of the same string would score much higher.
+    let phrase = "abacus.abdomen.abdominal.abide.ability";
+    let bits = 5.0 * (7776f64).log2();
+    let expect = (bits * 100.0 / 128.0).round() as u8;
+    assert_eq!(expect, 50);
+    assert_eq!(e.app.password_strength(phrase), expect, "{phrase}");
+    assert_eq!(e.app.password_strength("drop-down-abacus-abdomen"), (3.0 * (7776f64).log2() * 100.0 / 128.0).round() as u8);
     let a = login(&e, "Weak1", "a", "password");
     let b = login(&e, "Weak2", "b", "password");
     let _c = login(&e, "Strong", "c", &p);

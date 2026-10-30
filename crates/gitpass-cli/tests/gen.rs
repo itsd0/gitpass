@@ -56,19 +56,24 @@ fn character_mode_toggles() {
 
 #[test]
 fn passphrase_mode_uses_the_shared_wordlist() {
-    let pw = out(&gp(&["gen", "--words", "5"]));
-    let words: Vec<&str> = pw.split('-').collect();
+    // Exact word counts use `.`. A `-` join cannot be counted by splitting, because
+    // four EFF words themselves contain a hyphen (for example `drop-down`).
+    let pw = out(&gp(&["gen", "--words", "5", "--separator", "."]));
+    let words: Vec<&str> = pw.split('.').collect();
     assert_eq!(words.len(), 5, "{pw}");
     let mut with_digit = 0;
     for w in &words {
-        let alpha: String = w.chars().take_while(|c| c.is_ascii_alphabetic()).collect();
-        assert!(WORDLIST.contains(&alpha.as_str()), "{w}");
+        let alpha = w.trim_end_matches(|c: char| c.is_ascii_digit());
+        assert!(WORDLIST.contains(&alpha), "{w}");
         if alpha.len() < w.len() {
             assert!(w[alpha.len()..].chars().all(|c| c.is_ascii_digit()), "{w}");
             with_digit += 1;
         }
     }
     assert_eq!(with_digit, 1, "one word carries the digit by default: {pw}");
+    let dashed = out(&gp(&["gen", "--words", "5"]));
+    assert_eq!(gitpass_core::generate::passphrase_word_count(&dashed), Some(5), "{dashed}");
+    assert!(dashed.contains('-'), "{dashed}");
 
     let titled = out(&gp(&["gen", "--words", "4", "--no-digits", "--separator", ".", "--capitalize"]));
     let words: Vec<&str> = titled.split('.').collect();
@@ -129,6 +134,8 @@ fn help_lists_the_new_flags() {
     for flag in ["--words", "--pin", "--separator", "--capitalize", "--no-symbols", "--no-digits", "--copy", "--clear-secs"] {
         assert!(help.contains(flag), "help misses {flag}:\n{help}");
     }
+    assert!(help.contains("7,776"), "help should name the EFF list size:\n{help}");
+    assert!(help.contains("12.9"), "help should state per-word entropy:\n{help}");
 }
 
 #[test]

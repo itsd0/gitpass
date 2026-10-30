@@ -602,7 +602,7 @@ async function openGenerator(opts) {
     for (const ch of pw) code.append(el('span', /[0-9]/.test(ch) ? 'num' : /[^a-zA-Z0-9]/.test(ch) ? 'sym' : null, ch));
   }
   function paintStrength() {
-    const score = strengthScore(pw);
+    const score = strengthScore(pw, st.mode === 'memorable' ? st.length : undefined);
     const key = strengthKey(score);
     meterFill.className = 'gen-strength-fill ' + key;
     meterFill.style.width = score + '%';

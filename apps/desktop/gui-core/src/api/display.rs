@@ -12,9 +12,11 @@ pub(crate) fn ts(secs_str: &str) -> String { secs_str.trim().parse::<i64>().map(
 pub(crate) fn nonempty(o: Option<String>) -> Option<String> { o.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) }
 
 /// 0-100 from the core entropy estimate (common passwords / few distinct chars capped at 10).
+/// A passphrase of EFF wordlist words scores `log2(7776)` per word. The character-pool
+/// estimate would overstate how random those words are.
 pub fn strength(pw: &str) -> u8 {
     if pw.is_empty() { return 0; }
-    let bits = audit::entropy_bits(pw);
+    let bits = gitpass_core::generate::passphrase_entropy(pw).unwrap_or_else(|| audit::entropy_bits(pw));
     let mut s = (bits * 100.0 / 128.0).round().clamp(0.0, 100.0) as u8;
     if let Some(r) = audit::weakness(pw, &AuditOpts { min_length: 1, min_entropy_bits: 0.0, ..Default::default() }) { let _ = r; s = s.min(10); }
     s
