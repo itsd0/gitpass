@@ -1,6 +1,6 @@
 /* global chrome, GitpassI18n, GitpassPopupIcons, GitpassView, GitpassNewItem */
 'use strict';
-// gitpass popup v0.6: 1Password-style 2-pane UI. All host calls go through background.js as `popup:*` messages.
+// gitpass popup v0.6: 2-pane UI. All host calls go through background.js as `popup:*` messages.
 const $ = (id) => document.getElementById(id);
 const t = (k, f, subs) => GitpassI18n.t(k, f, subs);
 const V = typeof GitpassView !== 'undefined' ? GitpassView : (typeof require !== 'undefined' ? require('./view.js') : null);
@@ -11,6 +11,7 @@ const ROW_H = 52;
 const G = typeof GitpassGenerator !== 'undefined' ? GitpassGenerator : (typeof require !== 'undefined' ? require('./generator.js') : null);
 const GEN_MODES = G.MODES;
 const GEN_DEFAULTS = G.DEFAULTS;
+const WORD_SEPARATORS = G.WORD_SEPARATORS;
 const genMode = G.mode;
 const clampGenLength = G.clampLength;
 const safeGenSettings = G.safeSettings;
@@ -421,16 +422,22 @@ async function loadData() {
   let vaults = { vaults: [] };
   let all = null;
   let match = { items: [], origin: null };
+  let archivedRes = { items: [] };
+  let deletedRes = { items: [] };
 
   try {
     const results = await Promise.all([
       send({ type: 'popup:list_vaults' }).catch(() => ({ vaults: [] })),
       listAllItems(),
       send({ type: 'popup:match_active' }).catch(() => ({ items: [], origin: null })),
+      send({ type: 'popup:list_archived' }).catch(() => ({ items: [] })),
+      send({ type: 'popup:list_deleted' }).catch(() => ({ items: [] })),
     ]);
     vaults = results[0];
     all = results[1];
     match = results[2];
+    archivedRes = results[3];
+    deletedRes = results[4];
   } catch (err) {
     listError = err;
   } finally {
@@ -457,6 +464,8 @@ async function loadData() {
   S.all = (all && all.items) || [];
   S.suggested = (match && match.items) || [];
   S.origin = (match && match.origin) || null;
+  S.archived = (archivedRes && archivedRes.items) || [];
+  S.deleted = (deletedRes && deletedRes.items) || [];
   await refreshNeverSave();
   await loadSort();
   renderSort();
@@ -482,10 +491,19 @@ function closeVaultMenu() {
   const chip = document.querySelector('#filterChips [data-filter-id="vaults"]');
   if (chip) chip.setAttribute('aria-expanded', 'false');
 }
+let tagMenuOpen = false;
+function closeTagMenu() {
+  tagMenuOpen = false;
+  const m = $('tagMenu');
+  if (m) { m.classList.add('hidden'); m.textContent = ''; }
+  const chip = document.querySelector('#filterChips [data-filter-id="tags"]');
+  if (chip) chip.setAttribute('aria-expanded', 'false');
+}
 document.addEventListener('click', (e) => {
-  if (!vaultMenuOpen) return;
+  if (!vaultMenuOpen && !tagMenuOpen) return;
   if (e.target && e.target.closest && e.target.closest('.filter-chips-row')) return;
-  closeVaultMenu();
+  if (vaultMenuOpen) closeVaultMenu();
+  if (tagMenuOpen) closeTagMenu();
 });
 function renderFilter() {
   const wrap = $('filterChips'); if (!wrap) return;
@@ -494,12 +512,20 @@ function renderFilter() {
   const focusId = hadChipFocus ? prev.dataset.filterId : null;
   wrap.textContent = '';
   closeVaultMenu();
-  const chips = V.buildFilterChips(S.all, S.vaults, { origin: S.origin, currentFilter: S.filter });
+  closeTagMenu();
+  const chips = V.buildFilterChips(S.all, S.vaults, {
+    origin: S.origin,
+    currentFilter: S.filter,
+    archived: S.archived,
+    deleted: S.deleted,
+    archiveCount: (S.archived || []).length,
+    deletedCount: (S.deleted || []).length,
+  });
   const setRoving = (focused) => {
     for (const c of wrap.querySelectorAll('.filter-chip')) c.tabIndex = c === focused ? 0 : -1;
   };
   for (const f of chips) {
-    const active = f.kind === 'vaults' ? S.filter.startsWith('vault:') : S.filter === f.id;
+    const active = f.kind === 'vaults' ? S.filter.startsWith('vault:') : f.kind === 'tags' ? S.filter.startsWith('tag:') : S.filter === f.id;
     const b = el('button', 'filter-chip'); b.type = 'button';
     b.dataset.filterId = f.id;
     b.setAttribute('role', 'tab');
@@ -514,8 +540,20 @@ function renderFilter() {
       b.textContent = t(f.key, f.label) + ' ▾';
       b.setAttribute('aria-haspopup', 'menu');
       b.setAttribute('aria-expanded', 'false');
+    } else if (f.kind === 'tags') {
+      b.textContent = t(f.key, f.label) + ' ▾';
+      b.setAttribute('aria-haspopup', 'menu');
+      b.setAttribute('aria-expanded', 'false');
+    } else if (f.kind === 'tag') {
+      b.textContent = f.label + ' ×';
+      b.title = t('clearTag', 'Clear tag filter');
+      b.setAttribute('aria-label', t('clearTag', 'Clear tag filter'));
     } else {
-      b.textContent = f.key ? t(f.key, f.label) : f.label;
+      let label = f.key ? t(f.key, f.label) : f.label;
+      if (typeof f.count === 'number' && (f.id === 'archive' || f.id === 'deleted')) {
+        label += ' (' + f.count + ')';
+      }
+      b.textContent = label;
     }
     b.onclick = () => {
       if (f.kind === 'vaults') {
@@ -535,6 +573,51 @@ function renderFilter() {
         } else { m.classList.add('hidden'); }
         return;
       }
+      if (f.kind === 'tags') {
+        tagMenuOpen = !tagMenuOpen;
+        b.setAttribute('aria-expanded', tagMenuOpen ? 'true' : 'false');
+        const m = $('tagMenu'); m.textContent = '';
+        if (tagMenuOpen) {
+          const input = el('input'); input.type = 'search'; input.className = 'tag-filter-input';
+          input.placeholder = t('filterTagsPh', 'Filter tags…');
+          input.setAttribute('aria-label', t('filterTagsPh', 'Filter tags…'));
+          const list = el('div', 'tag-list');
+          const renderTagList = () => {
+            list.textContent = '';
+            const q = input.value.trim().toLowerCase();
+            const shown = (f.tags || []).filter((tg) => !q || tg.tag.toLowerCase().includes(q));
+            if (!shown.length) { list.append(el('div', 'tag-empty', t('noItems', 'No items'))); return; }
+            for (const tg of shown) {
+              const item = el('button', null, tg.tag + ' (' + tg.count + ')'); item.type = 'button';
+              item.setAttribute('role', 'menuitem');
+              item.setAttribute('aria-selected', S.filter === 'tag:' + tg.tag ? 'true' : 'false');
+              item.onclick = (ev) => { ev.stopPropagation(); S.filter = 'tag:' + tg.tag; renderFilter(); applyFilter(true); const tc = document.querySelector('#filterChips [data-filter-id="tags"]'); if (tc) tc.focus(); };
+              item.onkeydown = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeTagMenu(); const tc = document.querySelector('#filterChips [data-filter-id="tags"]'); if (tc) tc.focus(); } };
+              list.append(item);
+            }
+          };
+          input.oninput = renderTagList;
+          input.onkeydown = (ev) => {
+            if (ev.key === 'Escape') { ev.stopPropagation(); closeTagMenu(); b.focus(); }
+            else if (ev.key === 'Enter') {
+              const first = list.querySelector('button');
+              if (first) { ev.preventDefault(); first.click(); }
+            } else if (ev.key === 'ArrowDown') {
+              const first = list.querySelector('button');
+              if (first) { ev.preventDefault(); first.focus(); }
+            }
+          };
+          renderTagList();
+          m.append(input, list);
+          m.classList.remove('hidden');
+          input.focus();
+        } else { m.classList.add('hidden'); }
+        return;
+      }
+      if (f.kind === 'tag') {
+        S.filter = 'all'; renderFilter(); applyFilter(true);
+        return;
+      }
       S.filter = f.id; renderFilter(); applyFilter(true);
     };
     b.onkeydown = (e) => {
@@ -543,8 +626,8 @@ function renderFilter() {
         const all = [...wrap.querySelectorAll('.filter-chip')];
         const next = all[V.chipNavIndex(all.indexOf(b), e.key, all.length)];
         if (next) { setRoving(next); next.focus(); }
-      } else if (e.key === 'Escape' && vaultMenuOpen) {
-        e.stopPropagation(); closeVaultMenu(); b.focus();
+      } else if (e.key === 'Escape' && (vaultMenuOpen || tagMenuOpen)) {
+        e.stopPropagation(); if (vaultMenuOpen) closeVaultMenu(); if (tagMenuOpen) closeTagMenu(); b.focus();
       }
     };
     wrap.append(b);
@@ -712,14 +795,14 @@ function renderRecent() {
       const idx = S.rows.findIndex((r) => r.id === it.id);
       if (idx >= 0) select(idx);
     };
-    row.ondblclick = () => openAndFill();
+    row.ondblclick = () => { if (!it.deleted_at) openAndFill(); };
     rList.append(row);
   }
 }
 
 function applyFilter(selectFirst) {
   const prevId = S.rows[S.sel] && S.rows[S.sel].id;
-  S.rows = V.filterItems(S.all, S.suggested, S.filter, S.query, S.sort);
+  S.rows = V.filterItems(S.all, S.suggested, S.filter, S.query, S.sort, { archived: S.archived, deleted: S.deleted });
   let idx = prevId ? S.rows.findIndex((r) => r.id === prevId) : -1;
   if (idx < 0 && (selectFirst || prevId)) idx = S.rows.length ? 0 : -1;
   $('list').scrollTop = 0;
@@ -801,9 +884,19 @@ function renderList() {
     if (S.query) tDiv.append(renderHighlight(it.title, S.query));
     else tDiv.textContent = it.title;
     const uDiv = el('div', 'u');
-    const uText = V.rowSubtitle(it, S.query);
-    if (S.query && uText && uText !== '—') uDiv.append(renderHighlight(uText, S.query));
-    else uDiv.textContent = uText || '—';
+    if (it.deleted_at) {
+      const trashSub = V.formatTrashSubtitle(it.deleted_at, Date.now(), t);
+      if (trashSub) {
+        uDiv.textContent = trashSub.text;
+        if (trashSub.danger) uDiv.classList.add('text-danger');
+      } else {
+        uDiv.textContent = '—';
+      }
+    } else {
+      const uText = V.rowSubtitle(it, S.query);
+      if (S.query && uText && uText !== '—') uDiv.append(renderHighlight(uText, S.query));
+      else uDiv.textContent = uText || '—';
+    }
     meta.append(tDiv, uDiv);
     row.append(ic, meta);
     if (it.favorite) { const f = el('span', 'fav'); f.innerHTML = UI.star; row.append(f); }
@@ -834,13 +927,15 @@ function renderList() {
 function renderEmpty(inner) {
   const st = V.emptyState({ query: S.query, filter: S.filter, origin: S.origin, count: S.all.length, excepted: isSiteExcepted() });
   const box = el('div', 'empty');
-  const ic = st.kind === 'search' ? UI.search : st.kind === 'site' ? categoryIcon('login', 36) : st.kind === 'nofill' ? UI.external : st.kind === 'vault' ? UI.plus : null;
+  const ic = st.kind === 'search' ? UI.search : st.kind === 'site' ? categoryIcon('login', 36) : st.kind === 'nofill' ? UI.external : st.kind === 'vault' ? UI.plus : st.kind === 'archive' ? UI.archive : st.kind === 'deleted' ? UI.trash : null;
   if (ic) { const w = el('span', 'empty-ic'); w.innerHTML = ic; box.append(w); }
   const msg = {
     search: () => t('noResults', 'No items found'),
     site: () => t('noMatches', 'No saved logins for this site'),
     nofill: () => t('notFillable', 'Open an https page to fill'),
     vault: () => t('emptyVaultTitle', 'Your vault is empty'),
+    archive: () => t('emptyArchiveTitle', 'Nothing archived'),
+    deleted: () => t('emptyTrashTitle', 'Recently Deleted is empty'),
     none: () => t('noItems', 'No items'),
   }[st.kind]();
   box.append(el('p', null, msg));
@@ -863,6 +958,8 @@ function renderEmpty(inner) {
     }
   }
   if (st.kind === 'vault') box.append(el('p', 'empty-sub', t('emptyVaultBody', 'Items you add will appear here.')));
+  if (st.kind === 'archive') box.append(el('p', 'empty-sub', t('emptyArchiveBody', 'Items you archive will appear here.')));
+  if (st.kind === 'deleted') box.append(el('p', 'empty-sub', t('emptyTrashBody', 'Items you delete stay here for 30 days.')));
   const acts = el('div', 'empty-actions');
   const btn = (cls, label, fn) => { const b = el('button', cls, label); b.type = 'button'; b.onclick = fn; acts.append(b); };
   if (st.kind === 'search') btn('btn btn-primary', t('emptyCreateNamed', 'Create item named “$1”', [st.query]), () => openNewItem('login', { title: st.query }));
@@ -1026,7 +1123,7 @@ async function select(idx) {
       : Promise.resolve({ kinds: [] });
 
     const [res, findingsRes] = await Promise.all([
-      send({ type: 'popup:get_item', item_id: it.id }),
+      send({ type: 'popup:get_item', item_id: it.id, include_deleted: Boolean(it.deleted_at) }),
       findingsPromise,
     ]);
     d = res.item;
@@ -1059,6 +1156,20 @@ function renderDetail(d) {
   const g = el('div', 'grow'); g.append(el('h2', null, d.title), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
   head.append(ic, g, moreMenu(d));
   pane.append(head);
+
+  if (d.deleted_at) {
+    const banner = el('div', 'trash-banner');
+    const bannerMsg = el('div', null, t('inTrash', 'This item is in Recently Deleted.'));
+    const trashSub = V.formatTrashSubtitle(d.deleted_at, Date.now(), t);
+    const bannerSub = el('div', 'trash-sub' + (trashSub && trashSub.danger ? ' danger' : ''), trashSub ? trashSub.text : '');
+    banner.append(bannerMsg, bannerSub);
+    pane.append(banner);
+  } else if (d.archived) {
+    const banner = el('div', 'trash-banner');
+    const bannerMsg = el('div', null, t('inArchive', 'This item is archived.'));
+    banner.append(bannerMsg);
+    pane.append(banner);
+  }
 
   if (d.category === 'login' && V.hasWatchtowerFindings(d.findings)) {
     const strip = el('div', 'warning-strip');
@@ -1113,7 +1224,19 @@ function renderDetail(d) {
     pane.append(strip);
   }
   const acts = el('div', 'd-actions');
-  if (V.fillKind(d.category)) {
+  if (d.deleted_at) {
+    const restoreBtn = el('button', 'btn btn-primary', t('restore', 'Restore'));
+    restoreBtn.type = 'button';
+    restoreBtn.onclick = () => restoreItem(d);
+    acts.append(restoreBtn);
+  } else {
+    if (d.archived) {
+      const unarchiveBtn = el('button', 'btn btn-primary', t('unarchive', 'Unarchive'));
+      unarchiveBtn.type = 'button';
+      unarchiveBtn.onclick = () => unarchiveItem(d);
+      acts.append(unarchiveBtn);
+    }
+    if (V.fillKind(d.category)) {
     const fillLabel = d.category === 'login' && d.url ? t('openFill', 'Open & Fill') : t('fill', 'Fill');
     const b = el('button', 'btn btn-primary', fillLabel);
     b.onclick = async () => {
@@ -1140,12 +1263,23 @@ function renderDetail(d) {
     edit.onclick = () => startEdit();
     acts.append(edit);
   }
+  }
   if (acts.children.length) pane.append(acts);
   const box = el('div', 'fields');
   for (const f of d.fields || []) box.append(fieldRow(d, f));
   if (box.children.length) pane.append(box);
   if (d.notes) pane.append(el('div', 'notes', d.notes));
-  if (d.tags && d.tags.length) { const tg = el('div', 'tags'); for (const x of d.tags) tg.append(el('span', 'tag', x)); pane.append(tg); }
+  if (d.tags && d.tags.length) {
+    const tg = el('div', 'tags');
+    for (const x of d.tags) {
+      const pill = el('button', 'tag', x); pill.type = 'button';
+      pill.title = t('filterByTag', 'Show items with this tag');
+      pill.setAttribute('aria-label', t('filterByTag', 'Show items with this tag') + ': ' + x);
+      pill.onclick = () => { S.filter = 'tag:' + x; renderFilter(); applyFilter(true); };
+      tg.append(pill);
+    }
+    pane.append(tg);
+  }
   if (d.updated_at) pane.append(el('div', 'meta-line', t('lastEdited', 'Last edited') + ' ' + new Date(d.updated_at).toLocaleString()));
 }
 
@@ -1363,7 +1497,7 @@ function fieldRow(d, f) {
     lt.setAttribute('aria-label', label);
     acts.append(lt);
   }
-  acts.append(iconBtn(UI.copy, t('copy', 'Copy'), async (b) => {
+  const copyBtn = iconBtn(UI.copy, t('copy', 'Copy'), async (b) => {
     if (b.disabled) return;
     b.disabled = true;
     const prevHtml = b.innerHTML;
@@ -1377,7 +1511,12 @@ function fieldRow(d, f) {
       b.innerHTML = prevHtml;
       b.disabled = false;
     }
-  }));
+  });
+  if (d.deleted_at) {
+    copyBtn.disabled = true;
+    copyBtn.title = t('inTrash', 'This item is in Recently Deleted.');
+  }
+  acts.append(copyBtn);
   return row;
 }
 
@@ -1505,6 +1644,70 @@ function openLargeTypeForSelected() {
   return openLargeType(d, f, trigger);
 }
 
+
+async function restoreItem(d) {
+  const idx = Math.max(0, S.sel);
+  await send({ type: 'popup:restore_item', item_id: d.id });
+  delete S.findingsCache[d.id];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  await loadData();
+  if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('itemRestored', 'Item restored'), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:trash_item', item_id: d.id });
+    toast(t('movedToTrash', 'Moved to Recently Deleted'));
+    S.findingsCache = {};
+    await loadData();
+    const i = S.rows.findIndex((r) => r.id === d.id);
+    if (i >= 0) await select(i);
+  });
+}
+
+async function archiveItem(d) {
+  const idx = Math.max(0, S.sel);
+  await send({ type: 'popup:archive_item', item_id: d.id, archived: true });
+  delete S.findingsCache[d.id];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  await loadData();
+  if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('itemArchived', 'Item archived'), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:unarchive_item', item_id: d.id });
+    toast(t('itemUnarchived', 'Item unarchived'));
+    S.findingsCache = {};
+    await loadData();
+    const i = S.rows.findIndex((r) => r.id === d.id);
+    if (i >= 0) await select(i);
+  });
+}
+
+async function unarchiveItem(d) {
+  const idx = Math.max(0, S.sel);
+  await send({ type: 'popup:unarchive_item', item_id: d.id });
+  delete S.findingsCache[d.id];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  await loadData();
+  if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('itemUnarchived', 'Item unarchived'), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:archive_item', item_id: d.id, archived: true });
+    toast(t('itemArchived', 'Item archived'));
+    S.findingsCache = {};
+    await loadData();
+    const i = S.rows.findIndex((r) => r.id === d.id);
+    if (i >= 0) await select(i);
+  });
+}
+
 async function trashItem(d) {
   const idx = Math.max(0, S.sel);
   await send({ type: 'popup:trash_item', item_id: d.id });
@@ -1562,7 +1765,16 @@ function moreMenu(d) {
   const sep = el('div', 'menu-sep');
   sep.setAttribute('role', 'separator');
   m.append(sep);
-  item(UI.trash, t('moveToTrash', 'Move to Recently Deleted'), () => trashItem(d), { danger: true });
+  if (d.deleted_at) {
+    item(UI.restore, t('restore', 'Restore'), () => restoreItem(d));
+  } else {
+    if (d.archived) {
+      item(UI.archive, t('unarchive', 'Unarchive'), () => unarchiveItem(d));
+    } else {
+      item(UI.archive, t('archive', 'Archive'), () => archiveItem(d));
+    }
+    item(UI.trash, t('moveToTrash', 'Move to Recently Deleted'), () => trashItem(d), { danger: true });
+  }
   const trigger = iconBtn(UI.more, t('more', 'More'), () => (m.classList.contains('hidden') ? openMenu() : closeMenu()));
   trigger.setAttribute('aria-haspopup', 'menu');
   trigger.setAttribute('aria-expanded', 'false');
@@ -1583,13 +1795,13 @@ function moreMenu(d) {
 }
 
 async function openAndFill() {
-  const d = S.detail; if (!d) return;
+  const d = S.detail; if (!d || d.deleted_at) return;
   const kind = V.fillKind(d.category); if (!kind) return;
   await send({ type: 'popup:open_fill', item_id: d.id, kind, url: d.url || null }).then(() => window.close(), showErr);
 }
 
 async function copyPrimary() {
-  const d = S.detail; const f = V.primarySecretField(d); if (!f) return;
+  const d = S.detail; if (!d || d.deleted_at) return; const f = V.primarySecretField(d); if (!f) return;
   await copy(await secretValue(d, f), f.kind === 'password' ? t('passwordCopied', 'Password copied') : t('copied', 'Copied'));
 }
 
@@ -1723,6 +1935,7 @@ function openShortcuts() {
     { keys: [`${cmd}${alt}L`], label: t('shortcutLargeType', 'Show in large type') },
     { keys: [`${cmd}${shift}C`], label: t('shortcutCopyTotp', 'Copy one-time code (TOTP)') },
     { keys: [`${cmd}${shift}U`], label: t('shortcutCopyUser', 'Copy username') },
+    { keys: [`${cmd}${alt}R`], label: t('shortcutRestore', 'Restore item') },
     { keys: [`${cmd}O`], label: t('shortcutOpenUrl', 'Open website') },
     { keys: [`${cmd}E`], label: t('shortcutEdit', 'Edit login') },
     { keys: [`${cmd}${shift}G`], label: t('shortcutGen', 'Password generator') },
@@ -1753,6 +1966,8 @@ async function generate(len, digits, symbols, extra) {
   const msg = { type: 'popup:generate', len, digits, symbols };
   if (extra && extra.words) msg.words = true;
   if (extra && extra.pin) msg.pin = true;
+  if (extra && extra.separator != null) msg.separator = extra.separator;
+  if (extra && extra.capitalize != null) msg.capitalize = !!extra.capitalize;
   return (await send(msg)).password;
 }
 
@@ -1814,6 +2029,34 @@ async function openGenerator(opts) {
   const togSymbols = mkTog('genIncludeSymbols', 'Include symbols');
   p.append(rowTog);
 
+  const rowSep = el('div', 'gen-row gen-sep-row');
+  const sepLab = el('span', 'gen-sep-lab', t('genSeparator', 'Separator'));
+  const sepGroup = el('div', 'gen-seps');
+  sepGroup.setAttribute('role', 'radiogroup');
+  sepGroup.setAttribute('aria-label', t('genSeparator', 'Separator'));
+  const sepBtns = {};
+  for (const sep of WORD_SEPARATORS) {
+    const b = el('button', 'gen-sep', sep === ' ' ? '␣' : sep);
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('data-sep', sep);
+    b.setAttribute('aria-label', sep === ' ' ? t('genSeparatorSpace', 'Space') : sep);
+    b.onclick = () => setSeparator(sep);
+    b.onkeydown = onSepKeyDown;
+    sepGroup.append(b);
+    sepBtns[sep] = b;
+  }
+  sepGroup.onkeydown = onSepKeyDown;
+  rowSep.append(sepLab, sepGroup);
+  p.append(rowSep);
+
+  const rowCap = el('div', 'gen-row gen-toggles gen-cap-row');
+  const lCap = el('label', 'tog');
+  const togCap = Object.assign(el('input'), { type: 'checkbox' });
+  lCap.append(togCap, el('span', null, t('genCapitalize', 'Capitalize')));
+  rowCap.append(lCap);
+  p.append(rowCap);
+
   const acts = el('div', 'gen-acts');
   const fillBtn = el('button', 'btn hidden', t('fillTitle', 'Fill on this page')); fillBtn.type = 'button';
   const saveBtn = el('button', 'btn btn-link', t('genSaveAsLogin', 'Save as new Login…')); saveBtn.type = 'button';
@@ -1867,6 +2110,33 @@ async function openGenerator(opts) {
     lenLab.textContent = label();
     rowTog.classList.toggle('hidden', st.mode === 'pin');
     togDigits.checked = st.digits; togSymbols.checked = st.symbols;
+    const isMem = st.mode === 'memorable';
+    rowSep.classList.toggle('hidden', !isMem);
+    rowCap.classList.toggle('hidden', !isMem);
+    for (const sep of WORD_SEPARATORS) {
+      const on = sep === st.separator;
+      const b = sepBtns[sep];
+      b.classList.toggle('sel', on);
+      b.setAttribute('aria-checked', String(on));
+      b.tabIndex = on ? 0 : -1;
+    }
+    togCap.checked = !!st.capitalize;
+  }
+  function onSepKeyDown(e) {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+    const idx = WORD_SEPARATORS.indexOf(st.separator);
+    const next = WORD_SEPARATORS[(idx + dir + WORD_SEPARATORS.length) % WORD_SEPARATORS.length];
+    setSeparator(next);
+    if (sepBtns[next] && typeof sepBtns[next].focus === 'function') sepBtns[next].focus();
+  }
+  function setSeparator(sep) {
+    if (!WORD_SEPARATORS.includes(sep)) return;
+    st.separator = sep;
+    syncControls();
+    persist();
+    void run();
   }
   function setMode(m) {
     st.mode = genMode(m);
@@ -1896,7 +2166,19 @@ async function openGenerator(opts) {
     errEl.textContent = '';
     code.textContent = '…';
     try {
-      const r = await send({ type: 'popup:generate', len: st.length, digits: st.mode === 'pin' ? false : st.digits, symbols: st.mode === 'pin' ? false : st.symbols, words: st.mode === 'memorable', pin: st.mode === 'pin' });
+      const msg = {
+        type: 'popup:generate',
+        len: st.length,
+        digits: st.mode === 'pin' ? false : st.digits,
+        symbols: st.mode === 'pin' ? false : st.symbols,
+        words: st.mode === 'memorable',
+        pin: st.mode === 'pin',
+      };
+      if (st.mode === 'memorable') {
+        msg.separator = st.separator;
+        msg.capitalize = !!st.capitalize;
+      }
+      const r = await send(msg);
       if (seq !== genSeq || S.panel !== 'gen') return;
       pw = String((r && r.password) || '');
       paintCode(); paintStrength();
@@ -1913,6 +2195,7 @@ async function openGenerator(opts) {
   num.onchange = () => setLength(num.value);
   togDigits.onchange = () => { st.digits = togDigits.checked; persist(); void run(); };
   togSymbols.onchange = () => { st.symbols = togSymbols.checked; persist(); void run(); };
+  togCap.onchange = () => { st.capitalize = togCap.checked; persist(); void run(); };
   copyBtn.onclick = async () => {
     if (copyBtn.disabled) return;
     copyBtn.disabled = true;
@@ -2217,6 +2500,12 @@ document.addEventListener('keydown', (e) => {
   else if (act === 'copyUsername') copyUsername().catch(showErr);
   else if (act === 'largeType') openLargeTypeForSelected();
   else if (act === 'openWebsite') openWebsite();
+  else if (act === 'restore') {
+    if (selected) {
+      if (selected.deleted_at) restoreItem(selected).catch(showErr);
+      else if (selected.archived) unarchiveItem(selected).catch(showErr);
+    }
+  }
   else if (act === 'generator') { if (S.panel === 'gen') closePanel(); else openGenerator(); }
 });
 
@@ -2274,6 +2563,12 @@ if (typeof document !== 'undefined') {
 
 if (typeof window !== 'undefined' && window.__gitpassMock) {
   window.__gitpassPopup = {
+  restoreItem,
+  archiveItem,
+  unarchiveItem,
+  trashItem,
+  renderFilter,
+  renderEmpty,
   copy,
   clearClipboardIfOurs,
   renderListSkeletons,
@@ -2291,6 +2586,12 @@ if (typeof window !== 'undefined' && window.__gitpassMock) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    restoreItem,
+    archiveItem,
+    unarchiveItem,
+    trashItem,
+    renderFilter,
+    renderEmpty,
     copy,
     clearClipboardIfOurs,
     renderListSkeletons,

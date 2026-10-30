@@ -498,6 +498,10 @@ pub fn subtitle(r: &ItemRecord) -> String {
                 _ => String::new(),
             }
         }
+        Category::ApiCredential => gitpass_core::mask::api_credential_secret(r)
+            .map(gitpass_core::mask::secret_hint)
+            .or_else(|| find(&|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())))
+            .unwrap_or_default(),
         _ => find(&|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())).unwrap_or_default(),
     }
 }
@@ -509,6 +513,8 @@ fn to_dto_sections(r: &ItemRecord) -> Vec<Section> {
                 f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8).map(|d| card_mask(&d))
             } else if r.category == Category::BankAccount && (f.id == "account_number" || f.id == "account_no" || f.label.to_lowercase().contains("account number")) {
                 f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>()).filter(|d| d.len() >= 4).map(|d| format!("•••• •••• •••• {}", &d[d.len() - 4..]))
+            } else if r.category == Category::ApiCredential {
+                f.value.as_deref().map(gitpass_core::mask::secret_hint)
             } else {
                 None
             }
@@ -863,7 +869,11 @@ impl App {
                     FilterKind::Tag => live && !r.archived && filter.tag.as_ref().is_some_and(|t| r.tags.contains(t)),
                     FilterKind::Category => live && !r.archived && Some(r.category) == filter.category,
                 };
-                if !keep { return false; }
+                // The item-type picker narrows every view (Recently deleted, Archive,
+                // Favorites, a vault, a tag), not only the Category sidebar entry.
+                if !keep || !filter.category.is_none_or(|c| r.category == c) {
+                    return false;
+                }
                 if let Some(pq) = &parsed_q {
                     let vn = vnames.get(vid.as_str()).map(|s| s.as_str());
                     let cand = gitpass_core::search::CandidateInfo::from_record(r, vn);

@@ -50,6 +50,15 @@
   "genWords": {
     "message": "စကားလုံးများ"
   },
+  "genSeparator": {
+    "message": "ခွဲခြားသင်္ကေတ"
+  },
+  "genSeparatorSpace": {
+    "message": "နေရာလွတ်"
+  },
+  "genCapitalize": {
+    "message": "စာလုံးကြီး"
+  },
   "genIncludeDigits": {
     "message": "ဂဏန်းများ ထည့်ရန်"
   },
@@ -187,6 +196,18 @@
   },
   "vaults": {
     "message": "သော့ခတ်သေတ္တာများ"
+  },
+  "filterTags": {
+    "message": "တက်ဂ်များ"
+  },
+  "filterTagsPh": {
+    "message": "တက်ဂ်များကို စစ်ထုတ်ပါ…"
+  },
+  "clearTag": {
+    "message": "တက်ဂ် စစ်ထုတ်မှုကို ရှင်းပါ"
+  },
+  "filterByTag": {
+    "message": "ဤတက်ဂ်ပါသော အရာများကို ပြပါ"
   },
   "catLogin": {
     "message": "လော့ဂ်အင်များ"
@@ -954,7 +975,6 @@
   "badgeAppNotRunning": {
     "message": "gitpass အက်ပ် မလုပ်ဆောင်နေပါ"
   },
-
   "optAutoSubmit": {
     "message": "လော့ဂ်အင်ဖြည့်ပြီးနောက် ဖောင်ကို တင်သွင်းပါ"
   },
@@ -990,6 +1010,9 @@
   },
   "catServer": {
     "message": "ဆာဗာများ"
+  },
+  "catOther": {
+    "message": "အခြား"
   },
   "genRecent": {
     "message": "မကြာသေးမီ"
@@ -1064,5 +1087,75 @@
   },
   "itemRestored": {
     "message": "မူလအတိုင်း ပြန်လည်ရယူပြီးပါပြီ"
+  },
+  "filterArchive": {
+    "message": "သိမ်းဆည်းထားသည်များ"
+  },
+  "filterDeleted": {
+    "message": "မကြာသေးမီက ဖျက်လိုက်သည်များ"
+  },
+  "restore": {
+    "message": "မူလအတိုင်း ပြန်လည်ရယူရန်"
+  },
+  "unarchive": {
+    "message": "သိမ်းဆည်းမှုမှ ပြန်ထုတ်ရန်"
+  },
+  "archive": {
+    "message": "သိမ်းဆည်းရန်"
+  },
+  "itemUnarchived": {
+    "message": "သိမ်းဆည်းမှုမှ ပြန်ထုတ်ပြီးပါပြီ"
+  },
+  "itemArchived": {
+    "message": "သိမ်းဆည်းပြီးပါပြီ"
+  },
+  "shortcutRestore": {
+    "message": "Item ကို မူလအတိုင်း ပြန်လည်ရယူရန်"
+  },
+  "deletedToday": {
+    "message": "ယနေ့ ဖျက်လိုက်သည်"
+  },
+  "deletedDayOne": {
+    "message": "လွန်ခဲ့သော ၁ ရက်က ဖျက်လိုက်သည်"
+  },
+  "deletedDaysAgo": {
+    "message": "လွန်ခဲ့သော $1 ရက်က ဖျက်လိုက်သည်",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "deletesToday": {
+    "message": "ယနေ့ ဖျက်ပါမည်"
+  },
+  "deletesInDayOne": {
+    "message": "နောက် ၁ ရက်အတွင်း ဖျက်ပါမည်"
+  },
+  "deletesInDays": {
+    "message": "နောက် $1 ရက်အတွင်း ဖျက်ပါမည်",
+    "placeholders": {
+      "days": {
+        "content": "$1"
+      }
+    }
+  },
+  "emptyArchiveTitle": {
+    "message": "သိမ်းဆည်းထားသည်များ မရှိပါ"
+  },
+  "emptyArchiveBody": {
+    "message": "သင်သိမ်းဆည်းထားသော item များသည် ဤနေရာတွင် ပေါ်လာပါမည်။"
+  },
+  "emptyTrashTitle": {
+    "message": "မကြာသေးမီက ဖျက်ထားသည်များ မရှိပါ"
+  },
+  "emptyTrashBody": {
+    "message": "ဖျက်လိုက်သော item များသည် ဤနေရာတွင် ရက် ၃၀ ကြာ ရှိနေပါမည်။"
+  },
+  "inTrash": {
+    "message": "ဤ item သည် မကြာသေးမီက ဖျက်လိုက်သည်များထဲတွင် ရှိနေပါသည်။"
+  },
+  "inArchive": {
+    "message": "ဤ item ကို သိမ်းဆည်းထားပါသည်။"
   }
 }

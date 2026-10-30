@@ -18,7 +18,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, HashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ImportFormat { BitwardenJson, BitwardenCsv, OnePasswordCsv, OnePassword1pux, KeepassCsv, ChromeCsv, ApplePasswordsCsv, GitpassJson, LastpassCsv, ProtonPassCsv }
+pub enum ImportFormat { BitwardenJson, BitwardenCsv, GenericCsv, Pux, KeepassCsv, ChromeCsv, ApplePasswordsCsv, GitpassJson, LastpassCsv, ProtonPassCsv }
 
 impl std::str::FromStr for ImportFormat {
     type Err = anyhow::Error;
@@ -26,15 +26,15 @@ impl std::str::FromStr for ImportFormat {
         Ok(match s.to_ascii_lowercase().as_str() {
             "bitwarden-json" => Self::BitwardenJson,
             "bitwarden-csv" => Self::BitwardenCsv,
-            "1password-csv" => Self::OnePasswordCsv,
-            "1password-1pux" | "1pux" => Self::OnePassword1pux,
+            "generic-csv" | "1password-csv" => Self::GenericCsv,
+            "1pux" | "1password-1pux" => Self::Pux,
             "keepass-csv" | "keepassxc-csv" => Self::KeepassCsv,
             "chrome-csv" => Self::ChromeCsv,
             "apple-passwords-csv" | "apple-passwords" | "apple-csv" | "apple" | "safari-csv" | "safari" => Self::ApplePasswordsCsv,
             "gitpass-json" => Self::GitpassJson,
             "lastpass-csv" | "lastpass" => Self::LastpassCsv,
             "protonpass-csv" | "proton-pass-csv" | "protonpass" | "proton-pass" => Self::ProtonPassCsv,
-            o => bail!("unknown import format '{o}' (bitwarden-json, bitwarden-csv, 1password-csv, 1password-1pux, keepass-csv, chrome-csv, apple-passwords-csv, gitpass-json, lastpass-csv, protonpass-csv)"),
+            o => bail!("unknown import format '{o}' (bitwarden-json, bitwarden-csv, generic-csv, 1pux, keepass-csv, chrome-csv, apple-passwords-csv, gitpass-json, lastpass-csv, protonpass-csv)"),
         })
     }
 }
@@ -46,16 +46,16 @@ pub struct Parsed { pub items: Vec<ItemRecord>, pub warnings: Vec<String> }
 /// Parse text `data` in `format`. `passphrase` is only needed for encrypted gitpass-json exports.
 /// (.1pux is a zip archive: use [`parse_bytes`].)
 pub fn parse(format: ImportFormat, data: &str, passphrase: Option<&str>) -> Result<Parsed> {
-    let data = data.strip_prefix('\u{feff}').unwrap_or(data); // tolerate UTF-8 BOM (Excel / 1Password)
+    let data = data.strip_prefix('\u{feff}').unwrap_or(data); // tolerate UTF-8 BOM (Excel / other password managers)
     match format {
         ImportFormat::BitwardenJson => parse_bitwarden_json(data),
         ImportFormat::GitpassJson => parse_gitpass_json(data, passphrase),
         ImportFormat::BitwardenCsv => parse_csv(data, &BITWARDEN_CSV),
-        ImportFormat::OnePasswordCsv => parse_csv(data, &ONEPASSWORD_CSV),
+        ImportFormat::GenericCsv => parse_csv(data, &GENERIC_CSV),
         ImportFormat::KeepassCsv => parse_csv(data, &KEEPASS_CSV),
         ImportFormat::ChromeCsv => parse_csv(data, &CHROME_CSV),
         ImportFormat::ApplePasswordsCsv => parse_csv(data, &APPLE_PASSWORDS_CSV),
-        ImportFormat::OnePassword1pux => parse_1pux_json(data),
+        ImportFormat::Pux => parse_1pux_json(data),
         ImportFormat::LastpassCsv => parse_csv(data, &LASTPASS_CSV),
         ImportFormat::ProtonPassCsv => parse_csv(data, &PROTONPASS_CSV),
     }
@@ -63,7 +63,7 @@ pub fn parse(format: ImportFormat, data: &str, passphrase: Option<&str>) -> Resu
 
 /// Parse raw file bytes (handles the .1pux zip container; other formats must be UTF-8 text).
 pub fn parse_bytes(format: ImportFormat, data: &[u8], passphrase: Option<&str>) -> Result<Parsed> {
-    if format == ImportFormat::OnePassword1pux { return parse_1pux(data); }
+    if format == ImportFormat::Pux { return parse_1pux(data); }
     let s = std::str::from_utf8(data).map_err(|_| anyhow!("file is not UTF-8 text; is this the right format?"))?;
     parse(format, s, passphrase)
 }
@@ -140,10 +140,9 @@ const BITWARDEN_CSV: CsvSpec = CsvSpec {
     tags: &["folder"], tag_sep: &[], favorite: &["favorite"], archived: &[],
     ignore: &["reprompt", "type"], note_type: Some(("type", "note")), category: &["type"],
 };
-// 1Password 8 CSV: Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
-// (older 1Password 7 exports used "URL"/"Website", "One-time password", "notesPlain").
-const ONEPASSWORD_CSV: CsvSpec = CsvSpec {
-    name: "1password-csv",
+// Generic CSV: Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
+const GENERIC_CSV: CsvSpec = CsvSpec {
+    name: "generic-csv",
     title: &["title", "name"], username: &["username", "user name", "login"], email: &[], password: &["password"],
     url: &["url", "website", "urls", "location"], notes: &["notes", "notesplain", "note"],
     totp: &["otpauth", "one-time password", "totp", "otp"], created: &[], modified: &[],
@@ -497,15 +496,15 @@ fn parse_bitwarden_json(data: &str) -> Result<Parsed> {
     Ok(out)
 }
 
-// ---------------------------------------------------------------- 1Password .1pux
+// ---------------------------------------------------------------- .1pux
 
 /// 1PUX = zip with `export.data` (JSON: accounts[].vaults[].items[]) plus attachment files.
 fn parse_1pux(data: &[u8]) -> Result<Parsed> {
     use std::io::Read;
-    let mut z = zip::ZipArchive::new(std::io::Cursor::new(data)).context("1password-1pux: not a .1pux (zip) file")?;
-    let mut f = z.by_name("export.data").map_err(|_| anyhow!("1password-1pux: export.data not found in archive"))?;
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(data)).context("1pux: not a .1pux (zip) file")?;
+    let mut f = z.by_name("export.data").map_err(|_| anyhow!("1pux: export.data not found in archive"))?;
     let mut s = String::new();
-    f.read_to_string(&mut s).context("1password-1pux: export.data is not UTF-8")?;
+    f.read_to_string(&mut s).context("1pux: export.data is not UTF-8")?;
     let s = zeroize::Zeroizing::new(s);
     parse_1pux_json(&s)
 }
@@ -590,8 +589,8 @@ fn pux_field_id(cat: Category, id: &str) -> Option<&'static str> {
 }
 
 fn parse_1pux_json(data: &str) -> Result<Parsed> {
-    let v: Value = serde_json::from_str(data).context("1password-1pux: export.data is not valid JSON")?;
-    let accounts = v.get("accounts").and_then(Value::as_array).ok_or_else(|| anyhow!("1password-1pux: missing \"accounts\" array"))?;
+    let v: Value = serde_json::from_str(data).context("1pux: export.data is not valid JSON")?;
+    let accounts = v.get("accounts").and_then(Value::as_array).ok_or_else(|| anyhow!("1pux: missing \"accounts\" array"))?;
     let s = |o: &Value, k: &str| opt(o.get(k).and_then(Value::as_str));
     let mut out = Parsed::default();
     for acc in accounts {
@@ -603,7 +602,7 @@ fn parse_1pux_json(data: &str) -> Result<Parsed> {
                 let de = it.get("details").unwrap_or(&empty);
                 let state = s(it, "state").unwrap_or_else(|| "active".into());
                 let Some(title) = s(ov, "title") else { out.warnings.push(format!("1pux item {i}: no title, skipped")); continue };
-                if state == "trashed" || state == "deleted" { out.warnings.push(format!("{title}: in 1Password trash, skipped")); continue; }
+                if state == "trashed" || state == "deleted" { out.warnings.push(format!("{title}: in source trash, skipped")); continue; }
                 let cu = s(it, "categoryUuid").unwrap_or_else(|| "001".into());
                 let cat = pux_category(&cu);
                 let mut r = record(title, cat);
@@ -890,21 +889,20 @@ pub fn detect_format(data: &str) -> Option<ImportFormat> {
         return Some(ImportFormat::KeepassCsv);
     }
 
-    // Apple Passwords vs 1Password 8:
-    // 1Password 8 CSV header: Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
+    // Apple Passwords vs generic CSV (Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes):
     // Apple Passwords CSV header: Title,URL,Username,Password,Notes,OTPAuth
     if headers.contains(&"otpauth".to_string()) {
         if headers.iter().any(|h| ["favorite", "archived", "tags"].contains(&h.as_str())) {
-            return Some(ImportFormat::OnePasswordCsv);
+            return Some(ImportFormat::GenericCsv);
         }
         if headers.contains(&"title".to_string()) || headers.contains(&"url".to_string()) {
             return Some(ImportFormat::ApplePasswordsCsv);
         }
     }
 
-    // 1Password older CSV (without otpauth) or containing favorite/archived/tags
+    // Generic CSV (without otpauth) or containing favorite/archived/tags/notesplain
     if headers.iter().any(|h| ["favorite", "archived", "tags", "notesplain"].contains(&h.as_str())) {
-        return Some(ImportFormat::OnePasswordCsv);
+        return Some(ImportFormat::GenericCsv);
     }
 
     // Chrome CSV: name,url,username,password
@@ -926,7 +924,7 @@ pub fn detect_format_bytes(data: &[u8]) -> Option<ImportFormat> {
     if data.starts_with(&[0x50, 0x4b, 0x03, 0x04]) {
         if let Ok(mut z) = zip::ZipArchive::new(std::io::Cursor::new(data)) {
             if z.by_name("export.data").is_ok() {
-                return Some(ImportFormat::OnePassword1pux);
+                return Some(ImportFormat::Pux);
             }
         }
     }

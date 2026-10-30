@@ -300,11 +300,20 @@ impl Agent {
                 let parsed_q = (!q_trim.is_empty()).then(|| gitpass_core::search::parse_query(q_trim));
                 let vault = s("vault_id").filter(|v| !v.is_empty());
                 let limit = q.get("limit").and_then(|l| l.as_u64()).map(|l| l as usize).unwrap_or(usize::MAX);
+                // Paging like gitpass-host: the popup asks for pages of 500 and follows `next_offset`.
+                let offset = q.get("offset").and_then(|o| o.as_u64()).unwrap_or(0) as usize;
                 let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
-                let mut items: Vec<(Value, String)> = self.records()?.into_iter()
+                let recs = if s("state").as_deref() == Some("archived") || s("filter").as_deref() == Some("archive") || q.get("archived").and_then(|v| v.as_bool()) == Some(true) {
+                    self.archived_records()?
+                } else if s("state").as_deref() == Some("deleted") || s("filter").as_deref() == Some("deleted") || q.get("deleted").and_then(|v| v.as_bool()) == Some(true) {
+                    self.deleted_records()?
+                } else {
+                    self.records()?
+                };
+                let mut items: Vec<(Value, String)> = recs.into_iter()
                     .filter(|(vid, vname, _, r)| {
-                        if vault.as_ref().is_some_and(|v| v != vid) { return false; }
-                        if cat.is_some_and(|c| c != r.category) { return false; }
+                        if !vault.as_ref().is_none_or(|v| v == vid) { return false; }
+                        if !cat.is_none_or(|c| c == r.category) { return false; }
                         if let Some(pq) = &parsed_q {
                             let cand = gitpass_core::search::CandidateInfo::from_record(r, Some(vname.as_str()));
                             if !pq.matches(&cand) { return false; }
@@ -327,7 +336,38 @@ impl Agent {
                     })
                     .collect();
                 items.sort_by(|a, b| a.1.cmp(&b.1));
-                Ok(json!({"items": items.into_iter().take(limit).map(|x| x.0).collect::<Vec<_>>()}))
+                let total = items.len();
+                let page: Vec<Value> = items.into_iter().skip(offset).take(limit).map(|x| x.0).collect();
+                let end = offset.saturating_add(page.len());
+                let next_offset = (end < total).then_some(end);
+                Ok(json!({"items": page, "total": total, "next_offset": next_offset}))
+            }
+            "list_archived" => {
+                let vault = s("vault_id").filter(|v| !v.is_empty());
+                let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
+                let mut items: Vec<(Value, String)> = self.archived_records()?.into_iter()
+                    .filter(|(vid, _, _, _)| vault.as_ref().is_none_or(|v| v == vid))
+                    .map(|(vid, vname, iid, r)| {
+                        let mut s = summary(&vid, &vname, &iid, &r);
+                        if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
+                        (s, r.item.title.to_lowercase())
+                    })
+                    .collect();
+                items.sort_by(|a, b| a.1.cmp(&b.1));
+                Ok(json!({"items": items.into_iter().map(|x| x.0).collect::<Vec<_>>()}))
+            }
+            "list_deleted" => {
+                let vault = s("vault_id").filter(|v| !v.is_empty());
+                let mut items: Vec<Value> = self.deleted_records()?.into_iter()
+                    .filter(|(vid, _, _, _)| vault.as_ref().is_none_or(|v| v == vid))
+                    .map(|(vid, vname, iid, r)| summary(&vid, &vname, &iid, &r))
+                    .collect();
+                items.sort_by(|a, b| {
+                    let da = a.get("deleted_at").and_then(|v| v.as_str()).unwrap_or("");
+                    let db = b.get("deleted_at").and_then(|v| v.as_str()).unwrap_or("");
+                    db.cmp(da).then_with(|| a["title"].as_str().unwrap_or("").to_lowercase().cmp(&b["title"].as_str().unwrap_or("").to_lowercase()))
+                });
+                Ok(json!({"items": items}))
             }
             "match" => {
                 let origin = req("origin")?;
@@ -348,7 +388,13 @@ impl Agent {
             }
             "get_item" => {
                 let (vid, iid) = split_id(&req("item_id")?)?;
-                let (vname, r) = self.record(&vid, &iid)?;
+                let include_deleted = q.get("include_deleted").and_then(|v| v.as_bool()).unwrap_or(false);
+                let (vname, r) = self.app.state.with(|u| {
+                    let name = u.session.list_vaults()?.into_iter().find(|(v, _)| v == &vid).map(|(_, m)| m.name.clone()).ok_or_else(|| err("not_found", "no such vault"))?;
+                    let (_, r) = u.session.read_record(&vid, &iid).map_err(|e| err("not_found", e.to_string()))?;
+                    if r.deleted_at.is_some() && !include_deleted { return Err(err("not_found", "item is deleted")); }
+                    Ok((name, r))
+                })?;
                 let mut d = detail(&vid, &vname, &iid, &r);
                 if let Ok(Some(lu)) = self.app.state.with(|x| Ok(x.session.last_used(&iid))) {
                     d["last_used"] = json!(lu);
@@ -504,13 +550,46 @@ impl Agent {
                 self.poll_state();
                 Ok(json!({"ok": true}))
             }
+            "archive_item" | "unarchive_item" => {
+                if source != "popup" { return Err(err("denied", format!("{cmd} is allowed only from the popup"))); }
+                let (vid, iid) = split_id(&req("item_id")?)?;
+                let archived = if cmd == "unarchive_item" { false } else { q.get("archived").and_then(|v| v.as_bool()).unwrap_or(true) };
+                self.app.state.with(|x| {
+                    let (_, r) = x.session.read_record(&vid, &iid).map_err(|e| err("not_found", format!("item not found: {e:#}")))?;
+                    if r.deleted_at.is_some() { return Err(err("not_found", "item is deleted")); }
+                    Ok(())
+                })?;
+                self.app.archive_item(&vid, &iid, archived).map_err(host_err)?;
+                self.poll_state();
+                Ok(json!({"ok": true, "archived": archived}))
+            }
             "generate" => {
                 use gitpass_core::generate::{Mode, Request};
                 let b = |k: &str| q.get(k).and_then(|v| v.as_bool()).unwrap_or(true);
                 let pin = q.get("pin").and_then(|v| v.as_bool()).unwrap_or(false);
                 let words = q.get("words").and_then(|v| v.as_bool()).unwrap_or(false);
                 let mode = if pin { Mode::Pin } else if words { Mode::Words } else { Mode::Random };
-                let r = Request { mode, length: q.get("len").and_then(|v| v.as_u64()).map(|v| v as usize), symbols: b("symbols"), digits: b("digits"), ..Request::new(mode) };
+                let separator = match q.get("separator") {
+                    None | Some(Value::Null) => None,
+                    Some(Value::String(s)) => {
+                        let mut chars = s.chars();
+                        let c = chars.next();
+                        if c.is_none() || chars.next().is_some() || !crate::api::WORD_SEPARATORS.contains(&c.unwrap()) {
+                            return Err(err("bad_request", format!("invalid word separator {s:?}: use one of -, ., _, space")));
+                        }
+                        c
+                    }
+                    Some(_) => return Err(err("bad_request", "separator must be a string")),
+                };
+                let capitalize = q.get("capitalize").and_then(|v| v.as_bool()).unwrap_or(false);
+                let r = Request {
+                    mode,
+                    length: q.get("len").and_then(|v| v.as_u64()).map(|v| v as usize),
+                    symbols: b("symbols"),
+                    digits: b("digits"),
+                    separator,
+                    capitalize,
+                };
                 Ok(json!({"password": api::generate(&r).map_err(|e| err("bad_request", e.to_string()))?}))
             }
             "record_generated_password" => {
@@ -680,6 +759,24 @@ impl Agent {
             Ok(out)
         })
     }
+    fn archived_records(&self) -> Result<Vec<(String, String, String, ItemRecord)>> {
+        self.app.state.with(|u| {
+            let mut out = vec![];
+            for (vid, m) in u.session.list_vaults()? {
+                for (iid, _, r) in u.session.list_records(&vid)? { if r.deleted_at.is_none() && r.archived { out.push((vid.clone(), m.name.clone(), iid, r)); } }
+            }
+            Ok(out)
+        })
+    }
+    fn deleted_records(&self) -> Result<Vec<(String, String, String, ItemRecord)>> {
+        self.app.state.with(|u| {
+            let mut out = vec![];
+            for (vid, m) in u.session.list_vaults()? {
+                for (iid, _, r) in u.session.list_records(&vid)? { if r.deleted_at.is_some() { out.push((vid.clone(), m.name.clone(), iid, r)); } }
+            }
+            Ok(out)
+        })
+    }
     fn record(&self, vid: &str, iid: &str) -> Result<(String, ItemRecord)> {
         self.app.state.with(|u| {
             let name = u.session.list_vaults()?.into_iter().find(|(v, _)| v == vid).map(|(_, m)| m.name.clone()).ok_or_else(|| err("not_found", "no such vault"))?;
@@ -702,9 +799,10 @@ fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
     let subtitle = api::subtitle(r);
     let favicon_host = r.item.url.as_deref().and_then(url_host);
     let mut v = json!({"id": format!("{vid}:{iid}"), "vault_id": vid, "vault_name": vname, "category": r.category.as_str(), "title": r.item.title,
-        "subtitle": subtitle, "has_totp": has_totp(r), "favorite": r.favorite, "updated_at": ts(&r.item.updated_at)});
+        "subtitle": subtitle, "has_totp": has_totp(r), "favorite": r.favorite, "updated_at": ts(&r.item.updated_at), "archived": r.archived});
     if let Some(u) = &r.item.url { v["url"] = json!(u); }
     if let Some(h) = favicon_host { v["favicon_host"] = json!(h); }
+    if let Some(d) = r.deleted_at { v["deleted_at"] = json!(gitpass_core::device::iso8601(d as i64)); }
     v
 }
 fn url_host(u: &str) -> Option<String> {
@@ -738,6 +836,7 @@ fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
                 }
             }
         }
+        else if r.category == Category::ApiCredential { if let Some(val) = &f.value { x["masked"] = json!(gitpass_core::mask::secret_hint(val)); } }
         fields.push(x);
     }
     v["fields"] = json!(fields);

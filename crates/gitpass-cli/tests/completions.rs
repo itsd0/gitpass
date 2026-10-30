@@ -25,13 +25,13 @@ fn shell_completions_for_all_supported_shells() {
         assert!(!stdout.is_empty(), "completions script for {shell} was empty");
 
         // Must mention key subcommands and their long flags
-        for subcmd in ["gen", "get", "copy", "run", "totp"] {
+        for subcmd in ["gen", "get", "copy", "run", "totp", "archive", "unarchive", "undelete", "mv"] {
             assert!(
                 stdout.contains(subcmd),
                 "completions for {shell} missing subcommand '{subcmd}'"
             );
         }
-        for flag in ["copy", "clear-secs", "category"] {
+        for flag in ["copy", "clear-secs", "category", "tag", "untag", "favorite", "unfavorite", "to"] {
             let has_flag = match shell {
                 "fish" => stdout.contains(&format!("-l {flag}")),
                 _ => stdout.contains(&format!("--{flag}")),

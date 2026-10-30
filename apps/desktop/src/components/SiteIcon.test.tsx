@@ -9,7 +9,7 @@ describe('getMonogram', () => {
   it('returns uppercase first letter of title', () => {
     expect(getMonogram('github.com')).toBe('G');
     expect(getMonogram('Apple ID')).toBe('A');
-    expect(getMonogram('1password')).toBe('1');
+    expect(getMonogram('1example')).toBe('1');
   });
 
   it('trims leading whitespace', () => {

@@ -38,11 +38,24 @@ enum AddCategory {
     CreditCard,
     BankAccount,
     Server,
+    Identity,
+    Wifi,
+    SshKey,
 }
 
 impl clap::ValueEnum for AddCategory {
     fn value_variants<'a>() -> &'a [Self] {
-        &[Self::Login, Self::ApiCredential, Self::SecureNote, Self::CreditCard, Self::BankAccount, Self::Server]
+        &[
+            Self::Login,
+            Self::ApiCredential,
+            Self::SecureNote,
+            Self::CreditCard,
+            Self::BankAccount,
+            Self::Server,
+            Self::Identity,
+            Self::Wifi,
+            Self::SshKey,
+        ]
     }
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         Some(match self {
@@ -52,6 +65,9 @@ impl clap::ValueEnum for AddCategory {
             Self::CreditCard => clap::builder::PossibleValue::new("credit-card").alias("credit_card"),
             Self::BankAccount => clap::builder::PossibleValue::new("bank-account").alias("bank_account"),
             Self::Server => clap::builder::PossibleValue::new("server"),
+            Self::Identity => clap::builder::PossibleValue::new("identity"),
+            Self::Wifi => clap::builder::PossibleValue::new("wifi"),
+            Self::SshKey => clap::builder::PossibleValue::new("ssh-key").alias("ssh_key"),
         })
     }
 }
@@ -137,10 +153,40 @@ enum Cmd {
     Vault { #[command(subcommand)] cmd: VaultCmd },
     /// Manage attachments on an item
     Attach { #[command(subcommand)] cmd: AttachCmd },
-    /// Add an item (login, API credential, secure note, credit card, bank account, or server)
+    /// Add an item (login, API credential, secure note, credit card, bank account, server, identity, Wi-Fi, or SSH key)
+    #[command(after_help = "\
+EXAMPLES:
+  # Login (password prompted without echo)
+  gitpass add Personal --category login --title \"GitHub\" --username octocat --url https://github.com
+
+  # API Credential (credential prompted without echo)
+  gitpass add Personal --category api-credential --title \"OpenAI API\" --username org-acme --expires 2028-06-30
+
+  # Secure Note
+  gitpass add Personal --category secure-note --title \"Recovery Codes\" --notes \"code1\\ncode2\"
+
+  # Credit Card (card number prompted without echo)
+  gitpass add Personal --category credit-card --title \"Bank Visa\" --holder \"Alice Doe\" --expiry 11/30
+
+  # Bank Account (account number prompted without echo)
+  gitpass add Personal --category bank-account --title \"Chase Checking\" --bank \"Chase\" --holder \"Alice Doe\" --account-type checking --routing 021000021
+
+  # Server (password prompted without echo)
+  gitpass add Personal --category server --title \"Production Web\" --url 192.168.1.50 --username ubuntu
+
+  # Identity
+  gitpass add Personal --category identity --title \"Alice Personal\" --first-name Alice --last-name Doe --email alice@example.com --phone \"+1-555-0100\" --address \"123 Main St, Springfield\"
+
+  # Wi-Fi (password prompted without echo)
+  gitpass add Personal --category wifi --title \"Home Wi-Fi\" --ssid \"HomeNet\" --security WPA3
+
+  # SSH Key (generate Ed25519 key or import existing file; private key is never printed)
+  gitpass add Personal --category ssh-key --title \"Work Laptop\" --generate ed25519
+  gitpass add Personal --category ssh-key --title \"Deploy Key\" --private-key-file ~/.ssh/id_ed25519\
+")]
     Add {
         vault: String,
-        /// Item category / type: login (default), api-credential, secure-note, credit-card, bank-account, server
+        /// Item category / type: login (default), api-credential, secure-note, credit-card, bank-account, server, identity, wifi, ssh-key
         #[arg(long, alias = "type", default_value = "login")]
         category: AddCategory,
         /// Item title
@@ -159,10 +205,10 @@ enum Cmd {
         /// One-time password (TOTP) seed or otpauth:// URI
         #[arg(long)]
         totp: Option<String>,
-        /// Generate a password (optional length, default 24) instead of prompting
+        /// Generate a password (optional length, default 24) for login/server, or key type for ssh-key (ed25519)
         #[arg(long, num_args = 0..=1, default_missing_value = "24")]
-        generate: Option<usize>,
-        /// Read login password from stdin instead of prompting
+        generate: Option<String>,
+        /// Read login or Wi-Fi password from stdin instead of prompting (secrets are never passed as command-line arguments)
         #[arg(long)]
         password_stdin: bool,
 
@@ -223,6 +269,36 @@ enum Cmd {
         /// Hosting provider name for server items
         #[arg(long)]
         provider: Option<String>,
+
+        // Identity specific fields
+        /// First name for identity items
+        #[arg(long)]
+        first_name: Option<String>,
+        /// Last name for identity items
+        #[arg(long)]
+        last_name: Option<String>,
+        /// Email address for identity items
+        #[arg(long)]
+        email: Option<String>,
+        /// Phone number for identity items
+        #[arg(long)]
+        phone: Option<String>,
+        /// Physical / postal address for identity items
+        #[arg(long)]
+        address: Option<String>,
+
+        // Wi-Fi specific fields
+        /// Wi-Fi network SSID (network name) for wifi items
+        #[arg(long)]
+        ssid: Option<String>,
+        /// Wi-Fi network security protocol (WPA2, WPA3, WEP, none) for wifi items
+        #[arg(long)]
+        security: Option<String>,
+
+        // SSH Key specific fields
+        /// Path to an OpenSSH private key file to import for ssh-key items (passphrase from $GITPASS_SSH_PASSPHRASE or prompt; private keys are never passed as command-line arguments)
+        #[arg(long)]
+        private_key_file: Option<PathBuf>,
     },
     /// Decrypt and print an item (query = id, id prefix, or fuzzy match on title/username/url)
     Get {
@@ -299,16 +375,118 @@ enum Cmd {
     },
     /// Edit an item
     Edit {
-        vault: String, id: String,
-        #[arg(long)] title: Option<String>,
-        #[arg(long)] username: Option<String>,
-        #[arg(long)] url: Option<String>,
-        #[arg(long)] notes: Option<String>,
-        #[arg(long)] totp: Option<String>,
+        /// Item query (or vault if item is also given)
+        item: String,
+        /// Item query when vault is given as first positional argument
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        username: Option<String>,
+        #[arg(long)]
+        url: Option<String>,
+        #[arg(long)]
+        notes: Option<String>,
+        #[arg(long)]
+        totp: Option<String>,
         /// Prompt for a new password
-        #[arg(long)] password: bool,
+        #[arg(long)]
+        password: bool,
         #[arg(long, num_args = 0..=1, default_missing_value = "24")]
         generate: Option<usize>,
+        /// Add a tag (repeatable)
+        #[arg(long = "tag", action = clap::ArgAction::Append)]
+        tag: Vec<String>,
+        /// Remove a tag (repeatable)
+        #[arg(long = "untag", action = clap::ArgAction::Append)]
+        untag: Vec<String>,
+        /// Mark item as favorite
+        #[arg(long, conflicts_with = "unfavorite")]
+        favorite: bool,
+        /// Unmark item as favorite
+        #[arg(long, conflicts_with = "favorite")]
+        unfavorite: bool,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Archive an item
+    Archive {
+        /// Item query (or vault if item is also given)
+        item: String,
+        /// Item query when vault is given as first positional argument
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Unarchive an item
+    Unarchive {
+        /// Item query (or vault if item is also given)
+        item: String,
+        /// Item query when vault is given as first positional argument
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Restore an item from Recently Deleted
+    Undelete {
+        /// Item query (or vault if item is also given)
+        item: String,
+        /// Item query when vault is given as first positional argument
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Move an item to another vault
+    Mv {
+        /// Item query (or vault if item is also given)
+        item: String,
+        /// Item query when vault is given as first positional argument
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Source vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Destination vault
+        #[arg(long)]
+        to: String,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
     },
     /// Remove an item
     Rm { vault: String, id: String },
@@ -389,6 +567,20 @@ enum Cmd {
         /// Write to this file (mode 0600) instead of stdout. NOTE: this puts plaintext secrets on disk.
         #[arg(long, short = 'o')] output: Option<PathBuf>,
     },
+    /// Print the `gp://<vault>/<item>/<field>` secret reference for an item field (never the secret itself)
+    Ref {
+        vault: String,
+        /// Item id, id prefix, or fuzzy match on title/username/url
+        query: String,
+        /// Field: password (default), username, url, notes, title, totp, or a custom field label or id
+        field: Option<String>,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Copy the reference to the clipboard instead of printing it (not a secret: no auto-clear)
+        #[arg(long)]
+        copy: bool,
+    },
     /// Connect the vault folder to a private git remote (GitHub or any git host)
     Remote { #[command(subcommand)] cmd: RemoteCmd },
     /// git add/commit/pull --rebase/push in the vault directory, then verify the manifest
@@ -419,7 +611,7 @@ enum Cmd {
     /// Import items from another password manager's export file
     Import {
         vault: String,
-        /// bitwarden-json | bitwarden-csv | 1password-csv | 1password-1pux | keepass-csv | chrome-csv | apple-passwords-csv | lastpass-csv | protonpass-csv | gitpass-json
+        /// bitwarden-json | bitwarden-csv | generic-csv | 1pux | keepass-csv | chrome-csv | apple-passwords-csv | lastpass-csv | protonpass-csv | gitpass-json
         #[arg(long = "from")] from: String,
         file: PathBuf,
         /// Parse and count only; write nothing
@@ -815,7 +1007,7 @@ struct AddFlags<'a> {
     username: &'a Option<String>,
     url: &'a Option<String>,
     totp: &'a Option<String>,
-    generate: &'a Option<usize>,
+    generate: &'a Option<String>,
     password_stdin: bool,
     credential_stdin: bool,
     expires: &'a Option<String>,
@@ -832,6 +1024,40 @@ struct AddFlags<'a> {
     pin_stdin: bool,
     admin_url: &'a Option<String>,
     provider: &'a Option<String>,
+    first_name: &'a Option<String>,
+    last_name: &'a Option<String>,
+    email: &'a Option<String>,
+    phone: &'a Option<String>,
+    address: &'a Option<String>,
+    ssid: &'a Option<String>,
+    security: &'a Option<String>,
+    private_key_file: &'a Option<PathBuf>,
+}
+
+fn check_no_identity(flags: &AddFlags) -> Result<()> {
+    if flags.first_name.is_some()
+        || flags.last_name.is_some()
+        || flags.email.is_some()
+        || flags.phone.is_some()
+        || flags.address.is_some()
+    {
+        bail!("identity flags are only valid for identity items");
+    }
+    Ok(())
+}
+
+fn check_no_wifi(flags: &AddFlags) -> Result<()> {
+    if flags.ssid.is_some() || flags.security.is_some() {
+        bail!("wifi flags are only valid for wifi items");
+    }
+    Ok(())
+}
+
+fn check_no_ssh(flags: &AddFlags) -> Result<()> {
+    if flags.private_key_file.is_some() {
+        bail!("--private-key-file is only valid for ssh-key items");
+    }
+    Ok(())
 }
 
 fn validate_add_flags(flags: &AddFlags) -> Result<()> {
@@ -839,6 +1065,11 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
         AddCategory::Login => {
             if flags.password_stdin && flags.generate.is_some() {
                 bail!("cannot combine --generate and --password-stdin");
+            }
+            if let Some(g) = flags.generate {
+                if g.parse::<usize>().is_err() {
+                    bail!("invalid password length '{g}', expected a number");
+                }
             }
             if flags.credential_stdin {
                 bail!("--credential-stdin is only valid for api-credential items");
@@ -863,13 +1094,16 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.admin_url.is_some() || flags.provider.is_some() {
                 bail!("--admin-url and --provider are only valid for server items");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
         }
         AddCategory::ApiCredential => {
             if flags.totp.is_some() {
                 bail!("--totp is only valid for login items");
             }
             if flags.generate.is_some() {
-                bail!("--generate is only valid for login and server items");
+                bail!("--generate is only valid for login, server, and ssh-key items");
             }
             if flags.password_stdin {
                 bail!("--password-stdin is only valid for login and server items (use --credential-stdin for API credentials)");
@@ -891,6 +1125,9 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.admin_url.is_some() || flags.provider.is_some() {
                 bail!("--admin-url and --provider are only valid for server items");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
             if let Some(exp) = flags.expires {
                 validate_date_iso(exp)?;
             }
@@ -934,6 +1171,9 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.notes.is_some() && flags.notes_stdin {
                 bail!("cannot combine --notes and --notes-stdin");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
         }
         AddCategory::CreditCard => {
             if flags.username.is_some() {
@@ -968,6 +1208,9 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.admin_url.is_some() || flags.provider.is_some() {
                 bail!("--admin-url and --provider are only valid for server items");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
             if let Some(exp) = flags.expiry {
                 validate_card_expiry(exp)?;
             }
@@ -1003,10 +1246,18 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.admin_url.is_some() || flags.provider.is_some() {
                 bail!("--admin-url and --provider are only valid for server items");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
         }
         AddCategory::Server => {
             if flags.password_stdin && flags.generate.is_some() {
                 bail!("cannot combine --generate and --password-stdin");
+            }
+            if let Some(g) = flags.generate {
+                if g.parse::<usize>().is_err() {
+                    bail!("invalid password length '{g}', expected a number");
+                }
             }
             if flags.totp.is_some() {
                 bail!("--totp is not supported for server items");
@@ -1031,6 +1282,150 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
                 || flags.account_number_stdin || flags.pin_stdin {
                 bail!("bank account flags are only valid for bank-account items");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
+        }
+        AddCategory::Identity => {
+            if flags.username.is_some() {
+                bail!("--username is not supported for identity items");
+            }
+            if flags.url.is_some() {
+                bail!("--url/--host is not supported for identity items");
+            }
+            if flags.totp.is_some() {
+                bail!("--totp is not supported for identity items");
+            }
+            if flags.generate.is_some() {
+                bail!("--generate is not supported for identity items");
+            }
+            if flags.password_stdin {
+                bail!("--password-stdin is not supported for identity items");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is not supported for identity items");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is only valid for secure-note items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is not supported for identity items");
+            }
+            if flags.holder.is_some() {
+                bail!("--holder is not supported for identity items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is not supported for identity items");
+            }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
+            }
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
+        }
+        AddCategory::Wifi => {
+            if flags.ssid.as_deref().unwrap_or("").trim().is_empty() {
+                bail!("missing required field: --ssid is required for wifi items");
+            }
+            if let Some(sec) = flags.security.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                match sec.to_ascii_lowercase().as_str() {
+                    "wpa2" | "wpa3" | "wep" | "none" | "wpa" | "wpa/wpa2" | "wpa2/wpa3" => {},
+                    _ => bail!("invalid wifi security '{sec}', expected WPA2, WPA3, WEP, or none"),
+                }
+            }
+            if flags.username.is_some() {
+                bail!("--username is not supported for wifi items");
+            }
+            if flags.url.is_some() {
+                bail!("--url/--host is not supported for wifi items");
+            }
+            if flags.totp.is_some() {
+                bail!("--totp is not supported for wifi items");
+            }
+            if flags.generate.is_some() {
+                bail!("--generate is not supported for wifi items");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is not supported for wifi items");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is only valid for secure-note items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is not supported for wifi items");
+            }
+            if flags.holder.is_some() {
+                bail!("--holder is not supported for wifi items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is not supported for wifi items");
+            }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
+            }
+            check_no_identity(flags)?;
+            check_no_ssh(flags)?;
+        }
+        AddCategory::SshKey => {
+            if flags.generate.is_some() && flags.private_key_file.is_some() {
+                bail!("cannot combine --generate and --private-key-file");
+            }
+            if flags.generate.is_none() && flags.private_key_file.is_none() {
+                bail!("missing required option for ssh-key items: specify either --generate ed25519 or --private-key-file <PATH>");
+            }
+            if let Some(g) = flags.generate {
+                let g_norm = g.trim().to_ascii_lowercase();
+                if g_norm != "ed25519" && g != "24" {
+                    bail!("unsupported key type '{g}' for --generate: gitpass currently supports generating 'ed25519' SSH keys");
+                }
+            }
+            if flags.username.is_some() {
+                bail!("--username is not supported for ssh-key items");
+            }
+            if flags.url.is_some() {
+                bail!("--url/--host is not supported for ssh-key items");
+            }
+            if flags.totp.is_some() {
+                bail!("--totp is not supported for ssh-key items");
+            }
+            if flags.password_stdin {
+                bail!("--password-stdin is not supported for ssh-key items");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is not supported for ssh-key items");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is only valid for secure-note items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is not supported for ssh-key items");
+            }
+            if flags.holder.is_some() {
+                bail!("--holder is not supported for ssh-key items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is not supported for ssh-key items");
+            }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
+            }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
         }
     }
     Ok(())
@@ -1122,6 +1517,10 @@ struct CliItemSummary {
     updated_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     last_used: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    hint: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    subtitle: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -1129,6 +1528,8 @@ struct CliField {
     label: String,
     kind: FieldKind,
     value: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    masked: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -1223,6 +1624,11 @@ fn resolve_item_across_vaults(s: &Session, vault: Option<&str>, item: &str) -> R
 }
 
 fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
+    let hint = if r.category == Category::ApiCredential {
+        gitpass_core::mask::api_credential_secret(r).map(gitpass_core::mask::secret_hint)
+    } else {
+        None
+    };
     CliItemSummary {
         id: id.to_string(),
         title: r.item.title.clone(),
@@ -1247,6 +1653,8 @@ fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
         favorite: r.favorite,
         updated_at: ts(&r.item.updated_at),
         last_used: None,
+        subtitle: hint.clone(),
+        hint,
     }
 }
 
@@ -1254,15 +1662,22 @@ fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<Stri
     let mut fields = Vec::new();
     for section in r.view_sections() {
         for f in section.fields {
-            let val = if f.kind.is_secret() {
-                if reveal { f.value } else { None }
+            let (val, masked) = if f.kind.is_secret() {
+                if reveal {
+                    (f.value, None)
+                } else if r.category == Category::ApiCredential {
+                    (None, f.value.as_deref().map(gitpass_core::mask::secret_hint))
+                } else {
+                    (None, None)
+                }
             } else {
-                f.value
+                (f.value, None)
             };
             fields.push(CliField {
                 label: f.label,
                 kind: f.kind,
                 value: val,
+                masked,
             });
         }
     }
@@ -1335,6 +1750,149 @@ fn pick_record(s: &Session, vid: &str, query: &str, pick: Option<usize>, include
 fn pick_item(s: &Session, vid: &str, query: &str, pick: Option<usize>) -> Result<(String, Item)> {
     let (id, rec) = pick_record(s, vid, query, pick, false)?;
     Ok((id, rec.item.clone()))
+}
+
+fn resolve_target_item(
+    s: &Session,
+    vault_flag: Option<&str>,
+    pos1: &str,
+    pos2: Option<&str>,
+    pick: Option<usize>,
+    include_archived: bool,
+) -> Result<(String, String, ItemRecord)> {
+    let (vault_str, query_str) = match pos2 {
+        Some(q) => (Some(pos1), q),
+        None => match pos1.split_once('/') {
+            Some((v, q)) => (Some(v), q),
+            None => (vault_flag, pos1),
+        },
+    };
+
+    if let Some(v) = vault_str {
+        let vid = s.resolve_vault(v)?;
+        let (iid, rec) = pick_record(s, &vid, query_str, pick, include_archived)?;
+        return Ok((vid, iid, rec));
+    }
+
+    let mut all_recs = Vec::new();
+    for (vid, _) in s.list_vaults()? {
+        let mut recs = s.list_records(&vid)?;
+        if !include_archived {
+            recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
+        }
+        for (id, _, rec) in recs {
+            all_recs.push((vid.clone(), id, rec));
+        }
+    }
+
+    let ranked = gitpass_core::search::rank_by(
+        query_str,
+        all_recs.into_iter().map(|(vid, id, rec)| (format!("{vid}:{id}"), (vid, id, rec))),
+        |(_, _, rec)| &rec.item,
+    );
+
+    if ranked.is_empty() {
+        bail!("no item matches '{query_str}'");
+    }
+
+    let idx = match pick {
+        Some(n) if n >= 1 && n <= ranked.len() => n - 1,
+        Some(n) => bail!("--pick {n} out of range (1..={})", ranked.len()),
+        None => match gitpass_core::search::clear_winner(&ranked) {
+            Some(i) => i,
+            None => {
+                for (i, (sc, _, (vid, id, rec))) in ranked.iter().enumerate() {
+                    let vname = s.vault_meta(vid).map(|m| m.name.clone()).unwrap_or_else(|_| vid.clone());
+                    eprintln!(
+                        "{:>3}. [{vname}] {id}  {}  {}  (score {sc})",
+                        i + 1,
+                        rec.item.title,
+                        rec.item.username.clone().unwrap_or_default()
+                    );
+                }
+                bail!("{} items match '{query_str}'; use --pick <n> or specify --vault", ranked.len());
+            }
+        },
+    };
+
+    let (_, _, (vid, id, rec)) = ranked.into_iter().nth(idx).unwrap();
+    Ok((vid, id, rec))
+}
+
+fn resolve_deleted_item(
+    s: &Session,
+    vault_flag: Option<&str>,
+    pos1: &str,
+    pos2: Option<&str>,
+    pick: Option<usize>,
+) -> Result<(String, String, ItemRecord)> {
+    let (vault_str, query_str) = match pos2 {
+        Some(q) => (Some(pos1), q),
+        None => match pos1.split_once('/') {
+            Some((v, q)) => (Some(v), q),
+            None => (vault_flag, pos1),
+        },
+    };
+
+    let search_vaults: Vec<String> = if let Some(v) = vault_str {
+        vec![s.resolve_vault(v)?]
+    } else {
+        s.list_vaults()?.into_iter().map(|(v, _)| v).collect()
+    };
+
+    let mut deleted_recs = Vec::new();
+    let mut non_deleted_recs = Vec::new();
+
+    for vid in &search_vaults {
+        for (id, _, rec) in s.list_records(vid)? {
+            if rec.deleted_at.is_some() {
+                deleted_recs.push((vid.clone(), id, rec));
+            } else {
+                non_deleted_recs.push((vid.clone(), id, rec));
+            }
+        }
+    }
+
+    let ranked = gitpass_core::search::rank_by(
+        query_str,
+        deleted_recs.into_iter().map(|(vid, id, rec)| (format!("{vid}:{id}"), (vid, id, rec))),
+        |(_, _, rec)| &rec.item,
+    );
+
+    if ranked.is_empty() {
+        let active_ranked = gitpass_core::search::rank_by(
+            query_str,
+            non_deleted_recs.into_iter().map(|(vid, id, rec)| (format!("{vid}:{id}"), (vid, id, rec))),
+            |(_, _, rec)| &rec.item,
+        );
+        if let Some((_, _, (_, _, active_rec))) = active_ranked.into_iter().next() {
+            bail!("item '{}' is not deleted", active_rec.item.title);
+        }
+        bail!("no deleted item matches '{query_str}'");
+    }
+
+    let idx = match pick {
+        Some(n) if n >= 1 && n <= ranked.len() => n - 1,
+        Some(n) => bail!("--pick {n} out of range (1..={})", ranked.len()),
+        None => match gitpass_core::search::clear_winner(&ranked) {
+            Some(i) => i,
+            None => {
+                for (i, (sc, _, (vid, id, rec))) in ranked.iter().enumerate() {
+                    let vname = s.vault_meta(vid).map(|m| m.name.clone()).unwrap_or_else(|_| vid.clone());
+                    eprintln!(
+                        "{:>3}. [{vname}] {id}  {}  {}  (score {sc})",
+                        i + 1,
+                        rec.item.title,
+                        rec.item.username.clone().unwrap_or_default()
+                    );
+                }
+                bail!("{} deleted items match '{query_str}'; use --pick <n> or the item id", ranked.len());
+            }
+        },
+    };
+
+    let (_, _, (vid, id, rec)) = ranked.into_iter().nth(idx).unwrap();
+    Ok((vid, id, rec))
 }
 
 /// Clipboard markers for a copied field: passwords and TOTP codes are secrets; the rest are plain.
@@ -1585,6 +2143,14 @@ fn run() -> Result<()> {
             pin_stdin,
             admin_url,
             provider,
+            first_name,
+            last_name,
+            email,
+            phone,
+            address,
+            ssid,
+            security,
+            private_key_file,
             credential: _,
         } => {
             if title.trim().is_empty() {
@@ -1612,6 +2178,14 @@ fn run() -> Result<()> {
                 pin_stdin: *pin_stdin,
                 admin_url,
                 provider,
+                first_name,
+                last_name,
+                email,
+                phone,
+                address,
+                ssid,
+                security,
+                private_key_file,
             })?;
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
@@ -1624,7 +2198,8 @@ fn run() -> Result<()> {
                         let p = p.trim_end_matches(['\r', '\n']).to_string();
                         if p.is_empty() { None } else { Some(p) }
                     } else if let Some(n) = generate {
-                        Some(generate_password(*n))
+                        let len = n.parse::<usize>().unwrap_or(24);
+                        Some(generate_password(len))
                     } else {
                         let p = prompt_secret("GITPASS_ITEM_PASSWORD", "Item password (empty for none): ")?;
                         if p.is_empty() { None } else { Some(p.to_string()) }
@@ -1929,7 +2504,8 @@ fn run() -> Result<()> {
                         let p = p.trim_end_matches(['\r', '\n']).to_string();
                         if p.is_empty() { None } else { Some(p) }
                     } else if let Some(n) = generate {
-                        Some(generate_password(*n))
+                        let len = n.parse::<usize>().unwrap_or(24);
+                        Some(generate_password(len))
                     } else {
                         let p = prompt_secret("GITPASS_ITEM_PASSWORD", "Server password (empty for none): ")?;
                         if p.is_empty() { None } else { Some(p.to_string()) }
@@ -1996,6 +2572,179 @@ fn run() -> Result<()> {
                         title: None,
                         fields,
                     }];
+                    r
+                }
+                AddCategory::Identity => {
+                    let it = Item {
+                        title: title.clone(),
+                        username: None,
+                        password: None,
+                        url: None,
+                        notes: notes.clone(),
+                        totp: None,
+                        updated_at: store::now(),
+                    };
+                    let mut sections = Vec::new();
+                    let mut name_fields = Vec::new();
+                    if let Some(f) = first_name.as_ref().filter(|v| !v.is_empty()) {
+                        name_fields.push(gitpass_core::item::Field {
+                            id: "first".into(),
+                            label: "first name".into(),
+                            kind: FieldKind::Text,
+                            value: Some(f.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(l) = last_name.as_ref().filter(|v| !v.is_empty()) {
+                        name_fields.push(gitpass_core::item::Field {
+                            id: "last".into(),
+                            label: "last name".into(),
+                            kind: FieldKind::Text,
+                            value: Some(l.clone()),
+                            removed: false,
+                        });
+                    }
+                    if !name_fields.is_empty() {
+                        sections.push(Section {
+                            id: "name".into(),
+                            title: Some("Identification".into()),
+                            fields: name_fields,
+                        });
+                    }
+
+                    if let Some(a) = address.as_ref().filter(|v| !v.is_empty()) {
+                        sections.push(Section {
+                            id: "address".into(),
+                            title: Some("Address".into()),
+                            fields: vec![gitpass_core::item::Field {
+                                id: "address".into(),
+                                label: "address".into(),
+                                kind: FieldKind::Multiline,
+                                value: Some(a.clone()),
+                                removed: false,
+                            }],
+                        });
+                    }
+
+                    let mut contact_fields = Vec::new();
+                    if let Some(e) = email.as_ref().filter(|v| !v.is_empty()) {
+                        contact_fields.push(gitpass_core::item::Field {
+                            id: "email".into(),
+                            label: "email".into(),
+                            kind: FieldKind::Email,
+                            value: Some(e.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(p) = phone.as_ref().filter(|v| !v.is_empty()) {
+                        contact_fields.push(gitpass_core::item::Field {
+                            id: "phone".into(),
+                            label: "phone".into(),
+                            kind: FieldKind::Phone,
+                            value: Some(p.clone()),
+                            removed: false,
+                        });
+                    }
+                    if !contact_fields.is_empty() {
+                        sections.push(Section {
+                            id: "contact".into(),
+                            title: Some("Contact".into()),
+                            fields: contact_fields,
+                        });
+                    }
+
+                    let mut r = ItemRecord::new(it);
+                    r.category = Category::Identity;
+                    r.sections = sections;
+                    r
+                }
+                AddCategory::Wifi => {
+                    let password = if *password_stdin {
+                        let mut p = String::new();
+                        std::io::stdin().read_line(&mut p)?;
+                        let p = p.trim_end_matches(['\r', '\n']).to_string();
+                        if p.is_empty() { None } else { Some(p) }
+                    } else {
+                        let p = if std::env::var("GITPASS_WIFI_PASSWORD").is_ok() {
+                            prompt_secret("GITPASS_WIFI_PASSWORD", "Wi-Fi password (empty for none): ")?
+                        } else {
+                            prompt_secret("GITPASS_ITEM_PASSWORD", "Wi-Fi password (empty for none): ")?
+                        };
+                        if p.is_empty() { None } else { Some(p.to_string()) }
+                    };
+                    let it = Item {
+                        title: title.clone(),
+                        username: None,
+                        password: password.clone(),
+                        url: None,
+                        notes: notes.clone(),
+                        totp: None,
+                        updated_at: store::now(),
+                    };
+                    let mut fields = Vec::new();
+                    if let Some(s) = ssid.as_ref().filter(|s| !s.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "ssid".into(),
+                            label: "network name".into(),
+                            kind: FieldKind::Text,
+                            value: Some(s.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(p) = password {
+                        fields.push(gitpass_core::item::Field {
+                            id: "password".into(),
+                            label: "wireless password".into(),
+                            kind: FieldKind::Concealed,
+                            value: Some(p),
+                            removed: false,
+                        });
+                    }
+                    if let Some(s) = security.as_ref().filter(|s| !s.is_empty()) {
+                        let norm = match s.trim().to_ascii_lowercase().as_str() {
+                            "wpa2" => "WPA2".to_string(),
+                            "wpa3" => "WPA3".to_string(),
+                            "wep" => "WEP".to_string(),
+                            "none" => "none".to_string(),
+                            _ => s.trim().to_string(),
+                        };
+                        fields.push(gitpass_core::item::Field {
+                            id: "security".into(),
+                            label: "security".into(),
+                            kind: FieldKind::Text,
+                            value: Some(norm),
+                            removed: false,
+                        });
+                    }
+                    let mut r = ItemRecord::new(it);
+                    r.category = Category::Wifi;
+                    r.sections = vec![Section {
+                        id: "main".into(),
+                        title: None,
+                        fields,
+                    }];
+                    r
+                }
+                AddCategory::SshKey => {
+                    use gitpass_core::ssh::SshKey;
+                    use zeroize::Zeroizing;
+                    let k = if let Some(file) = private_key_file {
+                        let pem = Zeroizing::new(std::fs::read_to_string(file).with_context(|| format!("read key file {}", file.display()))?);
+                        match SshKey::import_openssh(&pem, None) {
+                            Ok(k) => k,
+                            Err(e) if e.to_string().contains("encrypted") => {
+                                let p = prompt_secret("GITPASS_SSH_PASSPHRASE", "Key passphrase: ")?;
+                                SshKey::import_openssh(&pem, Some(&p))?
+                            }
+                            Err(e) => return Err(e),
+                        }
+                    } else {
+                        SshKey::generate_ed25519(title)?
+                    };
+                    let mut r = k.to_record(title)?;
+                    if let Some(n) = notes {
+                        r.item.notes = Some(n.clone());
+                    }
                     r
                 }
             };
@@ -2077,7 +2826,15 @@ fn run() -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
             } else {
                 for (sc, id, rec) in ranked {
-                    println!("{id}  {}  {}  {}  (score {sc})", rec.item.title, rec.item.username.clone().unwrap_or_default(), rec.item.url.clone().unwrap_or_default());
+                    let col = if rec.category == Category::ApiCredential {
+                        gitpass_core::mask::api_credential_secret(&rec)
+                            .map(gitpass_core::mask::secret_hint)
+                            .or_else(|| rec.item.username.clone())
+                            .unwrap_or_default()
+                    } else {
+                        rec.item.username.clone().unwrap_or_default()
+                    };
+                    println!("{id}  {}  {}  {}  (score {sc})", rec.item.title, col, rec.item.url.clone().unwrap_or_default());
                 }
             }
         }
@@ -2127,25 +2884,127 @@ fn run() -> Result<()> {
                 println!("{}", serde_json::to_string_pretty(&summaries)?);
             } else {
                 for (id, rec) in items {
-                    println!("{id}  {}  {}", rec.item.title, rec.item.username.clone().unwrap_or_default());
+                    let col = if rec.category == Category::ApiCredential {
+                        gitpass_core::mask::api_credential_secret(&rec)
+                            .map(gitpass_core::mask::secret_hint)
+                            .or_else(|| rec.item.username.clone())
+                            .unwrap_or_default()
+                    } else {
+                        rec.item.username.clone().unwrap_or_default()
+                    };
+                    println!("{id}  {}  {col}", rec.item.title);
                 }
             }
         }
-        Cmd::Edit { vault, id, title, username, url, notes, totp, password, generate } => {
+        Cmd::Edit {
+            item,
+            item2,
+            vault,
+            title,
+            username,
+            url,
+            notes,
+            totp,
+            password,
+            generate,
+            tag,
+            untag,
+            favorite,
+            unfavorite,
+            pick,
+            json,
+        } => {
             let s = unlock(&cli, &root)?;
-            let vid = s.resolve_vault(vault)?;
-            let iid = s.resolve_item(&vid, id)?;
-            let (_, mut it) = s.read_item(&vid, &iid)?;
-            if let Some(v) = title { it.title = v.clone(); }
-            if let Some(v) = username { it.username = Some(v.clone()); }
-            if let Some(v) = url { it.url = Some(v.clone()); }
-            if let Some(v) = notes { it.notes = Some(v.clone()); }
-            if let Some(v) = totp { it.totp = Some(v.clone()); }
-            if let Some(n) = generate { it.password = Some(generate_password(*n)); }
-            else if *password { it.password = Some(prompt_secret("GITPASS_ITEM_PASSWORD", "New item password: ")?.to_string()); }
-            it.updated_at = store::now();
-            s.update_item(&vid, &iid, &it)?;
-            println!("updated {iid}");
+            let (vid, iid, mut rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, false)?;
+            if let Some(v) = title { rec.item.title = v.clone(); }
+            if let Some(v) = username { rec.item.username = Some(v.clone()); }
+            if let Some(v) = url { rec.item.url = Some(v.clone()); }
+            if let Some(v) = notes { rec.item.notes = Some(v.clone()); }
+            if let Some(v) = totp { rec.item.totp = Some(v.clone()); }
+            if let Some(n) = generate { rec.item.password = Some(generate_password(*n)); }
+            else if *password { rec.item.password = Some(prompt_secret("GITPASS_ITEM_PASSWORD", "New item password: ")?.to_string()); }
+
+            for u in untag {
+                let u_trim = u.trim();
+                rec.tags.retain(|t| t != u_trim);
+            }
+            for t in tag {
+                let t_trim = t.trim();
+                if !t_trim.is_empty() && !rec.tags.iter().any(|existing| existing == t_trim) {
+                    rec.tags.push(t_trim.to_string());
+                }
+            }
+            if *favorite {
+                rec.favorite = true;
+            }
+            if *unfavorite {
+                rec.favorite = false;
+            }
+            rec.item.updated_at = store::now();
+            s.update_record(&vid, &iid, rec)?;
+
+            if *json {
+                let (_, updated) = s.read_record(&vid, &iid)?;
+                let detail = item_detail(&iid, &updated, false, None);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                println!("updated {iid}");
+            }
+        }
+        Cmd::Archive { item, item2, vault, pick, json } => {
+            let s = unlock(&cli, &root)?;
+            let (vid, iid, _rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, false)?;
+            s.set_archived(&vid, &iid, true)?;
+            if *json {
+                let (_, updated) = s.read_record(&vid, &iid)?;
+                let detail = item_detail(&iid, &updated, false, None);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                println!("archived {iid}");
+            }
+        }
+        Cmd::Unarchive { item, item2, vault, pick, json } => {
+            let s = unlock(&cli, &root)?;
+            let (vid, iid, rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, true)?;
+            if !rec.archived {
+                bail!("item '{}' is not archived", rec.item.title);
+            }
+            s.set_archived(&vid, &iid, false)?;
+            if *json {
+                let (_, updated) = s.read_record(&vid, &iid)?;
+                let detail = item_detail(&iid, &updated, false, None);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                println!("unarchived {iid}");
+            }
+        }
+        Cmd::Undelete { item, item2, vault, pick, json } => {
+            let s = unlock(&cli, &root)?;
+            let (vid, iid, _rec) = resolve_deleted_item(&s, vault.as_deref(), item, item2.as_deref(), *pick)?;
+            s.restore(&vid, &iid)?;
+            if *json {
+                let (_, updated) = s.read_record(&vid, &iid)?;
+                let detail = item_detail(&iid, &updated, false, None);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                println!("restored {iid}");
+            }
+        }
+        Cmd::Mv { item, item2, vault, to, pick, json } => {
+            let s = unlock(&cli, &root)?;
+            let (from_vid, iid, _rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, false)?;
+            let to_vid = s.resolve_vault(to)?;
+            if from_vid == to_vid {
+                bail!("item is already in vault '{to}'");
+            }
+            let new_id = s.move_item(&from_vid, &iid, &to_vid)?;
+            if *json {
+                let (_, updated) = s.read_record(&to_vid, &new_id)?;
+                let detail = item_detail(&new_id, &updated, false, None);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                println!("moved {iid} to {to} (now {new_id})");
+            }
         }
         Cmd::Rm { vault, id } => {
             let s = unlock(&cli, &root)?;
@@ -2282,6 +3141,26 @@ fn run() -> Result<()> {
                 }
                 None => { use std::io::Write; std::io::stdout().write_all(out.as_bytes())?; }
             }
+        }
+        Cmd::Ref { vault, query, field, pick, copy } => {
+            use gitpass_cli::inject::{field_segment, Resolver, SecretRef};
+            let s = unlock(&cli, &root)?;
+            let vid = s.resolve_vault(vault)?;
+            let (id, rec) = pick_record(&s, &vid, query, *pick, false)?;
+            let vaults = s.list_vaults()?;
+            let vname = vaults.iter().find(|(v, _)| *v == vid).map(|(_, m)| m.name.clone()).unwrap_or_default();
+            // Name the vault and item by title only while that name resolves to exactly one of them.
+            let vault_seg = if !vname.is_empty() && vaults.iter().filter(|(_, m)| m.name == vname).count() == 1 { vname } else { vid.clone() };
+            let same_title = s.list_items(&vid)?.iter().filter(|(_, it)| it.title.eq_ignore_ascii_case(&rec.item.title)).count();
+            let item_seg = if same_title == 1 && !rec.item.title.is_empty() { rec.item.title.clone() } else { id.clone() };
+            let fields: Vec<(String, String)> = rec.sections.iter().flat_map(|sec| sec.fields.iter())
+                .filter(|f| !f.removed).map(|f| (f.id.clone(), f.label.clone())).collect();
+            let field_seg = field_segment(field.as_deref().unwrap_or("password"), &fields)?;
+            let r = SecretRef { vault: vault_seg, item: item_seg, field: field_seg };
+            // Round trip through the same resolver `run`/`inject` use, so a printed reference always works.
+            SessionResolver(&s).resolve(&r)?;
+            let text = r.to_string();
+            if *copy { do_copy(&text, 0, false, "secret reference", None)?; } else { println!("{text}"); }
         }
         Cmd::Remote { cmd } => match cmd {
             RemoteCmd::Add { url, allow_local } => {
