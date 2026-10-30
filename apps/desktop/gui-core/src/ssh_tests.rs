@@ -111,6 +111,90 @@ fn real_ssh_add_and_ssh_keygen_sign_against_agent() {
 }
 
 #[test]
+fn ssh_agent_activity_records_signed_denied_refused_and_clears_on_lock() {
+    use crate::ssh_activity::SshActivityResult;
+    use gitpass_core::ssh::{SSH_AGENTC_SIGN_REQUEST, SSH_AGENT_FAILURE, SSH_AGENT_SIGN_RESPONSE};
+    use std::io::{Read, Write};
+
+    fn sign(s: &mut std::os::unix::net::UnixStream, blob: &[u8], data: &[u8], flags: u32) -> u8 {
+        let mut body = vec![SSH_AGENTC_SIGN_REQUEST];
+        body.extend_from_slice(&(blob.len() as u32).to_be_bytes());
+        body.extend_from_slice(blob);
+        body.extend_from_slice(&(data.len() as u32).to_be_bytes());
+        body.extend_from_slice(data);
+        body.extend_from_slice(&flags.to_be_bytes());
+        s.write_all(&(body.len() as u32).to_be_bytes()).unwrap();
+        s.write_all(&body).unwrap();
+        s.flush().unwrap();
+        let mut len = [0u8; 4];
+        s.read_exact(&mut len).unwrap();
+        let mut resp = vec![0u8; u32::from_be_bytes(len) as usize];
+        s.read_exact(&mut resp).unwrap();
+        resp[0]
+    }
+
+    let e = env();
+    let a = crate::ssh_agent::start(e.app.clone(), e.ui.clone(), &e.sock.path().join("gitpass")).unwrap();
+    let mut s = std::os::unix::net::UnixStream::connect(&a.socket_path).unwrap();
+    let k = e.app.ssh_generate(&e.vault, "Deploy key", "deploy@example.invalid").unwrap();
+    let blob = gitpass_core::ssh::public_blob_from_openssh(&k.public_key).unwrap();
+    let payload = b"payload-that-must-not-be-logged";
+
+    assert_eq!(sign(&mut s, &blob, payload, 0), SSH_AGENT_SIGN_RESPONSE);
+    let act = e.app.ssh_agent_activity();
+    assert_eq!(act.len(), 1);
+    let first = &act[0];
+    assert_eq!(first.key_title, "Deploy key");
+    assert_eq!(first.fingerprint, k.fingerprint);
+    assert_eq!(first.key_type, "ssh-ed25519");
+    assert_eq!(first.algorithm, "ed25519");
+    assert_eq!(first.result, SshActivityResult::Signed);
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        assert!(first.pid.is_some(), "peer pid is captured from the socket");
+        assert!(first.client.is_some(), "peer process name is captured from the socket");
+    }
+    let json = serde_json::to_string(&act).unwrap();
+    assert!(!json.contains("payload-that-must-not-be-logged"), "signed data never enters the log: {json}");
+
+    e.app.set_settings(Settings { ssh_approve_each_use: true, ..e.app.get_settings() }).unwrap();
+    e.ui.allow.store(false, Ordering::SeqCst);
+    assert_eq!(sign(&mut s, &blob, b"data", 0), SSH_AGENT_FAILURE);
+    assert_eq!(e.app.ssh_agent_activity()[0].result, SshActivityResult::Denied);
+    e.ui.allow.store(true, Ordering::SeqCst);
+
+    assert_eq!(sign(&mut s, b"not-a-key", b"data", 0), SSH_AGENT_FAILURE);
+    let refused = &e.app.ssh_agent_activity()[0];
+    assert_eq!(refused.result, SshActivityResult::Refused);
+    assert_eq!(refused.key_title, "");
+
+    e.app.lock();
+    assert!(e.app.ssh_agent_activity().is_empty(), "locking clears the activity log");
+
+    e.app.unlock(&e.dir, "correct horse", Some(&e.sk)).unwrap();
+    assert_eq!(sign(&mut s, &blob, b"data", 0), SSH_AGENT_SIGN_RESPONSE);
+    assert_eq!(e.app.ssh_agent_activity().len(), 1);
+    e.app.clear_ssh_agent_activity();
+    assert!(e.app.ssh_agent_activity().is_empty(), "clear button empties the log");
+}
+
+#[test]
+fn ssh_activity_clears_on_idle_auto_lock() {
+    use gitpass_core::ssh::KeyProvider;
+    let e = env();
+    let keys = crate::ssh_agent::AppKeys { app: e.app.clone(), ui: e.ui.clone() };
+    let k = e.app.ssh_generate(&e.vault, "Idle key", "idle@example.invalid").unwrap();
+    let blob = gitpass_core::ssh::public_blob_from_openssh(&k.public_key).unwrap();
+    keys.sign(&blob, b"data", 0).unwrap();
+    assert_eq!(e.app.ssh_agent_activity().len(), 1);
+
+    e.app.state.set_auto_lock_duration(std::time::Duration::from_secs(1));
+    e.app.state.backdate_activity_wall(std::time::Duration::from_secs(5));
+    assert!(e.app.state.check_idle(), "idle timeout locks the vault");
+    assert!(e.app.ssh_agent_activity().is_empty(), "idle auto-lock clears the activity log");
+}
+
+#[test]
 fn agent_socket_passkey_needs_approval() {
     let e = env();
     let sd = tempfile::Builder::new().prefix("gpk").tempdir_in("/tmp").unwrap();

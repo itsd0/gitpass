@@ -90,6 +90,36 @@ describe('settings', () => {
     await waitFor(() => expect(spy).toHaveBeenCalled(), { timeout: 3000 });
     expect(spy.mock.calls[0]![0].settings).toMatchObject({ sshApproveEachUse: true, hibpCheck: false });
   });
+  it('SSH agent activity lists key, client and result, and Clear empties it', async () => {
+    vi.spyOn(api, 'sshAgentInfo').mockResolvedValue({ socketPath: '/x/ssh-agent.sock', configLine: 'Host *', running: true, approveEachUse: false });
+    vi.spyOn(api, 'sshAgentActivity').mockResolvedValue([
+      { time: new Date().toISOString(), keyTitle: 'Deploy key', fingerprint: 'SHA256:abc', keyType: 'ssh-ed25519', algorithm: 'ed25519', result: 'signed', client: 'git-upload-pack', pid: 4242 },
+      { time: new Date(Date.now() - 6 * 60_000).toISOString(), keyTitle: '', fingerprint: '', keyType: 'ssh-rsa', algorithm: 'ssh-rsa', result: 'refused' },
+    ]);
+    const clear = vi.spyOn(api, 'clearSshAgentActivity').mockResolvedValue(undefined);
+    const u = userEvent.setup();
+    render(<SettingsPage initialTab="ssh" />);
+    const rows = await screen.findAllByTestId('ssh-activity-row');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.textContent).toContain('Deploy key');
+    expect(rows[0]!.textContent).toContain('git-upload-pack (4242)');
+    expect(rows[0]!.textContent).toContain('just now');
+    expect(rows[0]!.textContent).toContain('Signed');
+    expect(rows[1]!.textContent).toContain('Unknown key');
+    expect(rows[1]!.textContent).toContain('Unknown app');
+    expect(rows[1]!.textContent).toContain('6 min ago');
+    expect(rows[1]!.textContent).toContain('Refused');
+    await u.click(screen.getByTestId('ssh-activity-clear'));
+    await waitFor(() => expect(clear).toHaveBeenCalled());
+    expect(await screen.findByTestId('ssh-activity-empty')).toBeTruthy();
+  });
+  it('SSH agent activity shows an empty state and disables Clear', async () => {
+    vi.spyOn(api, 'sshAgentInfo').mockResolvedValue({ socketPath: '/x/ssh-agent.sock', configLine: 'Host *', running: true, approveEachUse: false });
+    vi.spyOn(api, 'sshAgentActivity').mockResolvedValue([]);
+    render(<SettingsPage initialTab="ssh" />);
+    expect(await screen.findByTestId('ssh-activity-empty')).toBeTruthy();
+    expect((screen.getByTestId('ssh-activity-clear') as HTMLButtonElement).disabled).toBe(true);
+  });
   it('re-rendering the settings page keeps the active section mounted', async () => {
     const view = render(<SettingsPage initialTab="ssh" />);
     const sw = await screen.findByRole('switch', { name: 'Approve each use' });
