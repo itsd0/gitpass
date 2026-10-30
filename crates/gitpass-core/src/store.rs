@@ -1556,6 +1556,45 @@ impl Session {
         self.update_record(vid, iid, r)
     }
 
+    /// Locate which vault contains `iid`. Returns None if not found in any vault.
+    pub fn find_item_vault(&self, iid: &str) -> Result<Option<String>> {
+        let m = self.load_manifest()?;
+        for (vid, ve) in &m.vaults {
+            if ve.items.contains_key(iid) {
+                return Ok(Some(vid.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Read an item record by its ID across any vault in the account.
+    pub fn get_record_by_id(&self, iid: &str) -> Result<Option<(String, u64, ItemRecord)>> {
+        if let Some(vid) = self.find_item_vault(iid)? {
+            let (v, r) = self.read_record(&vid, iid)?;
+            return Ok(Some((vid, v, r)));
+        }
+        Ok(None)
+    }
+
+    /// Link a related item by id. Refuses to link an item to itself. Idempotent.
+    pub fn add_related_item(&self, vid: &str, iid: &str, related_id: &str) -> Result<()> {
+        if iid == related_id {
+            anyhow::bail!("cannot link an item to itself");
+        }
+        self.mutate_record(vid, iid, |r| {
+            if !r.related_item_ids.iter().any(|x| x == related_id) {
+                r.related_item_ids.push(related_id.to_string());
+            }
+        })
+    }
+
+    /// Remove a related item reference. Idempotent.
+    pub fn remove_related_item(&self, vid: &str, iid: &str, related_id: &str) -> Result<()> {
+        self.mutate_record(vid, iid, |r| {
+            r.related_item_ids.retain(|x| x != related_id);
+        })
+    }
+
     pub fn set_favorite(&self, vid: &str, iid: &str, fav: bool) -> Result<()> { self.mutate_record(vid, iid, |r| r.favorite = fav) }
     pub fn set_archived(&self, vid: &str, iid: &str, a: bool) -> Result<()> { self.mutate_record(vid, iid, |r| r.archived = a) }
     pub fn ignore_finding(&self, vid: &str, iid: &str, kind: &str) -> Result<()> { self.mutate_record(vid, iid, |r| { r.ignore_finding(kind); }) }

@@ -220,7 +220,8 @@ function applyInput(r: Rec, input: T.ItemInput) {
   Object.assign(r.detail, { vaultId: input.vaultId, category: input.category, title: input.title, sections, notes: input.notes ?? null,
     tags: input.tags ?? [], favorite: input.favorite ?? r.detail.favorite, url: input.url ?? null, changePasswordUrl: changePwUrl(input.url),
     subtitle: subtitleFor(input) || r.detail.subtitle,
-    hasTotp: sections.some((s) => s.fields.some((x) => x.kind === 'totp')) });
+    hasTotp: sections.some((s) => s.fields.some((x) => x.kind === 'totp')),
+    ...(input.relatedItemIds !== undefined ? { relatedItemIds: [...input.relatedItemIds] } : {}) });
   const pw = sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed');
   r.detail.passwordStrength = pw && secrets[pw.id] ? strength(secrets[pw.id]) : null;
   if (pw && secrets[pw.id]) { if (!r.detail.passwordChangedAt) r.detail.passwordChangedAt = r.detail.updatedAt; } else { r.detail.passwordChangedAt = null; }
@@ -301,6 +302,24 @@ function genPw(length: number, symbols: boolean, digits: boolean, words?: boolea
 
 type A = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 let syncState: T.SyncStatus = { remote: 'git@example.com:demo/vault.git', lastSync: '2026-10-25T09:00:00Z', ahead: 0, behind: 1, dirty: false };
+function resolveMockRelated(ids?: string[]): T.RelatedItem[] {
+  if (!ids || ids.length === 0) return [];
+  return ids.map((rid) => {
+    const target = db.get(rid);
+    if (!target || target.detail.deletedAt) {
+      return { id: rid, title: "Item not available", available: false };
+    }
+    return {
+      id: rid,
+      vaultId: target.detail.vaultId,
+      category: target.detail.category,
+      title: target.detail.title,
+      subtitle: target.detail.subtitle,
+      available: true,
+    };
+  });
+}
+
 export const mock: Record<string, (a: A) => Promise<unknown>> = {
   status: () => delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: unlocked ? 'Demo Family' : null }),
   unlock: (a: { password: string }) => { if (!a.password) return Promise.reject(new Error('password required')); unlocked = true; return delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: 'Demo Family' }, 300); },
@@ -428,7 +447,10 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : sort === 'recent' ? (b.lastUsed ?? 0) - (a.lastUsed ?? 0) || a.title.localeCompare(b.title) : b.updatedAt.localeCompare(a.updatedAt));
     return delay(xs.map(summary));
   },
-  get_item: (a: { itemId: string }) => delay({ ...get(a.itemId).detail, findings: mockFindings(a.itemId) }),
+  get_item: (a: { itemId: string }) => {
+    const d = get(a.itemId).detail;
+    return delay({ ...d, relatedItems: resolveMockRelated(d.relatedItemIds), findings: mockFindings(a.itemId) });
+  },
   reveal_field: (a: { itemId: string; fieldId: string; version?: number | null }) => {
     const r = get(a.itemId);
     r.detail.lastUsed = Math.floor(Date.now() / 1000);
@@ -585,6 +607,22 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     const r = db.get(a.itemId);
     if (r) {
       r.detail.ignoredFindings = (r.detail.ignoredFindings ?? []).filter((k) => k !== a.kind);
+    }
+    return delay(undefined, 20);
+  },
+  add_related_item: (a: { vaultId: string; itemId: string; relatedId: string }) => {
+    if (a.itemId === a.relatedId) return Promise.reject(new Error("cannot link an item to itself"));
+    const r = db.get(a.itemId);
+    if (r) {
+      const cur = r.detail.relatedItemIds ?? [];
+      if (!cur.includes(a.relatedId)) r.detail.relatedItemIds = [...cur, a.relatedId];
+    }
+    return delay(undefined, 20);
+  },
+  remove_related_item: (a: { vaultId: string; itemId: string; relatedId: string }) => {
+    const r = db.get(a.itemId);
+    if (r) {
+      r.detail.relatedItemIds = (r.detail.relatedItemIds ?? []).filter((id) => id !== a.relatedId);
     }
     return delay(undefined, 20);
   },

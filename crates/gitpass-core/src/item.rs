@@ -248,6 +248,8 @@ pub struct Snapshot {
     pub sections: Vec<Section>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_item_ids: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, Zeroize)]

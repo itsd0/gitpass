@@ -410,6 +410,12 @@ EXAMPLES:
         /// Unmark item as favorite
         #[arg(long, conflicts_with = "favorite")]
         unfavorite: bool,
+        /// Add a related item link (by title or ID, repeatable)
+        #[arg(long = "link", alias = "related", action = clap::ArgAction::Append)]
+        link: Vec<String>,
+        /// Remove a related item link (by title or ID, repeatable)
+        #[arg(long = "unlink", alias = "unrelated", action = clap::ArgAction::Append)]
+        unlink: Vec<String>,
         /// Choose the n-th (1-based) ranked candidate when several match
         #[arg(long)]
         pick: Option<usize>,
@@ -1432,7 +1438,7 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
     }
     Ok(())
 }
-fn print_item(id: &str, r: &ItemRecord, reveal: bool) {
+fn print_item(id: &str, r: &ItemRecord, reveal: bool, related: &[String]) {
     let it = &r.item;
     println!("id:       {id}");
     println!("title:    {}", it.title);
@@ -1496,6 +1502,9 @@ fn print_item(id: &str, r: &ItemRecord, reveal: bool) {
             }
         }
     }
+    if !related.is_empty() {
+        println!("related:  {}", related.join(", "));
+    }
 }
 
 fn field_value(it: &Item, f: Field) -> Result<Zeroizing<String>> {
@@ -1556,6 +1565,10 @@ struct CliItemDetail {
     #[serde(skip_serializing_if = "Option::is_none")]
     notes: Option<String>,
     fields: Vec<CliField>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    related_item_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    related_items: Vec<String>,
 }
 
 fn ts(s: &str) -> String {
@@ -1713,6 +1726,8 @@ fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<Stri
         last_used_at,
         notes: r.item.notes.clone().filter(|n| !n.trim().is_empty()),
         fields,
+        related_item_ids: r.related_item_ids.clone(),
+        related_items: r.related_item_ids.clone(),
     }
 }
 
@@ -2783,7 +2798,13 @@ fn run() -> Result<()> {
                 }).unwrap_or_default();
                 println!("{secret}");
             } else {
-                print_item(&id, &rec, *reveal);
+                let related_titles: Vec<String> = rec.related_item_ids.iter().map(|rid| {
+                    match s.get_record_by_id(rid) {
+                        Ok(Some((_, _, rel_rec))) if rel_rec.deleted_at.is_none() => rel_rec.item.title.clone(),
+                        _ => "Item not available".to_string(),
+                    }
+                }).collect();
+                print_item(&id, &rec, *reveal, &related_titles);
             }
         }
         Cmd::Copy { vault, query, field, pick, clear_secs, quiet } => {
@@ -2913,6 +2934,8 @@ fn run() -> Result<()> {
             untag,
             favorite,
             unfavorite,
+            link,
+            unlink,
             pick,
             json,
         } => {
@@ -2941,6 +2964,25 @@ fn run() -> Result<()> {
             }
             if *unfavorite {
                 rec.favorite = false;
+            }
+            for l in link {
+                let l_trim = l.trim();
+                if l_trim.is_empty() { continue; }
+                let target_id = if s.find_item_vault(l_trim)?.is_some() {
+                    l_trim.to_string()
+                } else {
+                    pick_record(&s, &vid, l_trim, *pick, false).map(|(id, _)| id)?
+                };
+                if target_id == iid {
+                    bail!("cannot link an item to itself");
+                }
+                if !rec.related_item_ids.contains(&target_id) {
+                    rec.related_item_ids.push(target_id);
+                }
+            }
+            for u in unlink {
+                let u_trim = u.trim();
+                rec.related_item_ids.retain(|id| id != u_trim);
             }
             rec.item.updated_at = store::now();
             s.update_record(&vid, &iid, rec)?;
