@@ -1241,5 +1241,14 @@
   },
   "optColorPasswordsBody": {
     "message": "แสดงตัวเลขเป็นสีส้ม สัญลักษณ์เป็นสีน้ำเงิน และช่องว่างเป็นจุด เมื่อเปิดดูรหัสผ่าน การคัดลอกไม่เปลี่ยนแปลง"
+  },
+  "watchtowerUnused": {
+    "message": "ไม่ได้ใช้งานมากว่าหนึ่งปี"
+  },
+  "watchtowerRotationDue": {
+    "message": "ถึงเวลาเปลี่ยนรหัสผ่าน"
+  },
+  "watchtowerRotationSoon": {
+    "message": "ใกล้ถึงเวลาเปลี่ยนรหัสผ่าน"
   }
 }

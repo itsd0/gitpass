@@ -1162,5 +1162,14 @@
   },
   "optColorPasswordsBody": {
     "message": "Show digits in orange, symbols in blue and spaces as a dot when a password is revealed. Copying is unchanged."
+  },
+  "watchtowerUnused": {
+    "message": "Not used in over a year"
+  },
+  "watchtowerRotationDue": {
+    "message": "Due for rotation"
+  },
+  "watchtowerRotationSoon": {
+    "message": "Rotation due soon"
   }
 }
