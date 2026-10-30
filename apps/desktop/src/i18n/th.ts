@@ -596,6 +596,18 @@ export const th: Partial<Record<Key, string>> = {
   'field.openLink': 'เปิดลิงก์',
   // one-time password countdown
   'totp.remaining': 'เหลืออีก {n} วินาที',
+  'totp.scanQr': 'สแกนรหัส QR',
+  'totp.scanScreen': 'จากหน้าจอ',
+  'totp.scanClipboard': 'จากรูปภาพในคลิปบอร์ด',
+  'totp.dropHint': 'ลากรูปภาพมาวางที่นี่เพื่อสแกน',
+  'totp.noQrFound': 'ไม่พบรหัส QR',
+  'totp.notTotp': 'รหัส QR นี้ไม่ใช่รหัสแบบใช้ครั้งเดียว',
+  'totp.captureCancelled': 'ยกเลิกการจับภาพหน้าจอแล้ว',
+  'totp.autofillOffer': 'กรอกชื่อเรื่องเป็น “{title}” และชื่อผู้ใช้เป็น “{username}” หรือไม่?',
+  'totp.autofillTitleOnly': 'กรอกชื่อเรื่องเป็น “{title}” หรือไม่?',
+  'totp.autofillUsernameOnly': 'กรอกชื่อผู้ใช้เป็น “{username}” หรือไม่?',
+  'totp.autofillApply': 'กรอก',
+  'totp.autofillDismiss': 'ปิด',
   'cmd.showLargeType': 'แสดงรหัสผ่านด้วยตัวอักษรขนาดใหญ่',
 
   // TODO(i18n-review): unlock and sidebar strings

@@ -1,4 +1,14 @@
 export type ItemCategory = 'login'|'credit_card'|'secure_note'|'identity'|'api_credential'|'document'|'ssh_key'|'wifi'|'passkey'|'bank_account'|'server';
+export interface ScannedTotp {
+  uri: string;
+  secret: string;
+  issuer?: string | null;
+  account?: string | null;
+  digits: number;
+  period: number;
+  algorithm: string;
+}
+
 export type FieldKind = 'text'|'concealed'|'url'|'email'|'phone'|'date'|'month_year'|'totp'|'multiline';
 export interface Field { id: string; label: string; kind: FieldKind; value: string | null; /** card numbers only: '•••• •••• •••• 7575' (computed after decryption, display only) */ masked?: string | null; diff?: 'changed' | 'added' | 'removed' | null; } // concealed values are null in summaries/details until reveal
 export interface Section { id: string; title: string | null; fields: Field[]; }
