@@ -569,6 +569,8 @@ export const my: Partial<Record<Key, string>> = {
   "items.section.previous30Days": "လွန်ခဲ့သော ရက် ၃၀",
   "items.ariaLabel": "Item များ",
   "items.selectItem": "{title} ကို ရွေးပါ",
+  "items.rowActions": "{title} အတွက် အမြန်လုပ်ဆောင်ချက်များ",
+  "itemKeys.copyNumber": "နံပါတ် ကူးယူရန်",
   "items.deselectItem": "{title} ကို ရွေးချယ်မှုမှ ပယ်ဖျက်ပါ",
   "items.search.resultCount": "ရလဒ် {count} ခု",
   "items.search.resultOne": "ရလဒ် ၁ ခု",
