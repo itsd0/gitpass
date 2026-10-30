@@ -144,6 +144,16 @@ pub struct IgnoredFindingItem {
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct UnusedItem {
+    pub item_id: String,
+    /// Whole days since the last use, or since the last edit/creation when the item was never used here.
+    pub days: u64,
+    /// True when local usage state recorded a use; false means `days` is measured from the edit/creation time.
+    pub last_used: bool,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct WatchtowerReport {
     pub score: u8, pub weak: Vec<String>, pub reused: Vec<Vec<String>>, pub old: Vec<String>, pub breached: Vec<String>,
     pub missing_totp: Vec<String>, pub totp_available: Vec<String>, pub passkey_available: Vec<String>,
@@ -151,6 +161,8 @@ pub struct WatchtowerReport {
     pub insecure_urls: Vec<String>,
     pub duplicates: Vec<Vec<String>>,
     pub weak_ssh_keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unused: Vec<UnusedItem>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub weak_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -210,7 +222,10 @@ pub struct Settings {
     #[serde(default = "default_true")] pub show_menu_bar_icon: bool,
     /// Remember generated passwords in an encrypted vault history (default on).
     #[serde(default = "default_true")] pub remember_generated_passwords: bool,
+    /// Watchtower "Unused items" threshold in months: 6, 12 or 24; 0 turns the check off (default 12).
+    #[serde(default = "default_unused_months")] pub watchtower_unused_months: u64,
 }
+fn default_unused_months() -> u64 { 12 }
 impl Default for Settings {
     fn default() -> Self {
         Settings { auto_lock_minutes: 5, clipboard_clear_secs: crate::CLIPBOARD_CLEAR_SECS, theme: Theme::Dark, language: Language::En,
@@ -219,7 +234,8 @@ impl Default for Settings {
             hide_from_screen_recording: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
-            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, remember_generated_passwords: true }
+            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, remember_generated_passwords: true,
+            watchtower_unused_months: 12 }
     }
 }
 
@@ -533,7 +549,7 @@ fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<Find
 
 /// Active Watchtower findings for one item. Runs the same audit as [`App::watchtower`] (without
 /// the opt-in HIBP network call) so reuse groups match the Watchtower page.
-fn item_findings(s: &Session, vault_id: &str, item_id: &str) -> Result<Vec<FindingInfo>> {
+fn item_findings(s: &Session, settings: &Settings, vault_id: &str, item_id: &str) -> Result<Vec<FindingInfo>> {
     let records = App::all_records(s)?;
     let passkey_sites: BTreeSet<String> = records.iter()
         .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
@@ -542,7 +558,9 @@ fn item_findings(s: &Session, vault_id: &str, item_id: &str) -> Result<Vec<Findi
     let items: Vec<(String, String, ItemRecord)> = records.into_iter()
         .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
         .collect();
-    let rep = audit::audit_with_passkeys(&items, &passkey_sites, &AuditOpts::default(), None)?;
+    let opts = AuditOpts { unused_months: (settings.watchtower_unused_months > 0).then_some(settings.watchtower_unused_months),
+        last_used: s.all_last_used(), ..AuditOpts::default() };
+    let rep = audit::audit_with_passkeys(&items, &passkey_sites, &opts, None)?;
     Ok(rep.per_item.into_iter()
         .filter(|f| f.vault == vault_id && f.id == item_id)
         .flat_map(|f| f.findings.into_iter().map(|x| FindingInfo { kind: x.kind().to_string(), description: x.to_string() }))
@@ -855,7 +873,7 @@ impl App {
     pub fn get_item(&self, vault_id: &str, item_id: &str) -> Result<ItemDetail> {
         self.with(|u| {
             let (v, r) = u.session.read_record(vault_id, item_id)?;
-            let findings = item_findings(&u.session, vault_id, item_id)?;
+            let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
             Ok(detail(vault_id, item_id, v, &r, findings, last_used))
         })
@@ -1102,7 +1120,7 @@ impl App {
         self.write(|u| {
             let new_v = u.session.restore_version(vault_id, item_id, version)?;
             let (_, r) = u.session.read_record(vault_id, item_id)?;
-            let findings = item_findings(&u.session, vault_id, item_id)?;
+            let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
             Ok(detail(vault_id, item_id, new_v, &r, findings, last_used))
         })
@@ -1250,7 +1268,9 @@ impl App {
     /// Watchtower over live login items, reusing core `audit` (HIBP only when `hibp`).
     pub fn watchtower(&self, hibp: bool) -> Result<WatchtowerReport> {
         // Network breach check only when the caller asks AND the user opted in via Settings.hibpCheck.
-        let hibp = hibp && self.get_settings().hibp_check;
+        let settings = self.get_settings();
+        let hibp = hibp && settings.hibp_check;
+        let unused_months = settings.watchtower_unused_months;
         let client: Option<&dyn PwnedRangeClient> = if hibp { Some(self.hibp.as_ref() as &dyn PwnedRangeClient) } else { None };
         self.with(|u| {
             let records = Self::all_records(&u.session)?;
@@ -1261,12 +1281,15 @@ impl App {
             let items: Vec<(String, String, ItemRecord)> = records.into_iter()
                 .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
                 .collect();
-            let rep = audit::audit_with_passkeys(&items, &passkey_sites, &AuditOpts::default(), client)?;
+            let last_used = u.session.all_last_used();
+            let opts = AuditOpts { unused_months: (unused_months > 0).then_some(unused_months), last_used: last_used.clone(), ..AuditOpts::default() };
+            let rep = audit::audit_with_passkeys(&items, &passkey_sites, &opts, client)?;
             let mut out = WatchtowerReport { score: 100, weak: vec![], reused: vec![], old: vec![], breached: vec![], missing_totp: vec![],
                 totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
                 insecure_urls: vec![],
                 duplicates: vec![],
                 weak_ssh_keys: vec![],
+                unused: vec![],
                 weak_reasons: HashMap::new(),
                 ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
@@ -1290,6 +1313,9 @@ impl App {
                         Finding::InsecureUrl { .. } => out.insecure_urls.push(f.id.clone()),
                         Finding::Duplicate { group } => dup_groups.entry(group.clone()).or_default().push(f.id.clone()),
                         Finding::WeakSshKey { .. } => out.weak_ssh_keys.push(f.id.clone()),
+                        Finding::Unused { days } => out.unused.push(UnusedItem {
+                            item_id: f.id.clone(), days: *days, last_used: last_used.contains_key(&f.id),
+                        }),
                     }
                 }
             }
@@ -1447,6 +1473,7 @@ impl App {
         }
         if s.auto_lock_minutes > 24 * 60 { bail!("autoLockMinutes must be <= 1440"); }
         if s.clipboard_clear_secs > 3600 { bail!("clipboardClearSecs must be <= 3600"); }
+        if ![0, 6, 12, 24].contains(&s.watchtower_unused_months) { bail!("watchtowerUnusedMonths must be 0 (off), 6, 12 or 24"); }
         self.update_local(|l| l.settings = Some(s.clone()))?;
         self.state.set_auto_lock_minutes(s.auto_lock_minutes);
         Ok(s)

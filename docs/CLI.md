@@ -278,13 +278,16 @@ recalled. See the README "Device management".
 ```sh
 gitpass audit
 gitpass audit Personal --max-age-days 180
+gitpass audit --unused-months 24
 gitpass audit --hibp --json
 gitpass audit --include-ignored
 ```
 
 `audit` checks live items: weak, reused and old passwords, missing TOTP, insecure URLs
 and duplicates on login items, plus expired or expiring credentials on cards and API
-credentials; it also reports offline 2FA/passkey availability. `--hibp` opts in to Have I
+credentials; it also reports offline 2FA/passkey availability. `--unused-months` (default
+12, `0` disables) flags logins not used on this device for that long, falling back to the
+last edit/creation time when the item was never used. `--hibp` opts in to Have I
 Been Pwned k-anonymity checks (only five hex characters of a SHA-1 leave the machine).
 `--max-age-days` defaults to 365 and `--expiring-days` to 30. The scoring and checks are
 documented in [WATCHTOWER.md](WATCHTOWER.md).
