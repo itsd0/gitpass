@@ -9,7 +9,7 @@ export type HistoryRange = 30 | 90;
 export const SCORE_HISTORY_KEY = 'gitpass.watchtowerHistory';
 export const MAX_HISTORY_DAYS = 90;
 
-const COUNT_KEYS: IssueKey[] = ['weak', 'reused', 'old', 'breached', 'missingTotp', 'totpAvailable', 'passkeyAvailable', 'expired', 'expiringSoon', 'insecureUrls', 'duplicates', 'weakSshKey', 'unused', 'rotationDue', 'rotationSoon'];
+const COUNT_KEYS: IssueKey[] = ['weak', 'reused', 'reusedOldPassword', 'old', 'breached', 'missingTotp', 'totpAvailable', 'passkeyAvailable', 'expired', 'expiringSoon', 'insecureUrls', 'duplicates', 'weakSshKey', 'unused', 'rotationDue', 'rotationSoon'];
 const DAY_MS = 86_400_000;
 
 /** Local calendar day as YYYY-MM-DD. */

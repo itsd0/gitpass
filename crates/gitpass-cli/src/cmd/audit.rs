@@ -48,8 +48,8 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             } else {
             println!("audited {} item(s) in {} vault(s){}  score: {score}/100", r.items_checked, vids.len(), if *hibp { " (with HIBP)" } else { "" });
             let unused_label = if *unused_months > 0 { format!(">{unused_months}mo") } else { "off".to_string() };
-            println!("  weak: {}  reused: {} ({} group(s))  duplicates: {}  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}  weak SSH keys: {}  unused ({unused_label}): {}  rotation due: {}  rotation soon: {}  ignored: {}",
-                r.weak, r.reused, r.reused_groups, r.duplicates, r.old, r.expired, r.expiring_soon, r.insecure_urls, r.missing_totp, r.totp_available, r.passkey_available,
+            println!("  weak: {}  reused: {} ({} group(s))  reused old passwords: {}  duplicates: {}  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}  weak SSH keys: {}  unused ({unused_label}): {}  rotation due: {}  rotation soon: {}  ignored: {}",
+                r.weak, r.reused, r.reused_groups, r.reused_old_password, r.duplicates, r.old, r.expired, r.expiring_soon, r.insecure_urls, r.missing_totp, r.totp_available, r.passkey_available,
                 if *hibp { format!("  pwned: {}", r.pwned) } else { String::new() },
                 r.weak_ssh_keys,
                 r.unused,

@@ -861,6 +861,9 @@
       }
     }
   },
+  "watchtowerReusedOldPassword": {
+    "message": "စကားဝှက်ဟောင်းကို ပြန်သုံးထားသည်"
+  },
   "watchtowerPwned": {
     "message": "ဒေတာပေါက်ကြားမှုတွင် ပါဝင်သည်"
   },
