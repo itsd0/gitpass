@@ -871,7 +871,7 @@ impl App {
                 };
                 // The item-type picker narrows every view (Recently deleted, Archive,
                 // Favorites, a vault, a tag), not only the Category sidebar entry.
-                if !keep || !filter.category.is_none_or(|c| r.category == c) {
+                if !keep || filter.category.is_some_and(|c| r.category != c) {
                     return false;
                 }
                 if let Some(pq) = &parsed_q {

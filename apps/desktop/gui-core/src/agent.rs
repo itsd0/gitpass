@@ -312,8 +312,8 @@ impl Agent {
                 };
                 let mut items: Vec<(Value, String)> = recs.into_iter()
                     .filter(|(vid, vname, _, r)| {
-                        if !vault.as_ref().is_none_or(|v| v == vid) { return false; }
-                        if !cat.is_none_or(|c| c == r.category) { return false; }
+                        if vault.as_ref().is_some_and(|v| v != vid) { return false; }
+                        if cat.is_some_and(|c| c != r.category) { return false; }
                         if let Some(pq) = &parsed_q {
                             let cand = gitpass_core::search::CandidateInfo::from_record(r, Some(vname.as_str()));
                             if !pq.matches(&cand) { return false; }
