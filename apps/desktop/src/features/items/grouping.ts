@@ -37,6 +37,8 @@ export interface GroupRowsOptions extends DateBucketOptions {
   showRecentSection?: boolean;
   recentLabel?: string;
   neverUsedLabel?: string;
+  /** Return plain item rows with no section headers (e.g. search results, which are ranked by relevance). */
+  flat?: boolean;
 }
 
 export function parseItemDate(value: string | number | Date | null | undefined): Date | null {
@@ -159,6 +161,9 @@ export function groupRows(
   options?: GroupRowsOptions
 ): Row[] {
   const rows: Row[] = [];
+  if (options?.flat) {
+    return items.map((item, index) => ({ type: 'item', key: item.id, item, index }));
+  }
   const recentLabel = options?.recentLabel ?? 'Recently used';
   const neverUsedLabel = options?.neverUsedLabel ?? 'Never used';
 
