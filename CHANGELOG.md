@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.6.7 — 2026-10-30
+
+### Fixes
+- The "What's new" sheet now shows 0.6.6 highlights (0.6.6 shipped with only the 0.6.5 entry and fell back to it), and
+  a desktop test fails CI when the app version has no What's new entry (#362).
+
 ## 0.6.6 — 2026-10-30
 
 ### Desktop
