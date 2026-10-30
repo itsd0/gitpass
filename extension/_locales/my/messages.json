@@ -273,6 +273,30 @@
   "reveal": {
     "message": "ပြရန်"
   },
+  "passwordHistory": {
+    "message": "စကားဝှက်မှတ်တမ်း ($1)",
+    "description": "Disclosure label for previous passwords on a login item",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "passwordHistoryReplaced": {
+    "message": "$1 တွင် အသစ်လဲခဲ့သည်",
+    "description": "Label indicating when a historical password was replaced",
+    "placeholders": {
+      "date": {
+        "content": "$1"
+      }
+    }
+  },
+  "revealPasswordHistory": {
+    "message": "ယခင်စကားဝှက်ကို ပြမည်"
+  },
+  "copyPasswordHistory": {
+    "message": "ယခင်စကားဝှက်ကို ကူးယူမည်"
+  },
   "lastEdited": {
     "message": "နောက်ဆုံး ပြင်ဆင်ချိန်"
   },

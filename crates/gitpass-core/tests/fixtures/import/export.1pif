@@ -34,6 +34,12 @@
         "type": "T",
         "value": "Blue"
       }
+    ],
+    "passwordHistory": [
+      {
+        "value": "FAKE-pw-webform-older",
+        "time": 1700002000
+      }
     ]
   }
 }

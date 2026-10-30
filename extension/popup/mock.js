@@ -101,7 +101,17 @@
         }
         return ok({ kinds: [] });
       }
-      case 'reveal': { const it = liveItem(msg.item_id); if (!it) return err('not_found'); detail(it); return ok({ value: secrets[msg.field] || '' }); }
+      case 'reveal': {
+        const it = liveItem(msg.item_id);
+        if (!it) return err('not_found');
+        detail(it);
+        if (msg.field && msg.field.startsWith('password_history:')) {
+          const idx = parseInt(msg.field.split(':')[1], 10);
+          const val = (it.password_history && it.password_history[idx]?.value) || secrets[msg.field] || 'fake-old-pw';
+          return ok({ value: val });
+        }
+        return ok({ value: secrets[msg.field] || '' });
+      }
       case 'totp': { const s = Math.floor(Date.now() / 1000); return ok({ code: String(100000 + (Math.floor(s / 30) * 7919) % 900000), remaining: 30 - (s % 30), period: 30 }); }
       case 'generate': return ok({ password: 'Xk7#pQ2m-Vr9!tLz4wNb' });
       case 'generator_history': {
