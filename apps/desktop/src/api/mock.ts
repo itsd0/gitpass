@@ -114,6 +114,13 @@ cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_ca
 
 add('v_private', 'passkey', 'webauthn.example.invalid', 'demo@example.invalid', 6, [['site', 'text', 'webauthn.example.invalid'], ['user name', 'text', 'demo@example.invalid'], ['credential id', 'text', 'FAKE-cred-id'], ['private key', 'concealed', 'FAKE'], ['sign count', 'text', '3']]);
 let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, hideFromScreenRecording: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false, renderNotesMarkdown: true, showMenuBarIcon: true, listDensity: 'comfortable', rememberGeneratedPasswords: true, watchtowerUnusedMonths: 12, lastSeenVersion: undefined };
+/** Last value this mock wrote, so Clear now only wipes the clipboard when it still matches. */
+let lastCopiedText: string | null = null;
+function noteClipboard(text: string) {
+  lastCopiedText = text;
+  const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+  if (clip && typeof clip.writeText === 'function') void Promise.resolve(clip.writeText(text)).catch(() => {});
+}
 let mockGeneratorHistory: T.GeneratorHistoryEntry[] = [
   { id: "gh-1", value: "FAKE-mock-pw-1", createdAt: Math.floor(Date.now() / 1000) - 300, source: "desktop", host: null },
   { id: "gh-2", value: "FAKE-mock-pw-2", createdAt: Math.floor(Date.now() / 1000) - 7200, source: "extension", host: "github.com" },
@@ -515,14 +522,29 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     if (a.fieldId.startsWith('password_history:')) {
       const idx = parseInt(a.fieldId.replace('password_history:', ''), 10);
       const val = r.passwordHistory?.[idx]?.value ?? '';
-      navigator.clipboard?.writeText(val).catch(() => {});
+      noteClipboard(val);
       return delay(undefined);
     }
     const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId);
     const v = r.secrets[a.fieldId] ?? fld?.value ?? '';
     // In Tauri the copy happens in Rust; the browser mock best-effort uses the clipboard API.
-    navigator.clipboard?.writeText(v).catch(() => {});
+    noteClipboard(v);
     return delay(undefined);
+  },
+  clear_clipboard_if_ours: async () => {
+    const token = lastCopiedText;
+    lastCopiedText = null;
+    if (!token) return false;
+    const clip = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+    if (!clip || typeof clip.readText !== 'function' || typeof clip.writeText !== 'function') return false;
+    try {
+      const cur = await clip.readText();
+      if (cur === token) {
+        await clip.writeText('');
+        return true;
+      }
+    } catch { /* clipboard unavailable in tests that did not mock it */ }
+    return false;
   },
   clear_password_history: (a: { itemId: string }) => {
     const r = get(a.itemId);
@@ -661,7 +683,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   },
   generate_password: (a: { length: number; symbols: boolean; digits: boolean; words?: boolean; pin?: boolean; separator?: string; capitalize?: boolean }) => delay(genPw(a.length, a.symbols, a.digits, a.words, a.pin, a.separator, a.capitalize), 5),
   copy_password: (a: { password: string }) => {
-    navigator.clipboard?.writeText(a.password).catch(() => {});
+    noteClipboard(a.password);
     return delay(undefined);
   },
   password_strength: (a: { password: string }) => delay(strength(a.password), 5),

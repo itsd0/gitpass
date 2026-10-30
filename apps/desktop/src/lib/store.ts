@@ -6,7 +6,7 @@ export type Route =
   | { name: 'items'; filter: Filter }
   | { name: 'watchtower' }
   | { name: 'people' }
-  | { name: 'settings'; tab?: string }
+  | { name: 'settings'; tab?: string; /** scroll target, e.g. setting-clipboard */ highlight?: string }
   | { name: 'quick-access' };
 
 export interface ModalState { id: string; props?: Record<string, unknown> }

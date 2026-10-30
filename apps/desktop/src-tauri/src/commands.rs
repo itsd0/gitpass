@@ -54,6 +54,8 @@ impl a::Clipboard for SysClipboard {
 #[tauri::command] pub fn reveal_field(s: State<App>, vault_id: String, item_id: String, field_id: String, version: Option<u64>) -> R<String> { s.reveal_field_version(&vault_id, &item_id, &field_id, version).map(|z| z.to_string()).map_err(e) }
 /// Copies in Rust; cleared after clipboardClearSecs only if the clipboard still holds our value.
 #[tauri::command] pub fn copy_field(s: State<App>, vault_id: String, item_id: String, field_id: String) -> R<()> { s.copy_field(&vault_id, &item_id, &field_id).map_err(e) }
+/// Clears the clipboard only when it still holds the value gitpass copied.
+#[tauri::command] pub fn clear_clipboard_if_ours(s: State<App>) -> bool { s.clear_clipboard_if_ours() }
 #[tauri::command] pub fn totp_now(s: State<App>, vault_id: String, item_id: String) -> R<a::TotpNow> { s.totp_now(&vault_id, &item_id).map_err(e) }
 #[tauri::command(async)]
 pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>) -> R<a::ScannedTotp> {
