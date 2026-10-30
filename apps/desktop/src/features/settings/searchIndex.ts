@@ -20,6 +20,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['appearance', 'dark mode', 'light mode', 'colors'],
   },
   {
+    id: 'setting-text-size',
+    tab: 'general',
+    labelKey: 'settings.textSize',
+    descriptionKey: 'settings.textSizeHelp',
+    keywords: ['zoom', 'font size', 'larger', 'smaller', 'bigger', 'accessibility', 'display'],
+  },
+  {
     id: 'setting-language',
     tab: 'general',
     labelKey: 'settings.language',
@@ -198,6 +205,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     labelKey: 'ssh.cli',
     descriptionKey: 'ssh.cliHelp',
     keywords: ['command line', 'terminal', 'gitpass ssh'],
+  },
+  {
+    id: 'setting-ssh-activity',
+    tab: 'ssh',
+    labelKey: 'ssh.activity',
+    descriptionKey: 'ssh.activityHelp',
+    keywords: ['activity', 'history', 'log', 'sign', 'denied', 'refused', 'client app'],
   },
   // About
   {

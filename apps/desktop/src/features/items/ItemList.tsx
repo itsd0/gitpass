@@ -115,6 +115,7 @@ export function ItemList() {
   const rows = useMemo(
     () =>
       groupRows(items, sort, {
+        flat: !!searchQuery,
         showRecentSection,
         recentLabel: t("items.recentlyUsed"),
         neverUsedLabel: t("items.neverUsed"),
@@ -124,7 +125,7 @@ export function ItemList() {
         previous30DaysLabel: t("items.section.previous30Days"),
         locale: lang,
       }),
-    [items, sort, showRecentSection, t, lang]
+    [items, sort, showRecentSection, searchQuery, t, lang]
   );
   const stickyIndexes = useMemo(
     () =>

@@ -233,7 +233,10 @@ OpenSSH private key (Ed25519, ECDSA P-256/P-384, or RSA 2048+ bits; RSA under 20
 are rejected; a passphrase comes from `GITPASS_SSH_PASSPHRASE` or a prompt). The SSH agent signs
 RSA requests with `rsa-sha2-256` or `rsa-sha2-512` only (plain SHA-1 `ssh-rsa` is refused). `ssh public` prints the
 `authorized_keys` line; `ssh config` prints the `~/.ssh/config` `IdentityAgent` snippet
-(both `config` and `agent` accept `--socket PATH`).
+(both `config` and `agent` accept `--socket PATH`). The desktop app's
+**Settings → SSH Agent → Recent activity** lists the last 50 sign requests (time, key, requested
+algorithm, client app, and whether the request was signed, denied or refused). That list lives only
+in memory and is cleared when the vault locks.
 
 ### Git commit signing
 
@@ -278,13 +281,16 @@ recalled. See the README "Device management".
 ```sh
 gitpass audit
 gitpass audit Personal --max-age-days 180
+gitpass audit --unused-months 24
 gitpass audit --hibp --json
 gitpass audit --include-ignored
 ```
 
 `audit` checks live items: weak, reused and old passwords, missing TOTP, insecure URLs
 and duplicates on login items, plus expired or expiring credentials on cards and API
-credentials; it also reports offline 2FA/passkey availability. `--hibp` opts in to Have I
+credentials; it also reports offline 2FA/passkey availability. `--unused-months` (default
+12, `0` disables) flags logins not used on this device for that long, falling back to the
+last edit/creation time when the item was never used. `--hibp` opts in to Have I
 Been Pwned k-anonymity checks (only five hex characters of a SHA-1 leave the machine).
 `--max-age-days` defaults to 365 and `--expiring-days` to 30. The scoring and checks are
 documented in [WATCHTOWER.md](WATCHTOWER.md).
