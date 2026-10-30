@@ -375,16 +375,118 @@ EXAMPLES:
     },
     /// Edit an item
     Edit {
-        vault: String, id: String,
-        #[arg(long)] title: Option<String>,
-        #[arg(long)] username: Option<String>,
-        #[arg(long)] url: Option<String>,
-        #[arg(long)] notes: Option<String>,
-        #[arg(long)] totp: Option<String>,
+        /// Item query (or vault if item is also given)
+        item: String,
+        /// Item query when vault is given as first positional argument
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        #[arg(long)]
+        title: Option<String>,
+        #[arg(long)]
+        username: Option<String>,
+        #[arg(long)]
+        url: Option<String>,
+        #[arg(long)]
+        notes: Option<String>,
+        #[arg(long)]
+        totp: Option<String>,
         /// Prompt for a new password
-        #[arg(long)] password: bool,
+        #[arg(long)]
+        password: bool,
         #[arg(long, num_args = 0..=1, default_missing_value = "24")]
         generate: Option<usize>,
+        /// Add a tag (repeatable)
+        #[arg(long = "tag", action = clap::ArgAction::Append)]
+        tag: Vec<String>,
+        /// Remove a tag (repeatable)
+        #[arg(long = "untag", action = clap::ArgAction::Append)]
+        untag: Vec<String>,
+        /// Mark item as favorite
+        #[arg(long, conflicts_with = "unfavorite")]
+        favorite: bool,
+        /// Unmark item as favorite
+        #[arg(long, conflicts_with = "favorite")]
+        unfavorite: bool,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Archive an item
+    Archive {
+        /// Item query (or vault if item is also given)
+        item: String,
+        /// Item query when vault is given as first positional argument
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Unarchive an item
+    Unarchive {
+        /// Item query (or vault if item is also given)
+        item: String,
+        /// Item query when vault is given as first positional argument
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Restore an item from Recently Deleted
+    Undelete {
+        /// Item query (or vault if item is also given)
+        item: String,
+        /// Item query when vault is given as first positional argument
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
+    /// Move an item to another vault
+    Mv {
+        /// Item query (or vault if item is also given)
+        item: String,
+        /// Item query when vault is given as first positional argument
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Source vault containing the item (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Destination vault
+        #[arg(long)]
+        to: String,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
     },
     /// Remove an item
     Rm { vault: String, id: String },
@@ -1649,6 +1751,149 @@ fn pick_item(s: &Session, vid: &str, query: &str, pick: Option<usize>) -> Result
     Ok((id, rec.item.clone()))
 }
 
+fn resolve_target_item(
+    s: &Session,
+    vault_flag: Option<&str>,
+    pos1: &str,
+    pos2: Option<&str>,
+    pick: Option<usize>,
+    include_archived: bool,
+) -> Result<(String, String, ItemRecord)> {
+    let (vault_str, query_str) = match pos2 {
+        Some(q) => (Some(pos1), q),
+        None => match pos1.split_once('/') {
+            Some((v, q)) => (Some(v), q),
+            None => (vault_flag, pos1),
+        },
+    };
+
+    if let Some(v) = vault_str {
+        let vid = s.resolve_vault(v)?;
+        let (iid, rec) = pick_record(s, &vid, query_str, pick, include_archived)?;
+        return Ok((vid, iid, rec));
+    }
+
+    let mut all_recs = Vec::new();
+    for (vid, _) in s.list_vaults()? {
+        let mut recs = s.list_records(&vid)?;
+        if !include_archived {
+            recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
+        }
+        for (id, _, rec) in recs {
+            all_recs.push((vid.clone(), id, rec));
+        }
+    }
+
+    let ranked = gitpass_core::search::rank_by(
+        query_str,
+        all_recs.into_iter().map(|(vid, id, rec)| (format!("{vid}:{id}"), (vid, id, rec))),
+        |(_, _, rec)| &rec.item,
+    );
+
+    if ranked.is_empty() {
+        bail!("no item matches '{query_str}'");
+    }
+
+    let idx = match pick {
+        Some(n) if n >= 1 && n <= ranked.len() => n - 1,
+        Some(n) => bail!("--pick {n} out of range (1..={})", ranked.len()),
+        None => match gitpass_core::search::clear_winner(&ranked) {
+            Some(i) => i,
+            None => {
+                for (i, (sc, _, (vid, id, rec))) in ranked.iter().enumerate() {
+                    let vname = s.vault_meta(vid).map(|m| m.name.clone()).unwrap_or_else(|_| vid.clone());
+                    eprintln!(
+                        "{:>3}. [{vname}] {id}  {}  {}  (score {sc})",
+                        i + 1,
+                        rec.item.title,
+                        rec.item.username.clone().unwrap_or_default()
+                    );
+                }
+                bail!("{} items match '{query_str}'; use --pick <n> or specify --vault", ranked.len());
+            }
+        },
+    };
+
+    let (_, _, (vid, id, rec)) = ranked.into_iter().nth(idx).unwrap();
+    Ok((vid, id, rec))
+}
+
+fn resolve_deleted_item(
+    s: &Session,
+    vault_flag: Option<&str>,
+    pos1: &str,
+    pos2: Option<&str>,
+    pick: Option<usize>,
+) -> Result<(String, String, ItemRecord)> {
+    let (vault_str, query_str) = match pos2 {
+        Some(q) => (Some(pos1), q),
+        None => match pos1.split_once('/') {
+            Some((v, q)) => (Some(v), q),
+            None => (vault_flag, pos1),
+        },
+    };
+
+    let search_vaults: Vec<String> = if let Some(v) = vault_str {
+        vec![s.resolve_vault(v)?]
+    } else {
+        s.list_vaults()?.into_iter().map(|(v, _)| v).collect()
+    };
+
+    let mut deleted_recs = Vec::new();
+    let mut non_deleted_recs = Vec::new();
+
+    for vid in &search_vaults {
+        for (id, _, rec) in s.list_records(vid)? {
+            if rec.deleted_at.is_some() {
+                deleted_recs.push((vid.clone(), id, rec));
+            } else {
+                non_deleted_recs.push((vid.clone(), id, rec));
+            }
+        }
+    }
+
+    let ranked = gitpass_core::search::rank_by(
+        query_str,
+        deleted_recs.into_iter().map(|(vid, id, rec)| (format!("{vid}:{id}"), (vid, id, rec))),
+        |(_, _, rec)| &rec.item,
+    );
+
+    if ranked.is_empty() {
+        let active_ranked = gitpass_core::search::rank_by(
+            query_str,
+            non_deleted_recs.into_iter().map(|(vid, id, rec)| (format!("{vid}:{id}"), (vid, id, rec))),
+            |(_, _, rec)| &rec.item,
+        );
+        if let Some((_, _, (_, _, active_rec))) = active_ranked.into_iter().next() {
+            bail!("item '{}' is not deleted", active_rec.item.title);
+        }
+        bail!("no deleted item matches '{query_str}'");
+    }
+
+    let idx = match pick {
+        Some(n) if n >= 1 && n <= ranked.len() => n - 1,
+        Some(n) => bail!("--pick {n} out of range (1..={})", ranked.len()),
+        None => match gitpass_core::search::clear_winner(&ranked) {
+            Some(i) => i,
+            None => {
+                for (i, (sc, _, (vid, id, rec))) in ranked.iter().enumerate() {
+                    let vname = s.vault_meta(vid).map(|m| m.name.clone()).unwrap_or_else(|_| vid.clone());
+                    eprintln!(
+                        "{:>3}. [{vname}] {id}  {}  {}  (score {sc})",
+                        i + 1,
+                        rec.item.title,
+                        rec.item.username.clone().unwrap_or_default()
+                    );
+                }
+                bail!("{} deleted items match '{query_str}'; use --pick <n> or the item id", ranked.len());
+            }
+        },
+    };
+
+    let (_, _, (vid, id, rec)) = ranked.into_iter().nth(idx).unwrap();
+    Ok((vid, id, rec))
+}
+
 /// Clipboard markers for a copied field: passwords and TOTP codes are secrets; the rest are plain.
 fn field_markers(f: Field) -> Option<PasteboardMarkers> {
     match f { Field::Password | Field::Totp => Some(PasteboardMarkers::SECRET), Field::Username | Field::Url | Field::Notes | Field::Title => None }
@@ -2646,21 +2891,115 @@ fn run() -> Result<()> {
                 }
             }
         }
-        Cmd::Edit { vault, id, title, username, url, notes, totp, password, generate } => {
+        Cmd::Edit {
+            item,
+            item2,
+            vault,
+            title,
+            username,
+            url,
+            notes,
+            totp,
+            password,
+            generate,
+            tag,
+            untag,
+            favorite,
+            unfavorite,
+            pick,
+            json,
+        } => {
             let s = unlock(&cli, &root)?;
-            let vid = s.resolve_vault(vault)?;
-            let iid = s.resolve_item(&vid, id)?;
-            let (_, mut it) = s.read_item(&vid, &iid)?;
-            if let Some(v) = title { it.title = v.clone(); }
-            if let Some(v) = username { it.username = Some(v.clone()); }
-            if let Some(v) = url { it.url = Some(v.clone()); }
-            if let Some(v) = notes { it.notes = Some(v.clone()); }
-            if let Some(v) = totp { it.totp = Some(v.clone()); }
-            if let Some(n) = generate { it.password = Some(generate_password(*n)); }
-            else if *password { it.password = Some(prompt_secret("GITPASS_ITEM_PASSWORD", "New item password: ")?.to_string()); }
-            it.updated_at = store::now();
-            s.update_item(&vid, &iid, &it)?;
-            println!("updated {iid}");
+            let (vid, iid, mut rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, false)?;
+            if let Some(v) = title { rec.item.title = v.clone(); }
+            if let Some(v) = username { rec.item.username = Some(v.clone()); }
+            if let Some(v) = url { rec.item.url = Some(v.clone()); }
+            if let Some(v) = notes { rec.item.notes = Some(v.clone()); }
+            if let Some(v) = totp { rec.item.totp = Some(v.clone()); }
+            if let Some(n) = generate { rec.item.password = Some(generate_password(*n)); }
+            else if *password { rec.item.password = Some(prompt_secret("GITPASS_ITEM_PASSWORD", "New item password: ")?.to_string()); }
+
+            for u in untag {
+                let u_trim = u.trim();
+                rec.tags.retain(|t| t != u_trim);
+            }
+            for t in tag {
+                let t_trim = t.trim();
+                if !t_trim.is_empty() && !rec.tags.iter().any(|existing| existing == t_trim) {
+                    rec.tags.push(t_trim.to_string());
+                }
+            }
+            if *favorite {
+                rec.favorite = true;
+            }
+            if *unfavorite {
+                rec.favorite = false;
+            }
+            rec.item.updated_at = store::now();
+            s.update_record(&vid, &iid, rec)?;
+
+            if *json {
+                let (_, updated) = s.read_record(&vid, &iid)?;
+                let detail = item_detail(&iid, &updated, false, None);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                println!("updated {iid}");
+            }
+        }
+        Cmd::Archive { item, item2, vault, pick, json } => {
+            let s = unlock(&cli, &root)?;
+            let (vid, iid, _rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, false)?;
+            s.set_archived(&vid, &iid, true)?;
+            if *json {
+                let (_, updated) = s.read_record(&vid, &iid)?;
+                let detail = item_detail(&iid, &updated, false, None);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                println!("archived {iid}");
+            }
+        }
+        Cmd::Unarchive { item, item2, vault, pick, json } => {
+            let s = unlock(&cli, &root)?;
+            let (vid, iid, rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, true)?;
+            if !rec.archived {
+                bail!("item '{}' is not archived", rec.item.title);
+            }
+            s.set_archived(&vid, &iid, false)?;
+            if *json {
+                let (_, updated) = s.read_record(&vid, &iid)?;
+                let detail = item_detail(&iid, &updated, false, None);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                println!("unarchived {iid}");
+            }
+        }
+        Cmd::Undelete { item, item2, vault, pick, json } => {
+            let s = unlock(&cli, &root)?;
+            let (vid, iid, _rec) = resolve_deleted_item(&s, vault.as_deref(), item, item2.as_deref(), *pick)?;
+            s.restore(&vid, &iid)?;
+            if *json {
+                let (_, updated) = s.read_record(&vid, &iid)?;
+                let detail = item_detail(&iid, &updated, false, None);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                println!("restored {iid}");
+            }
+        }
+        Cmd::Mv { item, item2, vault, to, pick, json } => {
+            let s = unlock(&cli, &root)?;
+            let (from_vid, iid, _rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, false)?;
+            let to_vid = s.resolve_vault(to)?;
+            if from_vid == to_vid {
+                bail!("item is already in vault '{to}'");
+            }
+            let new_id = s.move_item(&from_vid, &iid, &to_vid)?;
+            if *json {
+                let (_, updated) = s.read_record(&to_vid, &new_id)?;
+                let detail = item_detail(&new_id, &updated, false, None);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                println!("moved {iid} to {to} (now {new_id})");
+            }
         }
         Cmd::Rm { vault, id } => {
             let s = unlock(&cli, &root)?;
