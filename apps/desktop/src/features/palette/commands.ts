@@ -1,4 +1,4 @@
-import { AtSign, Copy, FolderInput, Globe, Pencil, Timer, Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, AtSign, Copy, FolderInput, Globe, Pencil, Timer, Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap } from 'lucide-react';
 import { api } from '../../api/client';
 import { translate, useI18n, type Key } from '../../i18n';
 import type { PaletteCommand } from '../registry';
@@ -8,6 +8,7 @@ import { copyPasswordSelected, copyTotpSelected, copyUsernameSelected, editSelec
 import { toast } from '../../ui';
 import { isDark } from '../settings/theme';
 import { useSettings } from '../settings/useSettings';
+import { useTextSize } from '../settings/textSize';
 export type { PaletteCommand };
 export const openShortcutsHelp = () => useApp.getState().openModal('shortcuts-help');
 export function builtinCommands(): PaletteCommand[] {
@@ -22,6 +23,9 @@ export function builtinCommands(): PaletteCommand[] {
     { id: 'go-settings', labelKey: 'cmd.settings', icon: Settings, keywords: ['preferences'], shortcut: 'mod+,', run: () => app.setRoute({ name: 'settings' }) },
     { id: 'go-people', labelKey: 'cmd.people', icon: Users, keywords: ['share', 'members'], run: () => app.setRoute({ name: 'people' }) },
     { id: 'toggle-theme', labelKey: 'cmd.toggleTheme', icon: Moon, keywords: ['dark', 'light'], run: async () => { const s = useSettings.getState(); if (!s.settings) await s.load(); await s.save({ theme: isDark() ? 'light' : 'dark' }).catch((e) => toast(String(e), 'danger')); } },
+    { id: 'text-larger', labelKey: 'cmd.textLarger', icon: ZoomIn, keywords: ['zoom', 'font', 'bigger', 'text size'], run: () => useTextSize.getState().step(1) },
+    { id: 'text-smaller', labelKey: 'cmd.textSmaller', icon: ZoomOut, keywords: ['zoom', 'font', 'text size'], run: () => useTextSize.getState().step(-1) },
+    { id: 'text-reset', labelKey: 'cmd.textReset', icon: RotateCcw, keywords: ['zoom', 'font', 'default', 'text size'], run: () => useTextSize.getState().reset() },
     { id: 'sync', labelKey: 'cmd.sync', icon: RefreshCw, keywords: ['git', 'push', 'pull'], run: async () => { try { toast((await api.sync({ merge: false })).message); } catch (e) { toast(String((e as Error).message ?? e), 'danger'); } } },
     { id: 'shortcuts', labelKey: 'cmd.shortcuts', icon: Keyboard, keywords: ['help', 'keys'], shortcut: '?', run: openShortcutsHelp },
   ];
