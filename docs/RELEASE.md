@@ -58,8 +58,9 @@ Without it the tag-triggered `build + publish` step fails; `workflow_dispatch` b
 
 ### Cutting a release
 1. Bump the version in `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/package.json`, the Cargo manifests.
-2. `git tag vX.Y.Z && git push origin vX.Y.Z` (on `itsd0/gitpass`).
-3. Review the draft on `itsd0/gitpass-releases`, then publish it (non-prerelease) so the updater sees it.
+2. Update `apps/desktop/src/whats-new/` highlights for the new version.
+3. `git tag vX.Y.Z && git push origin vX.Y.Z` (on `itsd0/gitpass`).
+4. Review the draft on `itsd0/gitpass-releases`, then publish it (non-prerelease) so the updater sees it.
 
 ### Writing release notes
 

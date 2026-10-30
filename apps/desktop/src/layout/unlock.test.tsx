@@ -266,4 +266,79 @@ describe("Unlock localization (en, my, th)", () => {
     expect(screen.getByRole("button", { name: translate("my", "common.cancel") })).toBeTruthy();
     expect(screen.getByRole("button", { name: translate("my", "vault.create") })).toBeTruthy();
   });
+  it("displays live countdown and disables unlock button when throttled", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(api, "status").mockResolvedValue({
+      unlocked: false,
+      vaultPath: "~/.gitpass",
+      account: null,
+      vaultExists: true,
+      throttledSecs: 3,
+    });
+
+    await act(async () => {
+      render(<TooltipProvider><Unlock /></TooltipProvider>);
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe("Too many attempts. Try again in 3 s");
+
+    // Unlock buttons should be disabled
+    const submitBtns = screen.getAllByRole("button", { name: "Unlock" });
+    expect(submitBtns.length).toBe(2);
+    expect((submitBtns[0] as HTMLButtonElement).disabled).toBe(true);
+    expect((submitBtns[1] as HTMLButtonElement).disabled).toBe(true);
+
+    // Advance 1s
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByRole("alert").textContent).toBe("Too many attempts. Try again in 2 s");
+
+    // Advance 2s more -> countdown ends
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(screen.queryByText(/Too many attempts/)).toBeNull();
+
+    vi.useRealTimers();
+  });
+
+  it("handles throttled error rejection from unlock submit with countdown and localized text", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(api, "status").mockResolvedValue({
+      unlocked: false,
+      vaultPath: "~/.gitpass",
+      account: null,
+      vaultExists: true,
+    });
+    vi.spyOn(api, "unlock").mockRejectedValue(new Error("throttled: try again in 2 s"));
+
+    useI18n.getState().setLang("my");
+    await act(async () => {
+      render(<TooltipProvider><Unlock /></TooltipProvider>);
+    });
+
+    const pwInput = screen.getByPlaceholderText(translate("my", "unlock.masterPasswordPlaceholder"));
+    await act(async () => {
+      fireEvent.change(pwInput, { target: { value: "some-password" } });
+    });
+
+    const submitBtns = screen.getAllByRole("button", { name: translate("my", "unlock.submit") });
+    await act(async () => {
+      fireEvent.click(submitBtns[1]);
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe(translate("my", "unlock.throttled", { n: 2 }));
+    expect((submitBtns[1] as HTMLButtonElement).disabled).toBe(true);
+
+    // Advance 2 seconds
+    await act(async () => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(screen.queryByText(/ကြိုးစားမှု/)).toBeNull();
+
+    vi.useRealTimers();
+  });
 });

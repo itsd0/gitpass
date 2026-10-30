@@ -48,7 +48,7 @@ gitpass migrate                                    # migrate a format v1 vault, 
 ```
 
 `init` and `rotate-secret-key` read `GITPASS_PASSWORD`; `passwd` reads
-`GITPASS_NEW_PASSWORD`. Otherwise they prompt. `rotate-account-key` rewrites the keyset
+`GITPASS_NEW_PASSWORD`. Otherwise they prompt. Unlock attempts are throttled after 3 consecutive wrong master password failures per vault; subsequent attempts are refused with a delay doubling from 2 s up to a 5-minute cap (persisted in `.gitpass-throttle.json`), and a successful unlock resets the failure counter. `rotate-account-key` rewrites the keyset
 (and with `--with-vault-keys`, every vault key and item). Read the security notes in the
 README before relying on rotation.
 
@@ -251,6 +251,14 @@ Duplicates (same title+username+url) are skipped unless `--allow-duplicates` is 
 `--dry-run` writes nothing. An encrypted `gitpass-json` export prompts for the passphrase
 (or reads `GITPASS_EXPORT_PASSPHRASE`).
 
+A **password-protected Bitwarden JSON** export (Bitwarden → Export → `.json` → "Password
+protected") is decrypted in place: gitpass derives the key from the export password with the
+file's KDF settings (PBKDF2-SHA256 or Argon2id), verifies the file's key-validation blob and
+HMAC before decrypting, and prompts for the export password (or reads
+`GITPASS_IMPORT_PASSWORD`). Wrong passwords, MAC failures and out-of-range KDF parameters are
+reported without exposing the password or any key material. Bitwarden exports encrypted with
+your **account key** are not supported; re-export with "Password protected" or unencrypted.
+
 `export` writes **plaintext** unless `--encrypted` is given, warns, and requires a
 confirmation or `--yes`; the file is mode 0600. `--encrypted` is only valid with
 `--format gitpass-json` and uses Argon2id + XChaCha20-Poly1305 with
@@ -364,6 +372,7 @@ alias. Setup details for each shell are in the README "Shell completions" sectio
 | `GITPASS_SECRET_KEY` | Secret Key, read before `<path>/secret.key` |
 | `GITPASS_SSH_PASSPHRASE` | Passphrase for `ssh import` |
 | `GITPASS_EXPORT_PASSPHRASE` | Passphrase for encrypted `import` / `export` |
+| `GITPASS_IMPORT_PASSWORD` | Export password for password-protected Bitwarden JSON imports |
 
 The password variables are meant for scripts and tests only: environment variables can
 leak. Interactive prompts are used when they are unset.

@@ -131,6 +131,7 @@ Options and environment variables:
 - `--path DIR` or `GITPASS_PATH` sets the vault dir (default `~/.gitpass`).
 - The Secret Key is read in this order: `GITPASS_SECRET_KEY`, then `<path>/secret.key` (mode 0600, git-ignored, written by `init --save-secret-key`), then an interactive prompt.
 - `GITPASS_PASSWORD` and `GITPASS_ITEM_PASSWORD` supply passwords without prompting. They are meant for scripts and tests only, because environment variables can leak.
+- `GITPASS_IMPORT_PASSWORD` supplies the export password for a password-protected Bitwarden JSON import (`gitpass import --from bitwarden-json`); the desktop Import wizard asks for it in a password step.
 
 ## Shell completions
 

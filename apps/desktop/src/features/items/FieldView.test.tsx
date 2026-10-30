@@ -1,3 +1,4 @@
+import QRCode from 'qrcode';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import { TooltipProvider } from '../../ui';
@@ -369,5 +370,115 @@ describe('FieldRow i18n + a11y (#182)', () => {
   it('shows no reference action without a target', () => {
     wrap({ id: 'username', label: 'username', kind: 'text', value: 'demo' });
     expect(screen.queryByLabelText(/secret reference/i)).toBeNull();
+  });
+});
+
+describe('FieldRow Show as QR code (#346)', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    useApp.setState({ locked: false });
+    vi.spyOn(QRCode, 'toDataURL').mockResolvedValue('data:image/png;base64,FAKE_QR');
+  });
+
+  it('renders QR code trigger for supported fields (password, username, website, totp, api credential, custom text, custom concealed)', () => {
+    const pw: Field = { id: 'password', label: 'password', kind: 'concealed', value: null };
+    const { unmount: u1 } = render(<TooltipProvider><FieldRow field={pw} ctx={ctx} category="login" /></TooltipProvider>);
+    expect(screen.getByTestId('show-qr-trigger')).toBeInTheDocument();
+    u1();
+
+    const user: Field = { id: 'username', label: 'username', kind: 'text', value: 'alice' };
+    const { unmount: u2 } = render(<TooltipProvider><FieldRow field={user} ctx={ctx} category="login" /></TooltipProvider>);
+    expect(screen.getByTestId('show-qr-trigger')).toBeInTheDocument();
+    u2();
+
+    const site: Field = { id: 'website', label: 'website', kind: 'url', value: 'https://example.com' };
+    const { unmount: u3 } = render(<TooltipProvider><FieldRow field={site} ctx={ctx} category="login" /></TooltipProvider>);
+    expect(screen.getByTestId('show-qr-trigger')).toBeInTheDocument();
+    u3();
+
+    const totp: Field = { id: 'otp', label: 'one-time password', kind: 'totp', value: null };
+    const { unmount: u4 } = render(<TooltipProvider><FieldRow field={totp} ctx={ctx} category="login" /></TooltipProvider>);
+    expect(screen.getByTestId('show-qr-trigger')).toBeInTheDocument();
+    u4();
+
+    const apiCred: Field = { id: 'credential', label: 'credential', kind: 'concealed', value: null };
+    const { unmount: u5 } = render(<TooltipProvider><FieldRow field={apiCred} ctx={ctx} category="api_credential" /></TooltipProvider>);
+    expect(screen.getByTestId('show-qr-trigger')).toBeInTheDocument();
+    u5();
+
+    const customText: Field = { id: 'sec_code', label: 'Security Code', kind: 'text', value: 'ABC123' };
+    const { unmount: u6 } = render(<TooltipProvider><FieldRow field={customText} ctx={ctx} category="login" /></TooltipProvider>);
+    expect(screen.getByTestId('show-qr-trigger')).toBeInTheDocument();
+    u6();
+
+    const customConcealed: Field = { id: 'secret_pin', label: 'Secret PIN', kind: 'concealed', value: null };
+    const { unmount: u7 } = render(<TooltipProvider><FieldRow field={customConcealed} ctx={ctx} category="login" /></TooltipProvider>);
+    expect(screen.getByTestId('show-qr-trigger')).toBeInTheDocument();
+    u7();
+  });
+
+  it('does not render QR code trigger for unsupported fields (notes, credit card number/cvv, date)', () => {
+    const note: Field = { id: 'note', label: 'note', kind: 'multiline', value: 'some note' };
+    const { unmount: u1 } = render(<TooltipProvider><FieldRow field={note} ctx={ctx} category="secure_note" /></TooltipProvider>);
+    expect(screen.queryByTestId('show-qr-trigger')).toBeNull();
+    u1();
+
+    const ccNum: Field = { id: 'number', label: 'number', kind: 'concealed', value: null };
+    const { unmount: u2 } = render(<TooltipProvider><FieldRow field={ccNum} ctx={ctx} category="credit_card" /></TooltipProvider>);
+    expect(screen.queryByTestId('show-qr-trigger')).toBeNull();
+    u2();
+
+    const ccCvv: Field = { id: 'cvv', label: 'verification number', kind: 'concealed', value: null };
+    const { unmount: u3 } = render(<TooltipProvider><FieldRow field={ccCvv} ctx={ctx} category="credit_card" /></TooltipProvider>);
+    expect(screen.queryByTestId('show-qr-trigger')).toBeNull();
+    u3();
+
+    const birth: Field = { id: 'birth', label: 'birth date', kind: 'date', value: '1990-01-01' };
+    const { unmount: u4 } = render(<TooltipProvider><FieldRow field={birth} ctx={ctx} category="identity" /></TooltipProvider>);
+    expect(screen.queryByTestId('show-qr-trigger')).toBeNull();
+    u4();
+  });
+
+  it('right click context menu displays Show as QR code and opens dialog', async () => {
+    vi.spyOn(api, 'revealField').mockResolvedValue('pw123');
+    const pw: Field = { id: 'password', label: 'password', kind: 'concealed', value: null };
+    render(<TooltipProvider><FieldRow field={pw} ctx={ctx} category="login" itemTitle="My Account" /></TooltipProvider>);
+
+    const row = screen.getByTestId('field-password');
+    fireEvent.contextMenu(row, { clientX: 50, clientY: 50 });
+
+    const menu = await screen.findByTestId('field-context-menu');
+    expect(menu).toBeInTheDocument();
+
+    const qrItem = screen.getByTestId('menu-show-qr');
+    expect(qrItem).toBeInTheDocument();
+    expect(qrItem.textContent).toBe('Show as QR code');
+
+    await act(async () => {
+      fireEvent.click(qrItem);
+    });
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByTestId('field-qr-title').textContent).toBe('My Account');
+
+    // Close with Escape
+    await act(async () => {
+      fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+    });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('field more actions dropdown menu has Show as QR code item', async () => {
+    const user: Field = { id: 'username', label: 'username', kind: 'text', value: 'alice' };
+    render(<TooltipProvider><FieldRow field={user} ctx={ctx} category="login" /></TooltipProvider>);
+
+    const moreBtn = screen.getByTestId('field-more-actions-username');
+    await act(async () => {
+      fireEvent.keyDown(moreBtn, { key: 'Enter', code: 'Enter' });
+    });
+
+    const menu = await screen.findByTestId('field-action-menu');
+    expect(menu).toBeInTheDocument();
+    expect(screen.getByTestId('menu-show-qr')).toBeInTheDocument();
   });
 });

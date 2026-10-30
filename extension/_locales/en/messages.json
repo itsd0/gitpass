@@ -173,6 +173,9 @@
   "unlockReason": {
     "message": "Unlock the gitpass browser extension"
   },
+  "unlockThrottled": {
+    "message": "Too many attempts. Try again in $1 s"
+  },
   "unlockCancelled": {
     "message": "Unlock was cancelled"
   },
@@ -1009,6 +1012,20 @@
   "itemRestored": {
     "message": "Item restored"
   },
+  "attachments": {
+    "message": "Attachments"
+  },
+  "hasAttachments": {
+    "message": "Has attachments"
+  },
+  "openAttachmentInGitpass": {
+    "message": "Open $1 in gitpass",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
+  },
   "filterArchive": {
     "message": "Archive"
   },
@@ -1082,6 +1099,39 @@
   "capsLockOn": {
     "message": "Caps Lock is on",
     "description": "Shown under a master-password field while Caps Lock is on"
+  },
+  "siteSettings": {
+    "message": "Site settings"
+  },
+  "siteSettingsFor": {
+    "message": "Site settings: $1"
+  },
+  "siteSaveLogins": {
+    "message": "Offer to save logins on this site"
+  },
+  "siteAutoSubmit": {
+    "message": "Submit after fill on this site"
+  },
+  "siteInlineMenu": {
+    "message": "Show inline menu on this site"
+  },
+  "siteSettingsHint": {
+    "message": "Changes apply the next time the page loads or rescans."
+  },
+  "optHiddenInlineMenu": {
+    "message": "Hide the inline menu on these sites"
+  },
+  "optHiddenInlineMenuBody": {
+    "message": "gitpass will not show the inline menu or field badges on these sites."
+  },
+  "optHiddenInlineMenuEmpty": {
+    "message": "No sites hidden"
+  },
+  "optHiddenInlineMenuEmptyBody": {
+    "message": "Sites you hide the inline menu on will appear here."
+  },
+  "optHiddenInlineMenuAdd": {
+    "message": "Add a site"
   },
   "optColorPasswords": {
     "message": "Colour-code revealed passwords"

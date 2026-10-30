@@ -173,6 +173,9 @@
   "unlockReason": {
     "message": "ปลดล็อกส่วนขยายเบราว์เซอร์ gitpass"
   },
+  "unlockThrottled": {
+    "message": "พยายามมากเกินไป ลองใหม่อีกครั้งในอีก $1 วินาที"
+  },
   "unlockCancelled": {
     "message": "ยกเลิกการปลดล็อกแล้ว"
   },
@@ -1088,6 +1091,20 @@
   "itemRestored": {
     "message": "กู้คืนรายการแล้ว"
   },
+  "attachments": {
+    "message": "ไฟล์แนบ"
+  },
+  "hasAttachments": {
+    "message": "มีไฟล์แนบ"
+  },
+  "openAttachmentInGitpass": {
+    "message": "เปิด $1 ใน gitpass",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
+  },
   "filterArchive": {
     "message": "คลังข้อมูล"
   },
@@ -1161,6 +1178,39 @@
   "capsLockOn": {
     "message": "Caps Lock เปิดอยู่",
     "description": "Shown under a master-password field while Caps Lock is on"
+  },
+  "siteSettings": {
+    "message": "การตั้งค่าเว็บไซต์"
+  },
+  "siteSettingsFor": {
+    "message": "การตั้งค่าเว็บไซต์: $1"
+  },
+  "siteSaveLogins": {
+    "message": "เสนอให้บันทึกการเข้าสู่ระบบบนเว็บไซต์นี้"
+  },
+  "siteAutoSubmit": {
+    "message": "ส่งฟอร์มหลังจากกรอกบนเว็บไซต์นี้"
+  },
+  "siteInlineMenu": {
+    "message": "แสดงเมนูอินไลน์บนเว็บไซต์นี้"
+  },
+  "siteSettingsHint": {
+    "message": "การเปลี่ยนแปลงจะมีผลเมื่อหน้าเว็บโหลดหรือสแกนใหม่ในครั้งถัดไป"
+  },
+  "optHiddenInlineMenu": {
+    "message": "ซ่อนเมนูอินไลน์บนเว็บไซต์เหล่านี้"
+  },
+  "optHiddenInlineMenuBody": {
+    "message": "gitpass จะไม่แสดงเมนูอินไลน์หรือป้ายฟิลด์บนเว็บไซต์เหล่านี้"
+  },
+  "optHiddenInlineMenuEmpty": {
+    "message": "ไม่มีเว็บไซต์ที่ซ่อนอยู่"
+  },
+  "optHiddenInlineMenuEmptyBody": {
+    "message": "เว็บไซต์ที่คุณซ่อนเมนูอินไลน์จะปรากฏที่นี่"
+  },
+  "optHiddenInlineMenuAdd": {
+    "message": "เพิ่มเว็บไซต์"
   },
   "optColorPasswords": {
     "message": "ไล่สีรหัสผ่านที่แสดงอยู่"

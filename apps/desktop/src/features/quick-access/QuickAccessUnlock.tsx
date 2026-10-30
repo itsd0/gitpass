@@ -13,6 +13,7 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [vaultPath, setVaultPath] = useState('');
   const [bioAvailable, setBioAvailable] = useState(false);
+  const [throttleLeft, setThrottleLeft] = useState<number>(0);
 
   useEffect(() => {
     let active = true;
@@ -21,6 +22,9 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
       setVaultPath(st.vaultPath);
       const canBio = !!st.biometricAvailable && !!sett.biometricUnlock;
       setBioAvailable(canBio);
+      if (st.throttledSecs && st.throttledSecs > 0) {
+        setThrottleLeft(st.throttledSecs);
+      }
       if (canBio && !st.unlocked) {
         // Auto-prompt Touch ID on show if enabled
         void touchId(st.vaultPath);
@@ -30,6 +34,14 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
       active = false;
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (throttleLeft <= 0) return;
+    const interval = setInterval(() => {
+      setThrottleLeft((n) => Math.max(0, n - 1));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [throttleLeft]);
 
   async function touchId(vp?: string) {
     setBusy(true);
@@ -41,7 +53,12 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
       onDone?.();
     } catch (x) {
       const msg = x instanceof Error ? x.message : String(x);
-      setErr(msg);
+      const throttleMatch = msg.match(/throttled.*?(\d+)\s*s?/i);
+      if (throttleMatch) {
+        setThrottleLeft(parseInt(throttleMatch[1], 10));
+      } else {
+        setErr(msg);
+      }
     } finally {
       setBusy(false);
     }
@@ -102,9 +119,9 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
           className="h-10 focus-visible:ring-accent"
         />
 
-        {err && (
+        {(throttleLeft > 0 ? t('unlock.throttled', { n: throttleLeft }) : err) && (
           <p role="alert" className="text-xs text-danger leading-tight">
-            {err}
+            {throttleLeft > 0 ? t('unlock.throttled', { n: throttleLeft }) : err}
           </p>
         )}
 
@@ -112,7 +129,7 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
           <Button
             type="submit"
             className="flex-1"
-            disabled={busy || !pw}
+            disabled={busy || !pw || throttleLeft > 0}
           >
             {busy ? (
               <Loader2 className="h-4 w-4 animate-spin" />
