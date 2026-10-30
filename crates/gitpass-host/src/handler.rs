@@ -136,13 +136,6 @@ fn kind_str(cat: Category, f: &Field) -> &'static str {
 }
 fn is_card_number(f: &Field) -> bool { matches!(f.id.as_str(), "number" | "ccnum" | "card_number") }
 
-/// Preview of a long API secret: first 4 and last 4 characters (`abcd••••wxyz`). Secrets shorter than
-/// 12 characters get no preview, so a short token is never mostly revealed.
-fn secret_preview(v: &str) -> Option<String> {
-    let c: Vec<char> = v.chars().collect();
-    (c.len() >= 12).then(|| format!("{}••••{}", c[..4].iter().collect::<String>(), c[c.len() - 4..].iter().collect::<String>()))
-}
-
 fn fields_of(r: &ItemRecord) -> Vec<Field> { r.view_sections().into_iter().flat_map(|s| s.fields).collect() }
 
 fn field_val(r: &ItemRecord, ids: &[&str]) -> Option<String> {
@@ -187,6 +180,10 @@ fn subtitle(r: &ItemRecord) -> String {
                 _ => String::new(),
             }
         }
+        Category::ApiCredential => gitpass_core::mask::api_credential_secret(r)
+            .map(gitpass_core::mask::secret_hint)
+            .or_else(|| fields_of(r).into_iter().find(|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())).and_then(|f| f.value))
+            .unwrap_or_default(),
         _ => fields_of(r).into_iter().find(|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty()))
             .and_then(|f| f.value).map(|v| v.lines().next().unwrap_or("").chars().take(80).collect()).unwrap_or_default(),
     }
@@ -199,12 +196,17 @@ fn has_totp(r: &ItemRecord) -> bool {
 /// ItemSummary (contract).
 pub fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
     let url = nonempty(&r.item.url);
-    json!({
+    let mut s = json!({
         "id": format!("{vid}:{iid}"), "vault_id": vid, "vault_name": vname,
         "category": r.category.as_str(), "title": r.item.title, "subtitle": subtitle(r),
         "url": url, "favicon_host": url.and_then(url_host), "has_totp": has_totp(r),
         "favorite": r.favorite, "updated_at": r.item.updated_at, "created_at": r.created_at,
-    })
+        "archived": r.archived,
+    });
+    if let Some(d) = r.deleted_at {
+        s["deleted_at"] = json!(gitpass_core::device::iso8601(d as i64));
+    }
+    s
 }
 
 /// ItemDetail (contract): summary + fields with secrets omitted (`concealed:true`, no value).
@@ -219,7 +221,7 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         let mut o = json!({"name": f.id, "label": f.label, "concealed": secret, "kind": kind_str(r.category, &f)});
         if !secret { o["value"] = json!(f.value); }
         else if r.category == Category::ApiCredential {
-            if let Some(m) = f.value.as_deref().and_then(secret_preview) { o["masked"] = json!(m); }
+            if let Some(m) = f.value.as_deref().map(gitpass_core::mask::secret_hint) { o["masked"] = json!(m); }
         }
         else if r.category == Category::BankAccount && (f.id == "account_number" || f.id == "account_no") {
             if let Some(v) = &f.value {
@@ -241,9 +243,17 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
 
 fn visible(r: &ItemRecord) -> bool { r.deleted_at.is_none() && !r.archived }
 
+/// Separators the generator offers for word passphrases; anything else is a bad request.
+pub const WORD_SEPARATORS: [char; 4] = ['-', '.', '_', ' '];
+
 /// Password generator: characters (`digits`, `symbols`), words (`words`) or a PIN (`pin`).
 /// The defaults, limits and separator come from gitpass-core, so the host, CLI and desktop app agree.
 pub fn generate(r: &gitpass_core::generate::Request) -> Result<String> {
+    if let Some(c) = r.separator {
+        if !WORD_SEPARATORS.contains(&c) {
+            return Err(coded(code::BAD_REQUEST, format!("invalid word separator {c:?}: use one of -, ., _, space")));
+        }
+    }
     let opts = gitpass_core::generate::Options::for_request(r).map_err(|m| coded(code::BAD_REQUEST, m))?;
     Ok(gitpass_core::generate::generate(&opts))
 }
@@ -460,6 +470,32 @@ impl Host {
         Ok(out)
     }
 
+    /// Every archived record: (vault id, vault name, item id, record).
+    fn archived_records(&self, only_vault: Option<&str>) -> Result<Vec<(String, String, String, ItemRecord)>> {
+        let s = self.sess()?;
+        let mut out = vec![];
+        for (vid, meta) in s.list_vaults()? {
+            if only_vault.is_some_and(|v| v != vid) { continue; }
+            for (iid, _, r) in s.list_records(&vid)? {
+                if r.deleted_at.is_none() && r.archived { out.push((vid.clone(), meta.name.clone(), iid, r)); }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Every deleted record: (vault id, vault name, item id, record).
+    fn deleted_records(&self, only_vault: Option<&str>) -> Result<Vec<(String, String, String, ItemRecord)>> {
+        let s = self.sess()?;
+        let mut out = vec![];
+        for (vid, meta) in s.list_vaults()? {
+            if only_vault.is_some_and(|v| v != vid) { continue; }
+            for (iid, _, r) in s.list_records(&vid)? {
+                if r.deleted_at.is_some() { out.push((vid.clone(), meta.name.clone(), iid, r)); }
+            }
+        }
+        Ok(out)
+    }
+
     fn get_audit_report(&mut self) -> Result<Arc<gitpass_core::audit::AuditReport>> {
         if let Some(cached) = &self.audit_cache {
             return Ok(Arc::clone(cached));
@@ -545,20 +581,39 @@ impl Host {
                 let vault = req.get("vault_id").and_then(Value::as_str);
                 let cat = req.get("category").and_then(Value::as_str);
                 if let Some(c) = cat { c.parse::<Category>().map_err(|e| coded(code::BAD_REQUEST, e.to_string()))?; }
-                let q = req.get("query").and_then(Value::as_str).map(str::to_lowercase).filter(|q| !q.is_empty());
+                let q_raw = req.get("query").and_then(Value::as_str).map(str::trim).filter(|q| !q.is_empty());
+                let parsed_q = q_raw.map(gitpass_core::search::parse_query);
                 // No cap unless the caller asks for one: the popup lists every item (a silent default cap dropped items past the 500th title).
                 let limit = req.get("limit").and_then(Value::as_u64).map(|n| n as usize);
                 // Paging: a reply is capped at 1 MiB (framing::MAX_OUT), so big vaults are fetched in pages via `offset`.
                 let offset = req.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
                 let usage = self.sess()?.all_last_used();
                 let mut out = vec![];
-                for (vid, vname, iid, r) in self.all_records(vault)? {
+                let recs = if req.get("state").and_then(Value::as_str) == Some("archived")
+                    || req.get("filter").and_then(Value::as_str) == Some("archive")
+                    || req.get("archived").and_then(Value::as_bool) == Some(true) {
+                    self.archived_records(vault)?
+                } else if req.get("state").and_then(Value::as_str) == Some("deleted")
+                    || req.get("filter").and_then(Value::as_str) == Some("deleted")
+                    || req.get("deleted").and_then(Value::as_bool) == Some(true) {
+                    self.deleted_records(vault)?
+                } else {
+                    self.all_records(vault)?
+                };
+                for (vid, vname, iid, r) in recs {
                     if cat.is_some_and(|c| c != r.category.as_str()) { continue; }
+                    if let Some(pq) = &parsed_q {
+                        let cand = gitpass_core::search::CandidateInfo::from_record(&r, Some(vname.as_str()));
+                        if !pq.matches(&cand) { continue; }
+                    }
                     let mut s = summary(&vid, &vname, &iid, &r);
                     if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
-                    if let Some(q) = &q {
-                        let hay = format!("{} {} {}", r.item.title, s["subtitle"].as_str().unwrap_or(""), r.item.url.as_deref().unwrap_or("")).to_lowercase();
-                        if !hay.contains(q.as_str()) { continue; }
+                    if let Some(pq) = &parsed_q {
+                        if !pq.terms.is_empty() {
+                            let term = pq.terms.to_lowercase();
+                            let hay = format!("{} {} {}", r.item.title, s["subtitle"].as_str().unwrap_or(""), r.item.url.as_deref().unwrap_or("")).to_lowercase();
+                            if !hay.contains(term.as_str()) { continue; }
+                        }
                     }
                     out.push(s);
                 }
@@ -568,6 +623,31 @@ impl Host {
                 let end = offset.saturating_add(out.len());
                 let next_offset = (end < total).then_some(end);
                 Ok(json!({"items": out, "total": total, "next_offset": next_offset}))
+            }
+            "list_archived" => {
+                let vault = req.get("vault_id").and_then(Value::as_str);
+                let usage = self.sess()?.all_last_used();
+                let mut out = vec![];
+                for (vid, vname, iid, r) in self.archived_records(vault)? {
+                    let mut s = summary(&vid, &vname, &iid, &r);
+                    if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
+                    out.push(s);
+                }
+                out.sort_by(|a, b| a["title"].as_str().unwrap_or("").to_lowercase().cmp(&b["title"].as_str().unwrap_or("").to_lowercase()));
+                Ok(json!({"items": out}))
+            }
+            "list_deleted" => {
+                let vault = req.get("vault_id").and_then(Value::as_str);
+                let mut out = vec![];
+                for (vid, vname, iid, r) in self.deleted_records(vault)? {
+                    out.push(summary(&vid, &vname, &iid, &r));
+                }
+                out.sort_by(|a, b| {
+                    let da = a.get("deleted_at").and_then(Value::as_str).unwrap_or("");
+                    let db = b.get("deleted_at").and_then(Value::as_str).unwrap_or("");
+                    db.cmp(da).then_with(|| a["title"].as_str().unwrap_or("").to_lowercase().cmp(&b["title"].as_str().unwrap_or("").to_lowercase()))
+                });
+                Ok(json!({"items": out}))
             }
             "match" => {
                 // `url` accepted for 0.5 extensions.
@@ -605,9 +685,16 @@ impl Host {
                 Ok(json!({"items": out}))
             }
             "get_item" => {
-                let (vid, iid, r) = self.record(arg_str(req, "item_id")?)?;
-                let mut d = detail(&vid, &self.vault_name(&vid)?, &iid, &r);
-                if let Some(lu) = self.sess()?.last_used(&iid) {
+                let (vid, iid) = split_id(arg_str(req, "item_id")?)?;
+                let include_deleted = req.get("include_deleted").and_then(Value::as_bool).unwrap_or(false);
+                let s = self.sess()?;
+                let vname = self.vault_name(vid)?;
+                let (_, r) = s.read_record(vid, iid).map_err(|e| coded(code::NOT_FOUND, format!("item not found: {e:#}")))?;
+                if r.deleted_at.is_some() && !include_deleted {
+                    return Err(coded(code::NOT_FOUND, "item not found"));
+                }
+                let mut d = detail(vid, &vname, iid, &r);
+                if let Some(lu) = s.last_used(iid) {
                     d["last_used"] = json!(lu);
                 }
                 Ok(json!({"item": d}))
@@ -757,17 +844,42 @@ impl Host {
                 self.audit_cache = None;
                 Ok(json!({"ok": true}))
             }
+            "archive_item" | "unarchive_item" => {
+                if req.get("source").and_then(Value::as_str) != Some("popup") {
+                    return Err(coded(code::DENIED, format!("{cmd} is allowed only from the popup")));
+                }
+                let (vid, iid) = split_id(arg_str(req, "item_id")?)?;
+                let s = self.sess()?;
+                let (_, r) = s.read_record(vid, iid).map_err(|e| coded(code::NOT_FOUND, format!("item not found: {e:#}")))?;
+                if r.deleted_at.is_some() { return Err(coded(code::NOT_FOUND, "item not found")); }
+                let archived = if cmd == "unarchive_item" { false } else { req.get("archived").and_then(Value::as_bool).unwrap_or(true) };
+                s.set_archived(vid, iid, archived)?;
+                self.audit_cache = None;
+                Ok(json!({"ok": true, "archived": archived}))
+            }
             "generate" => {
                 use gitpass_core::generate::{Mode, Request};
                 let flag = |k: &str, default: bool| req.get(k).and_then(Value::as_bool).unwrap_or(default);
                 let (words, pin) = (flag("words", false), flag("pin", false));
+                let separator = match req.get("separator") {
+                    None | Some(Value::Null) => None,
+                    Some(Value::String(s)) => {
+                        let mut chars = s.chars();
+                        let c = chars.next();
+                        if c.is_none() || chars.next().is_some() || !WORD_SEPARATORS.contains(&c.unwrap()) {
+                            return Err(coded(code::BAD_REQUEST, format!("invalid word separator {s:?}: use one of -, ., _, space")));
+                        }
+                        c
+                    }
+                    Some(_) => return Err(coded(code::BAD_REQUEST, "separator must be a string")),
+                };
                 let r = Request {
                     mode: if pin { Mode::Pin } else if words { Mode::Words } else { Mode::Random },
                     length: req.get("len").and_then(Value::as_u64).map(|v| v as usize),
                     symbols: flag("symbols", true),
                     digits: flag("digits", true),
-                    separator: None,
-                    capitalize: false,
+                    separator,
+                    capitalize: flag("capitalize", false),
                 };
                 if let Some(rules) = req.get("rules").filter(|r| !r.is_null()) {
                     if words || pin { return Err(coded(code::BAD_REQUEST, "rules apply to random passwords only")); }

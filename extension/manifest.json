@@ -65,7 +65,17 @@
         "lib/icons.js",
         "lib/banner.js",
         "lib/totp-chip.js",
-        "content.js"
+        "content.js",
+        "content/messaging.js",
+        "content/settings.js",
+        "content/detection.js",
+        "content/totp.js",
+        "content/dropdown.js",
+        "content/username.js",
+        "content/banner.js",
+        "content/command.js",
+        "content/prompts.js",
+        "content/wiring.js"
       ],
       "all_frames": false,
       "run_at": "document_idle"

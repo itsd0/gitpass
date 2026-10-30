@@ -177,9 +177,13 @@ function bootContent(pending) {
     },
     i18n: { getMessage: () => '' },
   };
-  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js', 'content.js']) {
+// content.js + content/*.js in manifest order, evaluated as ONE script: a browser shares
+// top-level let/const across content scripts, but jsdom w.eval calls do not share them.
+const CONTENT_SRC = ['content.js', 'content/messaging.js', 'content/settings.js', 'content/detection.js', 'content/totp.js', 'content/dropdown.js', 'content/username.js', 'content/banner.js', 'content/command.js', 'content/prompts.js', 'content/wiring.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n');
+  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js']) {
     w.eval(fs.readFileSync(path.join(__dirname, '..', f), 'utf8'));
   }
+  w.eval(CONTENT_SRC);
   return { dom, w, roots };
 }
 

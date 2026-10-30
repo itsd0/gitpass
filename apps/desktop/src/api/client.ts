@@ -94,6 +94,7 @@ export const api = {
   remoteDisconnect: () => call<T.SyncStatus>('remote_disconnect'),
   /** Opens https://github.com/new in the default browser (fixed URL). */
   openNewRepoPage: () => call<void>('open_new_repo_page'),
+  openGithubSshKeysPage: () => call<void>('open_github_ssh_keys_page'),
   /** Opens the item's `https://<host>/.well-known/change-password` page in the default browser (URL derived in Rust). */
   openChangePassword: (a:{vaultId:string; itemId:string}) => call<void>('open_change_password', a),
   /** Opens the passkey's `https://<rp_id>` site in the default browser (URL derived in Rust). */

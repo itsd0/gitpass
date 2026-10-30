@@ -42,23 +42,44 @@ fn api_secret_preview_first4_last4_only_for_long_values() {
         s.add_record(vid, rec(Category::ApiCredential, "Long key", vec![
             f("credential", FieldKind::Concealed, "sk-FAKE1234567890abcdWXYZ"), f("username", FieldKind::Text, "svc")])).unwrap();
         s.add_record(vid, rec(Category::ApiCredential, "Short key", vec![f("credential", FieldKind::Concealed, "short-12345")])).unwrap();
+        s.add_record(vid, rec(Category::ApiCredential, "Tiny key", vec![f("credential", FieldKind::Concealed, "tiny")])).unwrap();
     });
     ok(&mut f.host, json!({"cmd":"unlock","password":PW}));
     let list = ok(&mut f.host, json!({"cmd":"list_items","category":"api_credential"}));
     let items = list["items"].as_array().unwrap();
-    assert_eq!(items.len(), 2);
+    assert_eq!(items.len(), 3);
     assert!(items.iter().all(|i| i["created_at"].is_u64() || i["created_at"].is_null()));
     let id_of = |t: &str| items.iter().find(|i| i["title"] == t).unwrap()["id"].as_str().unwrap().to_string();
+
+    let long_item = items.iter().find(|i| i["title"] == "Long key").unwrap();
+    assert_eq!(long_item["subtitle"], "sk-F••••••••WXYZ");
+    let short_item = items.iter().find(|i| i["title"] == "Short key").unwrap();
+    assert_eq!(short_item["subtitle"], "sh••••••••");
+    let tiny_item = items.iter().find(|i| i["title"] == "Tiny key").unwrap();
+    assert_eq!(tiny_item["subtitle"], "••••••••");
 
     let long = ok(&mut f.host, json!({"cmd":"get_item","item_id":id_of("Long key")}))["item"].clone();
     let cred = long["fields"].as_array().unwrap().iter().find(|x| x["name"] == "credential").unwrap();
     assert_eq!(cred["concealed"], true);
-    assert_eq!(cred["masked"], "sk-F••••WXYZ");
+    assert_eq!(cred["masked"], "sk-F••••••••WXYZ");
     assert!(cred.get("value").is_none());
     assert!(!long.to_string().contains("1234567890abcd"), "middle of the secret never leaves the host");
 
     let short = ok(&mut f.host, json!({"cmd":"get_item","item_id":id_of("Short key")}))["item"].clone();
     let cred = short["fields"].as_array().unwrap().iter().find(|x| x["name"] == "credential").unwrap();
-    assert!(cred.get("masked").is_none(), "under 12 chars: bullets only");
+    assert_eq!(cred["masked"], "sh••••••••");
+    assert!(cred.get("value").is_none());
     assert!(!short.to_string().contains("short-12345"));
+
+    let tiny = ok(&mut f.host, json!({"cmd":"get_item","item_id":id_of("Tiny key")}))["item"].clone();
+    let cred = tiny["fields"].as_array().unwrap().iter().find(|x| x["name"] == "credential").unwrap();
+    assert_eq!(cred["masked"], "••••••••");
+    assert!(cred.get("value").is_none());
+    assert!(!tiny.to_string().contains("tiny"));
+
+    // Ensure list serialization never contains the full secrets
+    let list_str = list.to_string();
+    assert!(!list_str.contains("1234567890abcd"));
+    assert!(!list_str.contains("short-12345"));
+    assert!(!list_str.contains("tiny"));
 }

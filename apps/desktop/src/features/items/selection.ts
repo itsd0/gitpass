@@ -1,4 +1,4 @@
-// Pure multi-select logic for the item list (1Password-style): plain click selects one,
+// Pure multi-select logic for the item list: plain click selects one,
 // Cmd/Ctrl-click toggles, Shift-click selects the range from the anchor, Cmd-A selects all.
 import type { ItemSummary, ItemRef } from '../../api/types';
 import { useApp } from '../../lib/store';

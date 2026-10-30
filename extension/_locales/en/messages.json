@@ -50,6 +50,15 @@
   "genWords": {
     "message": "Words"
   },
+  "genSeparator": {
+    "message": "Separator"
+  },
+  "genSeparatorSpace": {
+    "message": "Space"
+  },
+  "genCapitalize": {
+    "message": "Capitalize"
+  },
   "genIncludeDigits": {
     "message": "Include digits"
   },
@@ -190,6 +199,18 @@
   },
   "vaults": {
     "message": "Vaults"
+  },
+  "filterTags": {
+    "message": "Tags"
+  },
+  "filterTagsPh": {
+    "message": "Filter tags…"
+  },
+  "clearTag": {
+    "message": "Clear tag filter"
+  },
+  "filterByTag": {
+    "message": "Show items with this tag"
   },
   "catLogin": {
     "message": "Logins"
@@ -878,7 +899,6 @@
   "badgeAppNotRunning": {
     "message": "gitpass app not running"
   },
-
   "optAutoSubmit": {
     "message": "Submit the form after filling a login"
   },
@@ -914,6 +934,9 @@
   },
   "catServer": {
     "message": "Servers"
+  },
+  "catOther": {
+    "message": "Other"
   },
   "genRecent": {
     "message": "Recent"
@@ -988,5 +1011,79 @@
   },
   "itemRestored": {
     "message": "Item restored"
+  },
+  "filterArchive": {
+    "message": "Archive"
+  },
+  "filterDeleted": {
+    "message": "Recently Deleted"
+  },
+  "restore": {
+    "message": "Restore"
+  },
+  "unarchive": {
+    "message": "Unarchive"
+  },
+  "archive": {
+    "message": "Archive"
+  },
+  "itemUnarchived": {
+    "message": "Item unarchived"
+  },
+  "itemArchived": {
+    "message": "Item archived"
+  },
+  "shortcutRestore": {
+    "message": "Restore item"
+  },
+  "deletedToday": {
+    "message": "Deleted today"
+  },
+  "deletedDayOne": {
+    "message": "Deleted 1 day ago"
+  },
+  "deletedDaysAgo": {
+    "message": "Deleted $1 days ago",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "deletesToday": {
+    "message": "Deletes today"
+  },
+  "deletesInDayOne": {
+    "message": "Deletes in 1 day"
+  },
+  "deletesInDays": {
+    "message": "Deletes in $1 days",
+    "placeholders": {
+      "days": {
+        "content": "$1"
+      }
+    }
+  },
+  "emptyArchiveTitle": {
+    "message": "Nothing archived"
+  },
+  "emptyArchiveBody": {
+    "message": "Items you archive will appear here."
+  },
+  "emptyTrashTitle": {
+    "message": "Recently Deleted is empty"
+  },
+  "emptyTrashBody": {
+    "message": "Items you delete stay here for 30 days."
+  },
+  "inTrash": {
+    "message": "This item is in Recently Deleted."
+  },
+  "inArchive": {
+    "message": "This item is archived."
+  },
+  "capsLockOn": {
+    "message": "Caps Lock is on",
+    "description": "Shown under a master-password field while Caps Lock is on"
   }
 }
