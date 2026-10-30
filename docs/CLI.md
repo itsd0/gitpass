@@ -69,12 +69,16 @@ gitpass add Personal --title Bank                  # prompts for the item passwo
 gitpass add Personal --category api-credential --title "OpenAI API" --url https://api.openai.com --expires 2028-06-30
 gitpass add Personal --category secure-note --title "Recovery Guide" --notes-stdin < recovery.txt
 gitpass add Personal --category credit-card --title "Bank Visa" --holder "Alice Doe" --expiry 11/30
+gitpass add Personal --category bank-account --title "Chase Checking" --bank "Chase" --holder "Alice Doe" --account-type checking --routing 021000021
+gitpass add Personal --category server --title "Production Web" --url 192.168.1.50 --username ubuntu --admin-url https://aws.amazon.com/console
 gitpass get Personal github
 gitpass get Personal github --password-only
 gitpass get Personal github --json --reveal
 gitpass get Personal github --copy --field password --clear-secs 30
 gitpass copy Personal github --field username
 gitpass list Personal
+gitpass list Personal --category bank-account  # filter by category
+gitpass list Personal --category server
 gitpass list Personal --sort recent   # title (default) or recent; ignored with --query
 gitpass list Personal --query git --json
 gitpass find Personal "git hub"
@@ -87,9 +91,10 @@ gitpass restore github --version 3
 ```
 
 - `add` creates an item in the vault. `--category` (alias `--type`) chooses the category:
-  `login` (default), `api-credential`, `secure-note`, or `credit-card`. Secrets are never
-  accepted as command-line arguments to avoid shell-history leaks; `add` prompts without echo,
-  or accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`).
+  `login` (default), `api-credential`, `secure-note`, `credit-card`, `bank-account`, or `server`.
+  Secrets are never accepted as command-line arguments to avoid shell-history leaks; `add` prompts
+  without echo, or accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`,
+  `--account-number-stdin`, `--pin-stdin`).
 - `get` prints the item, or only the password with `--password-only`. `--json` prints the
   item with concealed values set to `null` unless `--reveal` is also passed; see the
   README section "Scripting with --json".
@@ -153,14 +158,19 @@ unless `--no-history` is provided. `gitpass gen history` lists recently generate
 ## Secrets in commands and templates
 
 ```sh
+export GITHUB_TOKEN=gp://Personal/GitHub/token
+gitpass run -- gh repo list
 gitpass run --env-file .env.gitpass -- ./server --port 8080
 gitpass run --env-file .env.common --env-file .env.gitpass -- ./server
 gitpass inject -i config.yml.tpl                  # render to stdout
 gitpass inject -i .env.template -o .env           # write mode 0600 (plaintext secrets on disk)
 ```
 
-References are `gp://<vault>/<item>/<field>`; `run` puts resolved values only in the
-child's environment and masks them in its output, and `inject` replaces
+References are `gp://<vault>/<item>/<field>`; `run` resolves references from inherited
+environment variables and/or `--env-file` (which is optional and overrides inherited
+variables with the same name), puts resolved values only in the child's environment, and
+masks them in its output. If no `--env-file` is given and no inherited variable contains a
+`gp://` reference, `run` exits non-zero with an error. `inject` replaces
 `{{ gp://... }}` placeholders. See the README sections "Secrets in commands and config
 files" for the exact syntax, masking limits and `--no-masking`.
 
@@ -215,6 +225,7 @@ gitpass ssh list Personal
 gitpass ssh public Personal "GitHub deploy key"
 gitpass ssh config
 gitpass ssh agent                                  # foreground; the desktop app runs its own
+gitpass ssh git-signing Personal "GitHub deploy key"
 ```
 
 `ssh generate` creates an Ed25519 key in a new SSH Key item. `ssh import` reads an
@@ -226,6 +237,26 @@ RSA requests with `rsa-sha2-256` or `rsa-sha2-512` only (plain SHA-1 `ssh-rsa` i
 **Settings → SSH Agent → Recent activity** lists the last 50 sign requests (time, key, requested
 algorithm, client app, and whether the request was signed, denied or refused). That list lives only
 in memory and is cleared when the vault locks.
+
+### Git commit signing
+
+```sh
+gitpass ssh git-signing Personal "GitHub deploy key"               # print Git signing config (default)
+gitpass ssh git-signing Personal "GitHub deploy key" --apply --yes # apply to ~/.gitconfig and allowed_signers
+gitpass ssh git-signing Personal "Deploy key" --local --apply --yes # apply to local repo (.git/config)
+```
+
+`ssh git-signing` configures Git to sign commits and tags with an SSH key stored in gitpass (Ed25519 or RSA):
+- Sets `gpg.format=ssh`
+- Sets `user.signingkey="key::<public key>"`
+- Sets `commit.gpgsign=true` and `tag.gpgsign=true`
+- Appends `<email> <public key>` to `allowed_signers` (default `~/.ssh/allowed_signers`)
+- Points `gpg.ssh.allowedSignersFile` at the allowed signers file
+- Includes `export SSH_AUTH_SOCK="<path>"` so your shell can communicate with the background gitpass SSH agent
+
+Because Git commit signing invokes `ssh-keygen -Y sign` (which communicates with an agent via `$SSH_AUTH_SOCK` rather than `ssh`'s `IdentityAgent`), `SSH_AUTH_SOCK` in your shell profile (`~/.zshrc` or `~/.bashrc`) must point to the gitpass agent socket. `gitpass ssh git-signing` accepts `--socket <PATH>`, and `--apply` warns if `SSH_AUTH_SOCK` is currently pointing elsewhere.
+
+`--print` (the default) only prints the configuration lines without writing. Applying to git config (`--apply` or `--write`) requires confirmation unless `--yes` is passed. Signing requests go through the gitpass SSH agent, preserving per-use approval and logging.
 
 ## Devices and identity
 
@@ -250,13 +281,16 @@ recalled. See the README "Device management".
 ```sh
 gitpass audit
 gitpass audit Personal --max-age-days 180
+gitpass audit --unused-months 24
 gitpass audit --hibp --json
 gitpass audit --include-ignored
 ```
 
 `audit` checks live items: weak, reused and old passwords, missing TOTP, insecure URLs
 and duplicates on login items, plus expired or expiring credentials on cards and API
-credentials; it also reports offline 2FA/passkey availability. `--hibp` opts in to Have I
+credentials; it also reports offline 2FA/passkey availability. `--unused-months` (default
+12, `0` disables) flags logins not used on this device for that long, falling back to the
+last edit/creation time when the item was never used. `--hibp` opts in to Have I
 Been Pwned k-anonymity checks (only five hex characters of a SHA-1 leave the machine).
 `--max-age-days` defaults to 365 and `--expiring-days` to 30. The scoring and checks are
 documented in [WATCHTOWER.md](WATCHTOWER.md).
@@ -284,6 +318,8 @@ alias. Setup details for each shell are in the README "Shell completions" sectio
 | `GITPASS_ITEM_CREDENTIAL` | API credential secret for `add --category api-credential` |
 | `GITPASS_CARD_NUMBER` | Card number for `add --category credit-card` |
 | `GITPASS_CARD_CVV` | Verification code (CVV) for `add --category credit-card` |
+| `GITPASS_BANK_ACCOUNT_NUMBER` | Account number for `add --category bank-account` |
+| `GITPASS_BANK_PIN` | PIN for `add --category bank-account` |
 | `GITPASS_SECRET_KEY` | Secret Key, read before `<path>/secret.key` |
 | `GITPASS_SSH_PASSPHRASE` | Passphrase for `ssh import` |
 | `GITPASS_EXPORT_PASSPHRASE` | Passphrase for encrypted `import` / `export` |

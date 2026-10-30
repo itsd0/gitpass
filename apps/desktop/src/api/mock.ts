@@ -112,7 +112,7 @@ cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_ca
 { const a = [...db.values()][5].detail; a.archived = true; const b = [...db.values()][22].detail; b.deletedAt = new Date(Date.now() - 29 * 86400000).toISOString(); }
 
 add('v_private', 'passkey', 'webauthn.example.invalid', 'demo@example.invalid', 6, [['site', 'text', 'webauthn.example.invalid'], ['user name', 'text', 'demo@example.invalid'], ['credential id', 'text', 'FAKE-cred-id'], ['private key', 'concealed', 'FAKE'], ['sign count', 'text', '3']]);
-let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, hideFromScreenRecording: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false, renderNotesMarkdown: true, showMenuBarIcon: true, rememberGeneratedPasswords: true };
+let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, hideFromScreenRecording: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false, renderNotesMarkdown: true, showMenuBarIcon: true, rememberGeneratedPasswords: true, watchtowerUnusedMonths: 12 };
 let mockGeneratorHistory: T.GeneratorHistoryEntry[] = [
   { id: "gh-1", value: "FAKE-mock-pw-1", createdAt: Math.floor(Date.now() / 1000) - 300, source: "desktop", host: null },
   { id: "gh-2", value: "FAKE-mock-pw-2", createdAt: Math.floor(Date.now() / 1000) - 7200, source: "extension", host: "github.com" },
@@ -179,6 +179,22 @@ function annotateMockDiff(snap: T.ItemDetail, cur: T.ItemDetail) {
 const subtitleFor = (input: T.ItemInput): string => {
   const flds = input.sections.flatMap((s) => s.fields);
   if (input.category === 'credit_card') { const n = flds.find((x) => x.id === 'number' || x.label === 'number'); return n?.value ? cardLabel(n.value) : ''; }
+  if (input.category === 'bank_account') {
+    const num = flds.find((x) => x.id === 'account_number' || x.label === 'account number');
+    const b = flds.find((x) => x.id === 'bank_name' || x.label === 'bank name');
+    const t = flds.find((x) => x.id === 'account_type' || x.label === 'account type');
+    const l4 = num?.value ? `•••• ${num.value.slice(-4)}` : '';
+    if (t?.value && l4) return `${t.value} ${l4}`;
+    if (b?.value && l4) return `${b.value} ${l4}`;
+    if (l4) return l4;
+    return b?.value ?? '';
+  }
+  if (input.category === 'server') {
+    const u = flds.find((x) => x.id === 'username' || x.label === 'username')?.value;
+    const h = (flds.find((x) => x.id === 'url' || x.label.toLowerCase().includes('url') || x.label === 'hostname')?.value) || input.url;
+    if (u && h) return `${u}@${h}`;
+    return u || h || '';
+  }
   const u = flds.find((x) => x.kind === 'text' || x.kind === 'email');
   return u?.value ?? '';
 };
@@ -334,6 +350,17 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     return delay(undefined);
   },
   totp_now: () => { const period = 30; const now = Math.floor(Date.now() / 1000); const code = String((Math.floor(now / period) * 7919) % 1000000).padStart(6, '0'); return delay({ code, remaining: period - (now % period), period }, 10); },
+  scan_totp: (_a: { source: 'screen' | 'clipboard' | 'image'; dataBase64?: string }) => {
+    return delay<T.ScannedTotp>({
+      uri: 'otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub&algorithm=SHA1&digits=6&period=30',
+      secret: 'JBSWY3DPEHPK3PXP',
+      issuer: 'GitHub',
+      account: 'octocat',
+      digits: 6,
+      period: 30,
+      algorithm: 'SHA1',
+    }, 20);
+  },
   create_item: ({ input }: { input: T.ItemInput }) => {
     const now = new Date().toISOString();
     const r: Rec = { secrets: {}, versions: [], detail: { id: uid('i'), vaultId: input.vaultId, category: input.category, title: input.title, subtitle: '', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: now, createdAt: now, url: null, sections: [], notes: null, attachments: [], history: [{ version: 1, updatedAt: now }], passwordStrength: null, hasTotp: false, passwordChangedAt: null } };
@@ -547,6 +574,16 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       }
     }
     const duplicates = [...dupMap.values()].filter((g) => g.length > 1);
+    // Demo of the unused-items check: logins not edited for the configured threshold (never-used
+    // items fall back to their edit time, like the Rust audit).
+    const unusedMonths = settings.watchtowerUnusedMonths ?? 12;
+    const unusedPool: T.UnusedItem[] = unusedMonths > 0
+      ? logins
+          .filter((r) => !r.detail.archived && !r.detail.deletedAt)
+          .map((r) => ({ id: r.detail.id, edited: Date.parse(r.detail.updatedAt) }))
+          .filter((x) => Number.isFinite(x.edited) && Date.now() - x.edited > (unusedMonths * 365 * 86400000) / 12)
+          .map((x) => ({ itemId: x.id, days: Math.floor((Date.now() - x.edited) / 86400000), lastUsed: false }))
+      : [];
 
     const isIgnored = (id: string, kind: string) => {
       const it = db.get(id);
@@ -620,6 +657,10 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     const activeInsecureUrls: string[] = [];
     for (const id of insecureUrls) checkOrIgnore(id, "insecure_url", "Saved with unencrypted HTTP URL", activeInsecureUrls);
 
+    const activeUnusedIds: string[] = [];
+    for (const u of unusedPool) checkOrIgnore(u.itemId, "unused", "Not used in a long time", activeUnusedIds);
+    const activeUnused = unusedPool.filter((u) => activeUnusedIds.includes(u.itemId));
+
     const activeBreached: string[] = [];
     if (hibp && activeWeak.length > 0) {
       const candidate = activeWeak[0];
@@ -640,6 +681,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       insecureUrls: activeInsecureUrls,
       duplicates,
       weakSshKeys: [],
+      unused: activeUnused,
       weakReasons: Object.fromEntries(activeWeak.map((id) => [id, "contains the username"])),
       ignored: ignoredList,
       checkedAt: new Date().toISOString(),
@@ -664,6 +706,41 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   ssh_agent_info: () => delay<T.SshAgentInfo>({ socketPath: '/Users/demo/Library/Application Support/gitpass/ssh-agent.sock', configLine: 'Host *\n  IdentityAgent "~/Library/Application Support/gitpass/ssh-agent.sock"', running: true, approveEachUse: !!settings.sshApproveEachUse }),
   ssh_agent_activity: () => delay<T.SshActivityEntry[]>(mockSshActivity),
   clear_ssh_agent_activity: () => { mockSshActivity = []; return delay<void>(undefined); },
+  ssh_git_signing_config: (a: { vaultId: string; itemId: string; email?: string | null }) => {
+    const rec = db.get(a.itemId);
+    if (!rec) return Promise.reject(new Error('item not found'));
+    const item = rec.detail;
+    if (item.category !== 'ssh_key') return Promise.reject(new Error('item is not an SSH key'));
+    const pubField = item.sections.flatMap((s: T.Section) => s.fields).find((f: T.Field) => f.id === 'public_key');
+    const pub = pubField?.value || 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5FAKEDEMO demo@example.com';
+    const typeField = item.sections.flatMap((s: T.Section) => s.fields).find((f: T.Field) => f.id === 'key_type');
+    const keyType = typeField?.value || (pub.startsWith('ssh-rsa') ? 'ssh-rsa' : pub.startsWith('ecdsa') ? 'ecdsa-sha2-nistp256' : 'ssh-ed25519');
+    if (keyType !== 'ssh-ed25519' && keyType !== 'ssh-rsa') {
+      return Promise.reject(new Error(`Git commit signing supports Ed25519 and RSA keys; found ${keyType}`));
+    }
+    const email = a.email || 'demo@example.com';
+    const allowedSignersFile = '~/.ssh/allowed_signers';
+    const socketPath = '/Users/demo/Library/Application Support/gitpass/ssh-agent.sock';
+    const exportAuthSock = `export SSH_AUTH_SOCK="${socketPath}"`;
+    const signingKey = `key::${pub.trim()}`;
+    const allowedSignersLine = `${email} ${pub.trim()}`;
+    const configLines = `gpg.format=ssh\nuser.signingkey="${signingKey}"\ncommit.gpgsign=true\ntag.gpgsign=true\ngpg.ssh.allowedSignersFile=${allowedSignersFile}`;
+    return delay<T.GitSigningConfig>({
+      keyType,
+      publicKey: pub.trim(),
+      signingKey,
+      socketPath,
+      exportAuthSock,
+      allowedSignersFile,
+      allowedSignersLine,
+      configLines,
+      email,
+      authSockActive: false,
+    });
+  },
+  ssh_apply_git_signing: (a: { vaultId: string; itemId: string; email?: string | null; allowedSignersFile?: string | null; global?: boolean }) => {
+    return mock.ssh_git_signing_config({ vaultId: a.vaultId, itemId: a.itemId, email: a.email });
+  },
   identity: () => delay<T.Identity>({ publicKey: SELF_KEY, fingerprint: SELF.fingerprint }),
   fingerprint_of: (a: { publicKey: string }) => (PUB_RE.test(a.publicKey.trim()) ? delay(mockFingerprint(a.publicKey), 20) : Promise.reject(new Error('public key is not valid base64'))),
   list_members: (a: { vaultId: string }) => delay(vaults.find((v) => v.id === a.vaultId)?.members ?? []),

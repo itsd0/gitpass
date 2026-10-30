@@ -31,6 +31,7 @@ export const api = {
   revealField: (a:{vaultId:string; itemId:string; fieldId:string; version?:number|null}) => call<string>('reveal_field', a),
   copyField: (a:{vaultId:string; itemId:string; fieldId:string}) => call<void>('copy_field', a),
   totpNow: (a:{vaultId:string; itemId:string}) => call<{code:string; remaining:number; period:number}>('totp_now', a),
+  scanTotp: (a: { source: 'screen' | 'clipboard' | 'image'; dataBase64?: string }) => call<T.ScannedTotp>('scan_totp', a),
   createItem: (a:{input:T.ItemInput}) => call<T.ItemSummary>('create_item', a),
   updateItem: (a:{itemId:string; input:T.ItemInput}) => call<T.ItemSummary>('update_item', a),
   setFavorite: (a:{vaultId:string; itemId:string; favorite:boolean}) => call<void>('set_favorite', a),
@@ -72,6 +73,8 @@ export const api = {
   sshAgentInfo: () => call<T.SshAgentInfo>('ssh_agent_info'),
   sshAgentActivity: () => call<T.SshActivityEntry[]>('ssh_agent_activity'),
   clearSshAgentActivity: () => call<void>('clear_ssh_agent_activity'),
+  sshGitSigningConfig: (a:{vaultId:string; itemId:string; email?:string|null}) => call<T.GitSigningConfig>('ssh_git_signing_config', a),
+  sshApplyGitSigning: (a:{vaultId:string; itemId:string; email?:string|null; allowedSignersFile?:string|null; global?:boolean}) => call<T.GitSigningConfig>('ssh_apply_git_signing', a),
   /** fingerprint of a pasted recipient key (same parser as share_vault); for out-of-band verification */
   fingerprintOf: (a:{publicKey:string}) => call<string>('fingerprint_of', a),
   listMembers: (a:{vaultId:string}) => call<T.Member[]>('list_members', a),
