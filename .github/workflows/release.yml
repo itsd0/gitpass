@@ -5,16 +5,19 @@ name: Release
 # installers, updater artifacts and latest.json (URLs rewritten to gitpass-releases) to a release there.
 # Requires secret RELEASES_REPO_TOKEN (mirror only): fine-grained PAT, repo itsd0/gitpass-releases only,
 # Contents: read & write.
-# workflow_dispatch -> same builds, uploaded as workflow artifacts only (no release).
+# workflow_dispatch -> DRY RUN: same builds incl. updater signing (.sig), uploaded as workflow artifacts only;
+# nothing is published and no tag is created.
 #
-# Self-hosted runner policy: the self-hosted Mac (label gitpass-mac) is used ONLY by this workflow, which has
-# no pull_request / pull_request_target trigger, and every self-hosted job is guarded so it runs only in
-# itsd0/gitpass (never a fork) and only when the owner itsd0 pushed the v* tag or dispatched the run.
-# Cost control: macOS builds run on the self-hosted Mac (label gitpass-mac, free). Windows/Linux use hosted
-# runners and only run on a manual dispatch with include_windows_linux=true, so a tag release is macOS-only.
-# Signing: macOS bundles are signed with the self-signed keychain identity "gitpass Local Signing" (not
-# Developer ID, not notarized). The runner LaunchAgent must run in the logged-in user's session with the
-# login keychain unlocked (see docs/RELEASE.md).
+# Runners: everything runs on GitHub-hosted runners. macOS arm64 and x64 both build on macos-14 (Apple
+# Silicon); x64 is cross-compiled with --target x86_64-apple-darwin, as on the former release Mac.
+# Every job is guarded so it runs only in itsd0/gitpass (never a fork) and only when the owner itsd0 pushed the
+# v* tag or dispatched the run; there is no pull_request trigger, so fork PRs never see these secrets.
+# Tag builds and publishing run in the `release` environment (deployment rule: v* tags only).
+# Windows/Linux only run on a manual dispatch with include_windows_linux=true, so a tag release is macOS-only.
+# macOS code signing: with secrets APPLE_CERTIFICATE (base64 .p12 of the self-signed "gitpass Local Signing"
+# identity) + APPLE_CERTIFICATE_PASSWORD, the bundle is signed with that identity (not Developer ID, not
+# notarized). Without them a dry run is ad-hoc signed ("-"), and a tag release FAILS rather than silently
+# changing the app's signing identity (see docs/RELEASE.md).
 on:
   push:
     tags: ["v*"]
@@ -36,21 +39,22 @@ jobs:
   macos:
     name: desktop (${{ matrix.name }})
     if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0'
-    runs-on: [self-hosted, macOS, gitpass-mac]
+    runs-on: ${{ matrix.os }}
+    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || '' }}
     timeout-minutes: 90
     permissions:
       contents: write  # tauri-action creates/updates the draft release on this repo
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         include:
-          - { name: macos-arm64, target: aarch64-apple-darwin, args: "--target aarch64-apple-darwin --bundles app,dmg" }
-          - { name: macos-x64, target: x86_64-apple-darwin, args: "--target x86_64-apple-darwin --bundles app,dmg" }
+          - { name: macos-arm64, os: macos-14, target: aarch64-apple-darwin, args: "--target aarch64-apple-darwin --bundles app,dmg" }
+          - { name: macos-x64, os: macos-14, target: x86_64-apple-darwin, args: "--target x86_64-apple-darwin --bundles app,dmg" }
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}  # empty for the current unencrypted key
-      APPLE_SIGNING_IDENTITY: "gitpass Local Signing"
+      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -58,13 +62,25 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
           node-version: 22
-      - name: preflight (rust target + signing identity reachable)
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: apps/desktop/src-tauri
+          key: ${{ matrix.name }}
+      - name: preflight (updater key + macOS signing identity)
         run: |
-          rustup target add ${{ matrix.target }}
-          security find-identity -p codesigning | grep -q "gitpass Local Signing" || { echo "::error::signing identity not visible to the runner (keychain locked or wrong session)"; exit 1; }
-          f="$RUNNER_TEMP/signtest"; cp /bin/echo "$f"
-          codesign --force -s "gitpass Local Signing" "$f" || { echo "::error::codesign failed: unlock the login keychain on the Mac"; exit 1; }
-          rm -f "$f"
+          [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || { echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set"; exit 1; }
+          if [ -n "$APPLE_CERTIFICATE" ]; then
+            echo "APPLE_SIGNING_IDENTITY=gitpass Local Signing" >> "$GITHUB_ENV"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "::error::APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD are not set; refusing to ship a release with a different signing identity (see docs/RELEASE.md)"
+            exit 1
+          else
+            echo "::warning::dry run without APPLE_CERTIFICATE: the app is ad-hoc signed"
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+          fi
       - working-directory: apps/desktop
         run: npm ci
       - name: build + publish (tag)
@@ -81,12 +97,18 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           includeUpdaterJson: true
           args: ${{ matrix.args }}
-      - name: build only (manual run)
+      - name: build only (dry run, manual)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
         uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         with:
           projectPath: apps/desktop
           args: ${{ matrix.args }}
+      - name: check bundles and updater signature
+        run: |
+          b="apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle"
+          ls -l "$b"/dmg/*.dmg "$b"/macos/*.app.tar.gz "$b"/macos/*.app.tar.gz.sig
+          for f in "$b"/macos/*.app.tar.gz.sig; do [ -s "$f" ] || { echo "::error::empty $f"; exit 1; }; done
+          codesign -dv "$b"/macos/*.app 2>&1 | grep -E "Identifier|Signature|Authority|TeamIdentifier" || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: gitpass-desktop-${{ matrix.name }}
@@ -94,27 +116,13 @@ jobs:
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz*
           if-no-files-found: error
-      - name: clean built app from runner (avoid duplicate Launchpad icons)
-        if: always()
-        run: |
-          LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-          if [ -d apps/desktop/src-tauri/target ]; then
-            find apps/desktop/src-tauri/target -type d -name "*.app" -prune | while IFS= read -r app; do
-              if [ -n "$app" ] && [ -d "$app" ]; then
-                if [ -x "$LSREGISTER" ]; then
-                  "$LSREGISTER" -u "$app" 2>/dev/null || true
-                fi
-                rm -rf "$app"
-              fi
-            done
-          fi
-          touch .metadata_never_index ../.metadata_never_index 2>/dev/null || true
 
   publish:
     name: publish release (+ mirror to gitpass-releases)
     needs: macos
     if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
+    environment: release
     timeout-minutes: 15
     permissions:
       contents: write
@@ -208,12 +216,13 @@ jobs:
   cli-host:
     name: cli + native host (macOS arm64)
     if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0'
-    runs-on: [self-hosted, macOS, gitpass-mac]
+    runs-on: macos-14
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - run: cargo build --release --locked -p gitpass-cli -p gitpass-host
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:

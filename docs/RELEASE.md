@@ -135,16 +135,22 @@ which agents must not make. Until the owner lands those, the template
 documents the current asset names and carries a commented-out SHA256SUMS
 placeholder instead of claiming the file exists.
 
-### Self-hosted Mac runner (since v0.6.1)
+### Runners and the `release` environment (since 0.6.8)
 
-CI, the iOS workflow and the macOS release builds run on a repo-level self-hosted runner on the
-maintainer's Mac (`~/actions-runner`, labels `self-hosted,macOS,gitpass-mac`), registered to the
-private repo **itsd0/gitpass only** — never attach it to a public repo (including gitpass-releases).
+All workflows run on **GitHub-hosted runners**; the former self-hosted Mac runner was removed. CI and iOS use
+`ubuntu-latest` / `macos-latest`; `release.yml` builds macOS arm64 and x64 on `macos-14` (x64 is cross-compiled).
 
-- Service: `cd ~/actions-runner && ./svc.sh status|start|stop` (LaunchAgent; runs while the user is logged in).
-- Tests run with `HOME` set to a temp dir, so they never touch `~/.gitpass` or the app's agent socket.
-- macOS release signing uses the login-keychain identity `gitpass Local Signing`. The release job's
-  preflight step test-signs a file and fails with a clear error if the keychain is not reachable
-  (locked, or the service runs outside the user's session). Fix: log in / unlock the login keychain.
+- Tag builds and the publish job run in the `release` environment, whose deployment rule only allows `v*` tags.
+  There is no required reviewer, so the unattended daily release (tags pushed by itsd0) does not stall; the
+  owner-only actor guard in `release.yml` and the tag-only rule are the controls.
+- **Dry run:** `gh workflow run release.yml -R itsd0/gitpass` (on `main`) builds both DMGs and the signed updater
+  artifacts (`*.app.tar.gz` + `.sig`) as workflow artifacts. Nothing is published and no tag is created.
+- **macOS code signing on hosted runners** needs the self-signed `gitpass Local Signing` identity as secrets:
+  export it from Keychain Access as a `.p12` with a password, then
+  `base64 -i gitpass-signing.p12 | gh secret set APPLE_CERTIFICATE -R itsd0/gitpass --env release` and
+  `gh secret set APPLE_CERTIFICATE_PASSWORD -R itsd0/gitpass --env release`, and delete the `.p12` file. Until
+  they are set, dry runs are ad-hoc signed and tag releases fail in preflight (so a release never silently
+  changes the app's signing identity, which macOS uses for Keychain access).
+- Tests run with `HOME` set to a temp dir.
 - Windows/Linux builds are hosted (cost minutes) and only run via
   `gh workflow run release.yml -f include_windows_linux=true` (artifacts only, not published).
