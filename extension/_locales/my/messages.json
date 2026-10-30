@@ -991,6 +991,9 @@
   "catServer": {
     "message": "ဆာဗာများ"
   },
+  "catOther": {
+    "message": "အခြား"
+  },
   "genRecent": {
     "message": "မကြာသေးမီ"
   },
