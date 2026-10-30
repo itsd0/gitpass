@@ -27,10 +27,13 @@ pub enum Finding {
     InsecureUrl { url_host: String },
     Duplicate { group: String },
     WeakSshKey { bits: usize },
+    /// A live Login whose last use on this device (or last edit/creation when it was never used)
+    /// is older than the unused threshold. Housekeeping advice: it does not affect the score.
+    Unused { days: u64 },
 }
 
 /// Every [`Finding::kind`] string, in declaration order (docs and `gitpass audit --help` list these).
-pub const FINDING_KINDS: &[&str] = &["weak", "reused", "old", "missing_totp", "totp_available", "passkey_available", "pwned", "expired", "expiring_soon", "insecure_url", "duplicate", "weak_ssh_key"];
+pub const FINDING_KINDS: &[&str] = &["weak", "reused", "old", "missing_totp", "totp_available", "passkey_available", "pwned", "expired", "expiring_soon", "insecure_url", "duplicate", "weak_ssh_key", "unused"];
 
 impl Finding {
     pub fn kind(&self) -> &'static str {
@@ -47,6 +50,7 @@ impl Finding {
             Finding::InsecureUrl { .. } => "insecure_url",
             Finding::Duplicate { .. } => "duplicate",
             Finding::WeakSshKey { .. } => "weak_ssh_key",
+            Finding::Unused { .. } => "unused",
         }
     }
 }
@@ -62,12 +66,21 @@ pub struct ItemFindings {
 }
 
 #[derive(Clone, Debug)]
-pub struct AuditOpts { pub max_age_days: u64, pub min_length: usize, pub min_entropy_bits: f64, pub now_secs: u64, pub expiring_days: u64, pub include_ignored: bool }
+pub struct AuditOpts {
+    pub max_age_days: u64, pub min_length: usize, pub min_entropy_bits: f64, pub now_secs: u64, pub expiring_days: u64, pub include_ignored: bool,
+    /// Months without use after which a live Login is reported `unused` (see
+    /// [`unused_threshold_days`]); `None` turns the check off.
+    pub unused_months: Option<u64>,
+    /// Per-item last-used timestamps (unix seconds) from local state. A missing entry means the item
+    /// was never used on this device, so its last edit/creation time is used instead.
+    pub last_used: BTreeMap<String, u64>,
+}
 
 impl Default for AuditOpts {
     fn default() -> Self {
         let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0);
-        AuditOpts { max_age_days: 365, min_length: 12, min_entropy_bits: 60.0, now_secs: now, expiring_days: 30, include_ignored: false }
+        AuditOpts { max_age_days: 365, min_length: 12, min_entropy_bits: 60.0, now_secs: now, expiring_days: 30, include_ignored: false,
+            unused_months: Some(12), last_used: BTreeMap::new() }
     }
 }
 
@@ -79,6 +92,7 @@ pub struct AuditReport {
     pub expired: usize, pub expiring_soon: usize,
     pub insecure_urls: usize,
     pub weak_ssh_keys: usize,
+    pub unused: usize,
     pub ignored: usize,
     pub per_item: Vec<ItemFindings>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -564,6 +578,18 @@ pub fn parse_expiry(raw: &str) -> Option<u64> {
     None
 }
 
+/// Days in `months` for the unused-item threshold, counting months as twelfths of 365 days
+/// (6 → 182, 12 → 365, 24 → 730). The check is strict: an item exactly at the threshold is kept.
+pub fn unused_threshold_days(months: u64) -> u64 { months.saturating_mul(365) / 12 }
+
+/// A timestamp stored either as unix seconds (current items) or ISO 8601 (older items).
+fn activity_ts(raw: &str) -> Option<u64> {
+    let s = raw.trim();
+    if s.is_empty() { return None; }
+    if let Ok(n) = s.parse::<u64>() { return Some(n); }
+    crate::device::parse_iso8601(s).and_then(|t| u64::try_from(t).ok())
+}
+
 /// Audit `(vault, id, record)` triples with the bundled site list and no passkey context.
 pub fn audit(items: &[(String, String, ItemRecord)], o: &AuditOpts, hibp: Option<&dyn PwnedRangeClient>) -> Result<AuditReport> {
     audit_with_sites(items, &BTreeSet::new(), bundled_mfa_sites(), o, hibp)
@@ -772,6 +798,20 @@ fn auditable_url(rec: &ItemRecord) -> Option<&str> {
             }
         }
 
+        if let Some(months) = o.unused_months.filter(|m| *m > 0) {
+            if rec.category == crate::item::Category::Login && !rec.archived && rec.deleted_at.is_none() {
+                let last_activity = o.last_used.get(id).copied()
+                    .or_else(|| activity_ts(&rec.item.updated_at))
+                    .or(rec.created_at);
+                if let Some(t) = last_activity {
+                    let days = o.now_secs.saturating_sub(t) / 86400;
+                    if days > unused_threshold_days(months) {
+                        record_finding(Finding::Unused { days }, &mut r.unused);
+                    }
+                }
+            }
+        }
+
         let change_pw_url = url.and_then(change_password_url);
         if !f.is_empty() { r.per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), change_password_url: change_pw_url.clone(), findings: f }); }
         if !f_ignored.is_empty() { r.ignored_per_item.push(ItemFindings { vault: vault.clone(), id: id.clone(), title: it.title.clone(), change_password_url: change_pw_url, findings: f_ignored }); }
@@ -812,6 +852,7 @@ impl std::fmt::Display for Finding {
             Finding::InsecureUrl { url_host } => write!(f, "saved with unencrypted HTTP URL ({url_host})"),
             Finding::Duplicate { group } => write!(f, "duplicate login for {group}"),
             Finding::WeakSshKey { bits } => write!(f, "weak SSH key: {bits}-bit RSA (recommend 3072+ bits or Ed25519)"),
+            Finding::Unused { days } => write!(f, "not used in {days} days"),
         }
     }
 }
@@ -857,6 +898,113 @@ mod tests {
             }],
         }];
         rec
+    }
+
+    #[test]
+    fn test_unused_login_threshold_and_fallbacks() {
+        use std::collections::BTreeMap;
+        // 2027-01-15T00:00:00Z
+        let now_secs: u64 = 1_800_000_000;
+        let day = 86400u64;
+        let login = |title: &str| {
+            let mut it = Item::default();
+            it.title = title.into();
+            let mut rec = ItemRecord::new(it);
+            rec.category = Category::Login;
+            rec
+        };
+        let mut rows: Vec<(String, String, ItemRecord)> = vec![];
+        let mut push = |id: &str, rec: ItemRecord| rows.push(("v".into(), id.into(), rec));
+
+        // Recently edited (fallback when never used): not flagged.
+        let mut recent = login("Recent");
+        recent.item.updated_at = (now_secs - 10 * day).to_string();
+        push("recent", recent);
+
+        // Never used, no edit time, recently created: not flagged.
+        let mut created = login("New");
+        created.created_at = Some(now_secs - 10 * day);
+        push("created", created);
+
+        // No timestamp at all: old age is unknown, so not flagged.
+        push("unknown", login("Unknown"));
+
+        // Old edit time and no use recorded: flagged with the days since that edit.
+        let mut old = login("Old");
+        old.item.updated_at = (now_secs - 400 * day).to_string();
+        push("old", old);
+
+        // ISO 8601 `updated_at` (older items) is parsed too.
+        let mut iso = login("Old ISO");
+        iso.item.updated_at = crate::device::iso8601((now_secs - 400 * day) as i64);
+        push("iso", iso);
+
+        // Used recently even though edited long ago: not flagged.
+        let mut used = login("Used");
+        used.item.updated_at = (now_secs - 400 * day).to_string();
+        push("used", used);
+
+        // Last use is old even though the item was edited recently: flagged.
+        let mut stale = login("Stale");
+        stale.item.updated_at = (now_secs - 5 * day).to_string();
+        push("stale", stale);
+
+        // Exactly at the threshold is kept; one day past it is flagged.
+        let mut boundary = login("Boundary");
+        boundary.item.updated_at = (now_secs - 365 * day).to_string();
+        push("boundary", boundary);
+        let mut beyond = login("Beyond");
+        beyond.item.updated_at = (now_secs - 366 * day).to_string();
+        push("beyond", beyond);
+
+        // Archived, deleted and non-login items are never flagged.
+        let mut archived = login("Archived");
+        archived.item.updated_at = (now_secs - 400 * day).to_string();
+        archived.archived = true;
+        push("archived", archived);
+        let mut deleted = login("Deleted");
+        deleted.item.updated_at = (now_secs - 400 * day).to_string();
+        deleted.deleted_at = Some(now_secs - 400 * day);
+        push("deleted", deleted);
+        let mut card = card_item("Old card", "12/30");
+        card.item.updated_at = (now_secs - 400 * day).to_string();
+        push("card", card);
+
+        let mut last_used = BTreeMap::new();
+        last_used.insert("used".to_string(), now_secs - 5 * day);
+        last_used.insert("stale".to_string(), now_secs - 400 * day);
+        let opts = AuditOpts { now_secs, unused_months: Some(12), last_used, ..Default::default() };
+        let report = audit(&rows, &opts, None).unwrap();
+
+        let find = |id: &str| report.per_item.iter().find(|i| i.id == id).map(|i| i.findings.clone()).unwrap_or_default();
+        assert!(find("recent").is_empty());
+        assert!(find("created").is_empty());
+        assert!(find("unknown").is_empty());
+        assert_eq!(find("old"), vec![Finding::Unused { days: 400 }]);
+        assert_eq!(find("iso"), vec![Finding::Unused { days: 400 }]);
+        assert!(find("used").is_empty());
+        assert_eq!(find("stale"), vec![Finding::Unused { days: 400 }]);
+        assert!(find("boundary").is_empty());
+        assert_eq!(find("beyond"), vec![Finding::Unused { days: 366 }]);
+        assert!(find("archived").is_empty() && find("deleted").is_empty() && find("card").is_empty());
+        assert_eq!(report.unused, 4);
+
+        // 24 months is looser, 6 months is stricter.
+        let looser = AuditOpts { now_secs, unused_months: Some(24), ..Default::default() };
+        assert_eq!(audit(&rows, &looser, None).unwrap().unused, 0);
+        let stricter = AuditOpts { now_secs, unused_months: Some(6), ..Default::default() };
+        // 6 months = 182 days also catches the item exactly 365 days old, plus the four 12-month ones.
+        assert_eq!(audit(&rows, &stricter, None).unwrap().unused, 5);
+        assert_eq!(unused_threshold_days(6), 182);
+        assert_eq!(unused_threshold_days(24), 730);
+
+        // Off (None or 0 months) disables the check.
+        for off in [None, Some(0)] {
+            let opts = AuditOpts { now_secs, unused_months: off, ..Default::default() };
+            let r = audit(&rows, &opts, None).unwrap();
+            assert_eq!(r.unused, 0);
+            assert!(!r.per_item.iter().flat_map(|i| &i.findings).any(|f| matches!(f, Finding::Unused { .. })));
+        }
     }
 
     #[test]
@@ -952,6 +1100,7 @@ mod tests {
             Finding::MissingTotp, Finding::TotpAvailable { site: String::new() }, Finding::PasskeyAvailable { site: String::new() },
             Finding::Pwned { count: 1 }, Finding::Expired { on: String::new() }, Finding::ExpiringSoon { on: String::new(), days: 1 },
             Finding::InsecureUrl { url_host: String::new() }, Finding::Duplicate { group: String::new() }, Finding::WeakSshKey { bits: 2048 },
+            Finding::Unused { days: 400 },
         ];
         let kinds: Vec<&str> = all.iter().map(Finding::kind).collect();
         assert_eq!(kinds, FINDING_KINDS);

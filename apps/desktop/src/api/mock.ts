@@ -112,7 +112,7 @@ cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_ca
 { const a = [...db.values()][5].detail; a.archived = true; const b = [...db.values()][22].detail; b.deletedAt = new Date(Date.now() - 29 * 86400000).toISOString(); }
 
 add('v_private', 'passkey', 'webauthn.example.invalid', 'demo@example.invalid', 6, [['site', 'text', 'webauthn.example.invalid'], ['user name', 'text', 'demo@example.invalid'], ['credential id', 'text', 'FAKE-cred-id'], ['private key', 'concealed', 'FAKE'], ['sign count', 'text', '3']]);
-let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, hideFromScreenRecording: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false, renderNotesMarkdown: true, showMenuBarIcon: true, rememberGeneratedPasswords: true };
+let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, hideFromScreenRecording: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false, renderNotesMarkdown: true, showMenuBarIcon: true, rememberGeneratedPasswords: true, watchtowerUnusedMonths: 12 };
 let mockGeneratorHistory: T.GeneratorHistoryEntry[] = [
   { id: "gh-1", value: "FAKE-mock-pw-1", createdAt: Math.floor(Date.now() / 1000) - 300, source: "desktop", host: null },
   { id: "gh-2", value: "FAKE-mock-pw-2", createdAt: Math.floor(Date.now() / 1000) - 7200, source: "extension", host: "github.com" },
@@ -569,6 +569,16 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       }
     }
     const duplicates = [...dupMap.values()].filter((g) => g.length > 1);
+    // Demo of the unused-items check: logins not edited for the configured threshold (never-used
+    // items fall back to their edit time, like the Rust audit).
+    const unusedMonths = settings.watchtowerUnusedMonths ?? 12;
+    const unusedPool: T.UnusedItem[] = unusedMonths > 0
+      ? logins
+          .filter((r) => !r.detail.archived && !r.detail.deletedAt)
+          .map((r) => ({ id: r.detail.id, edited: Date.parse(r.detail.updatedAt) }))
+          .filter((x) => Number.isFinite(x.edited) && Date.now() - x.edited > (unusedMonths * 365 * 86400000) / 12)
+          .map((x) => ({ itemId: x.id, days: Math.floor((Date.now() - x.edited) / 86400000), lastUsed: false }))
+      : [];
 
     const isIgnored = (id: string, kind: string) => {
       const it = db.get(id);
@@ -642,6 +652,10 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     const activeInsecureUrls: string[] = [];
     for (const id of insecureUrls) checkOrIgnore(id, "insecure_url", "Saved with unencrypted HTTP URL", activeInsecureUrls);
 
+    const activeUnusedIds: string[] = [];
+    for (const u of unusedPool) checkOrIgnore(u.itemId, "unused", "Not used in a long time", activeUnusedIds);
+    const activeUnused = unusedPool.filter((u) => activeUnusedIds.includes(u.itemId));
+
     const activeBreached: string[] = [];
     if (hibp && activeWeak.length > 0) {
       const candidate = activeWeak[0];
@@ -662,6 +676,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       insecureUrls: activeInsecureUrls,
       duplicates,
       weakSshKeys: [],
+      unused: activeUnused,
       weakReasons: Object.fromEntries(activeWeak.map((id) => [id, "contains the username"])),
       ignored: ignoredList,
       checkedAt: new Date().toISOString(),

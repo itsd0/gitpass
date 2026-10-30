@@ -10,6 +10,7 @@ import {
   ExternalLink,
   EyeOff,
   Globe,
+  History,
   Key,
   KeyRound,
   Layers,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import type { ItemSummary, WatchtowerReport } from "../../api/types";
 import { api } from "../../api/client";
+import { SiteIcon } from "../../components/SiteIcon";
 import { useT, useI18n, type Key as TranslationKey } from "../../i18n";
 import {
   Button,
@@ -103,6 +105,7 @@ const ISSUE_TO_KIND: Record<IssueKey, string> = {
   expiringSoon: "expiring_soon",
   insecureUrls: "insecure_url",
   weakSshKey: "weak_ssh_key",
+  unused: "unused",
 };
 
 export function WatchtowerPage() {
@@ -117,10 +120,12 @@ export function WatchtowerPage() {
     { key: "expiringSoon" as const, titleKey: "watchtower.expiringSoon" as const, descKey: "watchtower.expiringSoonDesc" as const, Icon: CalendarClock },
     { key: "insecureUrls" as const, titleKey: "watchtower.insecureUrls" as const, descKey: "watchtower.insecureUrlsDesc" as const, Icon: Globe },
     { key: "weakSshKey" as const, titleKey: "watchtower.weakSshKey" as const, descKey: "watchtower.weakSshKeyDesc" as const, Icon: Key },
+    { key: "unused" as const, titleKey: "watchtower.unusedItems" as const, descKey: "watchtower.unusedItemsDesc" as const, Icon: History },
   ].map((c) => ({ ...c, title: t(c.titleKey), desc: t(c.descKey) }));
   const { selectItem, setRoute, setEditing } = useApp();
   const settings = useSettings((st) => st.settings);
   const hibp = !!settings?.hibpCheck;
+  const unusedMonths = settings?.watchtowerUnusedMonths ?? 12;
 
   useEffect(() => {
     if (!settings) void useSettings.getState().load();
@@ -130,6 +135,13 @@ export function WatchtowerPage() {
     useSettings
       .getState()
       .save({ hibpCheck: v })
+      .catch((e) => setErr(String((e as Error)?.message ?? e)));
+  };
+
+  const setUnusedMonths = (months: number) => {
+    useSettings
+      .getState()
+      .save({ watchtowerUnusedMonths: months })
       .catch((e) => setErr(String((e as Error)?.message ?? e)));
   };
 
@@ -159,7 +171,7 @@ export function WatchtowerPage() {
   const ready = !!settings;
   useEffect(() => {
     if (ready) load(hibp);
-  }, [hibp, ready, load]);
+  }, [hibp, unusedMonths, ready, load]);
 
   const open = (id: string) => {
     const it = titles[id];
@@ -185,6 +197,33 @@ export function WatchtowerPage() {
           onClick: async () => {
             try {
               await Promise.all(older.map((it) => api.archiveItem({ vaultId: it.vaultId, itemId: it.id, archived: false })));
+              toast(t("bulk.toast.unarchive"));
+              load(hibp);
+            } catch (e) {
+              toast(String(e), "danger");
+            }
+          },
+        },
+      });
+      load(hibp);
+    } catch (e) {
+      toast(String(e), "danger");
+    }
+  };
+
+  const archiveUnused = async (id: string) => {
+    const it = titles[id];
+    if (!it) return;
+    try {
+      await api.archiveItem({ vaultId: it.vaultId, itemId: id, archived: true });
+      toast(t("watchtower.archivedToast"), {
+        duration: 5000,
+        action: {
+          label: t("common.undo"),
+          altText: t("common.undo"),
+          onClick: async () => {
+            try {
+              await api.archiveItem({ vaultId: it.vaultId, itemId: id, archived: false });
               toast(t("bulk.toast.unarchive"));
               load(hibp);
             } catch (e) {
@@ -302,12 +341,39 @@ export function WatchtowerPage() {
               {t("watchtower.hibpNoteRest")}
             </p>
           </div>
+          <div className="rounded-lg border border-border p-3">
+            <label className="flex flex-wrap items-center gap-2 text-sm font-medium">
+              <History size={14} className="text-muted" />
+              {t("watchtower.unusedAfter")}
+              <select
+                aria-label={t("watchtower.unusedAfter")}
+                className="h-8 rounded-md border border-border bg-bg px-2 text-sm text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                value={unusedMonths}
+                disabled={!settings}
+                onChange={(e) => setUnusedMonths(Number(e.target.value))}
+                data-testid="unused-months-select"
+              >
+                {[6, 12, 24].map((n) => (
+                  <option key={n} value={n}>
+                    {t("watchtower.unusedMonths", { n })}
+                  </option>
+                ))}
+                <option value={0}>{t("watchtower.unusedOff")}</option>
+              </select>
+            </label>
+            <p className="mt-1 text-xs text-muted">{t("watchtower.unusedHint")}</p>
+          </div>
         </div>
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {cards.map(({ key, title, desc, Icon }) => {
           const ids = report ? issueIds(report, key) : [];
-          const off = key === "breached" && report && !report.hibpChecked;
+          const offHint =
+            key === "breached" && report && !report.hibpChecked
+              ? t("watchtower.breachOffHint")
+              : key === "unused" && report && unusedMonths === 0
+              ? t("watchtower.unusedOffHint")
+              : null;
           const kind = ISSUE_TO_KIND[key];
           // Change password is offered for password-related findings only (issue #92).
           const canChangePassword = key === "weak" || key === "reused" || key === "breached";
@@ -328,12 +394,12 @@ export function WatchtowerPage() {
                 />
                 <h2 className="font-semibold">{title}</h2>
                 <span data-testid={`count-${key}`} className="ml-auto rounded-full bg-hover px-2 text-sm">
-                  {report ? (off ? "—" : ids.length) : "…"}
+                  {report ? (offHint ? "—" : ids.length) : "…"}
                 </span>
               </div>
               <p className="mt-1 text-xs text-muted">{desc}</p>
-              {off ? (
-                <p className="mt-3 text-xs text-muted">{t("watchtower.breachOffHint")}</p>
+              {offHint ? (
+                <p className="mt-3 text-xs text-muted">{offHint}</p>
               ) : ids.length === 0 ? (
                 report && (
                   <p className="mt-3 flex items-center gap-1 text-xs text-ok">
@@ -519,6 +585,60 @@ export function WatchtowerPage() {
                             </DropdownMenuContent>
                           </DropdownMenu>
                         </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              ) : key === "unused" ? (
+                <ul className="mt-3 space-y-2" data-testid="unused-list">
+                  {(report?.unused ?? []).map((u) => {
+                    const it = titles[u.itemId];
+                    const title = it?.title ?? u.itemId;
+                    const months = Math.max(1, Math.round(u.days / 30));
+                    return (
+                      <li
+                        key={u.itemId}
+                        className="flex items-center gap-2 rounded-lg bg-bg p-2.5 text-xs"
+                        data-testid={`unused-item-${u.itemId}`}
+                      >
+                        <SiteIcon item={{ title, url: it?.url }} size={18} className="shrink-0" />
+                        <button
+                          type="button"
+                          onClick={() => open(u.itemId)}
+                          className="min-w-0 flex-1 truncate text-left font-medium text-fg hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                        >
+                          {title}
+                        </button>
+                        <span className="shrink-0 text-[11px] text-muted">
+                          {t(u.lastUsed ? "watchtower.lastUsedMonthsAgo" : "watchtower.lastEditedMonthsAgo", { n: months })}
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 shrink-0 border-accent px-2 text-xs text-accent hover:bg-accent/10 focus-visible:ring-accent"
+                          onClick={() => void archiveUnused(u.itemId)}
+                          aria-label={t("watchtower.archiveFor", { title })}
+                        >
+                          <Archive size={12} className="mr-1" />
+                          {t("watchtower.archive")}
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              aria-label={t("watchtower.moreOptionsFor", { title })}
+                              className="inline-flex shrink-0 items-center justify-center rounded bg-hover p-1 text-muted hover:text-fg hover:bg-hover/80 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent"
+                            >
+                              <MoreVertical size={13} />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onSelect={() => ignoreFinding(u.itemId, "unused")}>
+                              <EyeOff size={14} />
+                              <span>{t("watchtower.ignoreWarning")}</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </li>
                     );
                   })}
