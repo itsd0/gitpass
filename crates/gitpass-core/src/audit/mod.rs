@@ -10,7 +10,7 @@ pub mod url;
 pub use dates::{parse_expiry, unused_threshold_days};
 pub use hibp::{pwned_count, PwnedRangeClient, HIBP_RANGE_URL};
 pub use sites::{lookup_mfa_site, mfa_sites, parse_mfa_site_list, site_support, SiteSupport};
-pub use strength::{contains_personal_info, entropy_bits, weakness};
+pub use strength::{contains_personal_info, entropy_bits, pattern_estimate, weakness};
 pub use url::{change_password_url, decode_punycode, extract_site_name, insecure_url_host};
 pub(crate) use url::host_of;
 
