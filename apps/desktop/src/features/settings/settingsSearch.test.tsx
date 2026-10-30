@@ -253,6 +253,24 @@ describe('Settings search and consistent layout', () => {
     expect(row?.className).toContain('ring-accent');
   });
 
+  it('searches for density and highlights the list-density row in General tab', async () => {
+    const user = userEvent.setup();
+    render(<SettingsPage initialTab="security" />);
+    const searchInput = await screen.findByTestId('settings-search-input');
+
+    await user.type(searchInput, 'compact');
+    const result = await screen.findByRole('option', { name: /List density/i });
+    expect(result).toBeTruthy();
+    await user.click(result);
+
+    await waitFor(() => {
+      expect(screen.getByRole('tabpanel', { name: 'General' })).toBeTruthy();
+    });
+    const row = document.getElementById('setting-list-density');
+    expect(row).toBeTruthy();
+    expect(row?.className).toContain('ring-accent');
+  });
+
   it('searches for menu bar / tray icon and targets menu bar row', async () => {
     const user = userEvent.setup();
     render(<SettingsPage initialTab="security" />);

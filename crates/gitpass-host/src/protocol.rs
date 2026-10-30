@@ -234,6 +234,14 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord, last_used: Opti
     m.insert("notes".into(), json!(nonempty(&r.item.notes)));
     m.insert("tags".into(), json!(r.tags));
     m.insert("created_at".into(), json!(r.created_at));
+    if r.category == Category::Login && !r.password_history.is_empty() {
+        let history: Vec<Value> = r.password_history.iter().map(|h| {
+            json!({
+                "replaced_at": h.replaced_at,
+            })
+        }).collect();
+        m.insert("password_history".into(), json!(history));
+    }
     v
 }
 

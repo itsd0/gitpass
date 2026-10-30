@@ -273,6 +273,30 @@
   "reveal": {
     "message": "Reveal"
   },
+  "passwordHistory": {
+    "message": "Password history ($1)",
+    "description": "Disclosure label for previous passwords on a login item",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "passwordHistoryReplaced": {
+    "message": "Replaced $1",
+    "description": "Label indicating when a historical password was replaced",
+    "placeholders": {
+      "date": {
+        "content": "$1"
+      }
+    }
+  },
+  "revealPasswordHistory": {
+    "message": "Reveal historical password"
+  },
+  "copyPasswordHistory": {
+    "message": "Copy historical password"
+  },
   "lastEdited": {
     "message": "Last edited"
   },
@@ -1132,5 +1156,20 @@
   },
   "optHiddenInlineMenuAdd": {
     "message": "Add a site"
+  },
+  "optColorPasswords": {
+    "message": "Colour-code revealed passwords"
+  },
+  "optColorPasswordsBody": {
+    "message": "Show digits in orange, symbols in blue and spaces as a dot when a password is revealed. Copying is unchanged."
+  },
+  "watchtowerUnused": {
+    "message": "Not used in over a year"
+  },
+  "watchtowerRotationDue": {
+    "message": "Due for rotation"
+  },
+  "watchtowerRotationSoon": {
+    "message": "Rotation due soon"
   }
 }

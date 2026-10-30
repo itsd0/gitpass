@@ -1,12 +1,14 @@
 //! Format v5 item schema: categories, sections + typed fields, tags, favorite/archive, soft delete,
-//! version history and attachment metadata. Everything here lives INSIDE the encrypted, padded item
+//! version history, login password history and attachment metadata. Everything here lives INSIDE the encrypted, padded item
 //! payload ([`crate::merge::ItemRecord`]); nothing is visible on disk.
 //!
 //! Back-compat: the v2-v4 login fields (`username`, `password`, `url`, `totp`, `notes`, `title`) stay
 //! the canonical storage for login data (so v3 field-level merge and the CLI keep working); views
 //! synthesize a `login` section from them. Extra fields of any category live in `sections`.
+//! Login items may optionally retain a `password_history` list (newest first, capped at 20 entries)
+//! recording earlier passwords and their replacement timestamps.
 use serde::{Deserialize, Serialize};
-use zeroize::Zeroize;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -248,6 +250,8 @@ pub struct Snapshot {
     pub sections: Vec<Section>,
     #[serde(default)]
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_item_ids: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Default, Zeroize)]
@@ -255,6 +259,16 @@ pub struct HistoryEntry { pub version: u64, pub updated_at: String, pub snapshot
 
 /// Keep at most this many prior versions inside the item record.
 pub const HISTORY_LIMIT: usize = 20;
+
+/// A previous password value on a login item, kept encrypted inside the item record.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq, Default, Zeroize, ZeroizeOnDrop)]
+pub struct PasswordHistoryEntry {
+    pub value: String,
+    pub replaced_at: String,
+}
+
+/// Keep at most this many previous passwords on a login item.
+pub const PASSWORD_HISTORY_LIMIT: usize = 20;
 /// Soft-deleted items are purged this long after deletion (on unlock or explicit purge).
 pub const PURGE_AFTER_SECS: u64 = 30 * 86400;
 /// Attachment size cap.

@@ -230,8 +230,28 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .f .lbl { font-size: 11px; color: rgb(var(--label)); text-transform: lowercase; }
 .f .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; }
 .f .val.plain { font-family: inherit; }
+.f .val .sec-digit { color: rgb(var(--accent)); }
+.f .val .sec-symbol { color: rgb(var(--symbol)); }
+.f .val .sec-space { position: relative; display: inline-block; width: 1ch; white-space: pre; }
+.f .val .sec-space::before { content: "\00b7"; position: absolute; left: 0; color: rgb(var(--muted)); }
 .f .val a { color: rgb(var(--accent)); text-decoration: none; }
 .f .grow { flex: 1; min-width: 0; }
+.f.has-history { align-items: flex-start; }
+.f.has-history .acts:first-of-type { margin-top: 4px; }
+.pw-history { margin-top: 8px; width: 100%; }
+.pw-history-toggle { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; padding: 2px 0; font-size: 11px; color: rgb(var(--accent)); cursor: pointer; border-radius: 4px; }
+.pw-history-toggle:hover { opacity: 0.85; }
+.pw-history-toggle:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 1px; }
+.pw-history-chev { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 14px; transition: transform 0.15s ease; }
+.pw-history-chev.open { transform: rotate(180deg); }
+.pw-history-chev svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; }
+.pw-history-list { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; padding: 6px 8px; background: rgb(var(--bg)); border: 1px solid rgb(var(--border)); border-radius: 6px; }
+.pw-history-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; border-bottom: 1px solid rgb(var(--border) / 0.5); padding-bottom: 4px; }
+.pw-history-item:last-child { border-bottom: none; padding-bottom: 0; }
+.pw-history-info { flex: 1; min-width: 0; }
+.pw-history-date { font-size: 10px; color: rgb(var(--muted)); }
+.pw-history-val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; word-break: break-all; }
+.pw-history-acts { display: flex; gap: 2px; }
 .f .acts { display: flex; gap: 2px; opacity: .7; }
 .f:hover .acts { opacity: 1; }
 .totp { display: flex; align-items: center; gap: 8px; }

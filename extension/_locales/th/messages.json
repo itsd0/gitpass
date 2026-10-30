@@ -273,6 +273,30 @@
   "reveal": {
     "message": "แสดง"
   },
+  "passwordHistory": {
+    "message": "ประวัติรหัสผ่าน ($1)",
+    "description": "Disclosure label for previous passwords on a login item",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "passwordHistoryReplaced": {
+    "message": "เปลี่ยนเมื่อ $1",
+    "description": "Label indicating when a historical password was replaced",
+    "placeholders": {
+      "date": {
+        "content": "$1"
+      }
+    }
+  },
+  "revealPasswordHistory": {
+    "message": "แสดงรหัสผ่านในอดีต"
+  },
+  "copyPasswordHistory": {
+    "message": "คัดลอกรหัสผ่านในอดีต"
+  },
   "lastEdited": {
     "message": "แก้ไขล่าสุด"
   },
@@ -1211,5 +1235,20 @@
   },
   "optHiddenInlineMenuAdd": {
     "message": "เพิ่มเว็บไซต์"
+  },
+  "optColorPasswords": {
+    "message": "ไล่สีรหัสผ่านที่แสดงอยู่"
+  },
+  "optColorPasswordsBody": {
+    "message": "แสดงตัวเลขเป็นสีส้ม สัญลักษณ์เป็นสีน้ำเงิน และช่องว่างเป็นจุด เมื่อเปิดดูรหัสผ่าน การคัดลอกไม่เปลี่ยนแปลง"
+  },
+  "watchtowerUnused": {
+    "message": "ไม่ได้ใช้งานมากว่าหนึ่งปี"
+  },
+  "watchtowerRotationDue": {
+    "message": "ถึงเวลาเปลี่ยนรหัสผ่าน"
+  },
+  "watchtowerRotationSoon": {
+    "message": "ใกล้ถึงเวลาเปลี่ยนรหัสผ่าน"
   }
 }

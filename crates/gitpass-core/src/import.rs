@@ -464,6 +464,25 @@ fn parse_bitwarden_json(data: &str, export_password: Option<&str>) -> Result<Par
                 r.item.url = uris.first().cloned();
                 let extra: Vec<Option<Field>> = uris.iter().skip(1).enumerate().map(|(n, u)| fld(&format!("url{}", n + 2), "website", FieldKind::Url, Some(u.clone()))).collect();
                 push_section(&mut r, "urls", Some("Websites"), extra);
+                let pw_history = l.get("passwordHistory").or_else(|| it.get("passwordHistory")).and_then(Value::as_array);
+                if let Some(hist) = pw_history {
+                    for entry in hist {
+                        let pw = entry.get("password").and_then(Value::as_str).map(str::trim).filter(|p| !p.is_empty());
+                        let Some(pw) = pw else { continue };
+                        let replaced_at = entry.get("lastUsedDate").and_then(Value::as_str).map(str::trim)
+                            .filter(|d| !d.is_empty())
+                            .map(|d| d.to_string())
+                            .unwrap_or_else(|| r.item.updated_at.clone());
+                        r.password_history.push(crate::item::PasswordHistoryEntry {
+                            value: pw.to_string(),
+                            replaced_at,
+                        });
+                    }
+                    r.password_history.sort_by(|a, b| b.replaced_at.cmp(&a.replaced_at));
+                    if r.password_history.len() > crate::item::PASSWORD_HISTORY_LIMIT {
+                        r.password_history.truncate(crate::item::PASSWORD_HISTORY_LIMIT);
+                    }
+                }
             },
             3 => if let Some(c) = it.get("card") {
                 push_section(&mut r, "main", None, vec![
@@ -817,6 +836,25 @@ fn parse_1pux_json(data: &str) -> Result<Parsed> {
                         push_section(&mut r, "main", None, srv_fields);
                     }
                 }
+                if let Some(hist) = de.get("passwordHistory").and_then(Value::as_array) {
+                    for entry in hist {
+                        let pw = entry.get("value").or_else(|| entry.get("password")).and_then(Value::as_str).map(str::trim).filter(|p| !p.is_empty());
+                        let Some(pw) = pw else { continue };
+                        let replaced_at = if let Some(t) = entry.get("time").and_then(Value::as_i64) {
+                            crate::device::iso8601(t)
+                        } else {
+                            r.item.updated_at.clone()
+                        };
+                        r.password_history.push(crate::item::PasswordHistoryEntry {
+                            value: pw.to_string(),
+                            replaced_at,
+                        });
+                    }
+                    r.password_history.sort_by(|a, b| b.replaced_at.cmp(&a.replaced_at));
+                    if r.password_history.len() > crate::item::PASSWORD_HISTORY_LIMIT {
+                        r.password_history.truncate(crate::item::PASSWORD_HISTORY_LIMIT);
+                    }
+                }
                 out.items.push(r);
             }
         }
@@ -1133,6 +1171,30 @@ fn parse_onepif(data: &str) -> Result<Parsed> {
             }
         }
 
+        if let Some(hist) = sec.get("passwordHistory").or_else(|| v.get("passwordHistory")).and_then(Value::as_array) {
+            for entry in hist {
+                let pw = entry.get("value").or_else(|| entry.get("password")).and_then(Value::as_str).map(str::trim).filter(|p| !p.is_empty());
+                let Some(pw) = pw else { continue };
+                let replaced_at = if let Some(t) = entry.get("time").and_then(Value::as_i64) {
+                    crate::device::iso8601(t)
+                } else if let Some(t_str) = entry.get("time").and_then(Value::as_str).and_then(|s| s.parse::<i64>().ok()) {
+                    crate::device::iso8601(t_str)
+                } else if let Some(d) = entry.get("date").and_then(Value::as_str).map(str::trim).filter(|s| !s.is_empty()) {
+                    d.to_string()
+                } else {
+                    r.item.updated_at.clone()
+                };
+                r.password_history.push(crate::item::PasswordHistoryEntry {
+                    value: pw.to_string(),
+                    replaced_at,
+                });
+            }
+            r.password_history.sort_by(|a, b| b.replaced_at.cmp(&a.replaced_at));
+            if r.password_history.len() > crate::item::PASSWORD_HISTORY_LIMIT {
+                r.password_history.truncate(crate::item::PASSWORD_HISTORY_LIMIT);
+            }
+        }
+
         out.items.push(r);
     }
 
@@ -1162,6 +1224,10 @@ pub struct ExportRecord {
     pub archived: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub created_at: Option<u64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub password_history: Vec<crate::item::PasswordHistoryEntry>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotate_every_days: Option<u32>,
 }
 fn is_login(c: &Category) -> bool { *c == Category::Login }
 fn is_false(b: &bool) -> bool { !*b }
@@ -1169,17 +1235,18 @@ impl From<&ItemRecord> for ExportRecord {
     fn from(r: &ItemRecord) -> Self {
         let sections = r.sections.iter().map(|s| Section { id: s.id.clone(), title: s.title.clone(), fields: s.fields.iter().filter(|f| !f.removed).cloned().collect() })
             .filter(|s| !s.fields.is_empty() || s.title.is_some()).collect();
-        ExportRecord { item: r.item.clone(), category: r.category, sections, tags: r.tags.clone(), favorite: r.favorite, archived: r.archived, created_at: r.created_at }
+        ExportRecord { item: r.item.clone(), category: r.category, sections, tags: r.tags.clone(), favorite: r.favorite, archived: r.archived, created_at: r.created_at, password_history: r.password_history.clone(), rotate_every_days: r.rotate_every_days }
     }
 }
 impl From<ExportRecord> for ItemRecord {
     fn from(e: ExportRecord) -> Self {
         let mut r = ItemRecord::new(e.item); r.category = e.category; r.sections = e.sections; r.tags = e.tags;
-        r.favorite = e.favorite; r.archived = e.archived; r.created_at = e.created_at; r
+        r.favorite = e.favorite; r.archived = e.archived; r.created_at = e.created_at; r.rotate_every_days = e.rotate_every_days;
+        r.password_history = e.password_history; r
     }
 }
 fn plain_item(it: &Item) -> ExportRecord {
-    ExportRecord { item: it.clone(), category: Category::Login, sections: vec![], tags: vec![], favorite: false, archived: false, created_at: None }
+    ExportRecord { item: it.clone(), category: Category::Login, sections: vec![], tags: vec![], favorite: false, archived: false, created_at: None, password_history: vec![], rotate_every_days: None }
 }
 
 #[derive(Serialize, Deserialize)]

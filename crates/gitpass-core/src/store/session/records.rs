@@ -26,6 +26,9 @@ impl Session {
         rec.clocks = Some(merge::stamp(None, &rec.item, now));
         merge::stamp_ext(None, &mut rec, now);
         rec.history.clear();
+        if rec.password_history.len() > crate::item::PASSWORD_HISTORY_LIMIT {
+            rec.password_history.truncate(crate::item::PASSWORD_HISTORY_LIMIT);
+        }
         self.put_item(vid, &iid, 1, &rec)?;
         Ok(iid)
     }
@@ -57,6 +60,19 @@ impl Session {
         if new.removed_attachments.is_empty() { new.removed_attachments = old.removed_attachments.clone(); }
         if new.attachments.is_empty() {
             new.attachments = old.attachments.iter().filter(|a| !new.removed_attachments.contains(&a.id)).cloned().collect();
+        }
+        // Login password history: if the password changed, push old password onto history (newest first, capped at 20)
+        if old.category == crate::item::Category::Login && old.item.password != new.item.password {
+            if let Some(old_pw) = old.item.password.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+                new.password_history = old.password_history.clone();
+                new.password_history.insert(0, crate::item::PasswordHistoryEntry {
+                    value: old_pw.to_string(),
+                    replaced_at: crate::device::iso8601((now / 1000) as i64),
+                });
+                if new.password_history.len() > crate::item::PASSWORD_HISTORY_LIMIT {
+                    new.password_history.truncate(crate::item::PASSWORD_HISTORY_LIMIT);
+                }
+            }
         }
         new.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &new.item, now));
         merge::stamp_ext(Some(&old), &mut new, now);
@@ -137,6 +153,7 @@ impl Session {
             let mut n = ItemRecord::from_snapshot(&r.snapshot());
             n.favorite = r.favorite;
             n.ignored_findings = r.ignored_findings.clone();
+            n.rotate_every_days = r.rotate_every_days;
             n.archived = r.archived;
             if n.item.updated_at.is_empty() { n.item.updated_at = (now / 1000).to_string(); }
             if preserve_history {
@@ -196,7 +213,54 @@ impl Session {
         self.update_record(vid, iid, r)
     }
 
+    /// Locate which vault contains `iid`. Returns None if not found in any vault.
+    pub fn find_item_vault(&self, iid: &str) -> Result<Option<String>> {
+        let m = self.load_manifest()?;
+        for (vid, ve) in &m.vaults {
+            if ve.items.contains_key(iid) {
+                return Ok(Some(vid.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    /// Read an item record by its ID across any vault in the account.
+    pub fn get_record_by_id(&self, iid: &str) -> Result<Option<(String, u64, ItemRecord)>> {
+        if let Some(vid) = self.find_item_vault(iid)? {
+            let (v, r) = self.read_record(&vid, iid)?;
+            return Ok(Some((vid, v, r)));
+        }
+        Ok(None)
+    }
+
+    /// Link a related item by id. Refuses to link an item to itself. Idempotent.
+    pub fn add_related_item(&self, vid: &str, iid: &str, related_id: &str) -> Result<()> {
+        if iid == related_id {
+            anyhow::bail!("cannot link an item to itself");
+        }
+        self.mutate_record(vid, iid, |r| {
+            if !r.related_item_ids.iter().any(|x| x == related_id) {
+                r.related_item_ids.push(related_id.to_string());
+            }
+        })
+    }
+
+    /// Remove a related item reference. Idempotent.
+    pub fn remove_related_item(&self, vid: &str, iid: &str, related_id: &str) -> Result<()> {
+        self.mutate_record(vid, iid, |r| {
+            r.related_item_ids.retain(|x| x != related_id);
+        })
+    }
+
     pub fn set_favorite(&self, vid: &str, iid: &str, fav: bool) -> Result<()> { self.mutate_record(vid, iid, |r| r.favorite = fav) }
+    /// Set (or clear with `None`) the per-login "change password every N days" reminder. Only the
+    /// values in [`merge::ROTATION_DAYS`] are accepted.
+    pub fn set_rotation(&self, vid: &str, iid: &str, days: Option<u32>) -> Result<()> {
+        if let Some(d) = days {
+            if !merge::ROTATION_DAYS.contains(&d) { bail!("rotation must be one of 30, 90, 180 or 365 days"); }
+        }
+        self.mutate_record(vid, iid, |r| r.rotate_every_days = days)
+    }
     pub fn set_archived(&self, vid: &str, iid: &str, a: bool) -> Result<()> { self.mutate_record(vid, iid, |r| r.archived = a) }
     pub fn ignore_finding(&self, vid: &str, iid: &str, kind: &str) -> Result<()> { self.mutate_record(vid, iid, |r| { r.ignore_finding(kind); }) }
     pub fn unignore_finding(&self, vid: &str, iid: &str, kind: &str) -> Result<()> { self.mutate_record(vid, iid, |r| { r.unignore_finding(kind); }) }
@@ -255,6 +319,7 @@ impl Session {
         new.favorite = old.favorite;
         new.archived = old.archived;
         new.ignored_findings = old.ignored_findings.clone();
+        new.rotate_every_days = old.rotate_every_days;
         new.attachments = old.attachments.clone();
         // Keep attachment tombstones so a merge with a stale copy can't resurrect a removed file.
         new.removed_attachments = old.removed_attachments.clone();

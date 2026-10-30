@@ -176,6 +176,17 @@ async function secretValue(d, f) {
   return (await send({ type: 'popup:reveal', item_id: d.id, field: f.name })).value;
 }
 
+/** Shows a revealed secret in `node`. Colour-coded (digits orange, symbols blue, spaces as a dim ·) unless the
+ *  "Colour-code revealed passwords" option is off or the field is a card number; textContent stays the exact value
+ *  and the node carries the whole value as one aria-label so screen readers read it as a single string (#336). */
+function paintSecret(node, value, colored) {
+  node.textContent = '';
+  node.removeAttribute('role'); node.removeAttribute('aria-label');
+  if (!colored) { node.textContent = value; return; }
+  for (const run of V.secretRuns(value)) node.append(el('span', run.kind === 'letter' ? null : 'sec-' + run.kind, run.text));
+  node.setAttribute('role', 'img'); node.setAttribute('aria-label', value);
+}
+
 function fieldRow(d, f) {
   const row = el('div', 'f'); const g = el('div', 'grow');
   g.append(el('div', 'lbl', f.label || f.name));
@@ -186,14 +197,15 @@ function fieldRow(d, f) {
     val.textContent = V.mask(f.kind, f.masked);
     acts.append(iconBtn(UI.eye, t('reveal', 'Reveal'), async (b) => {
       if (b.disabled) return;
-      if (S.revealed[f.name] != null) { delete S.revealed[f.name]; val.textContent = V.mask(f.kind, f.masked); b.innerHTML = UI.eye; return; }
+      if (S.revealed[f.name] != null) { delete S.revealed[f.name]; paintSecret(val, V.mask(f.kind, f.masked), false); b.innerHTML = UI.eye; return; }
       b.disabled = true;
       const prevHtml = b.innerHTML;
       b.innerHTML = '<span class="spinner"></span>';
       try {
         const v = await secretValue(d, f);
+        const colored = f.kind !== 'card_number' && (await popupSettings()).colorPasswords !== false;
         S.revealed[f.name] = v;
-        val.textContent = V.formatValue(f.kind, v);
+        paintSecret(val, V.formatValue(f.kind, v), colored);
         b.innerHTML = UI.eyeOff;
       } catch (err) {
         b.innerHTML = prevHtml;
@@ -233,7 +245,102 @@ function fieldRow(d, f) {
     copyBtn.title = t('inTrash', 'This item is in Recently Deleted.');
   }
   acts.append(copyBtn);
+  if (d.category === 'login' && f.name === 'password' && Array.isArray(d.password_history) && d.password_history.length > 0) {
+    row.classList.add('has-history');
+    g.append(passwordHistoryDisclosure(d));
+  }
   return row;
+}
+
+function passwordHistoryDisclosure(d) {
+  const wrap = el('div', 'pw-history');
+  const toggle = el('button', 'pw-history-toggle');
+  toggle.type = 'button';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('data-action', 'password-history-toggle');
+  const chev = el('span', 'pw-history-chev');
+  chev.innerHTML = UI.chevron;
+  const countText = el('span', null, t('passwordHistory', 'Password history ($1)', [String(d.password_history.length)]));
+  toggle.append(chev, countText);
+  wrap.append(toggle);
+
+  const list = el('div', 'pw-history-list');
+  list.style.display = 'none';
+
+  toggle.onclick = () => {
+    const open = toggle.getAttribute('aria-expanded') === 'true';
+    toggle.setAttribute('aria-expanded', String(!open));
+    chev.classList.toggle('open', !open);
+    list.style.display = open ? 'none' : 'flex';
+  };
+
+  d.password_history.forEach((entry, idx) => {
+    const itemRow = el('div', 'pw-history-item');
+    itemRow.dataset.index = String(idx);
+    const info = el('div', 'pw-history-info');
+    const dateStr = entry.replaced_at ? (typeof entry.replaced_at === 'number' || /^\d+$/.test(entry.replaced_at) ? new Date(Number(entry.replaced_at) * (Number(entry.replaced_at) < 1e11 ? 1000 : 1)).toLocaleString() : new Date(entry.replaced_at).toLocaleString()) : '';
+    const dateEl = el('div', 'pw-history-date', t('passwordHistoryReplaced', 'Replaced $1', [dateStr]));
+    const pwVal = el('div', 'pw-history-val', '••••••••••');
+    info.append(dateEl, pwVal);
+    itemRow.append(info);
+
+    const itemActs = el('div', 'pw-history-acts');
+    const eyeBtn = iconBtn(UI.eye, t('revealPasswordHistory', 'Reveal historical password'), async (b) => {
+      if (b.disabled) return;
+      const historyKey = 'password_history:' + idx;
+      if (S.revealed[historyKey] != null) {
+        delete S.revealed[historyKey];
+        pwVal.textContent = '••••••••••';
+        b.innerHTML = UI.eye;
+        return;
+      }
+      b.disabled = true;
+      const prevHtml = b.innerHTML;
+      b.innerHTML = '<span class="spinner"></span>';
+      try {
+        const res = await send({ type: 'popup:reveal', item_id: d.id, field: historyKey });
+        S.revealed[historyKey] = res.value;
+        const colored = (await popupSettings()).colorPasswords !== false;
+        paintSecret(pwVal, res.value, colored);
+        b.innerHTML = UI.eyeOff;
+      } catch (err) {
+        b.innerHTML = prevHtml;
+        toast(errText(err));
+      } finally {
+        b.disabled = false;
+      }
+    });
+    eyeBtn.dataset.action = 'reveal-history';
+
+    const copyBtn = iconBtn(UI.copy, t('copyPasswordHistory', 'Copy historical password'), async (b) => {
+      if (b.disabled) return;
+      b.disabled = true;
+      const prevHtml = b.innerHTML;
+      b.innerHTML = '<span class="spinner"></span>';
+      try {
+        const historyKey = 'password_history:' + idx;
+        let val = S.revealed[historyKey];
+        if (val == null) {
+          const res = await send({ type: 'popup:reveal', item_id: d.id, field: historyKey });
+          val = res.value;
+        }
+        await copy(val, t('copied', 'Copied'));
+      } catch (err) {
+        toast(errText(err));
+      } finally {
+        b.innerHTML = prevHtml;
+        b.disabled = false;
+      }
+    });
+    copyBtn.dataset.action = 'copy-history';
+
+    itemActs.append(eyeBtn, copyBtn);
+    itemRow.append(itemActs);
+    list.append(itemRow);
+  });
+
+  wrap.append(list);
+  return wrap;
 }
 
 // TOTP ring countdown. Fix for v0.5.1 popup.js:45 null classList: the old handler kept a setInterval that
