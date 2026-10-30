@@ -431,3 +431,89 @@ fn legacy_import_format_aliases() {
     assert_eq!("generic-csv".parse::<ImportFormat>().unwrap(), ImportFormat::GenericCsv);
     assert_eq!("1pux".parse::<ImportFormat>().unwrap(), ImportFormat::Pux);
 }
+
+#[test]
+fn onepif_fixture_mapped_types_tags_totp_trashed_and_malformed() {
+    let p = import::parse_bytes(ImportFormat::OnePif, &fixture("export.1pif"), None).unwrap();
+
+    // 1. Check mapped types
+    let titles: Vec<String> = p.items.iter().map(|it| it.item.title.clone()).collect();
+    assert!(titles.contains(&"Example Web Form".to_string()));
+    assert!(titles.contains(&"Corporate Platinum Card".to_string()));
+    assert!(titles.contains(&"Server Backup Keys".to_string()));
+    assert!(titles.contains(&"Alice Identity".to_string()));
+    assert!(titles.contains(&"Primary Checking Account".to_string()));
+    assert!(titles.contains(&"Production App Server".to_string()));
+    assert!(titles.contains(&"Office HighSpeed Wi-Fi".to_string()));
+    assert!(titles.contains(&"City Gym Membership".to_string()));
+
+    // Trashed record skipped
+    assert!(!titles.contains(&"Old Deleted Service".to_string()));
+    // System record skipped
+    assert!(!titles.contains(&"Archived Folder".to_string()));
+
+    // 2. WebForm login fields, URL, tags, notes, and TOTP
+    let webform = p.items.iter().find(|it| it.item.title == "Example Web Form").unwrap();
+    assert_eq!(webform.category, Category::Login);
+    assert_eq!(webform.item.username.as_deref(), Some("alice_fake"));
+    assert_eq!(webform.item.password.as_deref(), Some("FAKE-pw-webform-123"));
+    assert_eq!(webform.item.url.as_deref(), Some("https://login.example.invalid"));
+    assert_eq!(webform.item.notes.as_deref(), Some("Important recovery note"));
+    assert_eq!(webform.item.totp.as_deref(), Some("otpauth://totp/Example:alice_fake?secret=JBSWY3DPEHPK3PXP"));
+    assert!(webform.tags.contains(&"work".to_string()));
+    assert!(webform.tags.contains(&"staging".to_string()));
+    assert_eq!(webform.created_at, Some(1700000000));
+    assert_eq!(webform.item.updated_at, "1700005000");
+
+    // 3. Credit Card
+    let card = p.items.iter().find(|it| it.item.title == "Corporate Platinum Card").unwrap();
+    assert_eq!(card.category, Category::CreditCard);
+    assert_eq!(card.find_field("number").and_then(|f| f.value), Some("4111222233334444".to_string()));
+    assert_eq!(card.find_field("cvv").and_then(|f| f.value), Some("999".to_string()));
+    assert_eq!(card.find_field("expiry").and_then(|f| f.value), Some("08/2029".to_string()));
+    assert_eq!(card.find_field("cardholder").and_then(|f| f.value), Some("Alice Fake".to_string()));
+
+    // 4. Identity
+    let id_item = p.items.iter().find(|it| it.item.title == "Alice Identity").unwrap();
+    assert_eq!(id_item.category, Category::Identity);
+    assert_eq!(id_item.find_field("first").and_then(|f| f.value), Some("Alice".to_string()));
+    assert_eq!(id_item.find_field("last").and_then(|f| f.value), Some("Fake".to_string()));
+    assert_eq!(id_item.find_field("email").and_then(|f| f.value), Some("alice@example.invalid".to_string()));
+
+    // 5. Bank Account
+    let bank = p.items.iter().find(|it| it.item.title == "Primary Checking Account").unwrap();
+    assert_eq!(bank.category, Category::BankAccount);
+    assert_eq!(bank.find_field("bank_name").and_then(|f| f.value), Some("Fake National Bank".to_string()));
+    assert_eq!(bank.find_field("account_holder").and_then(|f| f.value), Some("Alice Fake".to_string()));
+    assert_eq!(bank.find_field("account_number").and_then(|f| f.value), Some("123456789".to_string()));
+    assert_eq!(bank.find_field("routing_number").and_then(|f| f.value), Some("987654321".to_string()));
+
+    // 6. Server
+    let server = p.items.iter().find(|it| it.item.title == "Production App Server").unwrap();
+    assert_eq!(server.category, Category::Server);
+    assert_eq!(server.item.url.as_deref(), Some("https://app.example.invalid"));
+    assert_eq!(server.item.username.as_deref(), Some("deploy_user"));
+    assert_eq!(server.item.password.as_deref(), Some("FAKE-server-pw-456"));
+    assert_eq!(server.find_field("admin_console_url").and_then(|f| f.value), Some("https://admin.example.invalid".to_string()));
+
+    // 7. Wi-Fi
+    let wifi = p.items.iter().find(|it| it.item.title == "Office HighSpeed Wi-Fi").unwrap();
+    assert_eq!(wifi.category, Category::Wifi);
+    assert_eq!(wifi.find_field("ssid").and_then(|f| f.value), Some("OfficeGuestNet".to_string()));
+    assert_eq!(wifi.find_field("password").and_then(|f| f.value), Some("FAKE-wifi-secret-789".to_string()));
+    assert_eq!(wifi.find_field("security").and_then(|f| f.value), Some("WPA3".to_string()));
+
+    // 8. Unknown type mapped to Secure Note with warning
+    let gym = p.items.iter().find(|it| it.item.title == "City Gym Membership").unwrap();
+    assert_eq!(gym.category, Category::SecureNote);
+    assert!(p.warnings.iter().any(|w| w.contains("City Gym Membership: imported as Secure Note")));
+
+    // 9. Warnings report trashed skipped and malformed JSON
+    assert!(p.warnings.iter().any(|w| w.contains("Old Deleted Service: in source trash, skipped")));
+    assert!(p.warnings.iter().any(|w| w.contains("malformed JSON")));
+
+    // 10. Auto-detection
+    let data_str = fixture_str("export.1pif");
+    assert_eq!(import::detect_format(&data_str), Some(ImportFormat::OnePif));
+    assert_eq!(import::detect_format_bytes(&fixture("export.1pif")), Some(ImportFormat::OnePif));
+}

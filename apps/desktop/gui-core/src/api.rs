@@ -1366,8 +1366,8 @@ impl App {
         let fmt: import::ImportFormat = format.parse()?;
         let path = path.trim();
         let path = if let Some(rest) = path.strip_prefix("~/") { dirs::home_dir().map(|h| h.join(rest).display().to_string()).unwrap_or_else(|| path.to_string()) } else { path.to_string() };
-        let path = path.as_str();
-        let data = Zeroizing::new(std::fs::read(path).with_context(|| format!("cannot read {path}"))?);
+        let resolved = import::resolve_import_path(std::path::Path::new(&path));
+        let data = Zeroizing::new(std::fs::read(&resolved).with_context(|| format!("cannot read {}", resolved.display()))?);
         if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&String::from_utf8_lossy(&data)) { bail!("encrypted gitpass exports need a passphrase; import them with the CLI"); }
         let parsed = import::parse_bytes(fmt, &data, None)?;
         let mut categories = BTreeMap::new();

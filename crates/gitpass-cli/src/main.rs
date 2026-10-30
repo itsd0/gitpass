@@ -611,8 +611,8 @@ EXAMPLES:
     /// Import items from another password manager's export file
     Import {
         vault: String,
-        /// bitwarden-json | bitwarden-csv | generic-csv | 1pux | keepass-csv | chrome-csv | apple-passwords-csv | lastpass-csv | protonpass-csv | gitpass-json
-        #[arg(long = "from")] from: String,
+        /// bitwarden-json | bitwarden-csv | generic-csv | 1pux | 1pif | keepass-csv | chrome-csv | apple-passwords-csv | lastpass-csv | protonpass-csv | gitpass-json
+        #[arg(long = "from", alias = "format")] from: Option<String>,
         file: PathBuf,
         /// Parse and count only; write nothing
         #[arg(long)] dry_run: bool,
@@ -3261,8 +3261,13 @@ fn run() -> Result<()> {
         }
         Cmd::Import { vault, from, file, dry_run, allow_duplicates } => {
             use gitpass_core::import;
-            let fmt: import::ImportFormat = from.parse()?;
-            let data = Zeroizing::new(std::fs::read(file).with_context(|| format!("reading {}", file.display()))?);
+            let resolved = import::resolve_import_path(file);
+            let data = Zeroizing::new(std::fs::read(&resolved).with_context(|| format!("reading {}", resolved.display()))?);
+            let fmt: import::ImportFormat = match from.as_deref() {
+                Some(f) if !f.is_empty() => f.parse()?,
+                _ => import::detect_format_bytes(&data)
+                    .ok_or_else(|| anyhow::anyhow!("could not auto-detect format; specify --from <format>"))?,
+            };
             let pass = if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&String::from_utf8_lossy(&data)) {
                 Some(prompt_secret("GITPASS_EXPORT_PASSPHRASE", "Export passphrase: ")?) } else { None };
             let parsed = import::parse_bytes(fmt, &data, pass.as_deref().map(|s| s.as_str()))?;

@@ -21,6 +21,7 @@ export const IMPORT_FORMATS = [
   { id: 'bitwarden-csv', label: 'Bitwarden (.csv)', labelKey: 'import.formatBitwardenCsv', ext: 'csv' },
   { id: 'generic-csv', label: 'Other password manager (.csv)', labelKey: 'import.formatGenericCsv', ext: 'csv' },
   { id: '1pux', label: '1PUX export file (.1pux)', labelKey: 'import.format1pux', ext: '1pux' },
+  { id: '1pif', label: '.1pif export file (.1pif)', labelKey: 'import.format1pif', ext: '1pif' },
   { id: 'keepass-csv', label: 'KeePass (.csv)', labelKey: 'import.formatKeepassCsv', ext: 'csv' },
   { id: 'chrome-csv', label: 'Chrome / Chromium (.csv)', labelKey: 'import.formatChromeCsv', ext: 'csv' },
   { id: 'lastpass-csv', label: 'LastPass (.csv)', labelKey: 'import.formatLastpass', ext: 'csv' },
@@ -73,7 +74,16 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
     return '1pux';
   }
 
+  // 1b. .1pif files or folder with data.1pif
+  if (lowerName.endsWith('.1pif') || lowerName.includes('1pif') || lowerName.endsWith('data.1pif')) {
+    return '1pif';
+  }
+
   const content = contentOrHeader?.trim() ?? '';
+
+  if (content.includes('***') && content.includes('"typeName"')) {
+    return '1pif';
+  }
 
   // 2. JSON files or JSON content
   if (lowerName.endsWith('.json') || content.startsWith('{')) {
