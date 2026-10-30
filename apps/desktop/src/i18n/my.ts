@@ -607,6 +607,17 @@ export const my: Partial<Record<Key, string>> = {
   'strength.label': 'စကားဝှက် အားကောင်းမှု: {label}',
   // item detail field actions
   'field.open': 'ဖွင့်ရန်',
+  'field.showQrCode': 'QR ကုဒ်အဖြစ် ပြရန်',
+  'field.showQrAria': '{label} ကို QR ကုဒ်အဖြစ် ပြရန်',
+  'field.qrDialogTitle': 'QR ကုဒ်',
+  'field.qrWarning': 'ဤကုဒ်ကို စကင်န်ဖတ်သူတိုင်း တန်ဖိုးကို မြင်တွေ့နိုင်သည်',
+  'field.qrCodeAlt': '{label} အတွက် QR ကုဒ်',
+  'field.qrTooLong': 'တန်ဖိုးသည် QR ကုဒ်အဖြစ် ပြသရန် အလွန်ရှည်နေသည်',
+  'field.errorGeneratingQr': 'QR ကုဒ် ထုတ်ယူ၍မရပါ',
+  'field.revealValue': '{label} ကို ပြရန်',
+  'field.concealValue': '{label} ကို ဖုံးကွယ်ရန်',
+  'field.moreActions': '{label} အတွက် နောက်ထပ် လုပ်ဆောင်ချက်များ',
+  'field.menuLabel': '{label} လုပ်ဆောင်ချက်များ',
   'field.openLink': 'လင့်ခ်ဖွင့်ရန်',
   // one-time password countdown
   'totp.remaining': '{n} စက္ကန့် ကျန်သေးသည်',

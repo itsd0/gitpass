@@ -210,6 +210,17 @@ export const en = {
   'strength.label': 'Password strength: {label}',
   // item detail field actions
   'field.open': 'Open',
+  'field.showQrCode': 'Show as QR code',
+  'field.showQrAria': 'Show {label} as QR code',
+  'field.qrDialogTitle': 'QR code',
+  'field.qrWarning': 'Anyone who scans this can see the value',
+  'field.qrCodeAlt': 'QR code for {label}',
+  'field.qrTooLong': 'Value is too long to display as a QR code',
+  'field.errorGeneratingQr': 'Failed to generate QR code',
+  'field.revealValue': 'Reveal {label}',
+  'field.concealValue': 'Conceal {label}',
+  'field.moreActions': 'More actions for {label}',
+  'field.menuLabel': '{label} actions',
   'field.openLink': 'Open link',
   // one-time password countdown
   'totp.remaining': '{n} seconds remaining',
