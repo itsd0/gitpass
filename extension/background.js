@@ -151,6 +151,8 @@ async function popupRoute(msg) {
       if (Array.isArray(msg.urls)) args.urls = msg.urls.map(String);
       return host('update_login', args);
     }
+    case 'trash_item': return host('trash_item', { item_id: msg.item_id, source: 'popup' });
+    case 'restore_item': return host('restore_item', { item_id: msg.item_id, source: 'popup' });
     case 'update_password': return host('update_password', { item_id: msg.item_id, password: msg.password, username: msg.username });
     case 'save_login': return host('save_login', { origin: msg.origin, title: msg.title, username: msg.username, password: msg.password, vault_id: msg.vault_id });
     case 'set_favorite': return host('set_favorite', { item_id: msg.item_id, favorite: !!msg.favorite });

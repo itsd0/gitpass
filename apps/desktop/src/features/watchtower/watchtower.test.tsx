@@ -6,6 +6,7 @@ import { api } from '../../api/client';
 import { mock } from '../../api/mock';
 import { useSettings } from '../settings/useSettings';
 import { useI18n, translate } from '../../i18n';
+import { Toaster, useToasts } from '../../ui';
 const it3 = { id: 'i3', vaultId: 'v-private', category: 'login' as const, title: 'Fake Forum', subtitle: 'demo', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: '', createdAt: '', url: 'https://forum.example.org', changePasswordUrl: 'https://forum.example.org/.well-known/change-password' };
 const it3x = { ...it3, id: 'i3x', title: 'Fake 2FA Site', url: 'https://2fa.example.org', changePasswordUrl: 'https://2fa.example.org/.well-known/change-password' };
 const itExp = { ...it3, id: 'i-exp', category: 'credit_card' as const, title: 'Expired Card', url: null, changePasswordUrl: undefined };
@@ -22,7 +23,7 @@ beforeEach(() => {
   vi.spyOn(api, 'archiveItem').mockResolvedValue(undefined);
   vi.spyOn(api, 'watchtower').mockImplementation(async (a: any) => { const on = !!a.hibp && hibpOn; return { score: on ? 62 : 71, weak: ['i3'], reused: [], old: [], breached: on ? ['i3'] : [], missingTotp: ['i3', 'i3x'], totpAvailable: ['i3x'], passkeyAvailable: ['i3x'], expired: ['i-exp'], expiringSoon: ['i-soon'], insecureUrls: ['i-insecure'], duplicates: [['dup-older', 'dup-newer']], checkedAt: '', hibpChecked: on }; });
 });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); useI18n.getState().setLang('en'); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); useI18n.getState().setLang('en'); useToasts.setState({ list: [] }); });
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { gaugeDash, issueIds, scoreBand } from './score';
 import { ScoreGauge, WatchtowerPage } from './WatchtowerPage';
@@ -324,6 +325,68 @@ describe('watchtower score', () => {
     expect(translate("my", "watchtower.weakSshKey")).toBe("အားနည်းသော SSH သော့များ");
     useI18n.getState().setLang("th");
     expect(translate("th", "watchtower.weakSshKey")).toBe("คีย์ SSH ที่ไม่ปลอดภัย");
+  });
+
+  it("renders unused items with last activity and archives one with Undo", async () => {
+    vi.mocked(api.watchtower).mockResolvedValue({
+      score: 80, weak: [], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [],
+      expired: [], expiringSoon: [], insecureUrls: [], duplicates: [],
+      unused: [{ itemId: 'i3', days: 400, lastUsed: true }, { itemId: 'i3x', days: 800, lastUsed: false }],
+      ignored: [], checkedAt: '', hibpChecked: false,
+    });
+    const archiveSpy = vi.spyOn(api, 'archiveItem').mockResolvedValue(undefined);
+
+    render(<><Toaster /><WatchtowerPage /></>);
+    await screen.findByTestId('score');
+    expect(screen.getByTestId('count-unused').textContent).toBe('2');
+    expect(screen.getByTestId('unused-item-i3')).toBeTruthy();
+    expect(screen.getByText('Last used 13 months ago')).toBeTruthy();
+    expect(screen.getByText('Last edited 27 months ago')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Archive Fake Forum' }));
+    await waitFor(() => expect(archiveSpy).toHaveBeenCalledWith({ vaultId: 'v-private', itemId: 'i3', archived: true }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Undo' }));
+    await waitFor(() => expect(archiveSpy).toHaveBeenCalledWith({ vaultId: 'v-private', itemId: 'i3', archived: false }));
+  });
+
+  it("ignores an unused warning from the row menu", async () => {
+    vi.mocked(api.watchtower).mockResolvedValue({
+      score: 80, weak: [], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [],
+      expired: [], expiringSoon: [], insecureUrls: [], duplicates: [],
+      unused: [{ itemId: 'i3x', days: 800, lastUsed: false }],
+      ignored: [], checkedAt: '', hibpChecked: false,
+    });
+    const ignoreSpy = vi.spyOn(api, 'ignoreFinding').mockResolvedValue(undefined);
+
+    render(<WatchtowerPage />);
+    await screen.findByTestId('score');
+    const more = screen.getByRole('button', { name: 'More options for Fake 2FA Site' });
+    fireEvent.keyDown(more, { key: 'Enter', code: 'Enter' });
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Ignore this warning/i }));
+    await waitFor(() => expect(ignoreSpy).toHaveBeenCalledWith({ vaultId: 'v-private', itemId: 'i3x', kind: 'unused' }));
+  });
+
+  it("persists the unused threshold and shows the section as off at 0 months", async () => {
+    vi.mocked(api.getSettings).mockResolvedValue({
+      autoLockMinutes: 10, clipboardClearSecs: 30, theme: 'dark', language: 'en', biometricUnlock: false,
+      quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, watchtowerUnusedMonths: 0,
+    });
+    const saveSpy = vi.mocked(api.setSettings).mockImplementation(async (a: any) => ({ ...a.settings }));
+    vi.mocked(api.watchtower).mockResolvedValue({
+      score: 90, weak: [], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [],
+      expired: [], expiringSoon: [], insecureUrls: [], duplicates: [], unused: [], ignored: [], checkedAt: '', hibpChecked: false,
+    });
+
+    render(<WatchtowerPage />);
+    await screen.findByTestId('score');
+    const select = screen.getByTestId('unused-months-select') as HTMLSelectElement;
+    expect(select.value).toBe('0');
+    expect(screen.getByTestId('count-unused').textContent).toBe('—');
+    expect(screen.getByText('Choose a threshold above to find logins you no longer use.')).toBeTruthy();
+
+    fireEvent.change(select, { target: { value: '24' } });
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith({ settings: expect.objectContaining({ watchtowerUnusedMonths: 24 }) }));
+    await waitFor(() => expect((screen.getByTestId('unused-months-select') as HTMLSelectElement).value).toBe('24'));
   });
 
   it("has no hard-coded Watchtower copy in the page source", () => {

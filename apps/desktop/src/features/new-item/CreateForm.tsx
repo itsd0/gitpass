@@ -3,6 +3,9 @@ import { ArrowLeft, Eye, EyeOff, Paperclip } from 'lucide-react';
 import type { FieldKind, ItemCategory, VaultInfo } from '../../api/types';
 import { api } from '../../api/client';
 import { Button, Input } from '../../ui';
+import { cn } from '../../lib/utils';
+import { useT } from '../../i18n';
+import { TotpAutofillOffer, TotpScanButton, handleTotpImageDrop } from '../items/TotpScanButton';
 import { useApp } from '../../lib/store';
 import { buildSections, categoryById } from './categories';
 import { brandLabel, detectBrand, formatCardNumber, formatExpiry, luhnValid } from './card';
@@ -33,6 +36,9 @@ function TemplateForm({ category, initial, vaultId: initialVault, onBack, onDone
   const [notes, setNotes] = useState(''); const [docPath, setDocPath] = useState('');
   const [shown, setShown] = useState<Record<string, boolean>>(() => (initial?.password ? { 'main.password': true } : {} as Record<string, boolean>));
   const [busy, setBusy] = useState(false); const [err, setErr] = useState<string | null>(null);
+  const t = useT();
+  const [totpSuggestion, setTotpSuggestion] = useState<{ title?: string | null; username?: string | null } | null>(null);
+  const [totpDragOver, setTotpDragOver] = useState(false);
   const { setRoute, selectItem } = useApp();
   useEffect(() => { api.listVaults().then(v => { setVaults(v); setVaultId(id => id || v[0]?.id || ''); }).catch(e => setErr(String(e))); }, []);
   const set = (k: string, v: string) => setValues(s => ({ ...s, [k]: v }));
@@ -47,7 +53,7 @@ function TemplateForm({ category, initial, vaultId: initialVault, onBack, onDone
     try {
       const v = { ...values }; if (totpKey && v[totpKey]) v[totpKey] = normaliseTotp(v[totpKey])!;
       if (category === 'credit_card' && !v['main.type'] && brand !== 'unknown') v['main.type'] = brandLabel[brand];
-      const item = await api.createItem({ input: { vaultId, category, title: title.trim(), sections: buildSections(category, v), notes: notes.trim() || null, url: v['main.website'] || v['main.hostname'] || null } });
+      const item = await api.createItem({ input: { vaultId, category, title: title.trim(), sections: buildSections(category, v), notes: notes.trim() || null, url: v['main.website'] || v['main.hostname'] || v['main.url'] || null } });
       if (category === 'document') await api.addAttachment({ vaultId, itemId: item.id, path: docPath.trim() });
       setRoute({ name: 'items', filter: { kind: 'vault', vaultId } }); selectItem(item.id); onDone();
     } catch (e) { setErr(String(e)); } finally { setBusy(false); }
@@ -67,8 +73,65 @@ function TemplateForm({ category, initial, vaultId: initialVault, onBack, onDone
         <Button type="button" size="icon" variant="ghost" aria-label={shown[key] ? 'Hide' : 'Show'} onClick={() => setShown(s => ({ ...s, [key]: !s[key] }))}>{shown[key] ? <EyeOff size={14} /> : <Eye size={14} />}</Button>
         {isPw && <PasswordGenerator onUse={pw => { set(key, pw); setShown(s => ({ ...s, [key]: true })); }} />}</div>
       {isPw && <StrengthMeter password={val} />}</div>); }
-    if (kind === 'totp') return (<div><Input aria-label={label} placeholder="Paste secret or otpauth:// URI from QR code" value={val} onChange={e => set(key, e.target.value)} onPaste={e => { const t = e.clipboardData.getData('text'); if (t) { e.preventDefault(); set(key, t.trim()); } }} />
-      {totpInvalid && <p className="mt-1 text-xs text-warn">Not a valid base32 secret or otpauth:// URI.</p>}</div>);
+    if (kind === 'totp') return (
+      <div>
+        <div
+          className={cn('flex items-center gap-1 rounded-md p-0.5 transition-colors', totpDragOver && 'border border-accent ring-2 ring-accent/30 bg-accent/5')}
+          onDragOver={(e) => {
+            if (e.dataTransfer.types.includes('Files')) {
+              e.preventDefault();
+              setTotpDragOver(true);
+            }
+          }}
+          onDragLeave={() => setTotpDragOver(false)}
+          onDrop={(e) => {
+            setTotpDragOver(false);
+            void handleTotpImageDrop(e, (scanned) => {
+              set(key, scanned.uri);
+              const needTitle = !title.trim() && Boolean(scanned.issuer?.trim());
+              const needUser = !values['main.username']?.trim() && Boolean(scanned.account?.trim());
+              if (needTitle || needUser) {
+                setTotpSuggestion({
+                  title: needTitle ? scanned.issuer : null,
+                  username: needUser ? scanned.account : null,
+                });
+              } else {
+                setTotpSuggestion(null);
+              }
+            }, t);
+          }}
+        >
+          <Input aria-label={label} placeholder="Paste secret or otpauth:// URI from QR code" value={val} onChange={e => set(key, e.target.value)} onPaste={e => { const t = e.clipboardData.getData('text'); if (t) { e.preventDefault(); set(key, t.trim()); } }} />
+          <TotpScanButton
+            onScan={(scanned) => {
+              set(key, scanned.uri);
+              const needTitle = !title.trim() && Boolean(scanned.issuer?.trim());
+              const needUser = !values['main.username']?.trim() && Boolean(scanned.account?.trim());
+              if (needTitle || needUser) {
+                setTotpSuggestion({
+                  title: needTitle ? scanned.issuer : null,
+                  username: needUser ? scanned.account : null,
+                });
+              } else {
+                setTotpSuggestion(null);
+              }
+            }}
+          />
+        </div>
+        {totpSuggestion && (
+          <TotpAutofillOffer
+            suggestion={totpSuggestion}
+            onApply={(s) => {
+              if (s.title && !title.trim()) setTitle(s.title);
+              if (s.username && !values['main.username']?.trim()) set('main.username', s.username);
+              setTotpSuggestion(null);
+            }}
+            onDismiss={() => setTotpSuggestion(null)}
+          />
+        )}
+        {totpInvalid && <p className="mt-1 text-xs text-warn">Not a valid base32 secret or otpauth:// URI.</p>}
+      </div>
+    );
     const type = kind === 'email' ? 'email' : kind === 'phone' ? 'tel' : kind === 'date' ? 'date' : kind === 'url' ? 'url' : 'text';
     return <Input aria-label={label} type={type} value={val} onChange={e => set(key, e.target.value)} />;
   };

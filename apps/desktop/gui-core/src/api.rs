@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use zeroize::Zeroizing;
+pub use crate::qr::ScannedTotp;
 
 // ------------------------------------------------------------------ DTOs (contract types.ts)
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -144,6 +145,16 @@ pub struct IgnoredFindingItem {
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct UnusedItem {
+    pub item_id: String,
+    /// Whole days since the last use, or since the last edit/creation when the item was never used here.
+    pub days: u64,
+    /// True when local usage state recorded a use; false means `days` is measured from the edit/creation time.
+    pub last_used: bool,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct WatchtowerReport {
     pub score: u8, pub weak: Vec<String>, pub reused: Vec<Vec<String>>, pub old: Vec<String>, pub breached: Vec<String>,
     pub missing_totp: Vec<String>, pub totp_available: Vec<String>, pub passkey_available: Vec<String>,
@@ -151,6 +162,8 @@ pub struct WatchtowerReport {
     pub insecure_urls: Vec<String>,
     pub duplicates: Vec<Vec<String>>,
     pub weak_ssh_keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unused: Vec<UnusedItem>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub weak_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -210,7 +223,10 @@ pub struct Settings {
     #[serde(default = "default_true")] pub show_menu_bar_icon: bool,
     /// Remember generated passwords in an encrypted vault history (default on).
     #[serde(default = "default_true")] pub remember_generated_passwords: bool,
+    /// Watchtower "Unused items" threshold in months: 6, 12 or 24; 0 turns the check off (default 12).
+    #[serde(default = "default_unused_months")] pub watchtower_unused_months: u64,
 }
+fn default_unused_months() -> u64 { 12 }
 impl Default for Settings {
     fn default() -> Self {
         Settings { auto_lock_minutes: 5, clipboard_clear_secs: crate::CLIPBOARD_CLEAR_SECS, theme: Theme::Dark, language: Language::En,
@@ -219,7 +235,8 @@ impl Default for Settings {
             hide_from_screen_recording: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
-            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, remember_generated_passwords: true }
+            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, remember_generated_passwords: true,
+            watchtower_unused_months: 12 }
     }
 }
 
@@ -322,6 +339,13 @@ pub struct LocalFile {
     #[serde(default)] pub last_vault_path: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClipboardImage {
+    pub width: usize,
+    pub height: usize,
+    pub bytes: Vec<u8>,
+}
+
 // ------------------------------------------------------------------ clipboard
 pub trait Clipboard: Send + Sync {
     fn set_text(&self, s: &str) -> Result<()>;
@@ -329,20 +353,35 @@ pub trait Clipboard: Send + Sync {
     /// Copy a secret: macOS implementations declare the nspasteboard.org markers so clipboard
     /// managers do not record or sync it. The default (and non-macOS) writes plain text.
     fn set_marked(&self, s: &str, _markers: PasteboardMarkers) -> Result<()> { self.set_text(s) }
+    fn get_image(&self) -> Option<ClipboardImage> { None }
+    fn set_image(&self, _img: ClipboardImage) -> Result<()> { Ok(()) }
 }
 
 /// In-memory clipboard (tests / headless).
 #[derive(Default)]
-pub struct MemClipboard { text: Mutex<Option<String>>, markers: Mutex<Option<PasteboardMarkers>> }
+pub struct MemClipboard {
+    text: Mutex<Option<String>>,
+    markers: Mutex<Option<PasteboardMarkers>>,
+    image: Mutex<Option<ClipboardImage>>,
+}
 impl MemClipboard {
     pub fn markers(&self) -> Option<PasteboardMarkers> { *self.markers.lock().unwrap() }
+    pub fn set_test_image(&self, img: ClipboardImage) { *self.image.lock().unwrap() = Some(img); }
 }
 impl Clipboard for MemClipboard {
-    fn set_text(&self, s: &str) -> Result<()> { *self.text.lock().unwrap() = Some(s.to_string()); *self.markers.lock().unwrap() = None; Ok(()) }
+    fn set_text(&self, s: &str) -> Result<()> { *self.text.lock().unwrap() = Some(s.to_string()); *self.markers.lock().unwrap() = None; *self.image.lock().unwrap() = None; Ok(()) }
     fn get_text(&self) -> Option<String> { self.text.lock().unwrap().clone() }
     fn set_marked(&self, s: &str, markers: PasteboardMarkers) -> Result<()> {
         self.set_text(s)?;
         *self.markers.lock().unwrap() = Some(markers);
+        *self.image.lock().unwrap() = None;
+        Ok(())
+    }
+    fn get_image(&self) -> Option<ClipboardImage> { self.image.lock().unwrap().clone() }
+    fn set_image(&self, img: ClipboardImage) -> Result<()> {
+        *self.image.lock().unwrap() = Some(img);
+        *self.text.lock().unwrap() = None;
+        *self.markers.lock().unwrap() = None;
         Ok(())
     }
 }
@@ -404,7 +443,10 @@ fn is_card_cvv(f: &item::Field) -> bool {
 /// passwords, TOTP codes, card numbers/CVVs and API credentials; card data stored as plain text
 /// by an old import is still recognised by label/id.
 pub(crate) fn is_secret_copy(category: Category, f: &item::Field) -> bool {
-    f.kind.is_secret() || (category == Category::CreditCard && (is_card_number(f) || is_card_cvv(f)))
+    let l = f.label.to_lowercase();
+    f.kind.is_secret()
+        || (category == Category::CreditCard && (is_card_number(f) || is_card_cvv(f)))
+        || (category == Category::BankAccount && (f.id == "account_number" || f.id == "pin" || l.contains("account number") || l.contains("pin")))
 }
 fn card_digits(r: &ItemRecord) -> Option<String> {
     if r.category != Category::CreditCard { return None; }
@@ -423,20 +465,60 @@ pub fn card_mask(d: &str) -> String { format!("•••• •••• ••�
 pub fn subtitle(r: &ItemRecord) -> String {
     let fields: Vec<item::Field> = r.view_sections().into_iter().flat_map(|s| s.fields).collect();
     let find = |pred: &dyn Fn(&item::Field) -> bool| fields.iter().find(|f| pred(f)).and_then(|f| f.value.clone());
+    let field_val = |ids: &[&str]| ids.iter().find_map(|id| fields.iter().find(|f| f.id == *id).and_then(|f| f.value.clone()).filter(|v| !v.is_empty()));
     match r.category {
         Category::Login => r.item.username.clone().unwrap_or_default(),
         Category::CreditCard => card_digits(r).map(|d| card_label(&d)).unwrap_or_default(),
         Category::Identity => find(&|f| { let l = f.label.to_lowercase(); f.id == "name" || l.contains("name") })
             .or_else(|| find(&|f| !f.kind.is_secret())).unwrap_or_default(),
+        Category::BankAccount => {
+            let acct = field_val(&["account_number", "account_no", "account"]);
+            let holder = field_val(&["account_holder", "holder", "owner"]);
+            let bank = field_val(&["bank_name", "bank"]);
+            let acct_type = field_val(&["account_type", "type"]);
+            let l4 = acct.as_deref().map(|s| s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>()).filter(|d| d.len() >= 4).map(|d| format!("•••• {}", &d[d.len() - 4..]));
+            match (acct_type, l4, bank, holder) {
+                (Some(t), Some(m), _, _) => format!("{t} {m}"),
+                (_, Some(m), Some(b), _) => format!("{b} {m}"),
+                (_, Some(m), _, _) => m,
+                (_, _, Some(b), _) => b,
+                (_, _, _, Some(h)) => h,
+                _ => String::new(),
+            }
+        }
+        Category::Server => {
+            let u = r.item.username.clone().or_else(|| field_val(&["username"]));
+            let h = r.item.url.clone().or_else(|| field_val(&["url", "hostname"]));
+            match (u, h) {
+                (Some(u), Some(h)) if !u.is_empty() && !h.is_empty() => format!("{u}@{h}"),
+                (Some(u), _) if !u.is_empty() => u,
+                (_, Some(h)) if !h.is_empty() => h,
+                _ => String::new(),
+            }
+        }
         _ => find(&|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())).unwrap_or_default(),
     }
 }
 
 fn to_dto_sections(r: &ItemRecord) -> Vec<Section> {
-    r.view_sections().into_iter().map(|s| Section { id: s.id, title: s.title, fields: s.fields.into_iter().map(|f| Field {
-        masked: (r.category == Category::CreditCard && f.kind.is_secret() && is_card_number(&f))
-            .then(|| f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8).map(|d| card_mask(&d))).flatten(),
-        value: if f.kind.is_secret() { None } else { f.value.clone() }, id: f.id, label: f.label, kind: f.kind, diff: None }).collect() }).collect()
+    r.view_sections().into_iter().map(|s| Section { id: s.id, title: s.title, fields: s.fields.into_iter().map(|f| {
+        let masked = if f.kind.is_secret() {
+            if r.category == Category::CreditCard && is_card_number(&f) {
+                f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8).map(|d| card_mask(&d))
+            } else if r.category == Category::BankAccount && (f.id == "account_number" || f.id == "account_no" || f.label.to_lowercase().contains("account number")) {
+                f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>()).filter(|d| d.len() >= 4).map(|d| format!("•••• •••• •••• {}", &d[d.len() - 4..]))
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+        Field {
+            masked,
+            value: if f.kind.is_secret() { None } else { f.value.clone() },
+            id: f.id, label: f.label, kind: f.kind, diff: None
+        }
+    }).collect() }).collect()
 }
 
 pub fn item_expiry(r: &ItemRecord) -> Option<String> {
@@ -489,7 +571,7 @@ fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<Find
 
 /// Active Watchtower findings for one item. Runs the same audit as [`App::watchtower`] (without
 /// the opt-in HIBP network call) so reuse groups match the Watchtower page.
-fn item_findings(s: &Session, vault_id: &str, item_id: &str) -> Result<Vec<FindingInfo>> {
+fn item_findings(s: &Session, settings: &Settings, vault_id: &str, item_id: &str) -> Result<Vec<FindingInfo>> {
     let records = App::all_records(s)?;
     let passkey_sites: BTreeSet<String> = records.iter()
         .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
@@ -498,7 +580,9 @@ fn item_findings(s: &Session, vault_id: &str, item_id: &str) -> Result<Vec<Findi
     let items: Vec<(String, String, ItemRecord)> = records.into_iter()
         .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
         .collect();
-    let rep = audit::audit_with_passkeys(&items, &passkey_sites, &AuditOpts::default(), None)?;
+    let opts = AuditOpts { unused_months: (settings.watchtower_unused_months > 0).then_some(settings.watchtower_unused_months),
+        last_used: s.all_last_used(), ..AuditOpts::default() };
+    let rep = audit::audit_with_passkeys(&items, &passkey_sites, &opts, None)?;
     Ok(rep.per_item.into_iter()
         .filter(|f| f.vault == vault_id && f.id == item_id)
         .flat_map(|f| f.findings.into_iter().map(|x| FindingInfo { kind: x.kind().to_string(), description: x.to_string() }))
@@ -794,7 +878,7 @@ impl App {
     pub fn get_item(&self, vault_id: &str, item_id: &str) -> Result<ItemDetail> {
         self.with(|u| {
             let (v, r) = u.session.read_record(vault_id, item_id)?;
-            let findings = item_findings(&u.session, vault_id, item_id)?;
+            let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
             Ok(detail(vault_id, item_id, v, &r, findings, last_used))
         })
@@ -902,6 +986,7 @@ impl App {
     }
     fn validate(input: &ItemInput) -> Result<()> {
         if input.title.trim().is_empty() { bail!("title is required"); }
+        if input.category == Category::Other { bail!("invalid category"); }
         let mut ids = BTreeSet::new();
         for s in &input.sections { for f in &s.fields {
             if f.id.trim().is_empty() { bail!("field id is empty"); }
@@ -1040,7 +1125,7 @@ impl App {
         self.write(|u| {
             let new_v = u.session.restore_version(vault_id, item_id, version)?;
             let (_, r) = u.session.read_record(vault_id, item_id)?;
-            let findings = item_findings(&u.session, vault_id, item_id)?;
+            let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
             Ok(detail(vault_id, item_id, new_v, &r, findings, last_used))
         })
@@ -1188,7 +1273,9 @@ impl App {
     /// Watchtower over live login items, reusing core `audit` (HIBP only when `hibp`).
     pub fn watchtower(&self, hibp: bool) -> Result<WatchtowerReport> {
         // Network breach check only when the caller asks AND the user opted in via Settings.hibpCheck.
-        let hibp = hibp && self.get_settings().hibp_check;
+        let settings = self.get_settings();
+        let hibp = hibp && settings.hibp_check;
+        let unused_months = settings.watchtower_unused_months;
         let client: Option<&dyn PwnedRangeClient> = if hibp { Some(self.hibp.as_ref() as &dyn PwnedRangeClient) } else { None };
         self.with(|u| {
             let records = Self::all_records(&u.session)?;
@@ -1199,12 +1286,15 @@ impl App {
             let items: Vec<(String, String, ItemRecord)> = records.into_iter()
                 .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
                 .collect();
-            let rep = audit::audit_with_passkeys(&items, &passkey_sites, &AuditOpts::default(), client)?;
+            let last_used = u.session.all_last_used();
+            let opts = AuditOpts { unused_months: (unused_months > 0).then_some(unused_months), last_used: last_used.clone(), ..AuditOpts::default() };
+            let rep = audit::audit_with_passkeys(&items, &passkey_sites, &opts, client)?;
             let mut out = WatchtowerReport { score: 100, weak: vec![], reused: vec![], old: vec![], breached: vec![], missing_totp: vec![],
                 totp_available: vec![], passkey_available: vec![], expired: vec![], expiring_soon: vec![],
                 insecure_urls: vec![],
                 duplicates: vec![],
                 weak_ssh_keys: vec![],
+                unused: vec![],
                 weak_reasons: HashMap::new(),
                 ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
@@ -1228,6 +1318,9 @@ impl App {
                         Finding::InsecureUrl { .. } => out.insecure_urls.push(f.id.clone()),
                         Finding::Duplicate { group } => dup_groups.entry(group.clone()).or_default().push(f.id.clone()),
                         Finding::WeakSshKey { .. } => out.weak_ssh_keys.push(f.id.clone()),
+                        Finding::Unused { days } => out.unused.push(UnusedItem {
+                            item_id: f.id.clone(), days: *days, last_used: last_used.contains_key(&f.id),
+                        }),
                     }
                 }
             }
@@ -1385,6 +1478,7 @@ impl App {
         }
         if s.auto_lock_minutes > 24 * 60 { bail!("autoLockMinutes must be <= 1440"); }
         if s.clipboard_clear_secs > 3600 { bail!("clipboardClearSecs must be <= 3600"); }
+        if ![0, 6, 12, 24].contains(&s.watchtower_unused_months) { bail!("watchtowerUnusedMonths must be 0 (off), 6, 12 or 24"); }
         self.update_local(|l| l.settings = Some(s.clone()))?;
         self.state.set_auto_lock_minutes(s.auto_lock_minutes);
         Ok(s)
@@ -1564,6 +1658,37 @@ impl App {
     }
     pub fn ssh_agent_info(&self, socket: &std::path::Path, running: bool) -> SshAgentInfo {
         SshAgentInfo { socket_path: socket.display().to_string(), config_line: gitpass_core::ssh::identity_agent_line(socket), running, approve_each_use: self.get_settings().ssh_approve_each_use }
+    }
+
+    pub fn scan_totp_screen(&self) -> Result<crate::qr::ScannedTotp> {
+        crate::qr::scan_totp_screen()
+    }
+    pub fn scan_totp_clipboard(&self) -> Result<crate::qr::ScannedTotp> {
+        crate::qr::scan_totp_clipboard(&*self.clipboard)
+    }
+    pub fn scan_totp_image(&self, data_base64: &str) -> Result<crate::qr::ScannedTotp> {
+        crate::qr::decode_qr_base64(data_base64)
+    }
+
+    /// Get the Git commit signing configuration for an SSH key item.
+    pub fn ssh_git_signing_config(&self, vault_id: &str, item_id: &str, email: Option<&str>, socket: Option<&str>) -> Result<gitpass_core::ssh::GitSigningConfig> {
+        let (_, r) = self.with(|u| u.session.read_record(vault_id, item_id))?;
+        let k = gitpass_core::ssh::SshKey::from_record(&r)?;
+        let signers_path = gitpass_core::ssh::default_allowed_signers_path();
+        let socket_path = socket.map(std::path::PathBuf::from).unwrap_or_else(gitpass_core::ssh::default_ssh_agent_socket_path);
+        let email_val = gitpass_core::ssh::resolve_signing_email(email, &k);
+        gitpass_core::ssh::build_git_signing_config(&k, &email_val, &signers_path, &socket_path)
+    }
+    /// Apply the Git commit signing configuration for an SSH key item.
+    pub fn ssh_apply_git_signing(&self, vault_id: &str, item_id: &str, email: Option<&str>, allowed_signers_file: Option<&str>, socket: Option<&str>, global: bool) -> Result<gitpass_core::ssh::GitSigningConfig> {
+        let (_, r) = self.with(|u| u.session.read_record(vault_id, item_id))?;
+        let k = gitpass_core::ssh::SshKey::from_record(&r)?;
+        let signers_path = allowed_signers_file
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(gitpass_core::ssh::default_allowed_signers_path);
+        let socket_path = socket.map(std::path::PathBuf::from).unwrap_or_else(gitpass_core::ssh::default_ssh_agent_socket_path);
+        let email_val = gitpass_core::ssh::resolve_signing_email(email, &k);
+        gitpass_core::ssh::apply_git_signing(&k, &email_val, &signers_path, &socket_path, global)
     }
 }
 

@@ -15,6 +15,13 @@ export const CATEGORIES: CategoryDef[] = [
   { id: 'document', label: 'Document', color: 'from-blue-300 to-indigo-600', primary: true, sections: [] },
   { id: 'ssh_key', label: 'SSH Key', color: 'from-slate-300 to-slate-600', primary: false, sections: [{ id: 'main', title: null, fields: [f('private_key', 'private key', 'concealed'), f('public_key', 'public key', 'multiline'), f('fingerprint', 'fingerprint')] }] },
   { id: 'wifi', label: 'Wi-Fi', color: 'from-violet-300 to-purple-600', primary: false, sections: [{ id: 'main', title: null, fields: [f('ssid', 'network name'), f('password', 'wireless password', 'concealed'), f('security', 'security')] }] },
+  { id: 'bank_account', label: 'Bank Account', color: 'from-blue-400 to-sky-600', primary: true, sections: [{ id: 'main', title: null, fields: [
+    f('bank_name', 'bank name'), f('account_holder', 'account holder'), f('account_type', 'account type'),
+    f('account_number', 'account number', 'concealed'), f('routing_number', 'routing / SWIFT / IBAN'),
+    f('pin', 'PIN', 'concealed'), f('branch_phone', 'branch phone', 'phone'), f('branch_address', 'branch address', 'multiline')] }] },
+  { id: 'server', label: 'Server', color: 'from-indigo-400 to-violet-600', primary: true, sections: [{ id: 'main', title: null, fields: [
+    f('url', 'URL or hostname', 'url'), f('username', 'username'), f('password', 'password', 'concealed'),
+    f('admin_console_url', 'admin console URL', 'url'), f('hosting_provider', 'hosting provider')] }] },
 ];
 export const categoryById = (id: ItemCategory) => CATEGORIES.find(c => c.id === id)!;
 export function buildSections(cat: ItemCategory, values: Record<string, string>): Section[] {
