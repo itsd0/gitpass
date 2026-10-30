@@ -75,11 +75,11 @@ They also cannot edit `.github/workflows` (and must not anyway).
 
 | Path | What |
 |---|---|
-| `crates/gitpass-core` | Vault format, crypto (`crypto.rs`, `keys.rs`), store/commit (`store.rs`), merge/sync, import, audit (Watchtower/HIBP), passkeys, SSH keys, TOTP |
+| `crates/gitpass-core` | Vault format, crypto (`crypto.rs`, `keys.rs`), store/commit (`store/`), merge/sync, import, audit (Watchtower/HIBP), passkeys, SSH keys, TOTP |
 | `crates/gitpass-cli` | `gitpass` CLI (`init`, `add`, `get`, `run`/`inject` secret injection, `ssh`, `audit`, `import`/`export`, …) |
 | `crates/gitpass-host` | Native-messaging host for the browser extension |
 | `crates/gitpass-pasteboard` | Concealed/transient pasteboard copies (macOS NSPasteboard / Linux fallback) |
-| `apps/desktop/gui-core` | Rust API behind the desktop app (`api.rs`, browser agent, ssh-agent) |
+| `apps/desktop/gui-core` | Rust API behind the desktop app (`api/`, browser agent, ssh-agent) |
 | `apps/desktop/src-tauri` | Tauri shell (**excluded from the workspace**, own `Cargo.lock`) |
 | `apps/desktop/src` | React/TypeScript UI (Vite, zustand, vitest). Browser mock in `src/api/mock.ts` |
 | `extension/` | Chromium MV3 extension (plain JS, `node --test`) |
@@ -147,7 +147,7 @@ GitHub-only agents may not be able to read CI results; ask the owner or Grok Bot
    New actions must be pinned to a full commit SHA with a version comment.
 7. **Style:** desktop app accent is **orange**; the iOS UI stays **monochrome**. Follow existing patterns and UI kit (`apps/desktop/src/ui`).
 8. **Scope:** macOS + Chromium only; personal use — no team/SSO/admin-console features.
-9. Crypto, vault format and release config (`crates/gitpass-core/src/crypto.rs`, `keys.rs`, `store.rs` format,
+9. Crypto, vault format and release config (`crates/gitpass-core/src/crypto.rs`, `keys.rs`, `store/` format,
    `apps/desktop/src-tauri/tauri.conf.json`, `docs/RELEASE.md`) need an explicit note in the PR and owner review.
 10. Keep `Cargo.lock` / `package-lock.json` changes intentional (`--locked` in CI). New deps must pass `cargo deny`.
 11. Locale changes: add every new extension key to `en`, `my` and `th`.

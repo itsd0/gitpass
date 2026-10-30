@@ -312,5 +312,5 @@ appears at all and the request passes straight through to the browser's native f
 | New item creation | `extension/popup/newitem.js` |
 | Unlock screen and Caps Lock hint | `extension/popup/capslock.js`, `extension/popup/popup.js`, `crates/gitpass-host/README.md` |
 | Per-site popup settings | `extension/popup/sitesettings.js` |
-| Generator history recording | `extension/background.js`, `extension/bg-page.js` (`record_generated_password`), `crates/gitpass-host/src/handler.rs`, `apps/desktop/gui-core/src/api.rs` (`record_generated_password`, `rememberGeneratedPasswords`) |
+| Generator history recording | `extension/background.js`, `extension/bg-page.js` (`record_generated_password`), `crates/gitpass-host/src/handler.rs`, `apps/desktop/gui-core/src/api/app/tools.rs` (`record_generated_password`, `rememberGeneratedPasswords`) |
 | Unlocking and Secret Key handling | README "Browser extension" section, `crates/gitpass-host/README.md` |
