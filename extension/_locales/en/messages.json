@@ -339,6 +339,36 @@
   "edit": {
     "message": "Edit"
   },
+  "editLogin": {
+    "message": "Edit login"
+  },
+  "editSecureNote": {
+    "message": "Edit secure note"
+  },
+  "editApiCredential": {
+    "message": "Edit API credential"
+  },
+  "credential": {
+    "message": "Credential"
+  },
+  "showCredential": {
+    "message": "Show credential"
+  },
+  "hideCredential": {
+    "message": "Hide credential"
+  },
+  "hostname": {
+    "message": "Hostname"
+  },
+  "expiry": {
+    "message": "Expiry"
+  },
+  "expiryInvalid": {
+    "message": "Expiry must be YYYY-MM-DD"
+  },
+  "tagsPh": {
+    "message": "Comma separated"
+  },
   "cancel": {
     "message": "Cancel"
   },
@@ -692,7 +722,7 @@
     "message": "Open website"
   },
   "shortcutEdit": {
-    "message": "Edit login"
+    "message": "Edit item"
   },
   "shortcutGen": {
     "message": "Password generator"

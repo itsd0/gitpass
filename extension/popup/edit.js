@@ -1,30 +1,66 @@
 'use strict';
-// ---------- inline edit (logins) ----------
+// ---------- inline edit (logins, secure notes, API credentials) ----------
 function editDirty() { return !!(S.edit && S.edit.dirty); }
 function confirmDiscard() { return !editDirty() || window.confirm(t('discardChanges', 'Discard unsaved changes?')); }
 function isHttpUrl(v) { try { const u = new URL(v); return (u.protocol === 'http:' || u.protocol === 'https:') && !!u.hostname; } catch (_) { return false; } }
 function withScheme(v) { const s = String(v || '').trim(); return s && !/^[a-z][a-z0-9+.-]*:/i.test(s) ? 'https://' + s : s; }
 function focusEditButton() { const b = $('detail') && $('detail').querySelector('[data-action="edit"]'); if (b) b.focus(); }
+function canEditCategory(cat) { return cat === 'login' || cat === 'secure_note' || cat === 'api_credential'; }
+function editHeading(cat) {
+  if (cat === 'secure_note') return t('editSecureNote', 'Edit secure note');
+  if (cat === 'api_credential') return t('editApiCredential', 'Edit API credential');
+  return t('editLogin', 'Edit login');
+}
+function isIsoDate(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  return month >= 1 && month <= 12 && day >= 1 && day <= 31;
+}
+function parseTags(s) {
+  const out = [];
+  for (const part of String(s || '').split(',')) {
+    const tag = part.trim();
+    if (tag && !out.includes(tag)) out.push(tag);
+  }
+  return out;
+}
+function fieldByName(d, names) {
+  return (d.fields || []).find((f) => names.includes(f.name)) || null;
+}
+/** Notes textarea source: item notes when they have text, otherwise the template note/body field. */
+function secureNoteSource(d) {
+  const notes = d.notes == null ? '' : String(d.notes);
+  if (notes.trim()) return { noteField: null, value: notes };
+  const named = fieldByName(d, ['note', 'body']);
+  const multi = named || (d.fields || []).find((f) => !f.concealed && f.kind === 'multiline');
+  if (multi && !multi.concealed) return { noteField: multi.name, value: multi.value || '' };
+  return { noteField: null, value: '' };
+}
 
 function startEdit() {
-  if (!S.detail || S.detail.category !== 'login' || S.edit) return;
-  S.edit = { id: S.detail.id, dirty: false, passwordLoaded: false, passwordTouched: false, saving: false };
+  if (!S.detail || S.detail.deleted_at || !canEditCategory(S.detail.category) || S.edit) return;
+  S.edit = { id: S.detail.id, dirty: false, passwordLoaded: false, passwordTouched: false, credentialLoaded: false, credentialTouched: false, saving: false };
   renderEditForm(S.detail);
 }
 
 function renderEditForm(d) {
+  if (d.category === 'secure_note') { renderNoteEditForm(d); return; }
+  if (d.category === 'api_credential') { renderApiEditForm(d); return; }
   const pane = $('detail'); pane.textContent = '';
   const head = el('div', 'd-head');
   const ic = el('span', 'ic'); renderRowIcon(ic, d, 28);
   const g = el('div', 'grow');
-  g.append(el('h2', null, t('editLogin', 'Edit login')), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
+  const heading = editHeading(d.category);
+  g.append(el('h2', null, heading), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
   head.append(ic, g);
   pane.append(head);
 
   const form = el('form', 'stack inline-edit');
   form.autocomplete = 'off'; form.noValidate = true;
   form.style.maxWidth = 'none';
-  form.setAttribute('aria-label', t('editLogin', 'Edit login'));
+  form.setAttribute('aria-label', heading);
   const label = (text, forId, required) => {
     const l = el('label', null, text + (required ? ' *' : ''));
     l.htmlFor = forId; form.append(l); return l;
@@ -167,6 +203,190 @@ function cancelEdit() {
   if (S.detail) renderDetail(S.detail); else select(S.sel);
   focusEditButton();
   if (livePending) { livePending = false; liveReload(); }
+}
+
+function editShell(d) {
+  const pane = $('detail'); pane.textContent = '';
+  const heading = editHeading(d.category);
+  const head = el('div', 'd-head');
+  const ic = el('span', 'ic'); renderRowIcon(ic, d, 28);
+  const g = el('div', 'grow');
+  g.append(el('h2', null, heading), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
+  head.append(ic, g);
+  pane.append(head);
+  const form = el('form', 'stack inline-edit');
+  form.autocomplete = 'off'; form.noValidate = true;
+  form.style.maxWidth = 'none';
+  form.setAttribute('aria-label', heading);
+  const label = (text, forId, required) => {
+    const l = el('label', null, text + (required ? ' *' : ''));
+    l.htmlFor = forId; form.append(l); return l;
+  };
+  const input = (id, type, value) => {
+    const i = Object.assign(el('input'), { type });
+    i.id = id; i.value = value || ''; i.spellcheck = false; form.append(i); return i;
+  };
+  return { pane, form, label, input };
+}
+
+function finishEditForm(pane, form, titleInput, onSubmit) {
+  const errEl = el('p', 'err'); errEl.setAttribute('role', 'alert'); form.append(errEl);
+  const acts = el('div', 'edit-acts');
+  const save = el('button', 'btn btn-primary', t('save', 'Save')); save.type = 'submit';
+  const cancel = el('button', 'btn btn-link', t('cancel', 'Cancel')); cancel.type = 'button'; cancel.onclick = () => cancelEdit();
+  acts.append(save, cancel); form.append(acts);
+  form.addEventListener('input', (e) => {
+    if (S.edit) S.edit.dirty = true;
+    if (e.target && e.target.classList) e.target.classList.remove('bad');
+  });
+  form.onsubmit = (e) => { e.preventDefault(); void onSubmit(errEl, save); };
+  pane.append(form);
+  titleInput.focus();
+  return { errEl, save };
+}
+
+async function commitEdit(msg, errEl, save) {
+  if (!S.edit || S.edit.saving) return;
+  S.edit.saving = true;
+  save.disabled = true;
+  const prevHtml = save.innerHTML;
+  save.innerHTML = '<span class="spinner"></span> <span>' + t('save', 'Save') + '</span>';
+  try {
+    await send(msg);
+    S.edit = null; livePending = false;
+    toast(t('saved', 'Saved'));
+    await loadData();
+    if (S.sel >= 0) await select(S.sel);
+    focusEditButton();
+  } catch (e) {
+    if (S.edit) S.edit.saving = false;
+    save.disabled = false;
+    save.innerHTML = prevHtml;
+    if (e.code === 'locked') { S.edit = null; refresh(); return; }
+    errEl.textContent = errText(e);
+  }
+}
+
+function renderNoteEditForm(d) {
+  const { pane, form, label, input } = editShell(d);
+  const src = secureNoteSource(d);
+  label(t('title', 'Title'), 'edit-title', true);
+  const titleInput = input('edit-title', 'text', d.title);
+  titleInput.setAttribute('aria-required', 'true');
+  label(t('notes', 'Notes'), 'edit-notes');
+  const notesInput = el('textarea');
+  notesInput.id = 'edit-notes'; notesInput.rows = 6; notesInput.value = src.value; notesInput.spellcheck = false;
+  form.append(notesInput);
+  label(t('filterTags', 'Tags'), 'edit-tags');
+  const tagsInput = input('edit-tags', 'text', (d.tags || []).join(', '));
+  tagsInput.placeholder = t('tagsPh', 'Comma separated');
+  finishEditForm(pane, form, titleInput, (errEl, save) => {
+    errEl.textContent = '';
+    titleInput.classList.remove('bad');
+    const title = titleInput.value.trim();
+    if (!title) { errEl.textContent = t('titleRequired', 'Title is required'); titleInput.classList.add('bad'); titleInput.focus(); return; }
+    const msg = { type: 'popup:update_login', item_id: d.id, title, notes: notesInput.value, tags: parseTags(tagsInput.value) };
+    if (src.noteField) msg.note_field = src.noteField;
+    return commitEdit(msg, errEl, save);
+  });
+}
+
+function renderApiEditForm(d) {
+  const { pane, form, label, input } = editShell(d);
+  label(t('title', 'Title'), 'edit-title', true);
+  const titleInput = input('edit-title', 'text', d.title);
+  titleInput.setAttribute('aria-required', 'true');
+
+  label(t('username', 'Username'), 'edit-username');
+  const userField = fieldByName(d, ['username']);
+  const userInput = input('edit-username', 'text', userField && !userField.concealed ? userField.value : '');
+
+  label(t('credential', 'Credential'), 'edit-credential');
+  const credRow = el('div', 'edit-pw');
+  const credInput = Object.assign(el('input'), { type: 'password' });
+  credInput.id = 'edit-credential'; credInput.autocomplete = 'off'; credInput.spellcheck = false;
+  credInput.setAttribute('aria-label', t('credential', 'Credential'));
+  const show = el('button', 'icon-btn'); show.type = 'button'; show.innerHTML = UI.eye;
+  show.dataset.action = 'show-credential';
+  const showLabel = (open) => {
+    const text = open ? t('hideCredential', 'Hide credential') : t('showCredential', 'Show credential');
+    show.title = text; show.setAttribute('aria-label', text); show.setAttribute('aria-pressed', open ? 'true' : 'false');
+  };
+  showLabel(false);
+  show.setAttribute('aria-controls', 'edit-credential');
+  show.onclick = async () => {
+    if (show.disabled) return;
+    const hidden = credInput.type === 'password';
+    if (!hidden) { credInput.type = 'password'; show.innerHTML = UI.eye; showLabel(false); return; }
+    show.disabled = true;
+    const prev = show.innerHTML;
+    show.innerHTML = '<span class="spinner"></span>';
+    try {
+      await loadCredential(d, credInput);
+    } catch (err) {
+      show.innerHTML = prev;
+      show.disabled = false;
+      toast(errText(err));
+      return;
+    }
+    if (!credInput.isConnected) return;
+    credInput.type = 'text';
+    show.innerHTML = UI.eyeOff;
+    show.disabled = false;
+    showLabel(true);
+  };
+  credInput.addEventListener('input', () => { if (S.edit) S.edit.credentialTouched = true; });
+  credRow.append(credInput, show);
+  form.append(credRow);
+
+  label(t('hostname', 'Hostname'), 'edit-hostname');
+  const hostField = fieldByName(d, ['hostname', 'host']);
+  const hostInput = input('edit-hostname', 'url', (hostField && hostField.value) || d.url || '');
+  hostInput.setAttribute('aria-label', t('hostname', 'Hostname'));
+
+  label(t('expiry', 'Expiry'), 'edit-expires');
+  const expField = fieldByName(d, ['expires', 'expiry']);
+  const expValue = (expField && expField.value) || '';
+  const expInput = input('edit-expires', /^\d{4}-\d{2}-\d{2}$/.test(expValue) || !expValue ? 'date' : 'text', expValue);
+  expInput.setAttribute('aria-label', t('expiry', 'Expiry'));
+
+  label(t('notes', 'Notes'), 'edit-notes');
+  const notesInput = el('textarea');
+  notesInput.id = 'edit-notes'; notesInput.rows = 3; notesInput.value = d.notes || ''; notesInput.spellcheck = false;
+  form.append(notesInput);
+
+  finishEditForm(pane, form, titleInput, (errEl, save) => saveApiEdit(d, { titleInput, userInput, credInput, hostInput, expInput, notesInput, errEl, save }));
+}
+
+async function loadCredential(d, input) {
+  if (!S.edit || S.edit.credentialLoaded || S.edit.credentialTouched || input.value) return;
+  const edit = S.edit;
+  const r = await send({ type: 'popup:reveal', item_id: d.id, field: 'credential' });
+  if (S.edit !== edit || edit.credentialTouched || input.value) return;
+  input.value = r.value || '';
+  edit.credentialLoaded = true;
+}
+
+async function saveApiEdit(d, ui) {
+  if (!S.edit || S.edit.saving) return;
+  const { titleInput, userInput, credInput, hostInput, expInput, notesInput, errEl, save } = ui;
+  errEl.textContent = '';
+  titleInput.classList.remove('bad');
+  hostInput.classList.remove('bad');
+  expInput.classList.remove('bad');
+  const title = titleInput.value.trim();
+  if (!title) { errEl.textContent = t('titleRequired', 'Title is required'); titleInput.classList.add('bad'); titleInput.focus(); return; }
+  const hostRaw = hostInput.value.trim();
+  let hostname = '';
+  if (hostRaw) {
+    hostname = withScheme(hostRaw);
+    if (!isHttpUrl(hostname)) { errEl.textContent = t('websiteInvalid', 'Website must be an http(s) URL'); hostInput.classList.add('bad'); hostInput.focus(); return; }
+  }
+  const expires = expInput.value.trim();
+  if (expires && !isIsoDate(expires)) { errEl.textContent = t('expiryInvalid', 'Expiry must be YYYY-MM-DD'); expInput.classList.add('bad'); expInput.focus(); return; }
+  const msg = { type: 'popup:update_login', item_id: d.id, title, username: userInput.value.trim(), hostname, expires, notes: notesInput.value };
+  if (S.edit.credentialLoaded || S.edit.credentialTouched) msg.credential = credInput.value;
+  return commitEdit(msg, errEl, save);
 }
 
 async function secretValue(d, f) {

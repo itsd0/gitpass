@@ -91,7 +91,7 @@ svg.ui { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-wid
 .btn-link { background: none; border: none; color: rgb(var(--accent)); }
 .btn-link:hover { background: none; text-decoration: underline; }
 .field { position: relative; display: flex; }
-input[type=password], input[type=text], input[type=search], input[type=url], select {
+input[type=password], input[type=text], input[type=search], input[type=url], input[type=date], select {
   width: 100%; height: 32px; border-radius: 8px; border: 1px solid rgb(var(--border)); background: rgb(var(--card)); color: rgb(var(--fg)); padding: 0 10px; font: inherit; outline: none; }
 input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 3px rgb(var(--accent) / .25); }
 .field input { padding-right: 34px; }
@@ -373,7 +373,7 @@ button.tag:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--accent
 .inline-edit { flex: 1; min-height: 0; overflow-y: auto; max-width: none; gap: 6px; padding: 0 4px 8px 0; }
 .inline-edit label { font-size: 11px; color: rgb(var(--label)); margin-top: 4px; }
 .inline-edit label:first-child { margin-top: 0; }
-.inline-edit input[type=text], .inline-edit input[type=password], .inline-edit input[type=url] { width: 100%; }
+.inline-edit input[type=text], .inline-edit input[type=password], .inline-edit input[type=url], .inline-edit input[type=date] { width: 100%; }
 .inline-edit textarea { width: 100%; box-sizing: border-box; background: rgb(var(--card)); color: rgb(var(--fg)); border: 1px solid rgb(var(--border)); border-radius: 8px; padding: 7px 9px; outline: none; font: 12px/1.4 ui-monospace, Menlo, monospace; resize: vertical; min-height: 64px; }
 .inline-edit textarea:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 3px rgb(var(--accent) / .25); }
 .inline-edit .edit-pw, .inline-edit .edit-url { display: flex; align-items: center; gap: 6px; }

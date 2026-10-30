@@ -1006,8 +1006,8 @@ document.addEventListener('keydown', (e) => {
   }
   const inForm = !!(a && a.closest && a.closest('#panel, select, .menu, button'));
   const inEditable = !!(a && (a.tagName === 'INPUT' || a.tagName === 'TEXTAREA' || a.isContentEditable));
-  // ⌘E edits the selected login inline.
-  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'e' || e.key === 'E') && !inForm && S.detail && S.detail.category === 'login') {
+  // ⌘E edits the selected login, secure note, or API credential inline.
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'e' || e.key === 'E') && !inForm && S.detail && canEditCategory(S.detail.category) && !S.detail.deleted_at) {
     e.preventDefault(); startEdit(); return;
   }
   // Backspace or Alt+Left navigates back in detail history if present

@@ -164,12 +164,16 @@ function handle(m) {
       if (m.source !== 'popup') throw Object.assign(new Error('update_login is allowed only from the popup'), { code: 'denied' });
       const items = getItems(); const i = items.find((x) => x.id === m.item_id);
       if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
-      if (i.category !== 'login') throw Object.assign(new Error('not a login'), { code: 'bad_request' });
+      const cat = i.category || 'login';
+      if (!['login', 'secure_note', 'api_credential'].includes(cat)) throw Object.assign(new Error('not editable'), { code: 'bad_request' });
       if (m.title != null) { if (!String(m.title).trim()) throw Object.assign(new Error('title is required'), { code: 'bad_request' }); i.title = String(m.title).trim(); }
       if (m.username != null) { i._u = m.username; i.subtitle = m.username; const f = Array.isArray(i.fields) && i.fields.find((x) => x.name === 'username'); if (f) f.value = m.username; }
       if (m.password != null) i._p = m.password;
+      if (m.credential != null) i._p = m.credential;
       if (m.urls) { i.url = m.urls[0] || ''; i.favicon_host = i.url ? host(i.url) : undefined; }
+      if (m.hostname != null) i.url = m.hostname;
       if (m.notes != null) i.notes = m.notes;
+      if (Array.isArray(m.tags)) i.tags = m.tags;
       i.updated_at = new Date().toISOString();
       saveItems(items);
       setTimeout(() => send({ event: 'changed' }), 0);

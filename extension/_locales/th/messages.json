@@ -339,6 +339,36 @@
   "edit": {
     "message": "แก้ไข"
   },
+  "editLogin": {
+    "message": "แก้ไขข้อมูลเข้าสู่ระบบ"
+  },
+  "editSecureNote": {
+    "message": "แก้ไขบันทึกที่ปลอดภัย"
+  },
+  "editApiCredential": {
+    "message": "แก้ไขข้อมูลรับรอง API"
+  },
+  "credential": {
+    "message": "ข้อมูลรับรอง"
+  },
+  "showCredential": {
+    "message": "แสดงข้อมูลรับรอง"
+  },
+  "hideCredential": {
+    "message": "ซ่อนข้อมูลรับรอง"
+  },
+  "hostname": {
+    "message": "ชื่อโฮสต์"
+  },
+  "expiry": {
+    "message": "วันหมดอายุ"
+  },
+  "expiryInvalid": {
+    "message": "วันหมดอายุต้องเป็น YYYY-MM-DD"
+  },
+  "tagsPh": {
+    "message": "คั่นด้วยจุลภาค"
+  },
   "cancel": {
     "message": "ยกเลิก"
   },
@@ -762,7 +792,7 @@
     "message": "เปิดเว็บไซต์"
   },
   "shortcutEdit": {
-    "message": "แก้ไขข้อมูลเข้าสู่ระบบ"
+    "message": "แก้ไขรายการ"
   },
   "shortcutGen": {
     "message": "ตัวสร้างรหัสผ่าน"

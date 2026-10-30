@@ -114,7 +114,7 @@ function openShortcuts() {
     { keys: [`${cmd}${shift}U`], label: t('shortcutCopyUser', 'Copy username') },
     { keys: [`${cmd}${alt}R`], label: t('shortcutRestore', 'Restore item') },
     { keys: [`${cmd}O`], label: t('shortcutOpenUrl', 'Open website') },
-    { keys: [`${cmd}E`], label: t('shortcutEdit', 'Edit login') },
+    { keys: [`${cmd}E`], label: t('shortcutEdit', 'Edit item') },
     { keys: [`${cmd}${shift}G`], label: t('shortcutGen', 'Password generator') },
     { keys: ['Esc'], label: t('shortcutClose', 'Close or clear search') },
   ];
