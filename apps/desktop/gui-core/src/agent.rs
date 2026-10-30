@@ -800,7 +800,8 @@ fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
     let subtitle = api::subtitle(r);
     let favicon_host = r.item.url.as_deref().and_then(url_host);
     let mut v = json!({"id": format!("{vid}:{iid}"), "vault_id": vid, "vault_name": vname, "category": r.category.as_str(), "title": r.item.title,
-        "subtitle": subtitle, "has_totp": has_totp(r), "favorite": r.favorite, "updated_at": ts(&r.item.updated_at), "archived": r.archived});
+        "subtitle": subtitle, "has_totp": has_totp(r), "has_attachments": !r.attachments.is_empty(), "favorite": r.favorite,
+        "updated_at": ts(&r.item.updated_at), "archived": r.archived});
     if let Some(u) = &r.item.url { v["url"] = json!(u); }
     if let Some(h) = favicon_host { v["favicon_host"] = json!(h); }
     if let Some(d) = r.deleted_at { v["deleted_at"] = json!(gitpass_core::device::iso8601(d as i64)); }
@@ -841,6 +842,15 @@ fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         fields.push(x);
     }
     v["fields"] = json!(fields);
+    let attachments: Vec<Value> = r.attachments.iter().map(|a| {
+        json!({
+            "id": a.id,
+            "name": a.name,
+            "size": a.size,
+            "mime": a.mime,
+        })
+    }).collect();
+    v["attachments"] = json!(attachments);
     if let Some(n) = &r.item.notes { v["notes"] = json!(n); }
     v["tags"] = json!(r.tags);
     v["created_at"] = json!(r.created_at.map(|c| gitpass_core::device::iso8601(c as i64)).unwrap_or_else(|| ts(&r.item.updated_at)));

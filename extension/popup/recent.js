@@ -42,6 +42,13 @@ function renderRecent() {
       f.innerHTML = UI.star;
       row.append(f);
     }
+    if (it.has_attachments) {
+      const att = el('span', 'att');
+      att.innerHTML = UI.paperclip;
+      att.setAttribute('role', 'img');
+      att.setAttribute('aria-label', t('hasAttachments', 'Has attachments'));
+      row.append(att);
+    }
     if (it.has_totp) row.append(totpChip(it));
     row.onclick = () => {
       const idx = S.rows.findIndex((r) => r.id === it.id);

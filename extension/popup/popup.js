@@ -770,6 +770,13 @@ function renderList() {
     meta.append(tDiv, uDiv);
     row.append(ic, meta);
     if (it.favorite) { const f = el('span', 'fav'); f.innerHTML = UI.star; row.append(f); }
+    if (it.has_attachments) {
+      const att = el('span', 'att');
+      att.innerHTML = UI.paperclip;
+      att.setAttribute('role', 'img');
+      att.setAttribute('aria-label', t('hasAttachments', 'Has attachments'));
+      row.append(att);
+    }
     if (it.has_totp) row.append(totpChip(it));
     const findings = S.findingsCache[it.id];
     if (it.category === 'login' && V.hasWatchtowerFindings(findings)) {

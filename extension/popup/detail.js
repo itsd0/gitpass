@@ -193,6 +193,48 @@ function renderDetail(d) {
   for (const f of d.fields || []) box.append(fieldRow(d, f));
   if (box.children.length) pane.append(box);
   if (d.notes) pane.append(el('div', 'notes', d.notes));
+  if (d.attachments && d.attachments.length) {
+    const attSec = el('div', 'd-attachments');
+    attSec.setAttribute('role', 'region');
+    attSec.setAttribute('aria-label', t('attachments', 'Attachments'));
+    const attTitle = el('div', 'd-attachments-title', t('attachments', 'Attachments'));
+    const attList = el('div', 'd-attachments-list');
+    attList.setAttribute('role', 'list');
+    for (const a of d.attachments) {
+      const row = el('div', 'att-row');
+      row.setAttribute('role', 'listitem');
+      row.setAttribute('tabindex', '0');
+
+      const ic = el('span', 'att-icon');
+      ic.innerHTML = GitpassPopupIcons.fileIcon ? GitpassPopupIcons.fileIcon(a.name, a.mime) : UI.paperclip;
+
+      const info = el('div', 'att-info');
+      const nameEl = el('span', 'att-name', a.name);
+      nameEl.title = a.name;
+      const sizeEl = el('span', 'att-size', V.formatSize ? V.formatSize(a.size) : a.size + ' B');
+      info.append(nameEl, sizeEl);
+
+      const openBtn = el('button', 'btn att-open-btn');
+      openBtn.type = 'button';
+      openBtn.title = t('openInGitpass', 'Open in gitpass');
+      openBtn.setAttribute('aria-label', t('openAttachmentInGitpass', 'Open $1 in gitpass', [a.name]));
+      openBtn.innerHTML = UI.external + ' <span>' + t('openInApp', 'Open in gitpass') + '</span>';
+      openBtn.onclick = (e) => {
+        e.stopPropagation();
+        send({ type: 'popup:open_in_app', item_id: d.id }).catch(showErr);
+      };
+      row.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          send({ type: 'popup:open_in_app', item_id: d.id }).catch(showErr);
+        }
+      };
+      row.append(ic, info, openBtn);
+      attList.append(row);
+    }
+    attSec.append(attTitle, attList);
+    pane.append(attSec);
+  }
   if (d.tags && d.tags.length) {
     const tg = el('div', 'tags');
     for (const x of d.tags) {
