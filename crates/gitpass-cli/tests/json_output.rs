@@ -405,13 +405,38 @@ fn get_shows_related_item_titles_and_json_includes_ids() {
     let get_text = String::from_utf8_lossy(&get_out.stdout);
     assert!(get_text.contains("related:  Bank of Example Card"), "get output should show related item title: {get_text}");
 
-    // 2. gitpass get --json includes related_item_ids
+    // 2. gitpass get --json includes related_item_ids and resolved related_items
     let get_json_out = gp(&v.root, &["get", "Personal", "Personal GitHub", "--json"], None);
     assert!(get_json_out.status.success());
     let detail: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&get_json_out.stdout)).unwrap();
     let rel_ids = detail["related_item_ids"].as_array().expect("related_item_ids array in json");
     assert_eq!(rel_ids.len(), 1);
     assert_eq!(rel_ids[0].as_str().unwrap(), v.id_card);
+    let rel_items = detail["related_items"].as_array().expect("related_items array in json");
+    assert_eq!(rel_items.len(), 1);
+    assert_eq!(rel_items[0]["id"].as_str().unwrap(), v.id_card);
+    assert_eq!(rel_items[0]["title"].as_str().unwrap(), "Bank of Example Card");
+    assert!(rel_items[0]["available"].as_bool().unwrap());
+
+    // 2a. --unlink accepts a title as well as an ID, then --link re-adds it
+    let unlink_title_out = gp(&v.root, &["edit", "Personal", "Personal GitHub", "--unlink", "Bank of Example Card"], None);
+    assert!(unlink_title_out.status.success(), "edit --unlink by title failed: {}", String::from_utf8_lossy(&unlink_title_out.stderr));
+    let get_unlinked_title = gp(&v.root, &["get", "Personal", "Personal GitHub"], None);
+    assert!(!String::from_utf8_lossy(&get_unlinked_title.stdout).contains("related:"), "title unlink should remove the link");
+    let relink_out = gp(&v.root, &["edit", "Personal", "Personal GitHub", "--link", "Bank of Example Card"], None);
+    assert!(relink_out.status.success(), "edit --link by title failed: {}", String::from_utf8_lossy(&relink_out.stderr));
+
+    // 2b. A removed target is reported as unavailable, never a crash or a secret
+    let rm_out = gp(&v.root, &["rm", "Personal", &v.id_card], None);
+    assert!(rm_out.status.success(), "rm failed: {}", String::from_utf8_lossy(&rm_out.stderr));
+    let get_json_out = gp(&v.root, &["get", "Personal", "Personal GitHub", "--json"], None);
+    assert!(get_json_out.status.success());
+    let detail: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&get_json_out.stdout)).unwrap();
+    let rel_items = detail["related_items"].as_array().expect("related_items array in json after rm");
+    assert_eq!(rel_items.len(), 1);
+    assert_eq!(rel_items[0]["id"].as_str().unwrap(), v.id_card);
+    assert!(rel_items[0]["title"].is_null());
+    assert!(!rel_items[0]["available"].as_bool().unwrap());
 
     // 3. Unlink via edit --unlink
     let unlink_out = gp(&v.root, &["edit", "Personal", "Personal GitHub", "--unlink", &v.id_card], None);

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### CLI
+- `gitpass get --json` now resolves `related_items` to `{"id", "title", "available"}` objects instead of
+  repeating the IDs, with missing or deleted targets reported as unavailable (#359). `edit --unlink`
+  now accepts a title as well as an ID, matching `--link`.
+
 ## 0.6.7 — 2026-10-30
 
 ### Fixes

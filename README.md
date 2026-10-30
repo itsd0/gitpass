@@ -110,6 +110,7 @@ gitpass add personal --category api-credential --title "OpenAI API" --url https:
 gitpass list personal
 gitpass get personal github [--password-only]     # query = id, id prefix or title substring
 gitpass edit personal <id|query> --notes "..." [--password | --generate 20]
+gitpass edit personal <id|query> --link "Recovery codes" [--unlink <title|id>]   # related items; get shows a related: line
 gitpass rm personal <id|query>
 gitpass gen 32               # random password (default 24; --no-symbols, --no-digits)
 gitpass gen --words 5 [--separator .] [--capitalize]   # memorable passphrase (128-word list)

@@ -1543,6 +1543,16 @@ struct CliField {
     masked: Option<String>,
 }
 
+/// One entry of `related_items` in `gitpass get --json` output: the linked item's
+/// id plus its resolved title. `title` is null and `available` is false when the
+/// target is missing or deleted; titles only, never secrets.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliRelatedItem {
+    id: String,
+    title: Option<String>,
+    available: bool,
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq)]
 struct CliItemDetail {
     id: String,
@@ -1568,7 +1578,7 @@ struct CliItemDetail {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     related_item_ids: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    related_items: Vec<String>,
+    related_items: Vec<CliRelatedItem>,
 }
 
 fn ts(s: &str) -> String {
@@ -1673,7 +1683,35 @@ fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
     }
 }
 
-fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<String>) -> CliItemDetail {
+/// Resolve an item's `related_item_ids` to `{id, title, available}` entries, using
+/// the same lookup as the human-readable `get` output: a target counts as
+/// available only when it exists and is not deleted. Missing or deleted targets
+/// yield `title: None, available: false` and never fail the command.
+fn resolve_related_items(s: &Session, r: &ItemRecord) -> Vec<CliRelatedItem> {
+    r.related_item_ids
+        .iter()
+        .map(|rid| match s.get_record_by_id(rid) {
+            Ok(Some((_, _, rel_rec))) if rel_rec.deleted_at.is_none() => CliRelatedItem {
+                id: rid.clone(),
+                title: Some(rel_rec.item.title.clone()),
+                available: true,
+            },
+            _ => CliRelatedItem {
+                id: rid.clone(),
+                title: None,
+                available: false,
+            },
+        })
+        .collect()
+}
+
+fn item_detail(
+    id: &str,
+    r: &ItemRecord,
+    reveal: bool,
+    last_used_at: Option<String>,
+    related_items: Vec<CliRelatedItem>,
+) -> CliItemDetail {
     let mut fields = Vec::new();
     for section in r.view_sections() {
         for f in section.fields {
@@ -1727,7 +1765,7 @@ fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<Stri
         notes: r.item.notes.clone().filter(|n| !n.trim().is_empty()),
         fields,
         related_item_ids: r.related_item_ids.clone(),
-        related_items: r.related_item_ids.clone(),
+        related_items,
     }
 }
 
@@ -2782,7 +2820,13 @@ fn run() -> Result<()> {
                     let _ = s.touch_item_used(&id);
                 }
                 let last_used_at = s.last_used(&id).map(|t| gitpass_core::device::iso8601(t as i64));
-                let detail = item_detail(&id, &rec, *reveal, last_used_at);
+                let detail = item_detail(
+                    &id,
+                    &rec,
+                    *reveal,
+                    last_used_at,
+                    resolve_related_items(&s, &rec),
+                );
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else if *copy {
                 let _ = s.touch_item_used(&id);
@@ -2982,14 +3026,31 @@ fn run() -> Result<()> {
             }
             for u in unlink {
                 let u_trim = u.trim();
-                rec.related_item_ids.retain(|id| id != u_trim);
+                if u_trim.is_empty() { continue; }
+                // Resolve titles the same way --link does, so --unlink accepts
+                // a title or an ID. An unresolvable value keeps the previous
+                // silent no-op (retain against the raw value).
+                let target_id = if s.find_item_vault(u_trim)?.is_some() {
+                    u_trim.to_string()
+                } else {
+                    pick_record(&s, &vid, u_trim, *pick, false)
+                        .map(|(id, _)| id)
+                        .unwrap_or_else(|_| u_trim.to_string())
+                };
+                rec.related_item_ids.retain(|id| *id != target_id);
             }
             rec.item.updated_at = store::now();
             s.update_record(&vid, &iid, rec)?;
 
             if *json {
                 let (_, updated) = s.read_record(&vid, &iid)?;
-                let detail = item_detail(&iid, &updated, false, None);
+                let detail = item_detail(
+                    &iid,
+                    &updated,
+                    false,
+                    None,
+                    resolve_related_items(&s, &updated),
+                );
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 println!("updated {iid}");
@@ -3001,7 +3062,13 @@ fn run() -> Result<()> {
             s.set_archived(&vid, &iid, true)?;
             if *json {
                 let (_, updated) = s.read_record(&vid, &iid)?;
-                let detail = item_detail(&iid, &updated, false, None);
+                let detail = item_detail(
+                    &iid,
+                    &updated,
+                    false,
+                    None,
+                    resolve_related_items(&s, &updated),
+                );
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 println!("archived {iid}");
@@ -3016,7 +3083,13 @@ fn run() -> Result<()> {
             s.set_archived(&vid, &iid, false)?;
             if *json {
                 let (_, updated) = s.read_record(&vid, &iid)?;
-                let detail = item_detail(&iid, &updated, false, None);
+                let detail = item_detail(
+                    &iid,
+                    &updated,
+                    false,
+                    None,
+                    resolve_related_items(&s, &updated),
+                );
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 println!("unarchived {iid}");
@@ -3028,7 +3101,13 @@ fn run() -> Result<()> {
             s.restore(&vid, &iid)?;
             if *json {
                 let (_, updated) = s.read_record(&vid, &iid)?;
-                let detail = item_detail(&iid, &updated, false, None);
+                let detail = item_detail(
+                    &iid,
+                    &updated,
+                    false,
+                    None,
+                    resolve_related_items(&s, &updated),
+                );
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 println!("restored {iid}");
@@ -3044,7 +3123,13 @@ fn run() -> Result<()> {
             let new_id = s.move_item(&from_vid, &iid, &to_vid)?;
             if *json {
                 let (_, updated) = s.read_record(&to_vid, &new_id)?;
-                let detail = item_detail(&new_id, &updated, false, None);
+                let detail = item_detail(
+                    &new_id,
+                    &updated,
+                    false,
+                    None,
+                    resolve_related_items(&s, &updated),
+                );
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 println!("moved {iid} to {to} (now {new_id})");
