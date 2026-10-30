@@ -139,8 +139,6 @@ input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 
 .excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--accent)); cursor: pointer; text-decoration: underline; }
 .empty-excepted-note { margin: 8px 0 0; font-size: 12px; color: rgb(var(--muted)); }
 .empty-excepted-note .btn-link { font-size: 12px; padding: 0; color: rgb(var(--accent)); cursor: pointer; text-decoration: underline; }
-.recent-section { flex: none; border-bottom: 1px solid rgb(var(--border)); background: rgb(var(--panel)); }
-.recent-section.hidden { display: none !important; }
 .list-section-header { height: 24px; display: flex; align-items: center; padding: 0 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: rgb(var(--muted)); background: rgb(var(--sidebar)); border-bottom: 1px solid rgb(var(--border)); }
 /* min-height: 0 lets the list shrink below its content inside the .left flex column, so it scrolls instead of being clipped. */
 .list { flex: 1; min-height: 0; overflow-y: auto; outline: none; }
@@ -182,6 +180,21 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .row .warn-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; margin-left: 2px; }
 .row .warn-dot.danger { background: rgb(var(--danger)); }
 .row .warn-dot.warn { background: rgb(var(--warn)); }
+/* List density (issue #397): Compact shrinks rows to 36px with a 24px icon and
+   puts title and username on one truncated line. Comfortable (default) is the
+   existing two-line 52px layout. Quick actions stay absolutely positioned so
+   they keep working in both densities, and the selection border/focus ring is
+   unchanged. */
+.list.compact .row { height: 36px; gap: 8px; padding: 0 8px; }
+.list.compact .row .ic { width: 24px; height: 24px; }
+.list.compact .row .ic .site-icon-img { width: 16px; height: 16px; }
+.list.compact .row .ic .monogram { width: 16px; height: 16px; font-size: 9px; }
+.list.compact .row .ic svg { width: 18px; height: 18px; }
+.list.compact .row .meta { display: flex; align-items: baseline; gap: 6px; }
+.list.compact .row .meta .t { flex-shrink: 1; }
+.list.compact .row .meta .u { flex: 0 1 auto; font-size: 11px; }
+.list.compact .row .totp-mini { padding: 2px 3px; }
+
 .empty { padding: 24px 16px; color: rgb(var(--muted)); text-align: center; }
 .empty .empty-ic { display: flex; justify-content: center; margin-bottom: 8px; }
 .empty .empty-ic svg.ui { width: 22px; height: 22px; }
@@ -261,6 +274,19 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .ring .fg { stroke: rgb(var(--accent)); transition: stroke-dashoffset 1s linear; }
 .ring.low .fg { stroke: rgb(var(--danger)); }
 .notes { margin-top: 12px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; }
+.d-related { margin-top: 12px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 10px; padding: 10px 12px; }
+.d-related-title { font-size: 11px; color: rgb(var(--label)); text-transform: lowercase; margin-bottom: 6px; }
+.d-related-list { display: flex; flex-direction: column; gap: 4px; }
+.related-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; outline: none; cursor: pointer; user-select: none; }
+.related-row:hover, .related-row:focus-visible { background: rgb(var(--hover)); }
+.related-row:focus-visible { box-shadow: 0 0 0 2px rgb(var(--accent) / .35); outline: none; }
+.related-row.unavailable { cursor: default; opacity: 0.6; }
+.related-row.unavailable:hover, .related-row.unavailable:focus-visible { background: none; }
+.related-ic { display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: rgb(var(--accent)); }
+.related-ic svg { width: 20px; height: 20px; }
+.related-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: rgb(var(--fg)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.related-row.unavailable .related-title { color: rgb(var(--muted)); font-style: italic; }
+.back-item-btn { margin-right: -4px; }
 .d-attachments { margin-top: 12px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 10px; padding: 10px 12px; }
 .d-attachments-title { font-size: 11px; color: rgb(var(--label)); text-transform: lowercase; margin-bottom: 6px; }
 .d-attachments-list { display: flex; flex-direction: column; gap: 4px; }

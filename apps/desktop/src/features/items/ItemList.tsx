@@ -54,12 +54,11 @@ export const rowHeight = (r: Row, density: ListDensity = "comfortable") =>
   r.type === "header" ? HEADER_H : density === "compact" ? ITEM_H_COMPACT : ITEM_H;
 const SORTS: {
   id: NonNullable<Filter["sort"]>;
-  labelKey: "items.sortUpdated" | "items.sortCreated" | "items.sortTitle" | "items.sortRecent";
+  labelKey: "items.sortUpdated" | "items.sortCreated" | "items.sortTitle";
 }[] = [
   { id: "updated", labelKey: "items.sortUpdated" },
   { id: "created", labelKey: "items.sortCreated" },
   { id: "title", labelKey: "items.sortTitle" },
-  { id: "recent", labelKey: "items.sortRecent" },
 ];
 
 export function ItemList() {
@@ -130,21 +129,17 @@ export function ItemList() {
   );
 
   const lang = useI18n((s) => s.lang);
-  const showRecentSection = base.kind === "all" && !searchQuery && sort !== "recent";
   const rows = useMemo(
     () =>
       groupRows(items, sort, {
         flat: !!searchQuery,
-        showRecentSection,
-        recentLabel: t("items.recentlyUsed"),
-        neverUsedLabel: t("items.neverUsed"),
         todayLabel: t("items.section.today"),
         yesterdayLabel: t("items.section.yesterday"),
         previous7DaysLabel: t("items.section.previous7Days"),
         previous30DaysLabel: t("items.section.previous30Days"),
         locale: lang,
       }),
-    [items, sort, showRecentSection, searchQuery, t, lang]
+    [items, sort, searchQuery, t, lang]
   );
   const stickyIndexes = useMemo(
     () =>

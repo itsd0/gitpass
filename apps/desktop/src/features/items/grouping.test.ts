@@ -165,20 +165,6 @@ describe('groupRows', () => {
     ]);
   });
 
-  it('groups by recently used date buckets and puts items with no last-used time under Never used', () => {
-    const list = [itemToday, itemYesterday, itemNeverUsed];
-    const rows = groupRows(list, 'recent', { now, locale: 'en', neverUsedLabel: 'Never used' });
-
-    expect(rows.map((r) => (r.type === 'header' ? r.label : r.item.id))).toEqual([
-      'Today',
-      '1',
-      'Yesterday',
-      '2',
-      'Never used',
-      '7',
-    ]);
-  });
-
   it('uses letter headers and no date headers when sorted by title', () => {
     const list = [itemToday, itemYesterday, itemPrev7]; // Alpha (A), Beta (B), Charlie (C)
     const rows = groupRows(list, 'title', { now });
@@ -191,24 +177,9 @@ describe('groupRows', () => {
     expect(rows.filter((r) => r.type === 'header').some((r) => r.label === 'Today')).toBe(false);
   });
 
-  it('renders a Recently used section at top when showRecentSection is true for updated sort', () => {
-    const list = [itemToday, itemYesterday, itemPrev7];
-    const rows = groupRows(list, 'updated', {
-      now,
-      showRecentSection: true,
-      recentLabel: 'Recently used',
-    });
-
-    expect(rows[0]).toEqual({
-      type: 'header',
-      key: 'h:recent',
-      label: 'Recently used',
-    });
-  });
-
   it('returns plain item rows with no headers when flat is set', () => {
     const list = [itemYesterday, itemToday, itemOlder1];
-    const rows = groupRows(list, 'updated', { flat: true, now, showRecentSection: true });
+    const rows = groupRows(list, 'updated', { flat: true, now });
     expect(rows.every((r) => r.type === 'item')).toBe(true);
     expect(rows.map((r) => (r.type === 'item' ? r.item.id : ''))).toEqual(['2', '1', '5']);
   });

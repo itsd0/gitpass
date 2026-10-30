@@ -117,26 +117,6 @@ describe("Desktop ItemList date section headers", () => {
     expect(headerLabels).toEqual(["Today", "Yesterday"]);
   });
 
-  it("renders date headers and Never used when sorted by Recently used (recent)", async () => {
-    const nowSecs = Math.floor(Date.now() / 1000);
-    const yesterdaySecs = nowSecs - 86400;
-    const items = [
-      makeItem("1", "Active Today", todayIso, todayIso, nowSecs),
-      makeItem("2", "Active Yesterday", yesterdayIso, yesterdayIso, yesterdaySecs),
-      makeItem("3", "Never Touched", todayIso, todayIso, undefined),
-    ];
-    useItemsUI.setState({ items, loading: false, sort: "recent" });
-    vi.spyOn(api, "listItems").mockResolvedValue(items);
-
-    render(<ItemList />);
-
-    const headers = screen.getAllByTestId("group-header");
-    const headerLabels = headers.map((h) => h.textContent?.trim());
-
-    expect(headerLabels).toContain("Today");
-    expect(headerLabels).toContain("Yesterday");
-    expect(headerLabels).toContain("Never used");
-  });
 
   it("renders letter headers and NO date headers when sorted by Title", async () => {
     const items = [

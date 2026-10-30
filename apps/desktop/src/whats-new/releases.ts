@@ -118,6 +118,76 @@ const HIGHLIGHTS_0_6_6: WhatsNewHighlight[] = [
 ];
 
 export const RELEASES: ReleaseHighlights[] = [
+  {
+    version: '0.6.8',
+    highlights: [
+      {
+        id: 'emergency-kit-view-save',
+        icon: FileText,
+        title: {
+          en: 'View & Save Your Emergency Kit',
+          my: 'Emergency Kit ကို ကြည့်ရှုပြီး သိမ်းဆည်းပါ',
+          th: 'ดูและบันทึก Emergency Kit',
+        },
+        description: {
+          en: 'Open or save your Emergency Kit any time without rotating your Secret Key. Printing no longer marks the kit as saved.',
+          my: 'Secret Key ကို မပြောင်းဘဲ Emergency Kit ကို အချိန်မရွေး ဖွင့်ကြည့်ခြင်း သို့မဟုတ် သိမ်းဆည်းနိုင်ပါပြီ။ ပုံနှိပ်ခြင်းဖြင့် kit ကို သိမ်းပြီးဟု မှတ်သားတော့မည် မဟုတ်ပါ။',
+          th: 'เปิดหรือบันทึก Emergency Kit ได้ทุกเมื่อโดยไม่ต้องเปลี่ยน Secret Key และการพิมพ์จะไม่ทำเครื่องหมายว่าบันทึก kit แล้วอีกต่อไป',
+        },
+        showMe: {
+          route: { name: 'settings', tab: 'security' },
+        },
+      },
+      {
+        id: 'password-history',
+        icon: KeyRound,
+        title: {
+          en: 'Password History & Rotation Reminders',
+          my: 'စကားဝှက် မှတ်တမ်းနှင့် ပြောင်းလဲရန် သတိပေးချက်များ',
+          th: 'ประวัติรหัสผ่านและการเตือนให้เปลี่ยนรหัสผ่าน',
+        },
+        description: {
+          en: 'Logins keep their previous passwords, and you can set a per-login reminder to rotate them.',
+          my: 'Login များတွင် ယခင်စကားဝှက်များကို သိမ်းထားပြီး login တစ်ခုချင်းစီအတွက် စကားဝှက်ပြောင်းရန် သတိပေးချက် သတ်မှတ်နိုင်ပါပြီ။',
+          th: 'ล็อกอินจะเก็บรหัสผ่านเดิมไว้ และตั้งการเตือนให้เปลี่ยนรหัสผ่านแยกตามล็อกอินได้',
+        },
+        showMe: {
+          route: { name: 'items', filter: { kind: 'all', sort: 'updated' } },
+        },
+      },
+      {
+        id: 'watchtower-history-row-icons',
+        icon: ShieldCheck,
+        title: {
+          en: 'Watchtower Score History',
+          my: 'Watchtower ရမှတ် မှတ်တမ်း',
+          th: 'ประวัติคะแนน Watchtower',
+        },
+        description: {
+          en: 'See your score trend with a weekly change, and spot items with findings right in the item list.',
+          my: 'အပတ်စဉ် ပြောင်းလဲမှုနှင့်အတူ ရမှတ်လမ်းကြောင်းကို ကြည့်ပြီး ပြဿနာရှိသော item များကို စာရင်းထဲတွင် တန်းမြင်နိုင်ပါပြီ။',
+          th: 'ดูแนวโน้มคะแนนพร้อมการเปลี่ยนแปลงรายสัปดาห์ และเห็นรายการที่มีปัญหาได้ทันทีในรายการ',
+        },
+        showMe: {
+          route: { name: 'watchtower' },
+        },
+      },
+      {
+        id: 'extension-watchtower',
+        icon: Puzzle,
+        title: {
+          en: 'Watchtower in the Extension',
+          my: 'Extension ထဲရှိ Watchtower',
+          th: 'Watchtower ในส่วนขยาย',
+        },
+        description: {
+          en: 'The browser popup shows a vault-wide Watchtower overview and a severity dot, and lets you pick which login to update.',
+          my: 'ဘရောက်ဇာ popup တွင် vault တစ်ခုလုံး၏ Watchtower အကျဉ်းချုပ်နှင့် အဆင့်ပြအစက်ကို ပြပြီး မည်သည့် login ကို update လုပ်မည်ကို ရွေးနိုင်ပါပြီ။',
+          th: 'ป๊อปอัปเบราว์เซอร์แสดงภาพรวม Watchtower ทั้งห้องนิรภัยและจุดระดับความรุนแรง และให้เลือกล็อกอินที่จะอัปเดตได้',
+        },
+      },
+    ],
+  },
   { version: '0.6.7', highlights: HIGHLIGHTS_0_6_6 },
   { version: '0.6.6', highlights: HIGHLIGHTS_0_6_6 },
   {

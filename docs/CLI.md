@@ -3,7 +3,7 @@
 `gitpass` is the command-line client for a gitpass vault. `gitpass --help` lists the
 top-level commands and `gitpass <command> --help` shows the flags of one command; this
 page has a one-line example for every subcommand. The examples and flags track the clap
-definitions in `crates/gitpass-cli/src/main.rs`, and a test (`crates/gitpass-cli/tests/cli_docs.rs`)
+definitions in `crates/gitpass-cli/src/cli.rs` (commands in `src/cmd/`), and a test (`crates/gitpass-cli/tests/cli_docs.rs`)
 fails if a visible subcommand is missing here.
 
 The vault lives in `~/.gitpass` unless `--path DIR` or `GITPASS_PATH` says otherwise.
@@ -98,6 +98,8 @@ gitpass find Personal "git hub"
 gitpass edit Personal github --notes "2FA enabled"
 gitpass edit github --tag work --favorite
 gitpass edit github --untag old-tag --unfavorite
+gitpass edit github --link "Recovery codes" --link 01J...   # related items, by title or ID, repeatable
+gitpass edit github --unlink "Recovery codes"                  # remove a related item, by title or ID
 gitpass edit bank --rotate-every 90d
 gitpass archive github
 gitpass unarchive github
@@ -130,6 +132,12 @@ gitpass restore github --version 3
   `--password` / `--generate [N]` set a new password, `--tag` / `--untag` add or remove tags (repeatable),
   and `--favorite` / `--unfavorite` toggle favorite status. `--rotate-every 30d|90d|180d|365d|none`
   sets or clears a "change this password every N days" reminder (shown by `get` and flagged by `audit`).
+- Related items: `edit --link <title|id>` (alias `--related`, repeatable) links another item,
+  `edit --unlink <title|id>` (alias `--unrelated`, repeatable) removes the link, and linking an
+  item to itself is rejected. `get` prints a `related:` line with the linked titles (a missing or
+  deleted target shows as `Item not available`); `get --json` emits `related_item_ids` (the IDs)
+  plus `related_items`, an array of `{"id", "title", "available"}` objects where `title` is `null`
+  and `available` is `false` for a missing or deleted target. Titles only, never secrets.
 - `archive` and `unarchive` mark or unmark an item as archived.
 - `undelete` restores an item from Recently Deleted (searches deleted items only; clear error if the item is not deleted).
 - `mv <item> --to <vault>` moves an item to another vault, keeping its version history, attachments, tags and metadata.
@@ -339,6 +347,7 @@ gitpass audit Personal --max-age-days 180
 gitpass audit --unused-months 24
 gitpass audit --hibp --json
 gitpass audit --include-ignored
+gitpass audit --fail-under 80
 ```
 
 `audit` checks live items: weak, reused, reused-old and old passwords, missing TOTP, insecure URLs
@@ -348,8 +357,33 @@ credentials; it also reports offline 2FA/passkey availability. `--unused-months`
 last edit/creation time when the item was never used. Logins with a `--rotate-every`
 reminder are reported as `rotation_due` or `rotation_soon` (within 14 days). `--hibp` opts in to Have I
 Been Pwned k-anonymity checks (only five hex characters of a SHA-1 leave the machine).
-`--max-age-days` defaults to 365 and `--expiring-days` to 30. The scoring and checks are
+`--max-age-days` defaults to 365 and `--expiring-days` to 30. The first summary line
+also shows the shared Watchtower `score: NN/100` (same core function the desktop app
+uses); `--json` adds top-level `score` and `items_with_password` fields without changing
+the existing fields. `--fail-under N` (0-100) exits 1 with a message on stderr when the
+score is below N, so scripts can gate on it, with or without `--json`. The scoring and checks are
 documented in [WATCHTOWER.md](WATCHTOWER.md).
+
+## Health check (`gitpass doctor`)
+
+```sh
+gitpass doctor
+gitpass doctor --json
+gitpass doctor --no-unlock
+gitpass doctor --online
+```
+
+`doctor` runs read-only health checks across five areas and reports status with one-line fix hints. The only file it may write is the unlock throttle state (`.gitpass-throttle.json`): a wrong master password is still counted toward brute-force throttling and a successful unlock resets the counter. Every other vault file and the git working tree are left unchanged:
+- **Vault files**: verifies every item and the manifest decrypt cleanly, with valid AEAD authentication and padding. Reports item counts and failing item IDs without exposing any secrets.
+- **Permissions**: ensures the vault directory (`0700`) and key files (`0600`) are not group/world readable, and warns if the vault is placed inside a cloud-synced folder (e.g. Dropbox, iCloud Drive).
+- **Git repository**: checks for uncommitted changes or merge conflicts, verifies remote configuration, and reports ahead/behind commit counts (network fetch only with `--online`).
+- **Browser integration**: checks installed Chromium browsers (Google Chrome, Chromium, Brave) for native messaging host manifests and verifies they point to an existing `gitpass-host` binary.
+- **Local state**: verifies unlock throttle state (`.gitpass-throttle.json`) and checks that routine backups (`.gitpass-backup-*`) are sane and pruning.
+
+Exit codes:
+- `0`: all checks passed
+- `1`: one or more checks failed
+- `2`: warnings only (no failures)
 
 ## Shell completions
 

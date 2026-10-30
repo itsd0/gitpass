@@ -7,7 +7,30 @@
   entry in any login's password history (another login's, or its own) is flagged in the core audit,
   `gitpass audit`, the desktop Watchtower card and item detail, and the extension popup chips. The
   finding carries only the source item's title and the retirement date — never the retired value —
-  and counts at half the live-reuse weight in the desktop and extension scores.
+  and counts at half the live-reuse weight in the shared Watchtower score (`audit::score()`).
+
+### Desktop
+- Removed the "Recently used" section, sort option and command palette heading (#409).
+
+### Extension
+- Removed the popup's "Recently used" section (#409).
+
+## 0.6.8 — 2026-10-30
+
+### Desktop
+- View / Save Emergency Kit without rotating; printing no longer marks the kit saved (#399).
+- Password history on logins (#366), per-login rotation reminders (#364), Watchtower score history (#380) and row icons (#391).
+
+### Extension
+- Vault-wide Watchtower overview (#386), shield severity dot (#394), localized chips (#373), choose login to update (#393).
+
+### Release
+- Releases are published on itsd0/gitpass only; the gitpass-releases mirror is gone. Apps older than 0.6.7 need a manual update (#406).
+
+### CLI
+- `gitpass get --json` now resolves `related_items` to `{"id", "title", "available"}` objects instead of
+  repeating the IDs, with missing or deleted targets reported as unavailable (#359). `edit --unlink`
+  now accepts a title as well as an ID, matching `--link`.
 
 ### Docs
 - Format 5 note (#375): format 5, introduced in the 0.5.0 work for attachments, is now documented.

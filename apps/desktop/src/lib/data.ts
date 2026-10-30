@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api/client';
-import type { VaultInfo } from '../api/types';
+import type { ItemSummary, VaultInfo } from '../api/types';
 import { useApp } from './store';
 /** Vaults + tags, refetched whenever items change. */
 export function useVaultsAndTags() {
@@ -14,7 +14,7 @@ export function useVaultsAndTags() {
   return { vaults, tags };
 }
 
-export interface SidebarCounts { all: number; favorites: number; archive: number; deleted: number; tags: Record<string, number>; }
+export interface SidebarCounts { all: number; favorites: number; archive: number; deleted: number; tags: Record<string, number>; items?: ItemSummary[]; }
 const NO_COUNTS: SidebarCounts = { all: 0, favorites: 0, archive: 0, deleted: 0, tags: {} };
 /** Counts shown beside the sidebar rows, derived from the same lists the item views show; refetched whenever items change. */
 export function useSidebarCounts(): SidebarCounts {
@@ -25,7 +25,7 @@ export function useSidebarCounts(): SidebarCounts {
     part(api.listItems({ filter: { kind: 'all' } }), (xs) => setCounts((c) => {
       const tags: Record<string, number> = {};
       for (const x of xs) for (const tg of x.tags) tags[tg] = (tags[tg] ?? 0) + 1;
-      return { ...c, all: xs.length, favorites: xs.filter((x) => x.favorite).length, tags };
+      return { ...c, all: xs.length, favorites: xs.filter((x) => x.favorite).length, tags, items: xs };
     }));
     part(api.listItems({ filter: { kind: 'archive' } }), (xs) => setCounts((c) => ({ ...c, archive: xs.length })));
     part(api.listItems({ filter: { kind: 'deleted' } }), (xs) => setCounts((c) => ({ ...c, deleted: xs.length })));

@@ -625,6 +625,81 @@ fn audit_summary_agent_contract_and_security() {
 }
 
 #[test]
+fn audit_summary_score_matches_desktop_watchtower_score_with_archived_and_passkey() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+
+    // 1. Live login with weak password
+    let id_weak = add_login(&e, "Weak Login", "https://weak.example.invalid", "user1", "short");
+    let (_, iid_weak) = split_id(&id_weak).unwrap();
+    assert!(!iid_weak.is_empty());
+
+    // 2. Live login with strong password and TOTP
+    let it2 = ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "Strong Login".into(),
+        url: Some("https://strong.example.invalid".into()),
+        sections: vec![Section {
+            id: "login".into(),
+            title: None,
+            fields: vec![
+                fld("username", FieldKind::Text, "user2"),
+                fld("password", FieldKind::Concealed, "Correct-Horse-Battery-Staple-2026!"),
+                Field { id: "totp".into(), label: "totp".into(), kind: FieldKind::Totp, value: Some("JBSWY3DPEHPK3PXP".into()), masked: None, diff: None },
+            ],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+        related_item_ids: None,
+    };
+    e.app.create_item(&it2).unwrap();
+
+    // 3. Archived login (with weak password) - must not affect live score denominator or findings
+    let id_archived = add_login(&e, "Archived Login", "https://archived.example.invalid", "user3", "weakarchived");
+    let (_, iid_archived) = split_id(&id_archived).unwrap();
+    e.app.archive_item(&e.vault, &iid_archived, true).unwrap();
+
+    // 4. Passkey item - must not affect live score password denominator
+    let mut rec_pk = gitpass_core::ItemRecord::new(gitpass_core::store::Item {
+        title: "Passkey Site".into(),
+        username: Some("passkey_user".into()),
+        password: None,
+        url: Some("https://passkey.example.invalid".into()),
+        notes: None,
+        totp: None,
+        updated_at: gitpass_core::store::now(),
+    });
+    rec_pk.category = Category::Passkey;
+    rec_pk.sections = vec![gitpass_core::item::Section {
+        id: "main".into(),
+        title: None,
+        fields: vec![gitpass_core::item::Field {
+            id: gitpass_core::passkey::F_RP_ID.into(),
+            label: "RP ID".into(),
+            kind: gitpass_core::item::FieldKind::Text,
+            value: Some("passkey.example.invalid".into()),
+            removed: false,
+        }],
+    }];
+    e.app.state.with(|u| u.session.add_record(&e.vault, rec_pk)).unwrap();
+
+    // Both desktop watchtower() and agent audit_summary command must produce the exact same score
+    let desktop_report = e.app.watchtower(false).unwrap();
+    let desktop_score = desktop_report.score;
+
+    let summary = c.ok("audit_summary", json!({}));
+    let agent_score = summary["score"].as_u64().unwrap() as u8;
+
+    assert_eq!(
+        agent_score, desktop_score,
+        "audit_summary.score ({agent_score}) must equal desktop watchtower.score ({desktop_score})"
+    );
+    assert!(desktop_score < 100, "expected score penalty due to weak login: {desktop_score}");
+}
+
+#[test]
 fn generator_history_command_is_read_only_gated_by_lock_and_setting() {
     let e = env();
     let (mut c, _) = Client::connect(&e);

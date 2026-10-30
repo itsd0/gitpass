@@ -50,13 +50,41 @@ describe('emergency kit', () => {
     fireEvent.click(screen.getByText(en['kit.rotateConfirm']));
     await screen.findByText('A3-NEW'); expect(rot).toHaveBeenCalledTimes(1);
   });
-  it('print button calls window.print and onPrinted', async () => {
+  it('print does not mark the kit saved; the explicit confirmation does (window.print is a no-op on macOS webviews)', async () => {
     vi.spyOn(api, 'emergencyKitData').mockResolvedValue({ ...base, secretKey: 'A3-K' });
-    const print = vi.fn(); vi.stubGlobal('print', print); window.print = print; const done = vi.fn();
+    const print = vi.fn(); window.print = print; const done = vi.fn();
     render(<EmergencyKitFlow onClose={() => {}} onPrinted={done} />);
     await screen.findByText('A3-K');
     fireEvent.click(screen.getByText(en['kit.print']));
-    await waitFor(() => expect(done).toHaveBeenCalled()); expect(print).toHaveBeenCalled();
+    expect(print).toHaveBeenCalled(); expect(done).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByText(en['kit.markSaved']));
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+  it('print that throws still does not mark the kit saved', async () => {
+    vi.spyOn(api, 'emergencyKitData').mockResolvedValue({ ...base, secretKey: 'A3-K' });
+    window.print = () => { throw new Error('unsupported'); }; const done = vi.fn();
+    render(<EmergencyKitFlow onClose={() => {}} onPrinted={done} />);
+    await screen.findByText('A3-K');
+    fireEvent.click(screen.getByText(en['kit.print']));
+    expect(done).not.toHaveBeenCalled();
+  });
+  it('cannot confirm "saved" while the Secret Key is hidden', async () => {
+    vi.spyOn(api, 'emergencyKitData').mockResolvedValue(base);
+    render(<EmergencyKitFlow onClose={() => {}} onPrinted={() => {}} />);
+    await screen.findByTestId('emergency-kit-sheet');
+    expect((screen.getByText(en['kit.markSaved']).closest('button') as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText(en['kit.copyText'])).toBeNull();
+  });
+  it('Copy as text puts the account details and Secret Key on the clipboard', async () => {
+    vi.spyOn(api, 'emergencyKitData').mockResolvedValue({ ...base, secretKey: 'A3-K' });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    render(<EmergencyKitFlow onClose={() => {}} />);
+    await screen.findByText('A3-K');
+    fireEvent.click(screen.getByText(en['kit.copyText']));
+    expect(writeText).toHaveBeenCalledTimes(1);
+    const txt = writeText.mock.calls[0][0] as string;
+    expect(txt).toContain('acc-1'); expect(txt).toContain('A3-K');
   });
   it('every kit.* key exists in English, Burmese, and Thai', () => {
     const keys = Object.keys(en).filter(k => k.startsWith('kit.'));

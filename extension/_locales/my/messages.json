@@ -841,9 +841,6 @@
     "message": "popup မဖွင့်ဘဲ လက်ရှိစာမျက်နှာအတွက် အကိုက်ညီဆုံး လော့ဂ်အင်ကို ဖြည့်ပါသည်။",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
-  "recentlyUsed": {
-    "message": "မကြာသေးမီက သုံးခဲ့သည်"
-  },
   "watchtowerWarnings": {
     "message": "Watchtower သတိပေးချက်များ"
   },
@@ -1249,6 +1246,18 @@
   "optColorPasswordsBody": {
     "message": "စကားဝှက်ကို ဖော်ပြသည့်အခါ ဂဏန်းများကို လိမ္မော်ရောင်၊ သင်္ကေတများကို အပြာရောင်၊ နေရာလွတ်များကို အစက်ဖြင့် ပြပါမည်။ ကူးယူမှုတွင် ပြောင်းလဲမှုမရှိပါ။"
   },
+  "optListDensity": {
+    "message": "စာရင်း သိပ်သည်းမှု"
+  },
+  "optListDensityBody": {
+    "message": "သက်တောင့်သက်သာသည် အရာတစ်ခုလျှင် နှစ်ကြောင်းပြပြီး ကျစ်လစ်သည် တစ်ကြောင်းပြကာ အတန်းများ သေးငယ်သည်။ Popup စာရင်းတွင် အကျုံးဝင်သည်။"
+  },
+  "optDensityComfortable": {
+    "message": "သက်တောင့်သက်သာ"
+  },
+  "optDensityCompact": {
+    "message": "ကျစ်လစ်"
+  },
   "watchtowerUnused": {
     "message": "တစ်နှစ်ကျော် အသုံးမပြုပါ"
   },
@@ -1292,5 +1301,11 @@
   },
   "watchtowerAttention": {
     "message": "Watchtower: ပစ္စည်း $1 ခုကို ဆိုင်းငံ့စစ်ဆေးရန် လိုအပ်သည်"
+  },
+  "relatedItems": {
+    "message": "ဆက်စပ်ပစ္စည်းများ"
+  },
+  "itemNotAvailable": {
+    "message": "ပစ္စည်းမရနိုင်ပါ"
   }
 }

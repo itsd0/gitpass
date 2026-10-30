@@ -765,9 +765,6 @@
   "optFillShortcutBody": {
     "message": "Fills the best-matching login on the current page without opening the popup."
   },
-  "recentlyUsed": {
-    "message": "Recently used"
-  },
   "watchtowerWarnings": {
     "message": "Watchtower warnings"
   },
@@ -1169,6 +1166,18 @@
   "optColorPasswordsBody": {
     "message": "Show digits in orange, symbols in blue and spaces as a dot when a password is revealed. Copying is unchanged."
   },
+  "optListDensity": {
+    "message": "List density"
+  },
+  "optListDensityBody": {
+    "message": "Comfortable shows two lines per item; Compact shows one line per item with smaller rows. Applies to the popup list."
+  },
+  "optDensityComfortable": {
+    "message": "Comfortable"
+  },
+  "optDensityCompact": {
+    "message": "Compact"
+  },
   "watchtowerUnused": {
     "message": "Not used in over a year"
   },
@@ -1212,5 +1221,11 @@
   },
   "watchtowerAttention": {
     "message": "Watchtower: $1 items need attention"
+  },
+  "relatedItems": {
+    "message": "Related items"
+  },
+  "itemNotAvailable": {
+    "message": "Item not available"
   }
 }

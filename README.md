@@ -54,7 +54,7 @@ See `crates/gitpass-host/README.md` and `apps/desktop/README.md` for details, an
 
 ## Format compatibility
 - Formats 2, 3, 4 and 5 are read (`MIN_READ_FORMAT = 2`, `FORMAT_VERSION = 5` in
-  `crates/gitpass-core/src/store.rs`). A build refuses a format newer than the one it supports,
+  `crates/gitpass-core/src/store/`). A build refuses a format newer than the one it supports,
   so upgrade gitpass on every device before a vault moves to a newer format.
 - `init` writes `format.json` version 2 (`INIT_FORMAT_VERSION = 2`). It stays at 2 until the
   keyset is re-wrapped (master-password change, Secret Key rotation, KDF upgrade, or v1 migration),
@@ -115,6 +115,7 @@ gitpass add personal --category api-credential --title "OpenAI API" --url https:
 gitpass list personal
 gitpass get personal github [--password-only]     # query = id, id prefix or title substring
 gitpass edit personal <id|query> --notes "..." [--password | --generate 20]
+gitpass edit personal <id|query> --link "Recovery codes" [--unlink <title|id>]   # related items; get shows a related: line
 gitpass rm personal <id|query>
 gitpass gen 32               # random password (default 24; --no-symbols, --no-digits)
 gitpass gen --words 5 [--separator .] [--capitalize]   # memorable passphrase (128-word list)

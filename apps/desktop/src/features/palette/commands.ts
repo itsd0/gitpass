@@ -1,9 +1,10 @@
-import { ZoomIn, ZoomOut, RotateCcw, AtSign, Copy, FolderInput, Globe, Pencil, Timer, Home, KeyRound, LayoutGrid, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap, Sparkles } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, AtSign, Bookmark, Copy, FolderInput, Globe, Pencil, Timer, Home, KeyRound, LayoutGrid, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap, Sparkles } from 'lucide-react';
 import { api } from '../../api/client';
 import { translate, useI18n, type Key } from '../../i18n';
 import type { PaletteCommand } from '../registry';
 import { useApp } from '../../lib/store';
 import { useItemsUI } from '../items/state';
+import { useSavedSearches } from '../items/savedSearches';
 import { copyPasswordSelected, copyTotpSelected, copyUsernameSelected, editSelectedItem, openWebsiteSelected, shortcutTarget } from '../items/itemShortcuts';
 import { toast } from '../../ui';
 import { isDark } from '../settings/theme';
@@ -31,6 +32,26 @@ export function builtinCommands(): PaletteCommand[] {
     { id: 'whats-new', labelKey: 'cmd.whatsNew', icon: Sparkles, keywords: ['what', 'new', 'release', 'notes', 'changelog', 'update'], run: () => app.openModal('whats-new') },
     { id: 'shortcuts', labelKey: 'cmd.shortcuts', icon: Keyboard, keywords: ['help', 'keys'], shortcut: '?', run: openShortcutsHelp },
   ];
+  const q = useItemsUI.getState().query;
+  const cat = useItemsUI.getState().category;
+  const rf = app.route.name === 'items' ? app.route.filter : null;
+  const canSaveSearch = Boolean(
+    (q && q.trim()) || cat || (rf?.kind === 'vault' && rf.vaultId) || (rf?.kind === 'tag' && rf.tag)
+  );
+  if (canSaveSearch) {
+    cmds.push({
+      id: 'save-current-search',
+      labelKey: 'cmd.saveSearch',
+      icon: Bookmark,
+      keywords: ['save', 'search', 'filter', 'bookmark', 'pin'],
+      run: () => {
+        if (app.route.name !== 'items') {
+          app.setRoute({ name: 'items', filter: { kind: 'all', sort: 'updated' } });
+        }
+        useSavedSearches.getState().setSavePopoverOpen(true);
+      },
+    });
+  }
   const hasSelection = Boolean(app.selectedItemId || app.multiIds.length > 0);
   // No move/tag for items in Recently Deleted or Archive: restore them first.
   const kind = app.route.name === 'items' ? app.route.filter.kind : null;

@@ -841,9 +841,6 @@
     "message": "เติมข้อมูลเข้าสู่ระบบที่ตรงที่สุดในหน้าปัจจุบันโดยไม่ต้องเปิดป๊อปอัป",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
-  "recentlyUsed": {
-    "message": "ใช้งานล่าสุด"
-  },
   "watchtowerWarnings": {
     "message": "คำเตือน Watchtower"
   },
@@ -1249,6 +1246,18 @@
   "optColorPasswordsBody": {
     "message": "แสดงตัวเลขเป็นสีส้ม สัญลักษณ์เป็นสีน้ำเงิน และช่องว่างเป็นจุด เมื่อเปิดดูรหัสผ่าน การคัดลอกไม่เปลี่ยนแปลง"
   },
+  "optListDensity": {
+    "message": "ความหนาแน่นของรายการ"
+  },
+  "optListDensityBody": {
+    "message": "แบบสบายแสดงสองบรรทัดต่อรายการ ส่วนแบบกะทัดรัดแสดงบรรทัดเดียวและแถวเล็กลง ใช้กับรายการในป็อปอัป"
+  },
+  "optDensityComfortable": {
+    "message": "สบาย"
+  },
+  "optDensityCompact": {
+    "message": "กะทัดรัด"
+  },
   "watchtowerUnused": {
     "message": "ไม่ได้ใช้งานมากว่าหนึ่งปี"
   },
@@ -1292,5 +1301,11 @@
   },
   "watchtowerAttention": {
     "message": "Watchtower: มี $1 รายการที่ต้องตรวจสอบ"
+  },
+  "relatedItems": {
+    "message": "รายการที่เกี่ยวข้อง"
+  },
+  "itemNotAvailable": {
+    "message": "ไม่มีรายการนี้"
   }
 }

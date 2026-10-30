@@ -107,6 +107,13 @@ Open it from the toolbar icon, or with the keyboard command below.
   into the affected items (with website favicons and monograms); choosing an item
   immediately opens its detail in the popup, while Esc goes back to the overview.
   When everything is clean, a calm "Nothing needs attention" message is displayed.
+- **Related items.** When an item has linked related items, the detail view
+  shows a **Related items** section below the fields and notes. Each row displays
+  the item's category icon and title; clicking or pressing Enter opens that item's
+  detail view in the popup. A Back button (or Backspace / Alt+Left) returns to the
+  previously viewed item. If a linked item was removed or is in an unavailable vault,
+  it displays a muted "Item not available" entry. Related items are read-only in the
+  extension (linking and unlinking is managed in the desktop app or CLI).
 - **Opening gitpass.** Actions like "Open in gitpass" and "Open Watchtower" in
   the popup use `open_in_app` to bring the desktop app to the front and navigate
   directly to the item or target view (Watchtower, generator history, or
@@ -305,5 +312,5 @@ appears at all and the request passes straight through to the browser's native f
 | New item creation | `extension/popup/newitem.js` |
 | Unlock screen and Caps Lock hint | `extension/popup/capslock.js`, `extension/popup/popup.js`, `crates/gitpass-host/README.md` |
 | Per-site popup settings | `extension/popup/sitesettings.js` |
-| Generator history recording | `extension/background.js`, `extension/bg-page.js` (`record_generated_password`), `crates/gitpass-host/src/handler.rs`, `apps/desktop/gui-core/src/api.rs` (`record_generated_password`, `rememberGeneratedPasswords`) |
+| Generator history recording | `extension/background.js`, `extension/bg-page.js` (`record_generated_password`), `crates/gitpass-host/src/handler.rs`, `apps/desktop/gui-core/src/api/app/tools.rs` (`record_generated_password`, `rememberGeneratedPasswords`) |
 | Unlocking and Secret Key handling | README "Browser extension" section, `crates/gitpass-host/README.md` |

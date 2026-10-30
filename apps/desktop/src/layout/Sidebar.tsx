@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useEffect, useRef, useState } from 'react';
-import { Archive, Check, ChevronDown, ChevronRight, KeyRound, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, PanelLeftOpen, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
+import { Archive, Check, ChevronDown, ChevronRight, KeyRound, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, PanelLeftOpen, Plus, Search, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
 import { VaultIcon } from '../features/home/vaultIcons';
 import { DeleteVaultDialog, EditVaultDialog } from '../features/home/VaultDialogs';
 import { NewVaultDialog } from '../features/home/NewVaultDialog';
@@ -11,6 +11,8 @@ import type { Filter } from '../api/types';
 import { features } from '../features/registry';
 import { useSidebarCounts, useVaultsAndTags } from '../lib/data';
 import { useApp, type Route } from '../lib/store';
+import { useItemsUI } from '../features/items';
+import { useSavedSearches, matchSavedSearch, type SavedSearch } from '../features/items/savedSearches';
 import { cn } from '../lib/utils';
 import { useT, useI18n, translate, type Key } from '../i18n';
 import { OnboardingBadge } from '../features/onboarding';
@@ -90,14 +92,14 @@ const NavItem = React.forwardRef<
 NavItem.displayName = 'NavItem';
 
 const SECTIONS_KEY = 'gitpass.sidebar.collapsedSections';
-export type SectionId = 'vaults' | 'tags';
-/** Collapsed Vaults/Tags sections, remembered on this device only (localStorage, never written to the vault). */
+export type SectionId = 'vaults' | 'tags' | 'searches';
+/** Collapsed Vaults/Tags/Searches sections, remembered on this device only (localStorage, never written to the vault). */
 function loadCollapsed(): Record<SectionId, boolean> {
   try {
     const raw = JSON.parse(localStorage.getItem(SECTIONS_KEY) ?? '{}') as Partial<Record<SectionId, unknown>>;
-    return { vaults: raw.vaults === true, tags: raw.tags === true };
+    return { vaults: raw.vaults === true, tags: raw.tags === true, searches: raw.searches === true };
   } catch {
-    return { vaults: false, tags: false };
+    return { vaults: false, tags: false, searches: false };
   }
 }
 function useCollapsedSections() {
@@ -330,6 +332,190 @@ function SidebarTagItem({
   );
 }
 
+function SidebarSavedSearchItem({
+  search,
+  active,
+  isEditing,
+  menuOpen,
+  count,
+  isMissingFilter,
+  onOpenMenu,
+  onCloseMenu,
+  onStartRename,
+  onCancelRename,
+  onRename,
+  onSelect,
+  onDelete,
+}: {
+  search: SavedSearch;
+  active: boolean;
+  isEditing: boolean;
+  menuOpen: boolean;
+  count?: number;
+  isMissingFilter: boolean;
+  onOpenMenu: () => void;
+  onCloseMenu: () => void;
+  onStartRename: () => void;
+  onCancelRename: () => void;
+  onRename: (newName: string) => void;
+  onSelect: () => void;
+  onDelete: () => void;
+}) {
+  const t = useT();
+  const rail = React.useContext(RailContext);
+  const [val, setVal] = useState(search.name);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const committingRef = useRef(false);
+
+  useEffect(() => {
+    if (isEditing) {
+      setVal(search.name);
+      committingRef.current = false;
+      setTimeout(() => {
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }, 0);
+    }
+  }, [isEditing, search.name]);
+
+  const commit = () => {
+    committingRef.current = true;
+    const trimmed = val.trim();
+    if (!trimmed || trimmed === search.name) {
+      onCancelRename();
+      committingRef.current = false;
+      buttonRef.current?.focus();
+      return;
+    }
+    onRename(trimmed);
+    committingRef.current = false;
+    buttonRef.current?.focus();
+  };
+
+  if (isEditing) {
+    return (
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          commit();
+        }}
+        className="flex w-full items-center gap-2 rounded-md bg-active px-2 py-1 text-[14px]"
+        data-testid="sidebar-saved-search-rename"
+      >
+        <Search size={14} className="shrink-0 text-accent" />
+        <input
+          ref={inputRef}
+          type="text"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+              commit();
+            } else if (e.key === 'Escape') {
+              e.preventDefault();
+              e.stopPropagation();
+              onCancelRename();
+              buttonRef.current?.focus();
+            }
+          }}
+          onBlur={() => {
+            if (!committingRef.current) {
+              onCancelRename();
+            }
+          }}
+          className="min-w-0 flex-1 rounded border border-accent bg-panel px-1.5 py-0.5 text-[14px] text-fg outline-none ring-1 ring-accent"
+          autoFocus
+          aria-label={t('savedSearch.renameAria', { name: search.name })}
+        />
+      </form>
+    );
+  }
+
+  return (
+    <div
+      className="group/search relative"
+      data-testid="sidebar-saved-search"
+      data-search-id={search.id}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onOpenMenu();
+      }}
+    >
+      <NavItem
+        ref={buttonRef}
+        active={active}
+        icon={<Search size={14} className={cn(active ? 'text-accent' : isMissingFilter ? 'text-muted' : 'text-accent/80')} />}
+        label={search.name}
+        onClick={onSelect}
+        className={cn(isMissingFilter && 'opacity-60 text-muted')}
+        right={
+          count === undefined ? undefined : (
+            <span className="flex w-8 justify-end group-hover/search:invisible">
+              <Count n={count} />
+            </span>
+          )
+        }
+        onKeyDown={(e) => {
+          if (e.key === 'F2') {
+            e.preventDefault();
+            onStartRename();
+          } else if (e.key === 'Delete' || e.key === 'Backspace') {
+            e.preventDefault();
+            onDelete();
+          } else if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
+            e.preventDefault();
+            onOpenMenu();
+          }
+        }}
+      />
+      <DropdownMenu
+        open={menuOpen}
+        onOpenChange={(o) => {
+          if (o) onOpenMenu();
+          else {
+            onCloseMenu();
+            buttonRef.current?.focus();
+          }
+        }}
+      >
+        <DropdownMenuTrigger asChild>
+          <button
+            aria-label={`${t('savedSearch.more')}: ${search.name}`}
+            className={cn(
+              'absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:bg-active hover:text-fg',
+              rail && !menuOpen ? 'hidden' : menuOpen ? 'visible' : 'invisible group-hover/search:visible focus:visible'
+            )}
+          >
+            <MoreHorizontal size={14} />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          <DropdownMenuItem
+            onSelect={() => {
+              setTimeout(() => {
+                onStartRename();
+              }, 0);
+            }}
+          >
+            <Pencil size={14} />
+            {t('savedSearch.rename')}
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            className="text-danger"
+            onSelect={onDelete}
+          >
+            <Trash2 size={14} />
+            {t('savedSearch.delete')}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 function SidebarVaultItem({
   vault,
   active,
@@ -461,6 +647,69 @@ export function Sidebar() {
   const [mergePrompt, setMergePrompt] = useState<{ oldTag: string; newTag: string } | null>(null);
   const [delTag, setDelTag] = useState<string | null>(null);
 
+  // Saved searches state
+  const { searches, activeSearchId, setActiveSearchId, renameSearch, deleteSearch, restoreSearch } = useSavedSearches();
+  const [editingSearchId, setEditingSearchId] = useState<string | null>(null);
+  const [menuForSearch, setMenuForSearch] = useState<string | null>(null);
+
+  const handleSelectSearch = (s: SavedSearch) => {
+    const hasVault = s.vaultId && vaults.some((v) => v.id === s.vaultId);
+    const hasTag = s.tag && tags.includes(s.tag);
+
+    useItemsUI.getState().setQuery(s.query ?? '');
+    useItemsUI.getState().setCategory(s.category ?? null);
+
+    let filter: Filter;
+    if (hasVault) {
+      filter = { kind: 'vault', vaultId: s.vaultId, ...(hasTag ? { tag: s.tag } : {}), sort: 'updated' };
+    } else if (hasTag) {
+      filter = { kind: 'tag', tag: s.tag, sort: 'updated' };
+    } else {
+      filter = { kind: 'all', sort: 'updated' };
+    }
+
+    setRoute({ name: 'items', filter });
+    setActiveSearchId(s.id);
+  };
+
+  const isSearchActive = (s: SavedSearch): boolean => {
+    if (activeSearchId === s.id) return true;
+    if (route.name !== 'items') return false;
+    const currentQuery = useItemsUI.getState().query.trim();
+    const currentCategory = useItemsUI.getState().category;
+    if (currentQuery !== (s.query?.trim() ?? '')) return false;
+    if (currentCategory !== (s.category ?? null)) return false;
+    const hasVault = s.vaultId && vaults.some((v) => v.id === s.vaultId);
+    const hasTag = s.tag && tags.includes(s.tag);
+    if (hasVault) {
+      if (route.filter.kind !== 'vault' || route.filter.vaultId !== s.vaultId) return false;
+      if (hasTag && route.filter.tag !== s.tag) return false;
+    } else if (hasTag) {
+      if (route.filter.kind !== 'tag' || route.filter.tag !== s.tag) return false;
+    } else {
+      if (route.filter.kind !== 'all') return false;
+    }
+    return true;
+  };
+
+  const handleDeleteSearch = (s: SavedSearch) => {
+    const idx = searches.findIndex((item) => item.id === s.id);
+    const deleted = deleteSearch(s.id);
+    if (!deleted) return;
+    const lang = useI18n.getState().lang;
+    toast(translate(lang, 'savedSearch.deleted', { name: deleted.name }), {
+      duration: 5000,
+      action: {
+        label: translate(lang, 'bulk.undo'),
+        altText: translate(lang, 'bulk.undo'),
+        onClick: () => {
+          restoreSearch(deleted, idx);
+          toast(translate(lang, 'bulk.undone'));
+        },
+      },
+    });
+  };
+
   const extraTop = features.filter((f) => f.sidebar?.section === 'top' && f.id !== 'items' && f.route);
   const extraBottom = features.filter((f) => f.sidebar?.section === 'bottom' && f.route);
 
@@ -551,6 +800,61 @@ export function Sidebar() {
             onPromptDelete={() => setDelTag(tName)}
           />
         ))}
+
+        {searches.length > 0 && (
+          rail ? (
+            <Tooltip content={searches.map((s) => s.name).join(', ')} side="right">
+              <button
+                type="button"
+                aria-label={`${t('nav.savedSearches')}: ${searches.map((s) => s.name).join(', ')}`}
+                data-testid="sidebar-rail-saved-searches"
+                onClick={() => handleSelectSearch(searches.find(isSearchActive) ?? searches[0])}
+                className={cn(
+                  'flex h-9 w-9 items-center justify-center rounded-md transition-colors',
+                  searches.some(isSearchActive)
+                    ? 'bg-accent/15 text-accent ring-1 ring-inset ring-accent'
+                    : 'text-muted hover:bg-hover hover:text-fg'
+                )}
+              >
+                <Search size={16} />
+              </button>
+            </Tooltip>
+          ) : (
+            <>
+              <SectionHeader
+                label={t('nav.savedSearches').toUpperCase()}
+                name={t('nav.savedSearches')}
+                expanded={!collapsed.searches}
+                onToggle={(o) => setSectionCollapsed('searches', !o)}
+              />
+              {!collapsed.searches &&
+                searches.map((s) => (
+                  <SidebarSavedSearchItem
+                    key={s.id}
+                    search={s}
+                    active={isSearchActive(s)}
+                    isEditing={editingSearchId === s.id}
+                    menuOpen={menuForSearch === s.id}
+                    count={counts.items ? counts.items.filter((it) => matchSavedSearch(it, s)).length : 0}
+                    isMissingFilter={Boolean(
+                      (s.vaultId && !vaults.some((v) => v.id === s.vaultId)) ||
+                      (s.tag && !tags.includes(s.tag))
+                    )}
+                    onOpenMenu={() => setMenuForSearch(s.id)}
+                    onCloseMenu={() => setMenuForSearch(null)}
+                    onStartRename={() => setEditingSearchId(s.id)}
+                    onCancelRename={() => setEditingSearchId(null)}
+                    onRename={(newName) => {
+                      renameSearch(s.id, newName);
+                      setEditingSearchId(null);
+                    }}
+                    onSelect={() => handleSelectSearch(s)}
+                    onDelete={() => handleDeleteSearch(s)}
+                  />
+                ))}
+            </>
+          )
+        )}
       </nav>
 
       <div className={cn('border-t border-border p-2', rail && 'flex flex-col gap-0.5 px-1.5')}>

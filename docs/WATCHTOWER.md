@@ -4,8 +4,8 @@ Watchtower is gitpass's security audit. The CLI (`gitpass audit`) prints the fin
 shows the same findings plus a 0–100 score. Everything is offline unless you opt in to the Have I Been
 Pwned (HIBP) breach check.
 
-- Checks: `crates/gitpass-core/src/audit.rs`
-- Desktop score: `watchtower()` in `apps/desktop/gui-core/src/api.rs`
+- Checks: `crates/gitpass-core/src/audit/` (the shared score is `score()` in `audit/mod.rs`)
+- Desktop score: `watchtower()` in `apps/desktop/gui-core/src/api/app/tools.rs`, with weighting from core `audit::score`
 - Score bands and gauge: `apps/desktop/src/features/watchtower/score.ts`
 - Offline 2FA site list: `crates/gitpass-core/data/mfa-sites.tsv`
 
@@ -126,9 +126,9 @@ password:
 - The retired password value itself never appears in the report, the CLI output, the desktop or
   extension UI, or logs — only the source title and the retirement date. Like every other kind, it
   can be ignored per item (`reused_old_password` in `ignored_findings`).
-- Score: the desktop score counts a `reused_old_password` item at half the weight of a `reused`
-  item (40 instead of 80 in the `bad` term), and only when the item is not already counted as
-  weak, breached or reused; the extension host score does the same. A retired password is weaker
+- Score: the shared core `audit::score()` (used by the desktop and the extension host) counts a
+  `reused_old_password` item at half the weight of a `reused` item (`SCORE_WEIGHT_REUSED_OLD_PASSWORD`
+  = 40 instead of 80), and only when the item is not already counted as weak, breached or reused. A retired password is weaker
   evidence than a live shared password — it may have been exposed in a past breach, but it is no
   longer the other login's current secret.
 
@@ -291,7 +291,8 @@ bad          = number of distinct items flagged Weak, Reused or Pwned   (union: 
 with_pw      = items with a non-empty password
 items        = all audited items (every non-passkey item, including password-less ones)
 missing_totp = items flagged MissingTotp or TotpAvailable (2FA not set up; each item counts once)
-penalty      = 80 × bad / with_pw  +  10 × old / with_pw  +  10 × missing_totp / items
+reused_old   = items flagged ReusedOldPassword that are not already in `bad`
+penalty      = 80 × bad / with_pw  +  40 × reused_old / with_pw  +  10 × old / with_pw  +  10 × missing_totp / items
 score        = round(100 − penalty), clamped to 0…100
 ```
 
@@ -320,6 +321,10 @@ without a TOTP secret counts as missing TOTP (on TOTP-capable sites such as GitH
 | All ten use the same weak password, none has TOTP | 10 | 0 | 10 | 80 + 10 | 10 |
 
 (`missing_totp / items = 10 / 10 = 1`, contributing 10 points whenever every login lacks TOTP.)
+
+## Score history
+
+The desktop Watchtower page shows the score over time as a sparkline (`apps/desktop/src/features/watchtower/ScoreHistory.tsx`, with the logic in `history.ts`). Each time the page loads a fresh Watchtower report, it records one point for the current local day: the score plus per-finding counts only — no item ids, titles or other vault content. At most one point per day is kept (a later load the same day replaces the earlier one), and points older than 90 days are dropped. The sparkline offers a 30/90-day range and a weekly delta against the latest point at least 7 days old. History is per-device: it lives in the browser's localStorage under `gitpass.watchtowerHistory` and is never written to the vault repo or synced.
 
 ## Limits
 

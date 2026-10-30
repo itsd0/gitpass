@@ -5,8 +5,13 @@ use std::path::Path;
 
 pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
     match cmd {
-        Cmd::Audit { vault, hibp, max_age_days, expiring_days, unused_months, json, include_ignored } => {
+        Cmd::Audit { vault, hibp, max_age_days, expiring_days, unused_months, json, include_ignored, fail_under } => {
             use gitpass_core::{audit, passkey, Category};
+            if let Some(n) = fail_under {
+                if *n > 100 {
+                    return Err(anyhow::anyhow!("--fail-under must be between 0 and 100, got {n}"));
+                }
+            }
             let s = unlock(cli, root)?;
             let vids: Vec<(String, String)> = match vault {
                 Some(v) => { let id = s.resolve_vault(v)?; vec![(id.clone(), s.vault_meta(&id)?.name.clone())] }
@@ -31,11 +36,17 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             let opts = audit::AuditOpts { max_age_days: *max_age_days, expiring_days: *expiring_days, include_ignored: *include_ignored,
                 unused_months: (*unused_months > 0).then_some(*unused_months), last_used: s.all_last_used(), ..Default::default() };
             let r = audit::audit_with_passkeys(&all, &passkeys, &opts, if *hibp { Some(&client) } else { None })?;
+            // Shared Watchtower score: same core function and same predicate the
+            // desktop app and extension host use, so the CLI number agrees with the app.
+            let items_with_password = all.iter().filter(|(_, _, rec)| audit::is_score_password_item(rec)).count();
+            let score = audit::score(&r, items_with_password);
             if *json {
-                println!("{}", serde_json::to_string_pretty(&r)?);
-                return Ok(());
-            }
-            println!("audited {} item(s) in {} vault(s){}", r.items_checked, vids.len(), if *hibp { " (with HIBP)" } else { "" });
+                let mut v = serde_json::to_value(&r)?;
+                v["score"] = serde_json::json!(score);
+                v["items_with_password"] = serde_json::json!(items_with_password);
+                println!("{}", serde_json::to_string_pretty(&v)?);
+            } else {
+            println!("audited {} item(s) in {} vault(s){}  score: {score}/100", r.items_checked, vids.len(), if *hibp { " (with HIBP)" } else { "" });
             let unused_label = if *unused_months > 0 { format!(">{unused_months}mo") } else { "off".to_string() };
             println!("  weak: {}  reused: {} ({} group(s))  reused old passwords: {}  duplicates: {}  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}  weak SSH keys: {}  unused ({unused_label}): {}  rotation due: {}  rotation soon: {}  ignored: {}",
                 r.weak, r.reused, r.reused_groups, r.reused_old_password, r.duplicates, r.old, r.expired, r.expiring_soon, r.insecure_urls, r.missing_totp, r.totp_available, r.passkey_available,
@@ -54,6 +65,12 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
                 for f in &r.ignored_per_item {
                     println!("\n[{}] {} ({}) [ignored]", f.vault, f.title, &f.id[..f.id.len().min(8)]);
                     for x in &f.findings { println!("  - {x} (ignored)"); }
+                }
+            }
+            }
+            if let Some(threshold) = fail_under {
+                if score < *threshold {
+                    return Err(anyhow::anyhow!("audit score {score}/100 is below --fail-under {threshold}"));
                 }
             }
         }

@@ -66,7 +66,7 @@ function handle(m) {
     case 'match': needUnlock(); return { items: matches(origin).map(pub) };
     case 'get_item': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
       const fields = i.fields ? i.fields : (i._u ? [{ name: 'username', label: 'username', value: i._u, concealed: false, kind: 'text' }, { name: 'password', label: 'password', concealed: true, kind: 'password' }] : []);
-      return { item: { ...pub(i), fields, tags: i.tags || [], created_at: i.created_at || now, attachments: i.attachments || [] } }; }
+      return { item: { ...pub(i), fields, tags: i.tags || [], created_at: i.created_at || now, attachments: i.attachments || [], related_items: i.related_items || [] } }; }
     case 'site_icon': { needUnlock();
       const ctrl = readJson(CTRL, {});
       if (ctrl.website_icons === false) {

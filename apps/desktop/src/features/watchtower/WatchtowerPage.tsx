@@ -38,6 +38,8 @@ import {
 import { useApp } from "../../lib/store";
 import { useSettings } from "../settings/useSettings";
 import { loadHistory, recordReport, type ScorePoint } from "./history";
+import { CHECKUP_RELOAD_EVENT } from "./SecurityCheckup";
+import { buildCheckupQueue } from "./checkup";
 import { ScoreHistory } from "./ScoreHistory";
 import { gaugeDash, issueIds, scoreBand, type IssueKey } from "./score";
 import { cn } from "../../lib/utils";
@@ -185,6 +187,13 @@ export function WatchtowerPage() {
     if (ready) load(hibp);
   }, [hibp, unusedMonths, ready, load]);
 
+  // Reload after the security checkup changes findings (#401).
+  useEffect(() => {
+    const onReload = () => load(hibp);
+    window.addEventListener(CHECKUP_RELOAD_EVENT, onReload);
+    return () => window.removeEventListener(CHECKUP_RELOAD_EVENT, onReload);
+  }, [load, hibp]);
+
   const open = (id: string) => {
     const it = titles[id];
     setRoute({ name: "items", filter: it ? { kind: "vault", vaultId: it.vaultId } : { kind: "all" } });
@@ -314,9 +323,16 @@ export function WatchtowerPage() {
     <div className="mx-auto max-w-5xl space-y-6 p-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">{t("nav.watchtower")}</h1>
-        <Button variant="ghost" size="sm" disabled={busy} onClick={() => load(hibp)}>
-          <RefreshCw size={14} /> {t("watchtower.recheck")}
-        </Button>
+        <div className="flex items-center gap-2">
+          {report && buildCheckupQueue(report).length > 0 && (
+            <Button size="sm" onClick={() => useApp.getState().openModal('security-checkup')} data-testid="start-checkup">
+              <ShieldCheck size={14} /> {t("watchtower.startCheckup")}
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" disabled={busy} onClick={() => load(hibp)}>
+            <RefreshCw size={14} /> {t("watchtower.recheck")}
+          </Button>
+        </div>
       </div>
       {err && (
         <p role="alert" className="text-sm text-danger">
