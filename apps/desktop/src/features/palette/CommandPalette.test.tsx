@@ -48,9 +48,9 @@ describe('recently used items', () => {
     const options = screen.getAllByRole('option');
     expect(options.slice(0, 8).map((o) => o.textContent)).toEqual([10, 9, 8, 7, 6, 5, 4, 3].map((n) => expect.stringContaining(`Rec ${n}`)));
     expect(screen.getAllByTestId(/^category-icon-/)).toHaveLength(8);
-    const headings = screen.getAllByText(/^(Recently used|Commands)$/).map((h) => h.textContent);
-    expect(headings).toEqual(['Recently used', 'Commands']);
-    expect(listItems).toHaveBeenCalledWith({ filter: { kind: 'all', sort: 'recent' } });
+    expect(screen.queryByText('Recently used')).toBeNull();
+    expect(screen.getAllByText('Commands')).toHaveLength(1);
+    expect(listItems).toHaveBeenCalledWith({ filter: { kind: 'all' } });
   });
 
   it('falls back to recently edited items when nothing was used yet', async () => {
@@ -167,7 +167,6 @@ describe('palette localization', () => {
     vi.spyOn(api, 'getItem').mockResolvedValue(detail(base));
     await renderPalette([base]);
 
-    expect(screen.getByText(translate(lang, 'items.recentlyUsed'))).toBeTruthy();
     expect(screen.getByText(translate(lang, 'palette.commands'))).toBeTruthy();
     expect(screen.queryByText('Recently used')).toBeNull();
     expect(screen.queryByText('Commands')).toBeNull();

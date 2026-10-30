@@ -14,7 +14,6 @@ const SCRIPTS = [
   'popup/newitem.js',
   'popup/generator.js',
   'popup/skeletons.js',
-  'popup/recent.js',
   'popup/totp-list.js',
   'popup/detail.js',
   'popup/edit.js',

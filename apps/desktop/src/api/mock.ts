@@ -486,7 +486,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       }
     }
     const sort = filter.sort ?? 'updated';
-    xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : sort === 'recent' ? (b.lastUsed ?? 0) - (a.lastUsed ?? 0) || a.title.localeCompare(b.title) : b.updatedAt.localeCompare(a.updatedAt));
+    xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : b.updatedAt.localeCompare(a.updatedAt));
     return delay(xs.map(summary));
   },
   get_item: (a: { itemId: string }) => {

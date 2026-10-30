@@ -455,15 +455,6 @@ if (filter === "suggested") base = (suggested || []).filter((i) => !i.archived &
     return it.subtitle || host || '—';
   }
 
-  /** Extract up to `max` recently used items, sorted newest first. */
-  function getRecentlyUsed(all, max = 5) {
-    if (!Array.isArray(all)) return [];
-    return all
-      .filter((i) => i && i.last_used && i.last_used > 0)
-      .sort((a, b) => b.last_used - a.last_used)
-      .slice(0, max);
-  }
-
   /** Severity token for a Watchtower finding kind: danger or warn. */
   function findingSeverity(kind) {
     if (kind === 'weak' || kind === 'reused' || kind === 'pwned' || kind === 'expired') return 'danger';
@@ -601,7 +592,7 @@ if (filter === "suggested") base = (suggested || []).filter((i) => !i.archived &
     return (n / 1048576).toFixed(1) + ' MB';
   }
 
-  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, collectTags, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, charKind, secretRuns, fillKind, primarySecretField, quickActions, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache, parseDeletedAt, daysUntilPurge, daysDeletedAgo, formatTrashSubtitle, PURGE_AFTER_DAYS, formatSize };
+  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, collectTags, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, charKind, secretRuns, fillKind, primarySecretField, quickActions, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getMonogram, monogramIcon, createIconCache, parseDeletedAt, daysUntilPurge, daysDeletedAgo, formatTrashSubtitle, PURGE_AFTER_DAYS, formatSize };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

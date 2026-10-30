@@ -757,7 +757,6 @@ function applyFilter(selectFirst) {
   let idx = prevId ? S.rows.findIndex((r) => r.id === prevId) : -1;
   if (idx < 0 && (selectFirst || prevId)) idx = S.rows.length ? 0 : -1;
   $('list').scrollTop = 0;
-  renderRecent();
   renderList();
   select(idx);
   fetchFindingsForVisibleRows();
@@ -1145,7 +1144,6 @@ if (typeof module !== 'undefined' && module.exports) {
     send,
     loadData,
     select,
-    renderRecent,
     S,
   };
 }
