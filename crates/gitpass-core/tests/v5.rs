@@ -38,6 +38,9 @@ fn sample(cat: Category) -> Vec<Section> {
         Category::SshKey => vec![sec("ssh", vec![f("private", Concealed, "-----FAKE KEY-----"), f("public", Text, "ssh-ed25519 AAAA fake")])],
         Category::Wifi => vec![sec("wifi", vec![f("ssid", Text, "FakeNet"), f("wifi_password", Concealed, "FAKE-wifi")])],
         Category::Passkey => vec![sec("main", vec![f("rp_id", Text, "example.invalid"), f("credential_id", Text, "AAAA"), f("private_key", Concealed, "FAKE")])],
+        Category::BankAccount => vec![sec("main", vec![f("bank_name", Text, "Example Bank"), f("account_number", Concealed, "1234567890"), f("pin", Concealed, "1234")])],
+        Category::Server => vec![sec("main", vec![f("url", Url, "https://srv.example.invalid"), f("username", Text, "root"), f("password", Concealed, "FAKE-srv-pass")])],
+        _ => vec![],
     }
 }
 
@@ -532,4 +535,68 @@ fn restore_version_keeps_attachment_tombstones() {
     assert!(!m.attachments.iter().any(|a| a.id == att.id), "merge must not resurrect a removed attachment");
     let (m2, _) = merge_records(&stale, &restored);
     assert!(!m2.attachments.iter().any(|a| a.id == att.id));
+}
+
+
+#[test]
+fn bank_account_and_server_roundtrip_merge_and_compat() {
+    let (_d, _sk, s, v) = vault();
+
+    // 1. Bank Account creation, store round-trip, export/import
+    let bank_rec = rec(Category::BankAccount, "Chase Checking", Category::BankAccount.field_template());
+    let bank_sec = bank_rec.view_sections();
+    assert_eq!(bank_sec[0].id, "main");
+    assert!(bank_sec[0].fields.iter().any(|f| f.id == "account_number" && f.kind == FieldKind::Concealed));
+    assert!(bank_sec[0].fields.iter().any(|f| f.id == "pin" && f.kind == FieldKind::Concealed));
+    assert!(bank_sec[0].fields.iter().any(|f| f.id == "routing_number"));
+
+    let bank_id = s.add_record(&v, bank_rec.clone()).unwrap();
+    let (_, read_bank) = s.read_record(&v, &bank_id).unwrap();
+    assert_eq!(read_bank.category, Category::BankAccount);
+    assert_eq!(read_bank.item.title, "Chase Checking");
+
+    // 2. Server creation, store round-trip, export/import
+    let server_rec = rec(Category::Server, "Production DB", Category::Server.field_template());
+    let srv_sec = server_rec.view_sections();
+    assert_eq!(srv_sec[0].id, "main");
+    assert!(srv_sec[0].fields.iter().any(|f| f.id == "password" && f.kind == FieldKind::Concealed));
+    assert!(srv_sec[0].fields.iter().any(|f| f.id == "admin_console_url"));
+
+    let server_id = s.add_record(&v, server_rec.clone()).unwrap();
+    let (_, read_srv) = s.read_record(&v, &server_id).unwrap();
+    assert_eq!(read_srv.category, Category::Server);
+    assert_eq!(read_srv.item.title, "Production DB");
+
+    // 3. gitpass-json export / import round-trip
+    let exp = gitpass_core::import::export_records_json(&[read_bank.clone(), read_srv.clone()]).unwrap();
+    let parsed = gitpass_core::import::parse_bytes(gitpass_core::import::ImportFormat::GitpassJson, exp.as_bytes(), None).unwrap();
+    assert_eq!(parsed.items.len(), 2);
+    assert_eq!(parsed.items[0].category, Category::BankAccount);
+    assert_eq!(parsed.items[1].category, Category::Server);
+
+    // 4. Backward compatibility: unknown future category deserializes as Category::Other and merges without data loss
+    let future_json = r#"{
+        "title": "Future Item",
+        "updated_at": "1700000000",
+        "category": "future_quantum_key",
+        "sections": [{
+            "id": "main",
+            "title": null,
+            "fields": [
+                { "id": "qkey", "label": "quantum key", "kind": "concealed", "value": "SECRET-Q-999" }
+            ]
+        }],
+        "tags": ["quantum"]
+    }"#;
+    let future_rec: ItemRecord = serde_json::from_str(future_json).unwrap();
+    assert_eq!(future_rec.category, Category::Other);
+    assert_eq!(future_rec.item.title, "Future Item");
+    assert_eq!(future_rec.sections[0].fields[0].value.as_deref(), Some("SECRET-Q-999"));
+
+    let mut local_rec = future_rec.clone();
+    local_rec.item.title = "Future Item Renamed".into();
+    let (merged, _) = merge_records(&local_rec, &future_rec);
+    assert_eq!(merged.item.title, "Future Item Renamed");
+    assert_eq!(merged.sections[0].fields[0].value.as_deref(), Some("SECRET-Q-999"));
+    assert_eq!(merged.tags, vec!["quantum".to_string()]);
 }

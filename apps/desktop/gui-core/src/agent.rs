@@ -379,6 +379,7 @@ impl Agent {
                 }
                 let input: crate::api::ItemInput = serde_json::from_value(v).map_err(|e| err("bad_request", e.to_string()))?;
                 if input.category == Category::Passkey { return Err(err("bad_request", "passkeys are created by websites")); }
+                if input.category == Category::Other { return Err(err("bad_request", "invalid category")); }
                 let r = self.app.create_item(&input).map_err(|e| { let m = format!("{e:#}"); if m.contains("revoked") { err("denied", m) } else if m.contains("locked") { e } else { err("bad_request", m) } })?;
                 self.poll_state();
                 Ok(json!({"item_id": format!("{}:{}", input.vault_id, r.id), "title": r.title}))
@@ -439,6 +440,22 @@ impl Agent {
                 })?;
                 self.poll_state();
                 Ok(json!({"favorite": fav}))
+            }
+            // Same soft delete as the GUI's Recently Deleted (deleted_at + 30-day purge).
+            "trash_item" | "restore_item" => {
+                if source != "popup" { return Err(err("denied", format!("{cmd} is allowed only from the popup"))); }
+                let (vid, iid) = split_id(&req("item_id")?)?;
+                if cmd == "trash_item" {
+                    self.record(&vid, &iid)?; // live items only; already-deleted ones are not_found
+                    self.app.delete_item(&vid, &iid).map_err(host_err)?;
+                } else {
+                    // The deleted record must still exist; anyhow's Display hides the io error, so map it here.
+                    self.app.state.with(|x| x.session.read_record(&vid, &iid).map(|_| ())
+                        .map_err(|e| err("not_found", format!("item not found: {e:#}"))))?;
+                    self.app.restore_item(&vid, &iid).map_err(host_err)?;
+                }
+                self.poll_state();
+                Ok(json!({"ok": true}))
             }
             "generate" => gitpass_host::protocol::generate(q),
             "record_generated_password" => {

@@ -119,6 +119,35 @@ pub fn subtitle(r: &ItemRecord) -> String {
             .join(" ")
         }),
         Category::Wifi => field_val(r, &["ssid"]).unwrap_or_default(),
+        Category::BankAccount => {
+            let acct = field_val(r, &["account_number", "account_no", "account"]);
+            let holder = field_val(r, &["account_holder", "holder", "owner"]);
+            let bank = field_val(r, &["bank_name", "bank"]);
+            let acct_type = field_val(r, &["account_type", "type"]);
+            let l4 = acct
+                .as_deref()
+                .map(|s| s.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>())
+                .filter(|d| d.len() >= 4)
+                .map(|d| format!("•••• {}", &d[d.len() - 4..]));
+            match (acct_type, l4, bank, holder) {
+                (Some(t), Some(m), _, _) => format!("{t} {m}"),
+                (_, Some(m), Some(b), _) => format!("{b} {m}"),
+                (_, Some(m), _, _) => m,
+                (_, _, Some(b), _) => b,
+                (_, _, _, Some(h)) => h,
+                _ => String::new(),
+            }
+        }
+        Category::Server => {
+            let u = nonempty(&r.item.username).map(String::from).or_else(|| field_val(r, &["username"]));
+            let h = nonempty(&r.item.url).map(String::from).or_else(|| field_val(r, &["url", "hostname"]));
+            match (u, h) {
+                (Some(u), Some(h)) => format!("{u}@{h}"),
+                (Some(u), _) => u,
+                (_, Some(h)) => h,
+                _ => String::new(),
+            }
+        }
         _ => fields_of(r)
             .into_iter()
             .find(|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty()))
@@ -170,6 +199,13 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord, last_used: Opti
         } else if k == "card_number" {
             if let Some(d) = f.value.as_deref().and_then(card_digits) {
                 o["masked"] = json!(card_mask(&d));
+            }
+        } else if r.category == Category::BankAccount && (f.id == "account_number" || f.id == "account_no") {
+            if let Some(v) = &f.value {
+                let d: String = v.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+                if d.len() >= 4 {
+                    o["masked"] = json!(format!("•••• •••• •••• {}", &d[d.len() - 4..]));
+                }
             }
         }
         fields.push(o);

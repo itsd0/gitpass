@@ -535,6 +535,25 @@ impl Host {
                 self.audit_cache = None;
                 Ok(json!({"favorite": fav}))
             }
+            // Same soft delete as the desktop's Recently Deleted (deleted_at + 30-day purge).
+            // Destructive write: popup only, never a content script.
+            "trash_item" | "restore_item" => {
+                if req.get("source").and_then(Value::as_str) != Some("popup") {
+                    return Err(coded(code::DENIED, format!("{cmd} is allowed only from the popup")));
+                }
+                let (vid, iid) = split_id(arg_str(req, "item_id")?)?;
+                let s = self.sess()?;
+                // Restore must see the deleted record, so read it directly instead of `record()`.
+                let (_, r) = s.read_record(vid, iid).map_err(|e| coded(code::NOT_FOUND, format!("item not found: {e:#}")))?;
+                if cmd == "trash_item" {
+                    if r.deleted_at.is_some() { return Err(coded(code::NOT_FOUND, "item not found")); }
+                    s.soft_delete(vid, iid)?;
+                } else {
+                    s.restore(vid, iid)?;
+                }
+                self.audit_cache = None;
+                Ok(json!({"ok": true}))
+            }
             "generate" => crate::protocol::generate(req),
             "record_generated_password" => {
                 let pw = arg_str(req, "password")?;
@@ -698,6 +717,7 @@ pub fn record_from_input(v: &Value) -> Result<(Option<String>, ItemRecord)> {
         #[serde(default)] url: Option<String>, #[serde(default)] tags: Option<Vec<String>> }
     let i: Input = serde_json::from_value(v.clone()).map_err(|e| coded(code::BAD_REQUEST, format!("bad item: {e}")))?;
     if i.category == Category::Passkey { return Err(coded(code::BAD_REQUEST, "passkeys are created by websites")); }
+    if i.category == Category::Other { return Err(coded(code::BAD_REQUEST, "invalid category")); }
     if i.title.trim().is_empty() { return Err(coded(code::BAD_REQUEST, "title is required")); }
     let mut ids = std::collections::BTreeSet::new();
     for s in &i.sections { for f in &s.fields {

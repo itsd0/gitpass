@@ -21,6 +21,15 @@ impl a::Clipboard for SysClipboard {
     fn set_marked(&self, s: &str, markers: gitpass_pasteboard::PasteboardMarkers) -> anyhow::Result<()> {
         gitpass_pasteboard::write(s, markers)
     }
+    fn get_image(&self) -> Option<a::ClipboardImage> {
+        let mut c = arboard::Clipboard::new().ok()?;
+        let img = c.get_image().ok()?;
+        Some(a::ClipboardImage {
+            width: img.width,
+            height: img.height,
+            bytes: img.bytes.into_owned(),
+        })
+    }
 }
 
 #[tauri::command] pub fn status(s: State<App>) -> R<a::UnlockState> { s.status().map_err(e) }
@@ -46,6 +55,18 @@ impl a::Clipboard for SysClipboard {
 /// Copies in Rust; cleared after clipboardClearSecs only if the clipboard still holds our value.
 #[tauri::command] pub fn copy_field(s: State<App>, vault_id: String, item_id: String, field_id: String) -> R<()> { s.copy_field(&vault_id, &item_id, &field_id).map_err(e) }
 #[tauri::command] pub fn totp_now(s: State<App>, vault_id: String, item_id: String) -> R<a::TotpNow> { s.totp_now(&vault_id, &item_id).map_err(e) }
+#[tauri::command(async)]
+pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>) -> R<a::ScannedTotp> {
+    match source.as_str() {
+        "screen" => s.scan_totp_screen().map_err(e),
+        "clipboard" => s.scan_totp_clipboard().map_err(e),
+        "image" => {
+            let data = data_base64.ok_or_else(|| "missing image data".to_string())?;
+            s.scan_totp_image(&data).map_err(e)
+        }
+        other => Err(format!("unknown scan source {other}")),
+    }
+}
 #[tauri::command] pub fn create_item(s: State<App>, input: a::ItemInput) -> R<a::ItemSummary> { s.create_item(&input).map_err(e) }
 #[tauri::command] pub fn update_item(s: State<App>, item_id: String, input: a::ItemInput) -> R<a::ItemSummary> { s.update_item(&item_id, &input).map_err(e) }
 #[tauri::command] pub fn set_favorite(s: State<App>, vault_id: String, item_id: String, favorite: bool) -> R<()> { s.set_favorite(&vault_id, &item_id, favorite).map_err(e) }
@@ -356,4 +377,20 @@ pub fn setup_menu(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>
     let running = h.try_state::<std::sync::Arc<gitpass_gui_core::ssh_agent::SshAgent>>();
     let path = running.as_ref().map(|a| a.socket_path.clone()).unwrap_or_else(|| gitpass_gui_core::agent::default_dir().join(gitpass_gui_core::ssh_agent::SOCKET_NAME));
     s.ssh_agent_info(&path, running.is_some())
+}
+#[tauri::command] pub fn ssh_agent_activity(s: State<App>) -> Vec<gitpass_gui_core::ssh_activity::SshActivityEntry> {
+    s.ssh_agent_activity()
+}
+#[tauri::command] pub fn clear_ssh_agent_activity(s: State<App>) {
+    s.clear_ssh_agent_activity()
+}
+#[tauri::command] pub fn ssh_git_signing_config(h: AppHandle, s: State<App>, vault_id: String, item_id: String, email: Option<String>) -> R<gitpass_core::ssh::GitSigningConfig> {
+    let running = h.try_state::<std::sync::Arc<gitpass_gui_core::ssh_agent::SshAgent>>();
+    let path = running.as_ref().map(|a| a.socket_path.clone()).unwrap_or_else(|| gitpass_gui_core::agent::default_dir().join(gitpass_gui_core::ssh_agent::SOCKET_NAME));
+    s.ssh_git_signing_config(&vault_id, &item_id, email.as_deref(), Some(&path.to_string_lossy())).map_err(e)
+}
+#[tauri::command] pub fn ssh_apply_git_signing(h: AppHandle, s: State<App>, vault_id: String, item_id: String, email: Option<String>, allowed_signers_file: Option<String>, global: Option<bool>) -> R<gitpass_core::ssh::GitSigningConfig> {
+    let running = h.try_state::<std::sync::Arc<gitpass_gui_core::ssh_agent::SshAgent>>();
+    let path = running.as_ref().map(|a| a.socket_path.clone()).unwrap_or_else(|| gitpass_gui_core::agent::default_dir().join(gitpass_gui_core::ssh_agent::SOCKET_NAME));
+    s.ssh_apply_git_signing(&vault_id, &item_id, email.as_deref(), allowed_signers_file.as_deref(), Some(&path.to_string_lossy()), global.unwrap_or(true)).map_err(e)
 }
