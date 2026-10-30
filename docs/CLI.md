@@ -224,18 +224,20 @@ diverged. See the README "GitHub sync" section.
 ```sh
 gitpass import Personal --from bitwarden-json export.json
 gitpass import Personal --from generic-csv export.csv --dry-run
+gitpass import Personal --format 1pif export.1pif
 gitpass import Personal --from gitpass-json backup.json --allow-duplicates
 gitpass export Personal --format gitpass-json --out backup.json --encrypted
 gitpass export Personal --format csv --out backup.csv --yes
 ```
 
-`--from` accepts every format and alias in `crates/gitpass-core/src/import.rs`
+`--from` (or `--format`) accepts every format and alias in `crates/gitpass-core/src/import.rs`
 (`ImportFormat`): `bitwarden-json`, `bitwarden-csv`, `generic-csv` (alias `1password-csv`),
-`1pux` (alias `1password-1pux`), `keepass-csv` (alias `keepassxc-csv`),
+`1pux` (alias `1password-1pux`), `1pif` (alias `onepif`), `keepass-csv` (alias `keepassxc-csv`),
 `chrome-csv`, `apple-passwords-csv` (aliases `apple-passwords`, `apple-csv`,
 `apple`, `safari-csv`, `safari`), `lastpass-csv` (alias `lastpass`),
 `protonpass-csv` (aliases `proton-pass-csv`, `protonpass`, `proton-pass`) and
 `gitpass-json`.
+If `--from` is omitted, the format is auto-detected from the file content.
 Duplicates (same title+username+url) are skipped unless `--allow-duplicates` is given;
 `--dry-run` writes nothing. An encrypted `gitpass-json` export prompts for the passphrase
 (or reads `GITPASS_EXPORT_PASSPHRASE`).
