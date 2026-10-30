@@ -718,6 +718,12 @@ impl Host {
                 let report = self.get_audit_report()?;
                 Ok(crate::protocol::item_findings(vid, iid, &rec, &report))
             }
+            "audit_summary" => {
+                let report = self.get_audit_report()?;
+                let recs = self.all_records(None)?;
+                let iter = recs.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                Ok(crate::protocol::audit_summary(&report, iter))
+            }
             "site_icon" => {
                 let s = self.sess()?;
                 let host_arg = arg_str(req, "host")?.trim().to_lowercase();

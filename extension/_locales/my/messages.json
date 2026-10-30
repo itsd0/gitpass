@@ -1250,5 +1250,37 @@
   },
   "watchtowerRotationSoon": {
     "message": "မကြာမီ ပြောင်းရမည့်အချိန်"
+  },
+  "watchtower": {
+    "message": "Watchtower"
+  },
+  "watchtowerNothingNeedsAttention": {
+    "message": "သတိပြုရန် လိုအပ်သည်များ မရှိပါ"
+  },
+  "watchtowerScore": {
+    "message": "လုံခြုံရေးရမှတ်- ၁၀၀ တွင် $1",
+    "placeholders": {
+      "score": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerScoreExcellent": {
+    "message": "အလွန်ကောင်း"
+  },
+  "watchtowerScoreGood": {
+    "message": "ကောင်း"
+  },
+  "watchtowerScoreFair": {
+    "message": "သင့်တင့်"
+  },
+  "watchtowerScorePoor": {
+    "message": "ညံ့"
+  },
+  "loadingWatchtower": {
+    "message": "Watchtower ကို ရယူနေသည်…"
+  },
+  "errWatchtowerLoad": {
+    "message": "Watchtower ကို ရယူ၍ မရပါ"
   }
 }

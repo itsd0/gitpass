@@ -560,6 +560,26 @@ impl Agent {
                 })?;
                 Ok(gitpass_host::protocol::item_findings(&vid, &iid, &r, &rep))
             }
+            "audit_summary" => {
+                let stamp = self.app.state.change_stamp();
+                let rep = cached_audit(&self.audit_cache, stamp, || {
+                    self.app.state.with(|x| {
+                        let s = &x.session;
+                        let records = App::all_records(s)?;
+                        let passkey_sites: BTreeSet<String> = records.iter()
+                            .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category == Category::Passkey)
+                            .filter_map(|(_, _, r)| r.find_field(gitpass_core::passkey::F_RP_ID).and_then(|f| f.value))
+                            .collect();
+                        let items: Vec<(String, String, ItemRecord)> = records.into_iter()
+                            .filter(|(_, _, r)| r.deleted_at.is_none() && !r.archived && r.category != Category::Passkey)
+                            .collect();
+                        gitpass_core::audit::audit_with_passkeys(&items, &passkey_sites, &gitpass_core::audit::AuditOpts::default(), None)
+                    })
+                })?;
+                let live_records = self.records()?;
+                let iter = live_records.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                Ok(gitpass_host::protocol::audit_summary(&rep, iter))
+            }
             "site_icon" => {
                 let host = req("host")?.trim().to_lowercase();
                 if host.is_empty() { return Err(err("bad_request", "empty host")); }

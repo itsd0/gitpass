@@ -223,6 +223,9 @@ fn test_host_and_agent_identical_protocol_json() {
 
         // 17. list_deleted
         json!({"cmd": "list_deleted"}),
+
+        // 18. audit_summary (vault-wide watchtower overview)
+        json!({"cmd": "audit_summary"}),
     ];
 
     for (idx, req) in fixtures.iter().enumerate() {

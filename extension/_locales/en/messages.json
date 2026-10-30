@@ -1171,5 +1171,37 @@
   },
   "watchtowerRotationSoon": {
     "message": "Rotation due soon"
+  },
+  "watchtower": {
+    "message": "Watchtower"
+  },
+  "watchtowerNothingNeedsAttention": {
+    "message": "Nothing needs attention"
+  },
+  "watchtowerScore": {
+    "message": "Security score: $1 of 100",
+    "placeholders": {
+      "score": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerScoreExcellent": {
+    "message": "Excellent"
+  },
+  "watchtowerScoreGood": {
+    "message": "Good"
+  },
+  "watchtowerScoreFair": {
+    "message": "Fair"
+  },
+  "watchtowerScorePoor": {
+    "message": "Poor"
+  },
+  "loadingWatchtower": {
+    "message": "Loading Watchtower…"
+  },
+  "errWatchtowerLoad": {
+    "message": "Couldn't load Watchtower"
   }
 }
