@@ -1003,6 +1003,9 @@
   "catServer": {
     "message": "เซิร์ฟเวอร์"
   },
+  "catOther": {
+    "message": "อื่น ๆ"
+  },
   "genRecent": {
     "message": "ล่าสุด"
   },

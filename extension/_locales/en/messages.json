@@ -924,6 +924,9 @@
   "catServer": {
     "message": "Servers"
   },
+  "catOther": {
+    "message": "Other"
+  },
   "genRecent": {
     "message": "Recent"
   },

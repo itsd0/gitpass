@@ -145,6 +145,7 @@ export function SettingsPage({ initialTab }: { initialTab?: string } = {}) {
   }[local];
 
   return (
+    <div className="h-full overflow-y-auto" data-testid="settings-scroll">
     <div className="mx-auto flex max-w-4xl gap-8 p-8">
       <nav aria-label={t('settings.title')} className="w-52 shrink-0">
         <h1 className="mb-3 text-2xl font-semibold">{t('settings.title')}</h1>
@@ -263,6 +264,7 @@ export function SettingsPage({ initialTab }: { initialTab?: string } = {}) {
         )}
         {vaultId ? <VaultPanel vaultId={vaultId} /> : body}
       </section>
+    </div>
     </div>
   );
 }
