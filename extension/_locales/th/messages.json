@@ -188,6 +188,18 @@
   "vaults": {
     "message": "ห้องนิรภัย"
   },
+  "filterTags": {
+    "message": "แท็ก"
+  },
+  "filterTagsPh": {
+    "message": "กรองแท็ก…"
+  },
+  "clearTag": {
+    "message": "ล้างตัวกรองแท็ก"
+  },
+  "filterByTag": {
+    "message": "แสดงรายการที่มีแท็กนี้"
+  },
   "catLogin": {
     "message": "ข้อมูลเข้าสู่ระบบ"
   },
