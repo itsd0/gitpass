@@ -86,6 +86,9 @@ pub struct ItemDetail {
     pub related_items: Vec<RelatedItem>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related_item_ids: Vec<String>,
+    /// Live items in any vault whose Related items point at this item ("Linked from"), sorted by title.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub linked_from: Vec<RelatedItem>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub password_history: Vec<PasswordHistoryRef>,
 }

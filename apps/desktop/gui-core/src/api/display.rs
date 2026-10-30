@@ -191,7 +191,33 @@ pub(crate) fn resolve_related_items(s: &Session, ids: &[String]) -> Vec<RelatedI
     }).collect()
 }
 
-pub(crate) fn detail(s: &Session, vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>) -> ItemDetail {
+/// Reverse index of Related items: target item id -> live items (any vault) that link to it, sorted by title.
+pub(crate) fn build_backlinks_from_records(records: &[(String, String, ItemRecord)]) -> std::collections::HashMap<String, Vec<RelatedItem>> {
+    let mut by_target: std::collections::HashMap<String, Vec<RelatedItem>> = std::collections::HashMap::new();
+    for (vid, iid, r) in records {
+        if r.deleted_at.is_some() || r.related_item_ids.is_empty() { continue; }
+        let sub = subtitle(r);
+        let item_ref = RelatedItem {
+            id: iid.clone(),
+            vault_id: Some(vid.clone()),
+            category: Some(r.category),
+            title: r.item.title.clone(),
+            subtitle: if sub.is_empty() { None } else { Some(sub) },
+            available: true,
+        };
+        for tid in &r.related_item_ids {
+            let list = by_target.entry(tid.clone()).or_default();
+            if !list.iter().any(|x| x.id == *iid) { list.push(item_ref.clone()); }
+        }
+    }
+    for list in by_target.values_mut() {
+        list.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()).then_with(|| a.id.cmp(&b.id)));
+    }
+    by_target
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn detail(s: &Session, vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>, linked_from: Vec<RelatedItem>) -> ItemDetail {
     let pw = r.view_sections().into_iter().flat_map(|s| s.fields).find(|f| f.kind == FieldKind::Concealed && f.value.is_some());
     ItemDetail {
         summary: summary(vid, iid, r, last_used), version, sections: to_dto_sections(r), notes: r.item.notes.clone(),
@@ -203,6 +229,7 @@ pub(crate) fn detail(s: &Session, vid: &str, iid: &str, version: u64, r: &ItemRe
         password_changed_at: r.password_changed_at().map(|t| iso8601(t as i64)),
         related_items: resolve_related_items(s, &r.related_item_ids),
         related_item_ids: r.related_item_ids.clone(),
+        linked_from,
         password_history: if r.category == Category::Login {
             r.password_history.iter().map(|h| PasswordHistoryRef { replaced_at: ts(&h.replaced_at) }).collect()
         } else {

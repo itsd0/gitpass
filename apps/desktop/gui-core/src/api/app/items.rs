@@ -78,7 +78,8 @@ impl App {
             let (v, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
-            Ok(detail(&u.session, vault_id, item_id, v, &r, findings, last_used))
+            let linked_from = self.get_backlinks(&u.session, item_id)?;
+            Ok(detail(&u.session, vault_id, item_id, v, &r, findings, last_used, linked_from))
         })
     }
     /// The ONLY call that returns a stored secret value.
@@ -346,7 +347,9 @@ impl App {
         self.with(|u| {
             let r = u.session.item_version(vault_id, item_id, version)?;
             let (_, cur) = u.session.read_record(vault_id, item_id)?;
-            let last_used = u.session.last_used(item_id); let mut d = detail(&u.session, vault_id, item_id, version, &r, Vec::new(), last_used);
+            let last_used = u.session.last_used(item_id); 
+            let linked_from = self.get_backlinks(&u.session, item_id)?;
+            let mut d = detail(&u.session, vault_id, item_id, version, &r, Vec::new(), last_used, linked_from);
             d.history.clear();
             d.attachments.clear();
             if let Some(h) = cur.history.iter().find(|h| h.version == version) { d.summary.updated_at = ts(&h.updated_at); }
@@ -360,7 +363,8 @@ impl App {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
-            Ok(detail(&u.session, vault_id, item_id, new_v, &r, findings, last_used))
+            let linked_from = self.get_backlinks(&u.session, item_id)?;
+            Ok(detail(&u.session, vault_id, item_id, new_v, &r, findings, last_used, linked_from))
         })
     }
     pub fn add_attachment(&self, vault_id: &str, item_id: &str, path: &str) -> Result<Attachment> {

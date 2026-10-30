@@ -343,6 +343,25 @@ function resolveMockRelated(ids?: string[]): T.RelatedItem[] {
   });
 }
 
+function resolveMockBacklinks(targetId: string): T.RelatedItem[] {
+  const out: T.RelatedItem[] = [];
+  for (const item of db.values()) {
+    if (item.detail.deletedAt) continue;
+    if (item.detail.relatedItemIds?.includes(targetId)) {
+      out.push({
+        id: item.detail.id,
+        vaultId: item.detail.vaultId,
+        category: item.detail.category,
+        title: item.detail.title,
+        subtitle: item.detail.subtitle,
+        available: true,
+      });
+    }
+  }
+  out.sort((a, b) => a.title.localeCompare(b.title));
+  return out;
+}
+
 export const mock: Record<string, (a: A) => Promise<unknown>> = {
   status: () => delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: unlocked ? 'Demo Family' : null }),
   unlock: (a: { password: string }) => { if (!a.password) return Promise.reject(new Error('password required')); unlocked = true; return delay<T.UnlockState>({ unlocked, vaultPath: '~/.gitpass (mock)', account: 'Demo Family' }, 300); },
@@ -472,7 +491,12 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   },
   get_item: (a: { itemId: string }) => {
     const d = get(a.itemId).detail;
-    return delay({ ...d, relatedItems: resolveMockRelated(d.relatedItemIds), findings: mockFindings(a.itemId) });
+    return delay({
+      ...d,
+      relatedItems: resolveMockRelated(d.relatedItemIds),
+      linkedFrom: resolveMockBacklinks(a.itemId),
+      findings: mockFindings(a.itemId),
+    });
   },
   reveal_field: (a: { itemId: string; fieldId: string; version?: number | null }) => {
     const r = get(a.itemId);
