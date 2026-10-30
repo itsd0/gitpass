@@ -11,7 +11,7 @@ test('getMonogram extracts first character, uppercase, handling whitespace and u
   assert.strictEqual(V.getMonogram('   '), '?');
   assert.strictEqual(V.getMonogram(null), '?');
   assert.strictEqual(V.getMonogram(undefined), '?');
-  assert.strictEqual(V.getMonogram('1Password'), '1');
+  assert.strictEqual(V.getMonogram('1Example'), '1');
   assert.strictEqual(V.getMonogram('🍎 Apple ID'), '🍎');
   assert.strictEqual(V.getMonogram('မြန်မာ'), 'မ');
 

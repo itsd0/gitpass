@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Copy, Eye, EyeOff, ExternalLink, Maximize2 } from 'lucide-react';
+import { Copy, Eye, EyeOff, ExternalLink, Link2, Maximize2 } from 'lucide-react';
 import { api } from '../../api/client';
 import type { Field, ItemCategory } from '../../api/types';
 import { useT } from '../../i18n';
@@ -12,19 +12,20 @@ import { errText } from './actions';
 import { groupCardNumber } from '../../lib/cardMask';
 import { SafeMarkdown } from './SafeMarkdown';
 import { useSettings } from '../settings/useSettings';
+import { secretRef, type RefTarget } from '../../lib/secretRef';
 
 export const REVEAL_MS = 30_000;
 const DOTS = '••••••••••';
 
 interface Ctx { vaultId: string; itemId: string }
 
-export function FieldRow({ field, ctx, strength, category, passwordChangedAt }: { field: Field; ctx: Ctx; strength?: number | null; category?: ItemCategory; passwordChangedAt?: string | null }) {
+export function FieldRow({ field, ctx, strength, category, passwordChangedAt, refTarget }: { field: Field; ctx: Ctx; strength?: number | null; category?: ItemCategory; passwordChangedAt?: string | null; /** where `gp://` references for this item's fields point; omit to hide the action */ refTarget?: RefTarget | null }) {
   return (
     <div className="group relative border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-hover/50" data-testid={`field-${field.id}`}>
       <div className="text-xs text-label">{field.label}</div>
-      {field.kind === 'concealed' ? <ConcealedValue field={field} ctx={ctx} strength={strength} passwordChangedAt={passwordChangedAt} />
-        : field.kind === 'totp' ? <TotpValue ctx={ctx} fieldId={field.id} />
-        : <PlainValue field={field} ctx={ctx} category={category} />}
+      {field.kind === 'concealed' ? <ConcealedValue field={field} ctx={ctx} strength={strength} category={category} passwordChangedAt={passwordChangedAt} refTarget={refTarget} />
+        : field.kind === 'totp' ? <TotpValue ctx={ctx} field={field} refTarget={refTarget} />
+        : <PlainValue field={field} ctx={ctx} category={category} refTarget={refTarget} />}
     </div>
   );
 }
@@ -37,7 +38,25 @@ function CopyBtn({ ctx, fieldId, label }: { ctx: Ctx; fieldId: string; label: st
   );
 }
 
-function PlainValue({ field, ctx, category }: { field: Field; ctx: Ctx; category?: ItemCategory }) {
+/** Copies `gp://vault/item/field` (a name, not a secret): plain clipboard write, no concealed marker, no auto-clear. */
+function RefBtn({ field, target }: { field: Field; target?: RefTarget | null }) {
+  const t = useT();
+  if (!target) return null;
+  const copy = () => {
+    const ref = secretRef(target, field);
+    const done = () => toast(t('ref.copied'));
+    const fail = () => toast(t('ref.failed'), 'danger');
+    if (!navigator.clipboard) { fail(); return; }
+    navigator.clipboard.writeText(ref).then(done, fail);
+  };
+  return (
+    <Tooltip content={t('ref.copy')}>
+      <Button variant="ghost" size="iconSm" aria-label={t('ref.copyField', { label: field.label })} data-testid={`copy-ref-${field.id}`} onClick={copy}><Link2 size={13} /></Button>
+    </Tooltip>
+  );
+}
+
+function PlainValue({ field, ctx, category, refTarget }: { field: Field; ctx: Ctx; category?: ItemCategory; refTarget?: RefTarget | null }) {
   const t = useT();
   const renderNotesMarkdown = useSettings((s) => s.settings?.renderNotesMarkdown ?? true);
   const v = field.value ?? '';
@@ -78,13 +97,14 @@ function PlainValue({ field, ctx, category }: { field: Field; ctx: Ctx; category
       <div className="flex opacity-0 transition-opacity group-hover:opacity-100">
         {field.kind === 'url' && v && <Tooltip content={t('field.open')}><a className="inline-flex h-6 w-6 items-center justify-center rounded hover:bg-hover" href={v} target="_blank" rel="noreferrer noopener" aria-label={t('field.openLink')}><ExternalLink size={13} /></a></Tooltip>}
         {v && <CopyBtn ctx={ctx} fieldId={field.id} label={field.label} />}
+        {v && <RefBtn field={field} target={refTarget} />}
       </div>
     </div>
   );
 }
 
 /** Concealed values are never in the payload; only fetched via revealField, auto-hidden after 30s. */
-export function ConcealedValue({ field, ctx, strength, passwordChangedAt }: { field: Field; ctx: Ctx; strength?: number | null; passwordChangedAt?: string | null }) {
+export function ConcealedValue({ field, ctx, strength, category, passwordChangedAt, refTarget }: { field: Field; ctx: Ctx; strength?: number | null; category?: ItemCategory; passwordChangedAt?: string | null; refTarget?: RefTarget | null }) {
   const t = useT();
   const [revealed, setRevealed] = useState<string | null>(null);
   const [largeTypeOpen, setLargeTypeOpen] = useState(false);
@@ -136,6 +156,9 @@ export function ConcealedValue({ field, ctx, strength, passwordChangedAt }: { fi
     }
   };
 
+  const isApi = category === 'api_credential';
+  const shouldGroup = !isApi && Boolean(field.masked);
+
   return (
     <div
       ref={containerRef}
@@ -145,7 +168,7 @@ export function ConcealedValue({ field, ctx, strength, passwordChangedAt }: { fi
       data-testid={`concealed-field-${field.id}`}
     >
       <div className="flex items-center gap-2">
-        <div className={cn('min-w-0 flex-1 break-all font-mono text-[14px]', revealed === null && 'tracking-widest')} data-testid="concealed-value">{revealed === null ? (field.masked || DOTS) : field.masked ? groupCardNumber(revealed) : revealed}</div>
+        <div className={cn('min-w-0 flex-1 break-all font-mono text-[14px]', revealed === null && 'tracking-widest')} data-testid="concealed-value">{revealed === null ? (field.masked || DOTS) : (shouldGroup ? groupCardNumber(revealed) : revealed)}</div>
         <div className="flex opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <Tooltip content={t('largetype.action')}>
             <Button
@@ -163,6 +186,7 @@ export function ConcealedValue({ field, ctx, strength, passwordChangedAt }: { fi
             <Button variant="ghost" size="iconSm" aria-label={revealed === null ? `Reveal ${field.label}` : `Conceal ${field.label}`} onClick={toggle}>{revealed === null ? <Eye size={13} /> : <EyeOff size={13} />}</Button>
           </Tooltip>
           <CopyBtn ctx={ctx} fieldId={field.id} label={field.label} />
+          <RefBtn field={field} target={refTarget} />
         </div>
       </div>
       {strength != null && /password/i.test(field.label) && <StrengthMeter score={strength} />}
@@ -208,7 +232,8 @@ export function TotpRing({ remaining, period, size = 18 }: { remaining: number; 
   );
 }
 
-function TotpValue({ ctx, fieldId }: { ctx: Ctx; fieldId: string }) {
+function TotpValue({ ctx, field, refTarget }: { ctx: Ctx; field: Field; refTarget?: RefTarget | null }) {
+  const fieldId = field.id;
   const t = useT();
   const [state, setState] = useState<{ code: string; remaining: number; period: number } | null>(null);
   useEffect(() => {
@@ -223,7 +248,7 @@ function TotpValue({ ctx, fieldId }: { ctx: Ctx; fieldId: string }) {
       <div className="flex flex-1 items-center gap-2 font-mono text-[15px] tracking-wider">
         {state ? <><span aria-label={`${state.code} ${t('totp.remaining', { n: state.remaining })}`}>{state.code.slice(0, 3)} {state.code.slice(3)}</span><TotpRing remaining={state.remaining} period={state.period} /><span className="text-xs text-muted" aria-hidden="true">{state.remaining}s</span></> : '··· ···'}
       </div>
-      <div className="flex opacity-0 group-hover:opacity-100"><CopyBtn ctx={ctx} fieldId={fieldId} label="one-time password" /></div>
+      <div className="flex opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100"><CopyBtn ctx={ctx} fieldId={fieldId} label="one-time password" /><RefBtn field={field} target={refTarget} /></div>
     </div>
   );
 }

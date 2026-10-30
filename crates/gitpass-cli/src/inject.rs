@@ -40,6 +40,48 @@ impl SecretRef {
     }
 }
 
+/// Standard item fields that `gp://` references resolve by name before looking at custom fields.
+const STANDARD_FIELDS: [&str; 7] = ["password", "username", "url", "notes", "title", "totp", "otp"];
+
+/// Percent-encode one reference segment so [`SecretRef::parse`] reads it back unchanged. Letters, digits
+/// (any script) and `-_.~` stay as written; everything else, including `/`, `%`, spaces and braces, becomes `%XX`.
+pub fn encode_segment(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        if c.is_alphanumeric() || matches!(c, '-' | '_' | '.' | '~') {
+            out.push(c);
+        } else {
+            let mut buf = [0u8; 4];
+            for b in c.encode_utf8(&mut buf).bytes() { out.push_str(&format!("%{b:02X}")); }
+        }
+    }
+    out
+}
+
+impl std::fmt::Display for SecretRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "gp://{}/{}/{}", encode_segment(&self.vault), encode_segment(&self.item), encode_segment(&self.field))
+    }
+}
+
+/// The field segment that resolves to the field the user asked for (`wanted` is a standard name, a field
+/// label or a field id). `fields` is every live `(id, label)` of the item. A standard name stays as is; a
+/// custom field uses its label when that label is unique and cannot be mistaken for a standard field, and
+/// its id otherwise.
+pub fn field_segment(wanted: &str, fields: &[(String, String)]) -> Result<String> {
+    let lower = wanted.to_ascii_lowercase();
+    if STANDARD_FIELDS.contains(&lower.as_str()) { return Ok(lower); }
+    let hit = fields.iter().find(|(id, _)| id == wanted)
+        .or_else(|| fields.iter().find(|(_, label)| label.eq_ignore_ascii_case(wanted)));
+    let Some((id, label)) = hit else {
+        let names: Vec<&str> = fields.iter().map(|(_, l)| l.as_str()).collect();
+        bail!("no field '{wanted}' in this item (custom fields: {})", if names.is_empty() { "none".to_string() } else { names.join(", ") });
+    };
+    let same_label = fields.iter().filter(|(_, l)| l.eq_ignore_ascii_case(label)).count();
+    let shadowed = STANDARD_FIELDS.contains(&label.to_ascii_lowercase().as_str());
+    Ok(if same_label == 1 && !shadowed && !label.is_empty() { label.clone() } else { id.clone() })
+}
+
 /// Looks up a single reference (the binary implements this on an unlocked Session; tests use a map).
 pub trait Resolver { fn resolve(&self, r: &SecretRef) -> Result<Zeroizing<String>>; }
 
