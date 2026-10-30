@@ -95,7 +95,7 @@ describe('sidebar collapsible sections', () => {
   it('remembers the collapsed state across remounts in local storage only', async () => {
     const first = renderSidebar();
     await userEvent.click(await screen.findByRole('button', { name: 'Collapse Tags' }));
-    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual({ vaults: false, tags: true });
+    expect(JSON.parse(localStorage.getItem(KEY)!)).toEqual({ vaults: false, tags: true, searches: false });
     first.unmount();
 
     renderSidebar();
