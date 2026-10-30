@@ -106,9 +106,7 @@ function createPopup(initialState = { unlocked: true }) {
     },
   };
 
-  for (const f of ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/generator.js', 'popup/popup.js']) {
-    w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
-  }
+  w.eval("'use strict';\n" + ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/generator.js', 'popup/skeletons.js', 'popup/recent.js', 'popup/totp-list.js', 'popup/detail.js', 'popup/edit.js', 'popup/largetype.js', 'popup/quick-actions.js', 'popup/panels.js', 'popup/settings.js', 'popup/popup.js'].map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n'));
 
   return {
     dom,

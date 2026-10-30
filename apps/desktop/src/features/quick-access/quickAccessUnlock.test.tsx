@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
-import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QuickAccessUnlock } from './QuickAccessUnlock';
 import { api } from '../../api/client';
@@ -149,5 +149,48 @@ describe('QuickAccessUnlock', () => {
     expect(alert).toBeTruthy();
     expect(alert.textContent).toBe('Wrong master password');
     expect(useApp.getState().locked).toBe(true);
+  });
+  it("disables unlock button and displays live countdown when throttled", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(api, "status").mockResolvedValue({
+      unlocked: false,
+      vaultPath: "~/.gitpass",
+      account: null,
+      vaultExists: true,
+      throttledSecs: 3,
+    });
+    vi.spyOn(api, "getSettings").mockResolvedValue({
+      autoLockMinutes: 5,
+      clipboardClearSecs: 90,
+      theme: "dark",
+      language: "en",
+      biometricUnlock: false,
+      quickAccessHotkey: "CommandOrControl+Shift+Space",
+      hibpCheck: false,
+      sshApproveEachUse: false,
+      lockOnSleep: true,
+      lockOnScreenLock: true,
+      lockOnUserSwitch: true,
+    });
+
+    await act(async () => {
+      render(
+        <TooltipProvider>
+          <QuickAccessUnlock />
+        </TooltipProvider>
+      );
+    });
+
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toBe("Too many attempts. Try again in 3 s");
+    const submitBtn = screen.getByRole("button", { name: /Unlock/i });
+    expect((submitBtn as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.getByRole("alert").textContent).toBe("Too many attempts. Try again in 2 s");
+
+    vi.useRealTimers();
   });
 });

@@ -103,7 +103,7 @@ pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>)
 #[tauri::command] pub fn copy_password(s: State<App>, password: String) -> R<()> { s.copy_password(&password).map_err(e) }
 #[tauri::command] pub fn password_strength(s: State<App>, password: String) -> u8 { s.password_strength(&Zeroizing::new(password)) }
 #[tauri::command(async)] pub fn watchtower(s: State<'_, App>, hibp: bool) -> R<a::WatchtowerReport> { s.watchtower(hibp).map_err(e) }
-#[tauri::command(async)] pub fn import_file(s: State<'_, App>, vault_id: String, format: String, path: String, dry_run: bool) -> R<a::ImportResult> { s.import_file(&vault_id, &format, &path, dry_run).map_err(e) }
+#[tauri::command(async)] pub fn import_file(s: State<'_, App>, vault_id: String, format: String, path: String, dry_run: bool, password: Option<String>) -> R<a::ImportResult> { s.import_file(&vault_id, &format, &path, dry_run, password.as_deref()).map_err(e) }
 #[tauri::command(async)] pub fn export_items(s: State<'_, App>, req: a::ExportRequest) -> R<a::ExportResult> { s.export_items(&req).map_err(e) }
 #[tauri::command] pub fn identity(s: State<App>) -> R<a::Identity> { s.identity().map_err(e) }
 /// Fingerprint of a pasted recipient key, shown in the Share dialog for out-of-band verification.

@@ -3,6 +3,7 @@ import { api } from '../../../api/client';
 import { Button, Modal, Input, toast } from '../../../ui';
 import { useT } from '../../../i18n';
 import { errMsg } from '../shared';
+import { CapsLockHint, useCapsLockHint } from '../../../lib/capsLock';
 
 export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const t = useT();
@@ -11,6 +12,9 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
   const [conf, setConf] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const capsCur = useCapsLockHint();
+  const capsNext = useCapsLockHint();
+  const capsConf = useCapsLockHint();
   const problem =
     next && next.length < 10
       ? t('settings.passwordShort')
@@ -64,7 +68,9 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
           placeholder={t('settings.currentPassword')}
           value={cur}
           onChange={(e) => setCur(e.target.value)}
+          {...capsCur.fieldProps}
         />
+        <CapsLockHint id={capsCur.hintId} show={capsCur.show} />
         <Input
           type="password"
           autoComplete="new-password"
@@ -72,7 +78,9 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
           placeholder={t('settings.newPassword')}
           value={next}
           onChange={(e) => setNext(e.target.value)}
+          {...capsNext.fieldProps}
         />
+        <CapsLockHint id={capsNext.hintId} show={capsNext.show} />
         <Input
           type="password"
           autoComplete="new-password"
@@ -80,7 +88,9 @@ export function ChangePasswordDialog({ open, onOpenChange }: { open: boolean; on
           placeholder={t('settings.confirmPassword')}
           value={conf}
           onChange={(e) => setConf(e.target.value)}
+          {...capsConf.fieldProps}
         />
+        <CapsLockHint id={capsConf.hintId} show={capsConf.show} />
         {(problem || err) && (
           <p role="alert" className="text-sm text-danger">
             {problem ?? t('common.error', { msg: err! })}

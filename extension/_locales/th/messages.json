@@ -173,6 +173,9 @@
   "unlockReason": {
     "message": "ปลดล็อกส่วนขยายเบราว์เซอร์ gitpass"
   },
+  "unlockThrottled": {
+    "message": "พยายามมากเกินไป ลองใหม่อีกครั้งในอีก $1 วินาที"
+  },
   "unlockCancelled": {
     "message": "ยกเลิกการปลดล็อกแล้ว"
   },
@@ -1157,5 +1160,9 @@
   },
   "inArchive": {
     "message": "รายการนี้ถูกเก็บถาวรแล้ว"
+  },
+  "capsLockOn": {
+    "message": "Caps Lock เปิดอยู่",
+    "description": "Shown under a master-password field while Caps Lock is on"
   }
 }

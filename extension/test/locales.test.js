@@ -42,6 +42,6 @@ test('every en key is referenced by the extension (no dead strings)', () => {
 });
 
 test('dynamic-prefix allowlist still matches real lookups', () => {
-  const popup = fs.readFileSync(path.join(root, 'popup/popup.js'), 'utf8');
+  const popup = fs.readFileSync(path.join(root, 'popup/panels.js'), 'utf8'); // genStrength lookup moved here by the popup.js split (issue #318)
   for (const p of DYNAMIC_PREFIXES) assert.ok(popup.includes(p), `${p} no longer used dynamically; drop it from the allowlist`);
 });

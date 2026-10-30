@@ -23,8 +23,9 @@
     <button id="usePw" class="btn btn-link" data-i18n="usePassword">Use password</button>
   </div>
   <form id="unlockForm" class="stack hidden" autocomplete="off">
-    <div class="field"><input id="pw" type="password" autocomplete="off" spellcheck="false" data-i18n-ph="masterPassword" placeholder="Master password">
+    <div class="field"><input id="pw" type="password" autocomplete="off" spellcheck="false" data-i18n-ph="masterPassword" placeholder="Master password" aria-describedby="capsHint">
       <button type="button" class="eye" data-for="pw" aria-label="Show"></button></div>
+    <p id="capsHint" class="caps-hint" role="status" aria-live="polite" hidden><svg class="ic" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 18v-6H5l7-7 7 7h-4v6"/><path d="M9 22h6" stroke-dasharray="2 2"/></svg><span data-i18n="capsLockOn">Caps Lock is on</span></p>
     <div id="skRow" class="field"><input id="sk" type="password" autocomplete="off" spellcheck="false" data-i18n-ph="secretKeyPh" placeholder="Secret Key (A3-XXXXXX-…)">
       <button type="button" class="eye" data-for="sk" aria-label="Show"></button></div>
     <button id="unlockBtn" class="btn btn-primary" type="submit"><span class="spinner hidden"></span><span data-i18n="unlock">Unlock</span></button>
@@ -75,6 +76,16 @@
 <script src="view.js"></script>
 <script src="newitem.js"></script>
 <script src="generator.js"></script>
+<script src="capslock.js"></script>
 <script src="mock.js"></script>
+<script src="skeletons.js"></script>
+<script src="recent.js"></script>
+<script src="totp-list.js"></script>
+<script src="detail.js"></script>
+<script src="edit.js"></script>
+<script src="largetype.js"></script>
+<script src="quick-actions.js"></script>
+<script src="panels.js"></script>
+<script src="settings.js"></script>
 <script src="popup.js"></script>
 </body></html>

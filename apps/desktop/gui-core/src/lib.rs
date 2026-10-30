@@ -127,6 +127,17 @@ impl GuiState {
         self.unlock_with_opts(dir, password, secret, device_name, &opts)
     }
 
+    /// Unlock via biometric authentication, resetting failure throttling on success.
+    pub fn unlock_biometric_with_opts(&self, dir: &Path, password: &str, secret: SecretKey, device_name: Option<String>, opts: &UnlockOpts) -> Result<StatusDto> {
+        let session = Session::unlock_device_biometric(dir, password, &secret, opts, device_name.as_deref())?;
+        let mut g = self.inner.lock().map_err(|_| anyhow!("state poisoned"))?;
+        g.unlocked = Some(Unlocked { session, password: Zeroizing::new(password.to_string()), secret, device_name, opts_accept_rollback: opts.accept_rollback });
+        g.last_activity = Instant::now();
+        g.last_activity_wall = SystemTime::now();
+        drop(g);
+        self.status()
+    }
+
     /// Like `unlock` but with explicit options (tests use weak KDF targets to stay fast).
     pub fn unlock_with_opts(&self, dir: &Path, password: &str, secret: SecretKey, device_name: Option<String>, opts: &UnlockOpts) -> Result<StatusDto> {
         let session = Session::unlock_device(dir, password, &secret, opts, device_name.as_deref())?;
