@@ -222,6 +222,13 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .menu button:hover, .menu button:focus-visible { background: rgb(var(--hover)); outline: none; }
 .menu button.danger { color: rgb(var(--danger)); }
 .menu-sep { height: 1px; margin: 4px 6px; background: rgb(var(--border)); }
+/* Move-to-vault picker (#413): same panel as .menu, inside the .menu-wrap of the More button. */
+.move-picker { position: absolute; right: 0; top: 36px; z-index: 6; min-width: 200px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px #0008; }
+.move-picker-title { padding: 7px 8px 4px; color: rgb(var(--muted)); font-size: 12px; }
+.move-picker-item { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 8px; border: 0; background: none; color: rgb(var(--fg)); font: inherit; border-radius: 6px; cursor: pointer; text-align: left; }
+.move-picker-item:hover, .move-picker-item:focus-visible { background: rgb(var(--hover)); outline: none; }
+.move-picker-item:focus-visible { box-shadow: inset 0 0 0 2px rgb(var(--accent)); }
+.move-picker-count { color: rgb(var(--muted)); }
 
 /* Large type view (issue #278): orange frame, one character per cell, index numbers under each cell. */
 .largetype { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgb(0 0 0 / .55); }

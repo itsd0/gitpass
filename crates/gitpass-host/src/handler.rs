@@ -662,6 +662,27 @@ impl Host {
                 self.audit_cache = None;
                 Ok(json!({"ok": true, "archived": archived}))
             }
+            // Move an item to another vault: core re-encrypts it under the target Vault Key
+            // and returns its new id there, preserving history, tags and attachments.
+            // Destructive write: popup only, never a content script.
+            "move_item" => {
+                if req.get("source").and_then(Value::as_str) != Some("popup") {
+                    return Err(coded(code::DENIED, "move_item is allowed only from the popup"));
+                }
+                let (vid, iid) = split_id(arg_str(req, "item_id")?)?;
+                let to_vid = arg_str(req, "to_vault_id")?;
+                if vid == to_vid {
+                    return Err(coded(code::BAD_REQUEST, "item is already in that vault"));
+                }
+                let s = self.sess()?;
+                s.vault_meta(to_vid).map_err(|_| coded(code::BAD_REQUEST, "unknown vault"))?;
+                // Live items only: a deleted item is not_found, like trash_item.
+                let _ = self.record(arg_str(req, "item_id")?)?;
+                let nid = s.move_item(vid, iid, to_vid)?;
+                let vname = self.vault_name(to_vid)?;
+                self.audit_cache = None;
+                Ok(json!({"ok": true, "item_id": format!("{to_vid}:{nid}"), "vault_id": to_vid, "vault_name": vname}))
+            }
             "generate" => crate::protocol::generate(req),
             "record_generated_password" => {
                 let pw = arg_str(req, "password")?;

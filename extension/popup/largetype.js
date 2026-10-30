@@ -180,6 +180,96 @@ async function trashItem(d) {
   });
 }
 
+let movePickerTrigger = null;
+
+/** Other vaults this item can move to (from the list_vaults snapshot in S). */
+function moveVaultTargets(d) {
+  const vaults = (typeof S !== 'undefined' && S.vaults) || [];
+  const cur = d.id && d.id.indexOf(':') >= 0 ? d.id.split(':')[0] : null;
+  return vaults.filter((v) => v.id !== cur);
+}
+
+function closeMoveVaultPicker(restoreFocus = true) {
+  const box = document.querySelector('.move-picker');
+  if (box) box.remove();
+  const trigger = movePickerTrigger;
+  movePickerTrigger = null;
+  if (restoreFocus && trigger && trigger.isConnected && typeof trigger.focus === 'function') trigger.focus();
+}
+
+/** Vault picker for issue #413: a small panel under the More button listing the other
+ * vaults (name + item count), fully keyboard-operable (arrows, Enter, Esc). Focus
+ * returns to the More button on Esc; the panel lives inside the detail pane, so any
+ * detail re-render (select, loadData) removes it. */
+function openMoveVaultPicker(d, trigger) {
+  closeMoveVaultPicker(false);
+  const targets = moveVaultTargets(d);
+  const wrap = trigger && trigger.parentElement;
+  if (!wrap || !targets.length) return;
+  movePickerTrigger = trigger || null;
+  const box = el('div', 'move-picker');
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-label', t('moveToVault', 'Move to vault…'));
+  box.append(el('div', 'move-picker-title', t('moveToVault', 'Move to vault…')));
+  const list = el('div', 'move-picker-list');
+  list.setAttribute('role', 'menu');
+  for (const v of targets) {
+    const b = el('button', 'move-picker-item');
+    b.type = 'button';
+    b.setAttribute('role', 'menuitem');
+    b.dataset.vaultId = v.id;
+    b.append(el('span', 'move-picker-name', v.name));
+    if (typeof v.item_count === 'number') b.append(el('span', 'move-picker-count', String(v.item_count)));
+    b.onclick = () => { closeMoveVaultPicker(false); moveItemToVault(d, v).catch(showErr); };
+    list.append(b);
+  }
+  box.append(list);
+  box.onkeydown = (e) => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMoveVaultPicker(true); return; }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      const items = [...list.querySelectorAll('button')];
+      const i = items.indexOf(document.activeElement);
+      const n = e.key === 'ArrowDown' ? (i + 1) % items.length : (i - 1 + items.length) % items.length;
+      if (items[n]) items[n].focus();
+    }
+  };
+  wrap.append(box);
+  const first = list.querySelector('button');
+  if (first) first.focus();
+}
+
+async function moveItemToVault(d, toVault) {
+  const fromId = d.id;
+  const fromVault = fromId.indexOf(':') >= 0 ? fromId.split(':')[0] : null;
+  const fromName = d.vault_name || fromVault;
+  const idx = Math.max(0, S.sel);
+  const listEl = $('list');
+  const scrollTop = listEl ? listEl.scrollTop : 0;
+  const res = await send({ type: 'popup:move_item', item_id: fromId, to_vault_id: toVault.id });
+  const newId = (res && res.item_id) || (toVault.id + ':' + fromId.split(':').slice(1).join(':'));
+  delete S.findingsCache[fromId];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  await loadData();
+  if (listEl) listEl.scrollTop = scrollTop;
+  const i = S.rows.findIndex((r) => r.id === newId);
+  if (i >= 0) await select(i);
+  else if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('movedToVault', 'Moved to $1', [toVault.name]), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:move_item', item_id: newId, to_vault_id: fromVault });
+    toast(t('movedToVault', 'Moved to $1', [fromName]));
+    S.findingsCache = {};
+    await loadData();
+    const j = S.rows.findIndex((r) => r.id === fromId);
+    if (j >= 0) await select(j);
+  });
+}
+
 function moreMenu(d) {
   const w = el('div', 'menu-wrap');
   const m = el('div', 'menu hidden');
@@ -221,6 +311,10 @@ function moreMenu(d) {
       item(UI.archive, t('unarchive', 'Unarchive'), () => unarchiveItem(d));
     } else {
       item(UI.archive, t('archive', 'Archive'), () => archiveItem(d));
+    }
+    // Only when there is somewhere to move to; hidden with a single vault.
+    if (moveVaultTargets(d).length) {
+      item(UI.move, t('moveToVault', 'Move to vault…'), () => openMoveVaultPicker(d, trigger));
     }
     item(UI.trash, t('moveToTrash', 'Move to Recently Deleted'), () => trashItem(d), { danger: true });
   }

@@ -1116,6 +1116,12 @@
   "movedToTrash": {
     "message": "မကြာသေးမီက ဖျက်လိုက်သည်များသို့ ရွှေ့ပြီးပါပြီ"
   },
+  "moveToVault": {
+    "message": "Vault သို့ ရွှေ့ရန်…"
+  },
+  "movedToVault": {
+    "message": "$1 သို့ ရွှေ့ပြီးပါပြီ"
+  },
   "itemRestored": {
     "message": "မူလအတိုင်း ပြန်လည်ရယူပြီးပါပြီ"
   },

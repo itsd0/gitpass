@@ -1036,6 +1036,12 @@
   "movedToTrash": {
     "message": "Moved to Recently Deleted"
   },
+  "moveToVault": {
+    "message": "Move to vault…"
+  },
+  "movedToVault": {
+    "message": "Moved to $1"
+  },
   "itemRestored": {
     "message": "Item restored"
   },
