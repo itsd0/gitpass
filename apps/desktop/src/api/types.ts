@@ -1,4 +1,14 @@
 export type ItemCategory = 'login'|'credit_card'|'secure_note'|'identity'|'api_credential'|'document'|'ssh_key'|'wifi'|'passkey'|'bank_account'|'server';
+export interface ScannedTotp {
+  uri: string;
+  secret: string;
+  issuer?: string | null;
+  account?: string | null;
+  digits: number;
+  period: number;
+  algorithm: string;
+}
+
 export type FieldKind = 'text'|'concealed'|'url'|'email'|'phone'|'date'|'month_year'|'totp'|'multiline';
 export interface Field { id: string; label: string; kind: FieldKind; value: string | null; /** card numbers only: '•••• •••• •••• 7575' (computed after decryption, display only) */ masked?: string | null; diff?: 'changed' | 'added' | 'removed' | null; } // concealed values are null in summaries/details until reveal
 export interface Section { id: string; title: string | null; fields: Field[]; }
@@ -36,6 +46,12 @@ export interface ExportRequest { vaultId?: string; items?: ItemRef[]; format: 'g
 export interface ExportResult { path: string; items: number; format: string; encrypted: boolean; }
 export interface SshKeyCreated { item: ItemSummary; publicKey: string; fingerprint: string; keyType: string; }
 export interface SshAgentInfo { socketPath: string; configLine: string; running: boolean; approveEachUse: boolean; }
+export type SshActivityResult = 'signed' | 'denied' | 'refused';
+/** One SSH agent sign request (metadata only; never the signed data). */
+export interface SshActivityEntry {
+  time: string; keyTitle: string; fingerprint: string; keyType: string; algorithm: string;
+  result: SshActivityResult; client?: string; pid?: number;
+}
 export interface GitSigningConfig { keyType: string; publicKey: string; signingKey: string; socketPath: string; exportAuthSock: string; allowedSignersFile: string; allowedSignersLine: string; configLines: string; email: string; authSockActive: boolean; }
 
 export interface ItemRef { vaultId: string; itemId: string }

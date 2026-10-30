@@ -20,6 +20,9 @@ gitpass-host = { version = "0.6.5", path = "../../../crates/gitpass-host" }
 libc = "0.2"
 url = "2"
 ureq = { version = "2.12", default-features = false, features = ["tls"] }
+rqrr = "0.10.1"
+image = { version = "0.25.9", default-features = false, features = ["png", "jpeg"] }
+tempfile = "3"
 
 [dev-dependencies]
 tempfile = "3"

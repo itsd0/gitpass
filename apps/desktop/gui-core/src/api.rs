@@ -21,6 +21,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use zeroize::Zeroizing;
+pub use crate::qr::ScannedTotp;
 
 // ------------------------------------------------------------------ DTOs (contract types.ts)
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -338,6 +339,13 @@ pub struct LocalFile {
     #[serde(default)] pub last_vault_path: Option<String>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ClipboardImage {
+    pub width: usize,
+    pub height: usize,
+    pub bytes: Vec<u8>,
+}
+
 // ------------------------------------------------------------------ clipboard
 pub trait Clipboard: Send + Sync {
     fn set_text(&self, s: &str) -> Result<()>;
@@ -345,20 +353,35 @@ pub trait Clipboard: Send + Sync {
     /// Copy a secret: macOS implementations declare the nspasteboard.org markers so clipboard
     /// managers do not record or sync it. The default (and non-macOS) writes plain text.
     fn set_marked(&self, s: &str, _markers: PasteboardMarkers) -> Result<()> { self.set_text(s) }
+    fn get_image(&self) -> Option<ClipboardImage> { None }
+    fn set_image(&self, _img: ClipboardImage) -> Result<()> { Ok(()) }
 }
 
 /// In-memory clipboard (tests / headless).
 #[derive(Default)]
-pub struct MemClipboard { text: Mutex<Option<String>>, markers: Mutex<Option<PasteboardMarkers>> }
+pub struct MemClipboard {
+    text: Mutex<Option<String>>,
+    markers: Mutex<Option<PasteboardMarkers>>,
+    image: Mutex<Option<ClipboardImage>>,
+}
 impl MemClipboard {
     pub fn markers(&self) -> Option<PasteboardMarkers> { *self.markers.lock().unwrap() }
+    pub fn set_test_image(&self, img: ClipboardImage) { *self.image.lock().unwrap() = Some(img); }
 }
 impl Clipboard for MemClipboard {
-    fn set_text(&self, s: &str) -> Result<()> { *self.text.lock().unwrap() = Some(s.to_string()); *self.markers.lock().unwrap() = None; Ok(()) }
+    fn set_text(&self, s: &str) -> Result<()> { *self.text.lock().unwrap() = Some(s.to_string()); *self.markers.lock().unwrap() = None; *self.image.lock().unwrap() = None; Ok(()) }
     fn get_text(&self) -> Option<String> { self.text.lock().unwrap().clone() }
     fn set_marked(&self, s: &str, markers: PasteboardMarkers) -> Result<()> {
         self.set_text(s)?;
         *self.markers.lock().unwrap() = Some(markers);
+        *self.image.lock().unwrap() = None;
+        Ok(())
+    }
+    fn get_image(&self) -> Option<ClipboardImage> { self.image.lock().unwrap().clone() }
+    fn set_image(&self, img: ClipboardImage) -> Result<()> {
+        *self.image.lock().unwrap() = Some(img);
+        *self.text.lock().unwrap() = None;
+        *self.markers.lock().unwrap() = None;
         Ok(())
     }
 }
@@ -390,6 +413,8 @@ pub struct App {
     biometric: Box<dyn BiometricStore>,
     file_lock: Mutex<()>,
     favicon_cache_dir: Mutex<Option<PathBuf>>,
+    /// SSH agent sign requests since unlock (metadata only); cleared by every lock path.
+    pub(crate) ssh_activity: Arc<crate::ssh_activity::SshActivityLog>,
 }
 
 fn ts(secs_str: &str) -> String { secs_str.trim().parse::<i64>().map(iso8601).unwrap_or_else(|_| secs_str.to_string()) }
@@ -644,7 +669,8 @@ impl App {
     pub fn new(settings_dir: PathBuf, clipboard: Arc<dyn Clipboard>) -> Self {
         let app = App { state: GuiState::new(5), settings_dir, clipboard, clip_gen: Arc::new(AtomicU64::new(0)), last_copied: Arc::new(Mutex::new(None)), hibp: Box::new(UreqHibp),
             unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), fresh_secret: Mutex::new(None), biometric: Box::new(NoBiometrics), file_lock: Mutex::new(()),
-            favicon_cache_dir: Mutex::new(None) };
+            favicon_cache_dir: Mutex::new(None), ssh_activity: Default::default() };
+        app.state.on_lock({ let log = app.ssh_activity.clone(); Arc::new(move || log.clear()) });
         let s = app.get_settings();
         app.state.set_auto_lock_minutes(s.auto_lock_minutes);
         app
@@ -739,6 +765,7 @@ impl App {
     pub fn lock(&self) {
         self.clear_clipboard_if_ours();
         self.state.lock();
+        self.ssh_activity.clear();
         if let Ok(mut k) = self.fresh_kit.lock() { *k = None; }
         if let Ok(mut k) = self.fresh_secret.lock() { *k = None; }
     }
@@ -1642,6 +1669,24 @@ impl App {
     pub fn ssh_agent_info(&self, socket: &std::path::Path, running: bool) -> SshAgentInfo {
         SshAgentInfo { socket_path: socket.display().to_string(), config_line: gitpass_core::ssh::identity_agent_line(socket), running, approve_each_use: self.get_settings().ssh_approve_each_use }
     }
+    /// Sign requests handled by the SSH agent since unlock, newest first (metadata only, max 50).
+    pub fn ssh_agent_activity(&self) -> Vec<crate::ssh_activity::SshActivityEntry> {
+        self.ssh_activity.entries()
+    }
+    pub fn clear_ssh_agent_activity(&self) {
+        self.ssh_activity.clear();
+    }
+
+    pub fn scan_totp_screen(&self) -> Result<crate::qr::ScannedTotp> {
+        crate::qr::scan_totp_screen()
+    }
+    pub fn scan_totp_clipboard(&self) -> Result<crate::qr::ScannedTotp> {
+        crate::qr::scan_totp_clipboard(&*self.clipboard)
+    }
+    pub fn scan_totp_image(&self, data_base64: &str) -> Result<crate::qr::ScannedTotp> {
+        crate::qr::decode_qr_base64(data_base64)
+    }
+
     /// Get the Git commit signing configuration for an SSH key item.
     pub fn ssh_git_signing_config(&self, vault_id: &str, item_id: &str, email: Option<&str>, socket: Option<&str>) -> Result<gitpass_core::ssh::GitSigningConfig> {
         let (_, r) = self.with(|u| u.session.read_record(vault_id, item_id))?;
