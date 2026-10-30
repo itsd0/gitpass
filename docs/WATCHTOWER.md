@@ -4,8 +4,8 @@ Watchtower is gitpass's security audit. The CLI (`gitpass audit`) prints the fin
 shows the same findings plus a 0–100 score. Everything is offline unless you opt in to the Have I Been
 Pwned (HIBP) breach check.
 
-- Checks: `crates/gitpass-core/src/audit.rs`
-- Desktop score: `watchtower()` in `apps/desktop/gui-core/src/api.rs`
+- Checks: `crates/gitpass-core/src/audit/` (the shared score is `score()` in `audit/mod.rs`)
+- Desktop score: `watchtower()` in `apps/desktop/gui-core/src/api/app/tools.rs`, with weighting from core `audit::score`
 - Score bands and gauge: `apps/desktop/src/features/watchtower/score.ts`
 - Offline 2FA site list: `crates/gitpass-core/data/mfa-sites.tsv`
 
@@ -296,6 +296,10 @@ without a TOTP secret counts as missing TOTP (on TOTP-capable sites such as GitH
 | All ten use the same weak password, none has TOTP | 10 | 0 | 10 | 80 + 10 | 10 |
 
 (`missing_totp / items = 10 / 10 = 1`, contributing 10 points whenever every login lacks TOTP.)
+
+## Score history
+
+The desktop Watchtower page shows the score over time as a sparkline (`apps/desktop/src/features/watchtower/ScoreHistory.tsx`, with the logic in `history.ts`). Each time the page loads a fresh Watchtower report, it records one point for the current local day: the score plus per-finding counts only — no item ids, titles or other vault content. At most one point per day is kept (a later load the same day replaces the earlier one), and points older than 90 days are dropped. The sparkline offers a 30/90-day range and a weekly delta against the latest point at least 7 days old. History is per-device: it lives in the browser's localStorage under `gitpass.watchtowerHistory` and is never written to the vault repo or synced.
 
 ## Limits
 

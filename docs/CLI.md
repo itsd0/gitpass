@@ -3,7 +3,7 @@
 `gitpass` is the command-line client for a gitpass vault. `gitpass --help` lists the
 top-level commands and `gitpass <command> --help` shows the flags of one command; this
 page has a one-line example for every subcommand. The examples and flags track the clap
-definitions in `crates/gitpass-cli/src/main.rs`, and a test (`crates/gitpass-cli/tests/cli_docs.rs`)
+definitions in `crates/gitpass-cli/src/cli.rs` (commands in `src/cmd/`), and a test (`crates/gitpass-cli/tests/cli_docs.rs`)
 fails if a visible subcommand is missing here.
 
 The vault lives in `~/.gitpass` unless `--path DIR` or `GITPASS_PATH` says otherwise.

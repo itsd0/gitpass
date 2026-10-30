@@ -11,11 +11,11 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 ## Components
 | Name | Code | Notes |
 |---|---|---|
-| **core** | `crates/gitpass-core` | Vault format v5 (reads v2+; `init` writes v2, bumped to v5 on keyset re-wrap), crypto (`crypto.rs`, `keys.rs`), store/manifest/epoch (`store.rs`), merge/sync/remote (`merge.rs`, `sync.rs`, `remote.rs`), import, audit/HIBP, passkeys, SSH keys, TOTP, sharing (X25519 sealbox + Ed25519 share signatures) |
+| **core** | `crates/gitpass-core` | Vault format v5 (reads v2+; `init` writes v2, bumped to v5 on keyset re-wrap), crypto (`crypto.rs`, `keys.rs`), store/manifest/epoch (`store/`), merge/sync/remote (`merge.rs`, `sync.rs`, `remote.rs`), import, audit/HIBP, passkeys, SSH keys, TOTP, sharing (X25519 sealbox + Ed25519 share signatures) |
 | **cli** | `crates/gitpass-cli`, `crates/gitpass-pasteboard` | `gitpass` binary: `run`/`inject` secret injection into child env, ssh agent, import/export, clipboard |
 | **native-host** | `crates/gitpass-host` | Native-messaging host for the extension; origin matching (`origin.rs`), request handler (`handler.rs`), install manifests (`install.rs`), bridge to desktop agent |
 | **extension** | `extension/` | MV3 service worker (`background.js`, `bg-*.js`), content scripts on all https pages (`content.js`, `lib/forms.js`, `lib/passkey-main.js` in MAIN world, `lib/passkey-bridge.js`), popup, options |
-| **desktop** | `apps/desktop/gui-core`, `apps/desktop/src-tauri`, `apps/desktop/src` | Tauri app: Rust API (`api.rs`), browser agent UNIX socket (`agent.rs`), ssh-agent (`ssh_agent.rs`), favicon fetcher (`favicon.rs`), Touch ID/Keychain (`biometric.rs`), updater, React UI |
+| **desktop** | `apps/desktop/gui-core`, `apps/desktop/src-tauri`, `apps/desktop/src` | Tauri app: Rust API (`api/`), browser agent UNIX socket (`agent.rs`), ssh-agent (`ssh_agent.rs`), favicon fetcher (`favicon.rs`), Touch ID/Keychain (`biometric.rs`), updater, React UI |
 | **ios** | `ios/`, `ios/rust/gitpass-ios-ffi` | SwiftUI app + AutoFill credential provider via UniFFI |
 | **release** | `.github/workflows`, `docs/RELEASE.md`, `scripts/`, `tauri.conf.json` updater | Build, signing, minisign-verified auto-update from `itsd0/gitpass` releases |
 
