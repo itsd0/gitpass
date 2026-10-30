@@ -2014,3 +2014,29 @@ fn bank_account_and_server_crud_masking_and_subtitles() {
     let srv_detail = e.app.get_item(&e.vault, &srv_item.id).unwrap();
     assert!(srv_detail.password_strength.is_some());
 }
+
+#[test]
+fn settings_last_seen_version_roundtrip() {
+    let e = env();
+    let initial = e.app.get_settings();
+    assert_eq!(initial.last_seen_version, None);
+
+    let updated = e.app.set_settings(Settings {
+        last_seen_version: Some("0.6.5".to_string()),
+        ..initial.clone()
+    }).unwrap();
+    assert_eq!(updated.last_seen_version, Some("0.6.5".to_string()));
+    assert_eq!(e.app.get_settings().last_seen_version, Some("0.6.5".to_string()));
+
+    // Deserialization from JSON missing lastSeenVersion defaults to None
+    let json = serde_json::to_string(&initial).unwrap();
+    assert!(!json.contains("lastSeenVersion"));
+    let de: Settings = serde_json::from_str(&json).unwrap();
+    assert_eq!(de.last_seen_version, None);
+
+    // Serialization with Some("0.6.5") produces camelCase lastSeenVersion
+    let json_with_ver = serde_json::to_string(&updated).unwrap();
+    assert!(json_with_ver.contains(r#""lastSeenVersion":"0.6.5""#));
+    let de_with_ver: Settings = serde_json::from_str(&json_with_ver).unwrap();
+    assert_eq!(de_with_ver.last_seen_version, Some("0.6.5".to_string()));
+}

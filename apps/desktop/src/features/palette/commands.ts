@@ -1,4 +1,4 @@
-import { ZoomIn, ZoomOut, RotateCcw, AtSign, Copy, FolderInput, Globe, Pencil, Timer, Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, AtSign, Copy, FolderInput, Globe, Pencil, Timer, Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap, Sparkles } from 'lucide-react';
 import { api } from '../../api/client';
 import { translate, useI18n, type Key } from '../../i18n';
 import type { PaletteCommand } from '../registry';
@@ -27,6 +27,7 @@ export function builtinCommands(): PaletteCommand[] {
     { id: 'text-smaller', labelKey: 'cmd.textSmaller', icon: ZoomOut, keywords: ['zoom', 'font', 'text size'], run: () => useTextSize.getState().step(-1) },
     { id: 'text-reset', labelKey: 'cmd.textReset', icon: RotateCcw, keywords: ['zoom', 'font', 'default', 'text size'], run: () => useTextSize.getState().reset() },
     { id: 'sync', labelKey: 'cmd.sync', icon: RefreshCw, keywords: ['git', 'push', 'pull'], run: async () => { try { toast((await api.sync({ merge: false })).message); } catch (e) { toast(String((e as Error).message ?? e), 'danger'); } } },
+    { id: 'whats-new', labelKey: 'cmd.whatsNew', icon: Sparkles, keywords: ['what', 'new', 'release', 'notes', 'changelog', 'update'], run: () => app.openModal('whats-new') },
     { id: 'shortcuts', labelKey: 'cmd.shortcuts', icon: Keyboard, keywords: ['help', 'keys'], shortcut: '?', run: openShortcutsHelp },
   ];
   const hasSelection = Boolean(app.selectedItemId || app.multiIds.length > 0);

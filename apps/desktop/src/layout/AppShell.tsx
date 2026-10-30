@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar';
 import { PaletteHost } from '../features/palette';
 import { useSettings } from '../features/settings/useSettings';
 import { Toolbar } from './Toolbar';
+import { useWhatsNewOnStartup } from '../whats-new';
 
 function RouteView() {
   const route = useApp((s) => s.route);
@@ -19,6 +20,7 @@ export function AppShell() {
   const { sidebarCollapsed, modal } = useApp();
   const search = useRef<HTMLInputElement>(null);
   const M = modal ? modalFor(modal.id) : undefined;
+  useWhatsNewOnStartup();
   // Rust-persisted settings drive theme + language once unlocked.
   useEffect(() => { void useSettings.getState().load(); }, []);
   useEffect(() => {

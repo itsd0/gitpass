@@ -11,6 +11,7 @@ import { feature as quickAccess } from './quick-access';
 import { feature as generator } from './generator';
 import { feature as largeType } from './items/LargeType';
 import { moveToVaultFeature, addTagFeature } from './items/ItemModals';
+import { whatsNewFeature } from '../whats-new';
 
 /** One palette command shape for every feature. `label` is the display text (English fallback);
  * `labelKey` (an i18n key) wins when present so the palette follows the UI language. */
@@ -28,7 +29,7 @@ export interface FeatureDef {
   commands?: PaletteCommand[];
 }
 
-export const features: FeatureDef[] = [home, items, newItem, onboarding, watchtower, people, settings, palette, quickAccess, generator, largeType, moveToVaultFeature, addTagFeature] as FeatureDef[];
+export const features: FeatureDef[] = [home, items, newItem, onboarding, watchtower, people, settings, palette, quickAccess, generator, largeType, moveToVaultFeature, addTagFeature, whatsNewFeature] as FeatureDef[];
 export const featureById = (id: string) => features.find((f) => f.id === id);
 export const featureForRoute = (route: string) => features.find((f) => f.route === route && f.Page);
 /** Modals are opened via useApp().openModal(featureId). */
