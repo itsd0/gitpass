@@ -266,6 +266,51 @@ fn update_login_via_agent_edits_and_records_history() {
 }
 
 #[test]
+fn update_login_via_agent_edits_note_and_api_credential() {
+    let e = env();
+    let note = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::SecureNote, title: "Recovery".into(), url: None,
+        sections: vec![Section { id: "main".into(), title: None, fields: vec![fld("note", FieldKind::Multiline, "FAKE-old")] }],
+        notes: Some("FAKE imported".into()), tags: Some(vec!["old".into()]), favorite: None, related_item_ids: None,
+    }).unwrap();
+    let note_id = format!("{}:{}", e.vault, note.id);
+    let api = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(), category: Category::ApiCredential, title: "Stripe".into(), url: None,
+        sections: vec![Section { id: "main".into(), title: None, fields: vec![
+            fld("username", FieldKind::Text, "demo"), fld("credential", FieldKind::Concealed, "FAKE-sk-old"),
+            fld("hostname", FieldKind::Url, "https://api.example.invalid"), fld("expires", FieldKind::Date, "2026-01-01"),
+        ] }],
+        notes: Some("old".into()), tags: None, favorite: None, related_item_ids: None,
+    }).unwrap();
+    let api_id = format!("{}:{}", e.vault, api.id);
+    let (mut c, _) = Client::connect(&e);
+
+    assert_eq!(c.err("update_login", json!({"item_id": note_id, "title": "X"})), "denied");
+    assert_eq!(c.err("update_login", json!({"item_id": api_id, "source": "page", "credential": "X"})), "denied");
+
+    assert_eq!(c.ok("update_login", json!({"item_id": note_id, "source": "popup", "title": "Recovery codes",
+        "notes": "FAKE-new-note", "tags": ["demo", " home ", ""]}))["ok"], json!(true));
+    let (vid, iid) = note_id.split_once(':').unwrap();
+    let d = e.app.get_item(vid, iid).unwrap();
+    assert_eq!(d.summary.title, "Recovery codes");
+    assert_eq!(d.notes.as_deref(), Some("FAKE-new-note"));
+    assert_eq!(d.summary.tags, vec!["demo".to_string(), "home".to_string()]);
+    assert_eq!(e.app.reveal_field(vid, iid, "note").unwrap().as_str(), "FAKE-old");
+
+    let (vid, iid) = api_id.split_once(':').unwrap();
+    assert_eq!(c.ok("update_login", json!({"item_id": api_id, "source": "popup", "title": "Stripe test",
+        "username": "octo@example.invalid", "hostname": "dashboard.example.invalid", "expires": "2027-06-01",
+        "notes": "FAKE rotated"}))["ok"], json!(true));
+    let d = e.app.get_item(vid, iid).unwrap();
+    assert_eq!(d.summary.title, "Stripe test");
+    assert_eq!(d.notes.as_deref(), Some("FAKE rotated"));
+    assert_eq!(e.app.reveal_field(vid, iid, "username").unwrap().as_str(), "octo@example.invalid");
+    assert_eq!(e.app.reveal_field(vid, iid, "hostname").unwrap().as_str(), "https://dashboard.example.invalid");
+    assert_eq!(e.app.reveal_field(vid, iid, "expires").unwrap().as_str(), "2027-06-01");
+    assert_eq!(e.app.reveal_field(vid, iid, "credential").unwrap().as_str(), "FAKE-sk-old", "untouched credential stays");
+}
+
+#[test]
 fn trash_and_restore_via_agent_use_the_shared_vault() {
     let e = env();
     let id = add_login(&e, "GitHub", "https://github.com", "octo", "pw-gh");

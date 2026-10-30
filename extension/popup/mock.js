@@ -47,7 +47,7 @@
         secrets.number = '4242424242424242'; secrets.cvv = '123'; break;
       case 'identity': fields = [F('first', 'first name', 'text', 'Naing'), F('last', 'last name', 'text', 'Oo'), F('email', 'email', 'email', 'naing@example.com'), F('phone', 'phone', 'phone', '+66 81 234 5678'), F('birth', 'birth date', 'date', '1990-04-12')]; break;
       case 'secure_note': fields = []; break;
-      case 'api_credential': fields = [F('username', 'username', 'text', 'naing'), F('credential', 'credential', 'password', null, true), F('host', 'hostname', 'url', 'https://api.openai.com')]; secrets.credential = 'sk-demo-1234567890'; break;
+      case 'api_credential': fields = [F('username', 'username', 'text', 'naing'), F('credential', 'credential', 'password', null, true), F('hostname', 'hostname', 'url', 'https://api.example.invalid'), F('expires', 'expires', 'date', '2027-06-01')]; secrets.credential = 'sk-demo-FAKE-1234567890'; break;
       case 'document': fields = [F('file', 'file', 'text', 'passport.pdf (1.2 MB)')]; break;
       case 'ssh_key': fields = [F('public', 'public key', 'text', 'ssh-ed25519 AAAAC3Nza…demo naing@mac'), F('private', 'private key', 'password', null, true), F('fp', 'fingerprint', 'text', 'SHA256:x2Tq…9fA')]; secrets.private = '-----BEGIN OPENSSH PRIVATE KEY-----demo'; break;
       case 'wifi': fields = [F('ssid', 'network name', 'text', 'NaingHome-5G'), F('password', 'wireless password', 'password', null, true), F('security', 'security', 'text', 'WPA3')]; secrets.password = 'wifi-demo-pass'; break;
@@ -60,7 +60,8 @@
       { id: 'v2:i2', title: 'OpenAI API', category: 'api_credential', available: true },
     ] : [];
     const dAt = trashed.has(it.id) ? new Date(now - 864e5 * 2).toISOString() : undefined;
-    return { ...it, fields, attachments, related_items, archived: archived.has(it.id), deleted_at: dAt, notes: it.notes != null ? it.notes : (it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : ''), tags: ['demo'], created_at: now - 864e5 * 30 };
+    const notes = it.notes != null ? it.notes : (it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : it.category === 'api_credential' ? 'FAKE dashboard key for local tests.' : '');
+    return { ...it, fields, attachments, related_items, archived: archived.has(it.id), deleted_at: dAt, notes, tags: ['demo'], created_at: now - 864e5 * 30 };
   }
   let unlocked = !['locked', 'appdown', 'nohost'].includes(P.get('view'));
   const appRunning = P.get('view') !== 'appdown';
@@ -146,8 +147,11 @@
         if (msg.title != null) it.title = msg.title;
         if (msg.username != null) it.subtitle = msg.username;
         if (msg.password != null) secrets.password = msg.password;
+        if (msg.credential != null) secrets.credential = msg.credential;
         if (msg.urls) it.url = msg.urls[0] || null;
+        if (msg.hostname != null) it.url = msg.hostname;
         if (msg.notes != null) it.notes = msg.notes;
+        if (Array.isArray(msg.tags)) it.tags = msg.tags;
         it.updated_at = Date.now();
         return ok({ ok: true });
       }

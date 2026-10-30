@@ -160,30 +160,182 @@ pub fn generate_for_rules(len: usize, rules: &Value) -> Result<String> {
     generate_with_classes(len, &classes).ok_or_else(|| coded(code::BAD_REQUEST, "password rules cannot be satisfied"))
 }
 
-/// Apply an `update_login` request to a login record. Absent keys keep their stored value; an empty
-/// username/password/notes clears it. `urls` replaces the websites: the first becomes the item URL and
-/// the rest go to the importers' `urls` section (fields `url1`, `url2`, …).
+/// Apply an `update_login` request. Logins, secure notes, and API credentials are editable from the
+/// popup; every other category is rejected. Absent keys keep their stored value.
+///
+/// Login: an empty username/password/notes clears it. `urls` replaces the websites: the first becomes
+/// the item URL and the rest go to the importers' `urls` section (fields `url1`, `url2`, …).
+///
+/// Secure note: `title`, `notes`, and `tags`. When `note_field` names an existing non-secret field,
+/// `notes` is written there (the template `note` body) instead of `item.notes`.
+///
+/// API credential: `title`, `username`, `credential`, `hostname`, `expires`, and `notes`. `credential`
+/// is omitted by the popup until the user reveals or edits it, so an absent key keeps the secret.
 pub fn apply_login_update(r: &mut ItemRecord, req: &Value) -> Result<()> {
-    if r.category != Category::Login {
-        return Err(coded(code::BAD_REQUEST, "update_login needs a login item"));
+    match r.category {
+        Category::Login => apply_login_fields(r, req),
+        Category::SecureNote => apply_note_update(r, req),
+        Category::ApiCredential => apply_api_update(r, req),
+        _ => Err(coded(code::BAD_REQUEST, "update_login needs a login, secure note, or API credential")),
     }
+}
+
+fn apply_title(r: &mut ItemRecord, req: &Value) -> Result<()> {
     if let Some(v) = req.get("title") {
         let title = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "title must be a string"))?;
         if title.trim().is_empty() { return Err(coded(code::BAD_REQUEST, "title is required")); }
         r.item.title = title.trim().to_string();
     }
+    Ok(())
+}
+
+fn apply_item_notes(r: &mut ItemRecord, req: &Value) -> Result<()> {
+    if let Some(v) = req.get("notes") {
+        let notes = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "notes must be a string"))?;
+        r.item.notes = Some(notes.to_string()).filter(|s| !s.trim().is_empty());
+    }
+    Ok(())
+}
+
+fn apply_login_fields(r: &mut ItemRecord, req: &Value) -> Result<()> {
+    apply_title(r, req)?;
     for (key, target) in [("username", &mut r.item.username), ("password", &mut r.item.password)] {
         if let Some(v) = req.get(key) {
             let s = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, format!("{key} must be a string")))?;
             *target = Some(s.to_string()).filter(|s| !s.is_empty());
         }
     }
-    if let Some(v) = req.get("notes") {
-        let notes = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "notes must be a string"))?;
-        r.item.notes = Some(notes.to_string()).filter(|s| !s.trim().is_empty());
-    }
+    apply_item_notes(r, req)?;
     if let Some(v) = req.get("urls") {
         apply_websites(r, parse_websites(v)?);
+    }
+    Ok(())
+}
+
+fn apply_note_update(r: &mut ItemRecord, req: &Value) -> Result<()> {
+    apply_title(r, req)?;
+    if let Some(v) = req.get("tags") {
+        r.tags = parse_tags(v)?;
+    }
+    if let Some(id) = req.get("note_field") {
+        let id = id.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "note_field must be a string"))?;
+        let notes = req.get("notes").and_then(Value::as_str).ok_or_else(|| coded(code::BAD_REQUEST, "notes must be a string"))?;
+        set_note_field(r, id, notes)?;
+    } else {
+        apply_item_notes(r, req)?;
+    }
+    Ok(())
+}
+
+fn apply_api_update(r: &mut ItemRecord, req: &Value) -> Result<()> {
+    apply_title(r, req)?;
+    if let Some(v) = req.get("username") {
+        let s = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "username must be a string"))?;
+        upsert_field(r, "username", "username", FieldKind::Text, Some(s.to_string()).filter(|s| !s.is_empty()));
+    }
+    if let Some(v) = req.get("credential") {
+        let s = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "credential must be a string"))?;
+        upsert_field(r, "credential", "credential", FieldKind::Concealed, Some(s.to_string()).filter(|s| !s.is_empty()));
+    }
+    if let Some(v) = req.get("hostname") {
+        apply_hostname(r, v)?;
+    }
+    if let Some(v) = req.get("expires") {
+        apply_expires(r, v)?;
+    }
+    apply_item_notes(r, req)?;
+    Ok(())
+}
+
+fn parse_tags(v: &Value) -> Result<Vec<String>> {
+    let list = v.as_array().ok_or_else(|| coded(code::BAD_REQUEST, "tags must be an array of strings"))?;
+    let mut out = Vec::new();
+    for item in list {
+        let s = item.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "tags must be an array of strings"))?.trim();
+        if s.is_empty() || out.iter().any(|x| x == s) { continue; }
+        out.push(s.to_string());
+    }
+    Ok(out)
+}
+
+fn optional_http_url(v: &Value) -> Result<Option<String>> {
+    let s = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "hostname must be a string"))?;
+    if s.trim().is_empty() { return Ok(None); }
+    let urls = parse_websites(&Value::String(s.trim().to_string()))?;
+    Ok(urls.into_iter().next())
+}
+
+fn optional_iso_date(v: &Value) -> Result<Option<String>> {
+    let s = v.as_str().ok_or_else(|| coded(code::BAD_REQUEST, "expires must be a string"))?.trim();
+    if s.is_empty() { return Ok(None); }
+    let b = s.as_bytes();
+    let shape = b.len() == 10 && b[4] == b'-' && b[7] == b'-'
+        && b[..4].iter().all(u8::is_ascii_digit)
+        && b[5..7].iter().all(u8::is_ascii_digit)
+        && b[8..].iter().all(u8::is_ascii_digit);
+    let month: u32 = s.get(5..7).and_then(|x| x.parse().ok()).unwrap_or(0);
+    let day: u32 = s.get(8..10).and_then(|x| x.parse().ok()).unwrap_or(0);
+    if !shape || !(1..=12).contains(&month) || !(1..=31).contains(&day) {
+        return Err(coded(code::BAD_REQUEST, "expires must be YYYY-MM-DD"));
+    }
+    Ok(Some(s.to_string()))
+}
+
+fn field_mut<'a>(r: &'a mut ItemRecord, id: &str) -> Option<&'a mut Field> {
+    r.sections.iter_mut().flat_map(|s| s.fields.iter_mut()).find(|f| f.id == id && !f.removed)
+}
+
+fn upsert_field(r: &mut ItemRecord, id: &str, label: &str, kind: FieldKind, value: Option<String>) {
+    if let Some(f) = field_mut(r, id) {
+        f.value = value;
+        return;
+    }
+    // An empty edit must not invent a field the item never had.
+    let Some(value) = value else { return };
+    let field = Field { id: id.into(), label: label.into(), kind, value: Some(value), removed: false };
+    if let Some(s) = r.sections.iter_mut().find(|s| s.id == "main") {
+        s.fields.push(field);
+    } else if r.sections.is_empty() {
+        r.sections.push(Section { id: "main".into(), title: None, fields: vec![field] });
+    } else {
+        r.sections[0].fields.push(field);
+    }
+}
+
+fn set_note_field(r: &mut ItemRecord, id: &str, notes: &str) -> Result<()> {
+    let value = Some(notes.to_string()).filter(|s| !s.trim().is_empty());
+    let Some(f) = field_mut(r, id) else {
+        return Err(coded(code::BAD_REQUEST, "note field not found"));
+    };
+    if f.kind.is_secret() {
+        return Err(coded(code::BAD_REQUEST, "note field cannot be concealed"));
+    }
+    f.value = value;
+    Ok(())
+}
+
+fn apply_hostname(r: &mut ItemRecord, v: &Value) -> Result<()> {
+    let url = optional_http_url(v)?;
+    if r.find_field("hostname").is_some() {
+        upsert_field(r, "hostname", "hostname", FieldKind::Url, url);
+    } else if r.find_field("host").is_some() {
+        upsert_field(r, "host", "hostname", FieldKind::Url, url);
+    } else if r.item.url.is_some() {
+        r.item.url = url;
+    } else {
+        upsert_field(r, "hostname", "hostname", FieldKind::Url, url);
+    }
+    Ok(())
+}
+
+fn apply_expires(r: &mut ItemRecord, v: &Value) -> Result<()> {
+    let date = optional_iso_date(v)?;
+    if r.find_field("expires").is_some() {
+        upsert_field(r, "expires", "expires", FieldKind::Date, date);
+    } else if r.find_field("expiry").is_some() {
+        upsert_field(r, "expiry", "expires", FieldKind::Date, date);
+    } else {
+        upsert_field(r, "expires", "expires", FieldKind::Date, date);
     }
     Ok(())
 }

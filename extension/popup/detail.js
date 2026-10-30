@@ -244,11 +244,12 @@ function renderDetail(d) {
     };
     acts.append(b);
   }
-  if (d.category === 'login') {
+  if (canEditCategory(d.category)) {
     const edit = el('button', 'btn', t('edit', 'Edit'));
     edit.type = 'button';
     edit.dataset.action = 'edit';
-    edit.title = t('shortcutEdit', 'Edit login') + ' (⌘E)';
+    edit.title = editHeading(d.category) + ' (⌘E)';
+    edit.setAttribute('aria-keyshortcuts', 'Meta+E Control+E');
     edit.onclick = () => startEdit();
     acts.append(edit);
   }

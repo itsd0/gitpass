@@ -155,8 +155,9 @@ async function popupRoute(msg) {
     }
     case 'update_login': {
       const args = { item_id: msg.item_id, source: 'popup' }; // extension pages only; content scripts can't reach popup:*
-      for (const k of ['title', 'username', 'password', 'notes']) if (msg[k] != null) args[k] = String(msg[k]);
+      for (const k of ['title', 'username', 'password', 'notes', 'credential', 'hostname', 'expires', 'note_field']) if (msg[k] != null) args[k] = String(msg[k]);
       if (Array.isArray(msg.urls)) args.urls = msg.urls.map(String);
+      if (Array.isArray(msg.tags)) args.tags = msg.tags.map((t) => String(t));
       return host('update_login', args);
     }
     case 'trash_item': return host('trash_item', { item_id: msg.item_id, source: 'popup' });
