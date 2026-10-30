@@ -71,6 +71,10 @@ gitpass add Personal --category secure-note --title "Recovery Guide" --notes-std
 gitpass add Personal --category credit-card --title "Bank Visa" --holder "Alice Doe" --expiry 11/30
 gitpass add Personal --category bank-account --title "Chase Checking" --bank "Chase" --holder "Alice Doe" --account-type checking --routing 021000021
 gitpass add Personal --category server --title "Production Web" --url 192.168.1.50 --username ubuntu --admin-url https://aws.amazon.com/console
+gitpass add Personal --category identity --title "Alice Personal" --first-name Alice --last-name Doe --email alice@example.com --phone "+1-555-0100" --address "123 Main St, Springfield"
+gitpass add Personal --category wifi --title "Home Wi-Fi" --ssid "HomeNet" --security WPA3
+gitpass add Personal --category ssh-key --title "Work Laptop" --generate ed25519
+gitpass add Personal --category ssh-key --title "Deploy Key" --private-key-file ~/.ssh/id_ed25519
 gitpass get Personal github
 gitpass get Personal github --password-only
 gitpass get Personal github --json --reveal
@@ -91,10 +95,11 @@ gitpass restore github --version 3
 ```
 
 - `add` creates an item in the vault. `--category` (alias `--type`) chooses the category:
-  `login` (default), `api-credential`, `secure-note`, `credit-card`, `bank-account`, or `server`.
+  `login` (default), `api-credential`, `secure-note`, `credit-card`, `bank-account`, `server`,
+  `identity`, `wifi`, or `ssh-key`.
   Secrets are never accepted as command-line arguments to avoid shell-history leaks; `add` prompts
-  without echo, or accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`,
-  `--account-number-stdin`, `--pin-stdin`).
+  without echo, accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`,
+  `--account-number-stdin`, `--pin-stdin`), or reads key files (`--private-key-file`).
 - `get` prints the item, or only the password with `--password-only`. `--json` prints the
   item with concealed values set to `null` unless `--reveal` is also passed; see the
   README section "Scripting with --json".

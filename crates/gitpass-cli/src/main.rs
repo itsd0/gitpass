@@ -38,11 +38,24 @@ enum AddCategory {
     CreditCard,
     BankAccount,
     Server,
+    Identity,
+    Wifi,
+    SshKey,
 }
 
 impl clap::ValueEnum for AddCategory {
     fn value_variants<'a>() -> &'a [Self] {
-        &[Self::Login, Self::ApiCredential, Self::SecureNote, Self::CreditCard, Self::BankAccount, Self::Server]
+        &[
+            Self::Login,
+            Self::ApiCredential,
+            Self::SecureNote,
+            Self::CreditCard,
+            Self::BankAccount,
+            Self::Server,
+            Self::Identity,
+            Self::Wifi,
+            Self::SshKey,
+        ]
     }
     fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
         Some(match self {
@@ -52,6 +65,9 @@ impl clap::ValueEnum for AddCategory {
             Self::CreditCard => clap::builder::PossibleValue::new("credit-card").alias("credit_card"),
             Self::BankAccount => clap::builder::PossibleValue::new("bank-account").alias("bank_account"),
             Self::Server => clap::builder::PossibleValue::new("server"),
+            Self::Identity => clap::builder::PossibleValue::new("identity"),
+            Self::Wifi => clap::builder::PossibleValue::new("wifi"),
+            Self::SshKey => clap::builder::PossibleValue::new("ssh-key").alias("ssh_key"),
         })
     }
 }
@@ -137,10 +153,40 @@ enum Cmd {
     Vault { #[command(subcommand)] cmd: VaultCmd },
     /// Manage attachments on an item
     Attach { #[command(subcommand)] cmd: AttachCmd },
-    /// Add an item (login, API credential, secure note, credit card, bank account, or server)
+    /// Add an item (login, API credential, secure note, credit card, bank account, server, identity, Wi-Fi, or SSH key)
+    #[command(after_help = "\
+EXAMPLES:
+  # Login (password prompted without echo)
+  gitpass add Personal --category login --title \"GitHub\" --username octocat --url https://github.com
+
+  # API Credential (credential prompted without echo)
+  gitpass add Personal --category api-credential --title \"OpenAI API\" --username org-acme --expires 2028-06-30
+
+  # Secure Note
+  gitpass add Personal --category secure-note --title \"Recovery Codes\" --notes \"code1\\ncode2\"
+
+  # Credit Card (card number prompted without echo)
+  gitpass add Personal --category credit-card --title \"Bank Visa\" --holder \"Alice Doe\" --expiry 11/30
+
+  # Bank Account (account number prompted without echo)
+  gitpass add Personal --category bank-account --title \"Chase Checking\" --bank \"Chase\" --holder \"Alice Doe\" --account-type checking --routing 021000021
+
+  # Server (password prompted without echo)
+  gitpass add Personal --category server --title \"Production Web\" --url 192.168.1.50 --username ubuntu
+
+  # Identity
+  gitpass add Personal --category identity --title \"Alice Personal\" --first-name Alice --last-name Doe --email alice@example.com --phone \"+1-555-0100\" --address \"123 Main St, Springfield\"
+
+  # Wi-Fi (password prompted without echo)
+  gitpass add Personal --category wifi --title \"Home Wi-Fi\" --ssid \"HomeNet\" --security WPA3
+
+  # SSH Key (generate Ed25519 key or import existing file; private key is never printed)
+  gitpass add Personal --category ssh-key --title \"Work Laptop\" --generate ed25519
+  gitpass add Personal --category ssh-key --title \"Deploy Key\" --private-key-file ~/.ssh/id_ed25519\
+")]
     Add {
         vault: String,
-        /// Item category / type: login (default), api-credential, secure-note, credit-card, bank-account, server
+        /// Item category / type: login (default), api-credential, secure-note, credit-card, bank-account, server, identity, wifi, ssh-key
         #[arg(long, alias = "type", default_value = "login")]
         category: AddCategory,
         /// Item title
@@ -159,10 +205,10 @@ enum Cmd {
         /// One-time password (TOTP) seed or otpauth:// URI
         #[arg(long)]
         totp: Option<String>,
-        /// Generate a password (optional length, default 24) instead of prompting
+        /// Generate a password (optional length, default 24) for login/server, or key type for ssh-key (ed25519)
         #[arg(long, num_args = 0..=1, default_missing_value = "24")]
-        generate: Option<usize>,
-        /// Read login password from stdin instead of prompting
+        generate: Option<String>,
+        /// Read login or Wi-Fi password from stdin instead of prompting (secrets are never passed as command-line arguments)
         #[arg(long)]
         password_stdin: bool,
 
@@ -223,6 +269,36 @@ enum Cmd {
         /// Hosting provider name for server items
         #[arg(long)]
         provider: Option<String>,
+
+        // Identity specific fields
+        /// First name for identity items
+        #[arg(long)]
+        first_name: Option<String>,
+        /// Last name for identity items
+        #[arg(long)]
+        last_name: Option<String>,
+        /// Email address for identity items
+        #[arg(long)]
+        email: Option<String>,
+        /// Phone number for identity items
+        #[arg(long)]
+        phone: Option<String>,
+        /// Physical / postal address for identity items
+        #[arg(long)]
+        address: Option<String>,
+
+        // Wi-Fi specific fields
+        /// Wi-Fi network SSID (network name) for wifi items
+        #[arg(long)]
+        ssid: Option<String>,
+        /// Wi-Fi network security protocol (WPA2, WPA3, WEP, none) for wifi items
+        #[arg(long)]
+        security: Option<String>,
+
+        // SSH Key specific fields
+        /// Path to an OpenSSH private key file to import for ssh-key items (passphrase from $GITPASS_SSH_PASSPHRASE or prompt; private keys are never passed as command-line arguments)
+        #[arg(long)]
+        private_key_file: Option<PathBuf>,
     },
     /// Decrypt and print an item (query = id, id prefix, or fuzzy match on title/username/url)
     Get {
@@ -815,7 +891,7 @@ struct AddFlags<'a> {
     username: &'a Option<String>,
     url: &'a Option<String>,
     totp: &'a Option<String>,
-    generate: &'a Option<usize>,
+    generate: &'a Option<String>,
     password_stdin: bool,
     credential_stdin: bool,
     expires: &'a Option<String>,
@@ -832,6 +908,40 @@ struct AddFlags<'a> {
     pin_stdin: bool,
     admin_url: &'a Option<String>,
     provider: &'a Option<String>,
+    first_name: &'a Option<String>,
+    last_name: &'a Option<String>,
+    email: &'a Option<String>,
+    phone: &'a Option<String>,
+    address: &'a Option<String>,
+    ssid: &'a Option<String>,
+    security: &'a Option<String>,
+    private_key_file: &'a Option<PathBuf>,
+}
+
+fn check_no_identity(flags: &AddFlags) -> Result<()> {
+    if flags.first_name.is_some()
+        || flags.last_name.is_some()
+        || flags.email.is_some()
+        || flags.phone.is_some()
+        || flags.address.is_some()
+    {
+        bail!("identity flags are only valid for identity items");
+    }
+    Ok(())
+}
+
+fn check_no_wifi(flags: &AddFlags) -> Result<()> {
+    if flags.ssid.is_some() || flags.security.is_some() {
+        bail!("wifi flags are only valid for wifi items");
+    }
+    Ok(())
+}
+
+fn check_no_ssh(flags: &AddFlags) -> Result<()> {
+    if flags.private_key_file.is_some() {
+        bail!("--private-key-file is only valid for ssh-key items");
+    }
+    Ok(())
 }
 
 fn validate_add_flags(flags: &AddFlags) -> Result<()> {
@@ -839,6 +949,11 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
         AddCategory::Login => {
             if flags.password_stdin && flags.generate.is_some() {
                 bail!("cannot combine --generate and --password-stdin");
+            }
+            if let Some(g) = flags.generate {
+                if g.parse::<usize>().is_err() {
+                    bail!("invalid password length '{g}', expected a number");
+                }
             }
             if flags.credential_stdin {
                 bail!("--credential-stdin is only valid for api-credential items");
@@ -863,13 +978,16 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.admin_url.is_some() || flags.provider.is_some() {
                 bail!("--admin-url and --provider are only valid for server items");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
         }
         AddCategory::ApiCredential => {
             if flags.totp.is_some() {
                 bail!("--totp is only valid for login items");
             }
             if flags.generate.is_some() {
-                bail!("--generate is only valid for login and server items");
+                bail!("--generate is only valid for login, server, and ssh-key items");
             }
             if flags.password_stdin {
                 bail!("--password-stdin is only valid for login and server items (use --credential-stdin for API credentials)");
@@ -891,6 +1009,9 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.admin_url.is_some() || flags.provider.is_some() {
                 bail!("--admin-url and --provider are only valid for server items");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
             if let Some(exp) = flags.expires {
                 validate_date_iso(exp)?;
             }
@@ -934,6 +1055,9 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.notes.is_some() && flags.notes_stdin {
                 bail!("cannot combine --notes and --notes-stdin");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
         }
         AddCategory::CreditCard => {
             if flags.username.is_some() {
@@ -968,6 +1092,9 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.admin_url.is_some() || flags.provider.is_some() {
                 bail!("--admin-url and --provider are only valid for server items");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
             if let Some(exp) = flags.expiry {
                 validate_card_expiry(exp)?;
             }
@@ -1003,10 +1130,18 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
             if flags.admin_url.is_some() || flags.provider.is_some() {
                 bail!("--admin-url and --provider are only valid for server items");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
         }
         AddCategory::Server => {
             if flags.password_stdin && flags.generate.is_some() {
                 bail!("cannot combine --generate and --password-stdin");
+            }
+            if let Some(g) = flags.generate {
+                if g.parse::<usize>().is_err() {
+                    bail!("invalid password length '{g}', expected a number");
+                }
             }
             if flags.totp.is_some() {
                 bail!("--totp is not supported for server items");
@@ -1031,6 +1166,150 @@ fn validate_add_flags(flags: &AddFlags) -> Result<()> {
                 || flags.account_number_stdin || flags.pin_stdin {
                 bail!("bank account flags are only valid for bank-account items");
             }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
+        }
+        AddCategory::Identity => {
+            if flags.username.is_some() {
+                bail!("--username is not supported for identity items");
+            }
+            if flags.url.is_some() {
+                bail!("--url/--host is not supported for identity items");
+            }
+            if flags.totp.is_some() {
+                bail!("--totp is not supported for identity items");
+            }
+            if flags.generate.is_some() {
+                bail!("--generate is not supported for identity items");
+            }
+            if flags.password_stdin {
+                bail!("--password-stdin is not supported for identity items");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is not supported for identity items");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is only valid for secure-note items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is not supported for identity items");
+            }
+            if flags.holder.is_some() {
+                bail!("--holder is not supported for identity items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is not supported for identity items");
+            }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
+            }
+            check_no_wifi(flags)?;
+            check_no_ssh(flags)?;
+        }
+        AddCategory::Wifi => {
+            if flags.ssid.as_deref().unwrap_or("").trim().is_empty() {
+                bail!("missing required field: --ssid is required for wifi items");
+            }
+            if let Some(sec) = flags.security.as_ref().map(|s| s.trim()).filter(|s| !s.is_empty()) {
+                match sec.to_ascii_lowercase().as_str() {
+                    "wpa2" | "wpa3" | "wep" | "none" | "wpa" | "wpa/wpa2" | "wpa2/wpa3" => {},
+                    _ => bail!("invalid wifi security '{sec}', expected WPA2, WPA3, WEP, or none"),
+                }
+            }
+            if flags.username.is_some() {
+                bail!("--username is not supported for wifi items");
+            }
+            if flags.url.is_some() {
+                bail!("--url/--host is not supported for wifi items");
+            }
+            if flags.totp.is_some() {
+                bail!("--totp is not supported for wifi items");
+            }
+            if flags.generate.is_some() {
+                bail!("--generate is not supported for wifi items");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is not supported for wifi items");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is only valid for secure-note items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is not supported for wifi items");
+            }
+            if flags.holder.is_some() {
+                bail!("--holder is not supported for wifi items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is not supported for wifi items");
+            }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
+            }
+            check_no_identity(flags)?;
+            check_no_ssh(flags)?;
+        }
+        AddCategory::SshKey => {
+            if flags.generate.is_some() && flags.private_key_file.is_some() {
+                bail!("cannot combine --generate and --private-key-file");
+            }
+            if flags.generate.is_none() && flags.private_key_file.is_none() {
+                bail!("missing required option for ssh-key items: specify either --generate ed25519 or --private-key-file <PATH>");
+            }
+            if let Some(g) = flags.generate {
+                let g_norm = g.trim().to_ascii_lowercase();
+                if g_norm != "ed25519" && g != "24" {
+                    bail!("unsupported key type '{g}' for --generate: gitpass currently supports generating 'ed25519' SSH keys");
+                }
+            }
+            if flags.username.is_some() {
+                bail!("--username is not supported for ssh-key items");
+            }
+            if flags.url.is_some() {
+                bail!("--url/--host is not supported for ssh-key items");
+            }
+            if flags.totp.is_some() {
+                bail!("--totp is not supported for ssh-key items");
+            }
+            if flags.password_stdin {
+                bail!("--password-stdin is not supported for ssh-key items");
+            }
+            if flags.credential_stdin {
+                bail!("--credential-stdin is not supported for ssh-key items");
+            }
+            if flags.notes_stdin {
+                bail!("--notes-stdin is only valid for secure-note items");
+            }
+            if flags.expires.is_some() {
+                bail!("--expires is not supported for ssh-key items");
+            }
+            if flags.holder.is_some() {
+                bail!("--holder is not supported for ssh-key items");
+            }
+            if flags.expiry.is_some() {
+                bail!("--expiry is not supported for ssh-key items");
+            }
+            if flags.bank.is_some() || flags.account_type.is_some() || flags.routing.is_some()
+                || flags.branch_phone.is_some() || flags.branch_address.is_some()
+                || flags.account_number_stdin || flags.pin_stdin {
+                bail!("bank account flags are only valid for bank-account items");
+            }
+            if flags.admin_url.is_some() || flags.provider.is_some() {
+                bail!("--admin-url and --provider are only valid for server items");
+            }
+            check_no_identity(flags)?;
+            check_no_wifi(flags)?;
         }
     }
     Ok(())
@@ -1584,6 +1863,14 @@ fn run() -> Result<()> {
             pin_stdin,
             admin_url,
             provider,
+            first_name,
+            last_name,
+            email,
+            phone,
+            address,
+            ssid,
+            security,
+            private_key_file,
             credential: _,
         } => {
             if title.trim().is_empty() {
@@ -1611,6 +1898,14 @@ fn run() -> Result<()> {
                 pin_stdin: *pin_stdin,
                 admin_url,
                 provider,
+                first_name,
+                last_name,
+                email,
+                phone,
+                address,
+                ssid,
+                security,
+                private_key_file,
             })?;
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
@@ -1623,7 +1918,8 @@ fn run() -> Result<()> {
                         let p = p.trim_end_matches(['\r', '\n']).to_string();
                         if p.is_empty() { None } else { Some(p) }
                     } else if let Some(n) = generate {
-                        Some(generate_password(*n))
+                        let len = n.parse::<usize>().unwrap_or(24);
+                        Some(generate_password(len))
                     } else {
                         let p = prompt_secret("GITPASS_ITEM_PASSWORD", "Item password (empty for none): ")?;
                         if p.is_empty() { None } else { Some(p.to_string()) }
@@ -1928,7 +2224,8 @@ fn run() -> Result<()> {
                         let p = p.trim_end_matches(['\r', '\n']).to_string();
                         if p.is_empty() { None } else { Some(p) }
                     } else if let Some(n) = generate {
-                        Some(generate_password(*n))
+                        let len = n.parse::<usize>().unwrap_or(24);
+                        Some(generate_password(len))
                     } else {
                         let p = prompt_secret("GITPASS_ITEM_PASSWORD", "Server password (empty for none): ")?;
                         if p.is_empty() { None } else { Some(p.to_string()) }
@@ -1995,6 +2292,179 @@ fn run() -> Result<()> {
                         title: None,
                         fields,
                     }];
+                    r
+                }
+                AddCategory::Identity => {
+                    let it = Item {
+                        title: title.clone(),
+                        username: None,
+                        password: None,
+                        url: None,
+                        notes: notes.clone(),
+                        totp: None,
+                        updated_at: store::now(),
+                    };
+                    let mut sections = Vec::new();
+                    let mut name_fields = Vec::new();
+                    if let Some(f) = first_name.as_ref().filter(|v| !v.is_empty()) {
+                        name_fields.push(gitpass_core::item::Field {
+                            id: "first".into(),
+                            label: "first name".into(),
+                            kind: FieldKind::Text,
+                            value: Some(f.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(l) = last_name.as_ref().filter(|v| !v.is_empty()) {
+                        name_fields.push(gitpass_core::item::Field {
+                            id: "last".into(),
+                            label: "last name".into(),
+                            kind: FieldKind::Text,
+                            value: Some(l.clone()),
+                            removed: false,
+                        });
+                    }
+                    if !name_fields.is_empty() {
+                        sections.push(Section {
+                            id: "name".into(),
+                            title: Some("Identification".into()),
+                            fields: name_fields,
+                        });
+                    }
+
+                    if let Some(a) = address.as_ref().filter(|v| !v.is_empty()) {
+                        sections.push(Section {
+                            id: "address".into(),
+                            title: Some("Address".into()),
+                            fields: vec![gitpass_core::item::Field {
+                                id: "address".into(),
+                                label: "address".into(),
+                                kind: FieldKind::Multiline,
+                                value: Some(a.clone()),
+                                removed: false,
+                            }],
+                        });
+                    }
+
+                    let mut contact_fields = Vec::new();
+                    if let Some(e) = email.as_ref().filter(|v| !v.is_empty()) {
+                        contact_fields.push(gitpass_core::item::Field {
+                            id: "email".into(),
+                            label: "email".into(),
+                            kind: FieldKind::Email,
+                            value: Some(e.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(p) = phone.as_ref().filter(|v| !v.is_empty()) {
+                        contact_fields.push(gitpass_core::item::Field {
+                            id: "phone".into(),
+                            label: "phone".into(),
+                            kind: FieldKind::Phone,
+                            value: Some(p.clone()),
+                            removed: false,
+                        });
+                    }
+                    if !contact_fields.is_empty() {
+                        sections.push(Section {
+                            id: "contact".into(),
+                            title: Some("Contact".into()),
+                            fields: contact_fields,
+                        });
+                    }
+
+                    let mut r = ItemRecord::new(it);
+                    r.category = Category::Identity;
+                    r.sections = sections;
+                    r
+                }
+                AddCategory::Wifi => {
+                    let password = if *password_stdin {
+                        let mut p = String::new();
+                        std::io::stdin().read_line(&mut p)?;
+                        let p = p.trim_end_matches(['\r', '\n']).to_string();
+                        if p.is_empty() { None } else { Some(p) }
+                    } else {
+                        let p = if std::env::var("GITPASS_WIFI_PASSWORD").is_ok() {
+                            prompt_secret("GITPASS_WIFI_PASSWORD", "Wi-Fi password (empty for none): ")?
+                        } else {
+                            prompt_secret("GITPASS_ITEM_PASSWORD", "Wi-Fi password (empty for none): ")?
+                        };
+                        if p.is_empty() { None } else { Some(p.to_string()) }
+                    };
+                    let it = Item {
+                        title: title.clone(),
+                        username: None,
+                        password: password.clone(),
+                        url: None,
+                        notes: notes.clone(),
+                        totp: None,
+                        updated_at: store::now(),
+                    };
+                    let mut fields = Vec::new();
+                    if let Some(s) = ssid.as_ref().filter(|s| !s.is_empty()) {
+                        fields.push(gitpass_core::item::Field {
+                            id: "ssid".into(),
+                            label: "network name".into(),
+                            kind: FieldKind::Text,
+                            value: Some(s.clone()),
+                            removed: false,
+                        });
+                    }
+                    if let Some(p) = password {
+                        fields.push(gitpass_core::item::Field {
+                            id: "password".into(),
+                            label: "wireless password".into(),
+                            kind: FieldKind::Concealed,
+                            value: Some(p),
+                            removed: false,
+                        });
+                    }
+                    if let Some(s) = security.as_ref().filter(|s| !s.is_empty()) {
+                        let norm = match s.trim().to_ascii_lowercase().as_str() {
+                            "wpa2" => "WPA2".to_string(),
+                            "wpa3" => "WPA3".to_string(),
+                            "wep" => "WEP".to_string(),
+                            "none" => "none".to_string(),
+                            _ => s.trim().to_string(),
+                        };
+                        fields.push(gitpass_core::item::Field {
+                            id: "security".into(),
+                            label: "security".into(),
+                            kind: FieldKind::Text,
+                            value: Some(norm),
+                            removed: false,
+                        });
+                    }
+                    let mut r = ItemRecord::new(it);
+                    r.category = Category::Wifi;
+                    r.sections = vec![Section {
+                        id: "main".into(),
+                        title: None,
+                        fields,
+                    }];
+                    r
+                }
+                AddCategory::SshKey => {
+                    use gitpass_core::ssh::SshKey;
+                    use zeroize::Zeroizing;
+                    let k = if let Some(file) = private_key_file {
+                        let pem = Zeroizing::new(std::fs::read_to_string(file).with_context(|| format!("read key file {}", file.display()))?);
+                        match SshKey::import_openssh(&pem, None) {
+                            Ok(k) => k,
+                            Err(e) if e.to_string().contains("encrypted") => {
+                                let p = prompt_secret("GITPASS_SSH_PASSPHRASE", "Key passphrase: ")?;
+                                SshKey::import_openssh(&pem, Some(&p))?
+                            }
+                            Err(e) => return Err(e),
+                        }
+                    } else {
+                        SshKey::generate_ed25519(title)?
+                    };
+                    let mut r = k.to_record(title)?;
+                    if let Some(n) = notes {
+                        r.item.notes = Some(n.clone());
+                    }
                     r
                 }
             };
