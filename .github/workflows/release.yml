@@ -12,7 +12,8 @@ name: Release
 # Silicon); x64 is cross-compiled with --target x86_64-apple-darwin, as on the former release Mac.
 # Every job is guarded so it runs only in itsd0/gitpass (never a fork) and only when the owner itsd0 pushed the
 # v* tag or dispatched the run; there is no pull_request trigger, so fork PRs never see these secrets.
-# Tag builds and publishing run in the `release` environment (deployment rule: v* tags only).
+# Desktop builds (tag and dry run) and publishing run in the `release` environment (deployment rules: v* tags
+# and the main branch, so a dry run must be dispatched on main).
 # Windows/Linux only run on a manual dispatch with include_windows_linux=true, so a tag release is macOS-only.
 # macOS code signing: with secrets APPLE_CERTIFICATE (base64 .p12 of the self-signed "gitpass Local Signing"
 # identity) + APPLE_CERTIFICATE_PASSWORD, the bundle is signed with that identity (not Developer ID, not
@@ -40,7 +41,9 @@ jobs:
     name: desktop (${{ matrix.name }})
     if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0'
     runs-on: ${{ matrix.os }}
-    environment: ${{ startsWith(github.ref, 'refs/tags/v') && 'release' || '' }}
+    # Always in `release` so dry runs on main also get the APPLE_CERTIFICATE env secrets (deployment rules:
+    # v* tags and the main branch). Publishing stays tag-only (`publish` job `if`).
+    environment: release
     timeout-minutes: 90
     permissions:
       contents: write  # tauri-action creates/updates the draft release on this repo
