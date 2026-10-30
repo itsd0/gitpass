@@ -54,5 +54,19 @@
       chrome.storage.local.set({ neverAutoSubmit: list }, () => res(list));
     });
   }
-  root.GitpassOnboard = { send, getSettings, setSettings, getNeverSave, setNeverSave, removeNeverSave, getNeverAutoSubmit, setNeverAutoSubmit, DEFAULTS };
+  // Per-site "Hide inline menu here" list for issue #341. Same shape as neverAutoSubmit, separate key.
+  function getHiddenInlineMenu() {
+    return new Promise((res) => {
+      chrome.storage.local.get(['hiddenInlineMenu'], (r) => {
+        const list = (r && r.hiddenInlineMenu) || [];
+        res(Array.isArray(list) ? list : []);
+      });
+    });
+  }
+  function setHiddenInlineMenu(list) {
+    return new Promise((res) => {
+      chrome.storage.local.set({ hiddenInlineMenu: list }, () => res(list));
+    });
+  }
+  root.GitpassOnboard = { send, getSettings, setSettings, getNeverSave, setNeverSave, removeNeverSave, getNeverAutoSubmit, setNeverAutoSubmit, getHiddenInlineMenu, setHiddenInlineMenu, DEFAULTS };
 })(globalThis);

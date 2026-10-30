@@ -48,7 +48,7 @@ function hasOverlappingBadge(field, role) {
 
 function rescan() {
   pruneDetachedBadges();
-  if (!SETTINGS.autofill) { // in-page suggestions turned off: drop badges/dropdown, keep capture (governed by savePrompts)
+  if (!SETTINGS.autofill || isInlineMenuHidden()) { // in-page suggestions turned off: drop badges/dropdown, keep capture (governed by savePrompts)
     closeDropdown();
     for (const field of Array.from(badges.keys())) removeBadge(field);
     return;

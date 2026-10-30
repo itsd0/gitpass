@@ -286,6 +286,69 @@ async function onAddNeverAutoSubmit() {
   await renderNeverAutoSubmit();
 }
 
+async function renderHiddenInlineMenu() {
+  const listEl = $('hidden-inline-menu-list');
+  const emptyEl = $('hidden-inline-menu-empty');
+  const emptyDescEl = $('hidden-inline-menu-empty-desc');
+  if (!listEl || !emptyEl) return;
+
+  const domains = await GitpassOnboard.getHiddenInlineMenu();
+  listEl.textContent = '';
+
+  if (!domains.length) {
+    emptyEl.style.display = 'block';
+    if (emptyDescEl) emptyDescEl.classList.remove('hidden');
+    return;
+  }
+
+  emptyEl.style.display = 'none';
+  if (emptyDescEl) emptyDescEl.classList.add('hidden');
+
+  for (const domain of domains) {
+    const row = document.createElement('div');
+    row.className = 't setting-row never-save-row';
+
+    const info = document.createElement('div');
+    info.className = 'never-save-info';
+    const b = document.createElement('b');
+    b.className = 'domain-name';
+    b.textContent = domain;
+    info.append(b);
+
+    const actions = document.createElement('div');
+    actions.className = 'setting-control';
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-sec sec';
+    btn.type = 'button';
+    btn.setAttribute('data-domain', domain);
+    btn.textContent = t('remove', 'Remove');
+    btn.onclick = async () => {
+      const current = await GitpassOnboard.getHiddenInlineMenu();
+      await GitpassOnboard.setHiddenInlineMenu(removeDomain(current, domain));
+      showToast(t('saved', 'Saved'));
+      await renderHiddenInlineMenu();
+    };
+
+    actions.append(btn);
+    row.append(info, actions);
+    listEl.append(row);
+  }
+}
+
+async function onAddHiddenInlineMenu() {
+  const input = $('hidden-inline-menu-add');
+  if (!input) return;
+  const domain = normalizeDomain(input.value);
+  if (!domain) return;
+  const current = await GitpassOnboard.getHiddenInlineMenu();
+  if (!current.some((d) => (d || '').toLowerCase() === domain)) {
+    await GitpassOnboard.setHiddenInlineMenu([...current, domain]);
+  }
+  input.value = '';
+  showToast(t('saved', 'Saved'));
+  await renderHiddenInlineMenu();
+}
+
 async function checkStatus() {
   const card = $('connection-card');
   const dot = $('status-dot');
@@ -378,6 +441,11 @@ async function init() {
   await renderShortcut();
   await renderNeverSave();
   await renderNeverAutoSubmit();
+  await renderHiddenInlineMenu();
+  const hiddenAddBtn = $('hidden-inline-menu-add-btn');
+  if (hiddenAddBtn) hiddenAddBtn.onclick = () => onAddHiddenInlineMenu();
+  const hiddenAddInput = $('hidden-inline-menu-add');
+  if (hiddenAddInput) hiddenAddInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); onAddHiddenInlineMenu(); } });
   const addBtn = $('never-auto-submit-add-btn');
   if (addBtn) addBtn.onclick = () => onAddNeverAutoSubmit();
   const addInput = $('never-auto-submit-add');
@@ -412,6 +480,8 @@ if (typeof module !== 'undefined' && module.exports) {
     checkStatus,
     renderNeverSave,
     renderNeverAutoSubmit,
+    renderHiddenInlineMenu,
+    onAddHiddenInlineMenu,
     onRemoveDomain,
     onUndoRemove,
     onAddNeverAutoSubmit,

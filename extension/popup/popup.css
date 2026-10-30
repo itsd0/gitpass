@@ -406,3 +406,10 @@ button.tag:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--accent
 /* Caps Lock hint (issue #325): reserves its line so the form does not shift */
 .caps-hint { min-height: 14px; margin: 2px 0 0; font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 4px; }
 .caps-hint[hidden] { display: flex; visibility: hidden; }
+
+/* Site settings panel + per-site gear (issue #341) */
+.site-settings-btn { width: 26px; height: 26px; flex: none; align-self: center; }
+.site-settings-btn svg.ui { width: 15px; height: 15px; }
+.site-settings-list { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.site-settings-row { cursor: pointer; }
+.site-settings-hint { font-size: 11px; margin-top: 12px; }

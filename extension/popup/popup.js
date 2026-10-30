@@ -563,6 +563,11 @@ function renderFilter() {
     const showNote = S.filter === 'suggested' && isSiteExcepted();
     noteEl.classList.toggle('hidden', !showNote);
   }
+  const ssBtn = $('siteSettingsBtn');
+  if (ssBtn) {
+    const hasSite = !!(S.origin && typeof GitpassPolicy !== 'undefined' && GitpassPolicy.isFillableOrigin(S.origin));
+    ssBtn.classList.toggle('hidden', !hasSite);
+  }
 }
 
 // Sort menu (#165): newest edit first by default; the choice is kept in extension storage.
@@ -852,6 +857,7 @@ let qt = null;
 $('q').oninput = () => { clearTimeout(qt); qt = setTimeout(() => { S.query = $('q').value.trim(); applyFilter(true); }, 80); };
 
 $('genBtn').innerHTML = UI.key; $('genBtn').onclick = () => (S.panel === 'gen' ? closePanel() : openGenerator());
+  $('siteSettingsBtn').innerHTML = UI.gear; $('siteSettingsBtn').onclick = () => (S.panel === 'site-settings' ? closePanel() : openSiteSettings(S.origin));
 $('newBtn').innerHTML = UI.plus; $('newBtn').onclick = () => (S.panel === 'new' ? closePanel() : openNewItem());
 $('lock').innerHTML = UI.lock; $('searchIc').innerHTML = UI.search;
 if ($('searchHints')) $('searchHints').onclick = () => (S.panel === 'shortcuts' ? closePanel() : openShortcuts());

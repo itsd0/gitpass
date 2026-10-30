@@ -7,14 +7,19 @@
 const SETTINGS = { autofill: true, savePrompts: true, autolockFollowsApp: true, autoFillTotp: false, autoSubmitAfterFill: false };
 let neverAutoSubmit = [];
 const isNeverAutoSubmit = () => neverAutoSubmit.includes(location.hostname.replace(/^www\./, '').toLowerCase());
+let hiddenInlineMenu = [];
+// Per-site inline menu / field badge visibility (issue #341): same host list shape as neverAutoSubmit.
+const isInlineMenuHidden = () => hiddenInlineMenu.includes(location.hostname.replace(/^www\./, '').toLowerCase());
 // Only when the guards in content.js passed (top frame, fillable origin): the callbacks call rescan().
 if (window.__gitpassInpage) {
   try {
     chrome.storage.local.get('settings', (r) => { Object.assign(SETTINGS, (r && r.settings) || {}); rescan(); });
     chrome.storage.local.get('neverAutoSubmit', (r) => { neverAutoSubmit = Array.isArray(r && r.neverAutoSubmit) ? r.neverAutoSubmit : []; });
+    chrome.storage.local.get('hiddenInlineMenu', (r) => { hiddenInlineMenu = Array.isArray(r && r.hiddenInlineMenu) ? r.hiddenInlineMenu : []; if (hiddenInlineMenu.length) rescan(); });
     chrome.storage.onChanged.addListener((ch, area) => {
       if (area === 'local' && ch.settings) { Object.assign(SETTINGS, ch.settings.newValue || {}); if (!SETTINGS.savePrompts) closeBanner(); rescan(); }
       if (area === 'local' && ch.neverAutoSubmit) neverAutoSubmit = Array.isArray(ch.neverAutoSubmit.newValue) ? ch.neverAutoSubmit.newValue : [];
+      if (area === 'local' && ch.hiddenInlineMenu) { hiddenInlineMenu = Array.isArray(ch.hiddenInlineMenu.newValue) ? ch.hiddenInlineMenu.newValue : []; rescan(); }
     });
   } catch (_) { /* storage unavailable: keep defaults */ }
 }
