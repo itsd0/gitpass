@@ -25,21 +25,53 @@ function showBanner(p) {
   const b = el('div', 'banner'); b.setAttribute('role', 'dialog'); b.tabIndex = -1;
   const isUpdate = p.prompt === 'update';
   const isCard = p.prompt === 'save_card';
+  const accounts = GitpassBanner.accountList(p.accounts);
+  const hasAccountPicker = isUpdate && accounts.length > 1;
+  const initialAccountId = hasAccountPicker ? GitpassBanner.selectAccount(accounts, p.item_id) : (p.item_id || '');
+  let chosenAccount = hasAccountPicker ? accounts.find((a) => a.id === initialAccountId) : null;
   const headTitle = isUpdate ? t('csUpdateQ', 'Update password in gitpass?')
     : isCard ? t('csSaveCardQ', 'Save card to gitpass?') : t('csSaveQ', 'Save login to gitpass?');
   b.setAttribute('aria-label', headTitle);
   const row = el('div', 'row'); const lg = el('img'); lg.src = LOGO; lg.alt = ''; lg.style.cssText = 'width:24px;height:24px;border-radius:6px';
   const m = el('div', 'm');
   m.append(el('div', 'ti', headTitle));
-  // Card banner shows the brand + masked number only — never the full number.
-  m.append(el('div', 'u', isCard ? ((p.brand ? p.brand + ' · ' : '') + (p.masked || ''))
-    : ((p.title ? p.title + ' · ' : siteName() + ' · ') + (p.username || t('csNoUser', '(no username)')))));
+  const subti = el('div', 'u');
+  function updateSubtitle(acc) {
+    if (isCard) {
+      subti.textContent = (p.brand ? p.brand + ' · ' : '') + (p.masked || '');
+    } else if (acc) {
+      const tStr = acc.title ? acc.title + ' · ' : siteName() + ' · ';
+      const uStr = acc.username || t('csNoUser', '(no username)');
+      subti.textContent = tStr + uStr;
+    } else {
+      subti.textContent = (p.title ? p.title + ' · ' : siteName() + ' · ') + (p.username || t('csNoUser', '(no username)'));
+    }
+  }
+  updateSubtitle(chosenAccount);
+  m.append(subti);
   row.append(lg, m);
 
   const title = el('input', 'inp'); title.type = 'text'; title.value = isCard && p.title ? p.title : siteName(); title.maxLength = GitpassBanner.MAX_TITLE;
   title.autocomplete = 'off'; title.spellcheck = false;
   const titleFld = el('label', 'fld'); titleFld.append(el('span', null, t('title', 'Title')), title);
   const fields = el('div', 'fields'); fields.append(titleFld);
+
+  let account = null;
+  if (hasAccountPicker) {
+    account = el('select', 'inp');
+    for (const a of accounts) {
+      const o = el('option', null, GitpassBanner.formatAccountOption(a, siteName(), t('csNoUser', '(no username)')));
+      o.value = a.id;
+      account.append(o);
+    }
+    account.value = initialAccountId;
+    account.addEventListener('change', () => {
+      chosenAccount = accounts.find((a) => a.id === account.value) || null;
+      updateSubtitle(chosenAccount);
+    });
+    const af = el('label', 'fld'); af.append(el('span', null, t('csAccount', 'Account')), account);
+    fields.append(af);
+  }
 
   const vaults = GitpassBanner.vaultList(p.vaults);
   let vault = null;
@@ -64,7 +96,7 @@ function showBanner(p) {
   if (saveNew) acts.append(saveNew);
   acts.append(primary);
 
-  const controls = () => [title, vault, never, no, saveNew, primary].filter(Boolean);
+  const controls = () => [title, account, vault, never, no, saveNew, primary].filter(Boolean);
   function setBusy(label) {
     me.busy = true;
     for (const c of controls()) c.disabled = true;
@@ -106,7 +138,13 @@ function showBanner(p) {
     m.firstChild.textContent = action === 'update' ? t('csUpdated', 'Password updated')
       : action === 'save_new' ? t('csSavedNew', 'Saved as a new login')
       : isCard ? t('csSavedCard', 'Card saved') : t('csSaved', 'Saved to gitpass');
-    m.lastChild.textContent = siteName() + ' · ' + (isCard ? (p.masked || '') : (p.username || t('csNoUser', '(no username)')));
+    if (action === 'update' && chosenAccount) {
+      const tStr = chosenAccount.title ? chosenAccount.title + ' · ' : siteName() + ' · ';
+      const uStr = chosenAccount.username || t('csNoUser', '(no username)');
+      m.lastChild.textContent = tStr + uStr;
+    } else {
+      m.lastChild.textContent = siteName() + ' · ' + (isCard ? (p.masked || '') : (p.username || t('csNoUser', '(no username)')));
+    }
     const done = el('div', 'acts');
     const mark = el('span', 'ok', '✓'); mark.setAttribute('aria-hidden', 'true');
     const open = el('button', 'btn pri', t('openInApp', 'Open in gitpass')); open.type = 'button';
@@ -134,6 +172,10 @@ function showBanner(p) {
       const msg = { action, title: GitpassBanner.titleForSave(title.value, siteName()), user_click: true };
       const vaultId = vault ? GitpassBanner.selectVault(vaults, vault.value) : '';
       if (vaultId) msg.vault_id = vaultId;
+      if (action === 'update') {
+        const chosenId = account ? GitpassBanner.selectAccount(accounts, account.value, p.item_id) : p.item_id;
+        if (chosenId) msg.item_id = chosenId;
+      }
       await send('page:save_decision', msg);
       showDone(action);
     } catch (err) {
@@ -155,6 +197,15 @@ function showBanner(p) {
     if (GitpassBanner.isEscape(e.key)) {
       if (me.busy) return;
       e.preventDefault(); e.stopPropagation(); dismiss(); return;
+    }
+    if (e.key === 'Enter') {
+      if (me.busy) return;
+      const act = banner && banner.root && banner.root.activeElement;
+      if (act && (act.tagName === 'INPUT' || act.tagName === 'SELECT')) {
+        e.preventDefault(); e.stopPropagation();
+        decide(isUpdate ? 'update' : 'save');
+        return;
+      }
     }
     if (e.key !== 'Tab') return;
     const list = Array.from(banner.root.querySelectorAll('input,select,button')).filter((x) => !x.disabled);

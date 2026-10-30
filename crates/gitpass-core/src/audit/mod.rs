@@ -128,6 +128,67 @@ pub struct AuditReport {
     pub ignored_per_item: Vec<ItemFindings>,
 }
 
+/// Weight constants for Watchtower security score calculation.
+///
+/// The score is on a 0..=100 scale:
+/// - 80% weight: bad passwords (weak, reused, or pwned/breached). An item with
+///   multiple bad password findings is only penalized once against the number of items
+///   with a password.
+/// - 10% weight: old passwords (> max age, default 365 days) against items with a password.
+/// - 10% weight: missing 2FA / TOTP (either unconfigured TOTP or documented 2FA support)
+///   against total checked items.
+pub const SCORE_WEIGHT_BAD_PASSWORDS: f64 = 80.0;
+pub const SCORE_WEIGHT_OLD_PASSWORDS: f64 = 10.0;
+pub const SCORE_WEIGHT_MISSING_2FA: f64 = 10.0;
+
+/// Returns true if the record is a live, non-archived, non-Passkey item with a non-empty password,
+/// suitable for inclusion in the Watchtower score denominator.
+pub fn is_score_password_item(rec: &ItemRecord) -> bool {
+    rec.deleted_at.is_none()
+        && !rec.archived
+        && rec.category != crate::item::Category::Passkey
+        && rec.item.password.as_deref().is_some_and(|p| !p.is_empty())
+}
+
+/// Compute the Watchtower security score (0..=100) from an [`AuditReport`] and
+/// the count of live items with a password (`items_with_password`).
+///
+/// # Weights
+/// - **80% Bad passwords**: proportion of items with a password that have a weak,
+///   reused, or breached/pwned finding (`bad_items / items_with_password * 80.0`).
+///   An item with multiple bad password findings is only penalized once.
+/// - **10% Old passwords**: proportion of items with a password that have not been
+///   changed in over `max_age_days` (`old_items / items_with_password * 10.0`).
+/// - **10% Missing 2FA / TOTP**: proportion of all audited items that lack two-factor
+///   authentication (`(missing_totp + totp_available) / items_checked.max(1) * 10.0`).
+///
+/// Returns 100 when `items_with_password == 0`.
+pub fn score(report: &AuditReport, items_with_password: usize) -> u8 {
+    if items_with_password == 0 {
+        return 100;
+    }
+    let bad_count = report.per_item.iter().filter(|f| {
+        f.findings.iter().any(|x| matches!(x, Finding::Weak { .. } | Finding::Reused { .. } | Finding::Pwned { .. }))
+    }).count();
+    let old_count = report.per_item.iter().filter(|f| {
+        f.findings.iter().any(|x| matches!(x, Finding::Old { .. }))
+    }).count();
+    let missing_totp_count = report.per_item.iter().filter(|f| {
+        f.findings.iter().any(|x| matches!(x, Finding::MissingTotp | Finding::TotpAvailable { .. }))
+    }).count();
+
+    let penalty = bad_count as f64 / items_with_password as f64 * SCORE_WEIGHT_BAD_PASSWORDS
+        + old_count as f64 / items_with_password as f64 * SCORE_WEIGHT_OLD_PASSWORDS
+        + missing_totp_count as f64 / report.items_checked.max(1) as f64 * SCORE_WEIGHT_MISSING_2FA;
+
+    (100.0 - penalty).round().clamp(0.0, 100.0) as u8
+}
+
+impl AuditReport {
+    /// Compute the Watchtower security score (0..=100) given `items_with_password`.
+    pub fn score(&self, items_with_password: usize) -> u8 { score(self, items_with_password) }
+}
+
 /// Audit `(vault, id, record)` triples with the bundled site list and no passkey context.
 pub fn audit(items: &[(String, String, ItemRecord)], o: &AuditOpts, hibp: Option<&dyn PwnedRangeClient>) -> Result<AuditReport> {
     audit_with_sites(items, &BTreeSet::new(), bundled_mfa_sites(), o, hibp)
@@ -1299,5 +1360,126 @@ mod tests {
         assert_eq!(rep_ign.ignored, 1);
         assert_eq!(rep_ign.ignored_per_item.len(), 1);
         assert!(rep_ign.ignored_per_item[0].findings.contains(&Finding::WeakSshKey { bits: 2048 }));
+    }
+
+    #[test]
+    fn test_watchtower_own_password_history_not_flagged_as_reused() {
+        let mut it = Item::default();
+        it.title = "Single Item".into();
+        it.username = Some("alice".into());
+        it.password = Some("Complex-P@ssword-1234!".into());
+        it.url = Some("https://example.com".into());
+        it.updated_at = "1700000000".into();
+        let mut login = ItemRecord::new(it);
+        login.password_history.push(crate::item::PasswordHistoryEntry {
+            value: "Complex-P@ssword-1234!".into(),
+            replaced_at: "2024-01-01T00:00:00Z".into(),
+        });
+        login.password_history.push(crate::item::PasswordHistoryEntry {
+            value: "Older-Complex-P@ss-5678!".into(),
+            replaced_at: "2023-01-01T00:00:00Z".into(),
+        });
+
+        let items = vec![("vault1".into(), "item1".into(), login)];
+        let report = audit(&items, &AuditOpts::default(), None).unwrap();
+        assert_eq!(report.reused, 0);
+        assert_eq!(report.reused_groups, 0);
+        let item1 = report.per_item.iter().find(|i| i.id == "item1");
+        if let Some(i) = item1 {
+            assert!(!i.findings.iter().any(|f| matches!(f, Finding::Reused { .. })));
+        }
+    }
+    #[test]
+    fn test_watchtower_score_calculation() {
+        // 1. Zero items with password -> score 100
+        let rep_empty = AuditReport::default();
+        assert_eq!(score(&rep_empty, 0), 100);
+        assert_eq!(rep_empty.score(0), 100);
+
+        // 2. All clean items -> score 100
+        let rep_clean = AuditReport {
+            items_checked: 5,
+            ..Default::default()
+        };
+        assert_eq!(score(&rep_clean, 5), 100);
+        assert_eq!(rep_clean.score(5), 100);
+
+        // 3. Mixed vault:
+        // 5 items checked, 4 with passwords
+        // Item 1: weak password (bad)
+        // Item 2: reused password and breached (bad - only penalized once)
+        // Item 3: old password (old) and missing totp
+        // Item 4: clean login with totp
+        // Item 5: secure note without password
+        //
+        // bad_count = 2 (Item 1, Item 2)
+        // old_count = 1 (Item 3)
+        // missing_totp_count = 1 (Item 3)
+        // items_with_password = 4
+        // items_checked = 5
+        //
+        // penalty = (2 / 4) * 80.0 + (1 / 4) * 10.0 + (1 / 5) * 10.0
+        //         = 40.0 + 2.5 + 2.0 = 44.5
+        // score = round(100 - 44.5) = round(55.5) = 56
+        let rep_mixed = AuditReport {
+            items_checked: 5,
+            per_item: vec![
+                ItemFindings {
+                    vault: "v1".into(),
+                    id: "item1".into(),
+                    title: "Item 1".into(),
+                    change_password_url: None,
+                    findings: vec![Finding::Weak { reason: "short".into() }],
+                },
+                ItemFindings {
+                    vault: "v1".into(),
+                    id: "item2".into(),
+                    title: "Item 2".into(),
+                    change_password_url: None,
+                    findings: vec![
+                        Finding::Reused { group: 1, others: 1 },
+                        Finding::Pwned { count: 42 },
+                    ],
+                },
+                ItemFindings {
+                    vault: "v1".into(),
+                    id: "item3".into(),
+                    title: "Item 3".into(),
+                    change_password_url: None,
+                    findings: vec![
+                        Finding::Old { days: 400 },
+                        Finding::MissingTotp,
+                    ],
+                },
+            ],
+            ..Default::default()
+        };
+        assert_eq!(score(&rep_mixed, 4), 56);
+        assert_eq!(rep_mixed.score(4), 56);
+    }
+
+    #[test]
+    fn test_is_score_password_item_predicate() {
+        let mut it = Item::default();
+        it.password = Some("secret".into());
+        let mut rec = ItemRecord::new(it);
+        rec.category = Category::Login;
+        assert!(is_score_password_item(&rec));
+
+        // Empty password is not counted
+        rec.item.password = Some("".into());
+        assert!(!is_score_password_item(&rec));
+        rec.item.password = None;
+        assert!(!is_score_password_item(&rec));
+
+        // Archived item is not counted
+        rec.item.password = Some("secret".into());
+        rec.archived = true;
+        assert!(!is_score_password_item(&rec));
+        rec.archived = false;
+
+        // Passkey is not counted
+        rec.category = Category::Passkey;
+        assert!(!is_score_password_item(&rec));
     }
 }

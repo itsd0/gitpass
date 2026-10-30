@@ -6,18 +6,22 @@ function closePanel() {
   const p = $('panel');
   p.classList.add('hidden');
   p.classList.remove('shortcuts-panel');
+  p.classList.remove('wt-panel');
   p.textContent = '';
   p.removeAttribute('aria-modal');
   p.removeAttribute('aria-label');
   const wasShortcuts = S.panel === 'shortcuts';
+  const wasWatchtower = S.panel === 'watchtower';
   S.panel = null;
-  if (wasShortcuts && prevFocus && typeof prevFocus.focus === 'function' && prevFocus.isConnected) {
+  wtDrillKind = null;
+  if ((wasShortcuts || wasWatchtower) && prevFocus && typeof prevFocus.focus === 'function' && prevFocus.isConnected) {
     prevFocus.focus();
   } else {
     $('q').focus();
   }
   prevFocus = null;
   if (livePending) { livePending = false; liveReload(); }
+  else if (wasWatchtower && typeof refreshWatchtowerBadge === 'function') refreshWatchtowerBadge();
 }
 
 function panelHead(title) { const h = el('h3', null, title); h.append(iconBtn(UI.close, t('close', 'Close'), closePanel)); return h; }
@@ -133,6 +137,281 @@ function openShortcuts() {
 
   const closeBtn = p.querySelector('button');
   if (closeBtn) closeBtn.focus();
+}
+
+// ---------- Watchtower overview panel (issue #376) ----------
+let wtData = null;
+let wtDrillKind = null;
+
+function scoreBand(score) {
+  const s = Math.max(0, Math.min(100, Math.round(score)));
+  if (s >= 85) return { score: s, labelKey: 'watchtowerScoreExcellent', fallback: 'Excellent', color: '#22c55e' };
+  if (s >= 70) return { score: s, labelKey: 'watchtowerScoreGood', fallback: 'Good', color: '#84cc16' };
+  if (s >= 50) return { score: s, labelKey: 'watchtowerScoreFair', fallback: 'Fair', color: '#f59e0b' };
+  return { score: s, labelKey: 'watchtowerScorePoor', fallback: 'Poor', color: '#ef4444' };
+}
+
+async function openWatchtower() {
+  prevFocus = document.activeElement;
+  const p = $('panel');
+  p.textContent = '';
+  p.classList.remove('hidden');
+  p.classList.remove('shortcuts-panel');
+  p.classList.add('wt-panel');
+  p.setAttribute('role', 'dialog');
+  p.setAttribute('aria-modal', 'true');
+  p.setAttribute('aria-label', t('watchtower', 'Watchtower'));
+  S.panel = 'watchtower';
+  wtDrillKind = null;
+
+  renderWatchtowerLoading(p);
+
+  try {
+    const res = await send({ type: 'popup:audit_summary' });
+    wtData = res;
+    renderWatchtowerOverview(p, res);
+  } catch (err) {
+    renderWatchtowerError(p, err, () => openWatchtower());
+  }
+}
+
+function renderWatchtowerLoading(p) {
+  p.textContent = '';
+  p.setAttribute('aria-busy', 'true');
+  p.setAttribute('aria-label', t('loadingWatchtower', 'Loading Watchtower…'));
+  p.append(panelHead(t('watchtower', 'Watchtower')));
+  const box = el('div', 'wt-skeleton-box');
+  for (let i = 0; i < 4; i++) {
+    const row = el('div', 'row skeleton-row skeleton-shimmer wt-skeleton-row');
+    row.setAttribute('aria-hidden', 'true');
+    const ic = el('span', 'skeleton-icon');
+    const meta = el('div', 'skeleton-meta grow');
+    meta.append(el('span', 'skeleton-bar t'), el('span', 'skeleton-bar u'));
+    row.append(ic, meta);
+    box.append(row);
+  }
+  p.append(box);
+}
+
+function renderWatchtowerError(p, err, onRetry) {
+  p.textContent = '';
+  p.removeAttribute('aria-busy');
+  p.append(panelHead(t('watchtower', 'Watchtower')));
+  const card = el('div', 'inline-err');
+  card.setAttribute('role', 'alert');
+  const ic = el('div', 'inline-err-ic');
+  ic.innerHTML = UI.alert || UI.warn;
+  const msg = el('h3', 'inline-err-msg', t('errWatchtowerLoad', "Couldn't load Watchtower"));
+  const sub = el('p', 'inline-err-sub muted', typeof errText === 'function' ? errText(err) : (err && err.message) || String(err));
+  const btn = el('button', 'btn btn-primary btn-retry', t('retry', 'Retry'));
+  btn.type = 'button';
+  btn.onclick = onRetry;
+  card.append(ic, msg, sub, btn);
+  p.append(card);
+  btn.focus();
+}
+
+function renderWatchtowerOverview(p, data) {
+  p.textContent = '';
+  p.removeAttribute('aria-busy');
+  wtDrillKind = null;
+
+  p.append(panelHead(t('watchtower', 'Watchtower')));
+
+  const findings = (data && Array.isArray(data.findings)) ? data.findings.filter((f) => f.items && f.items.length > 0) : [];
+
+  if (!findings.length) {
+    const emptyBox = el('div', 'empty wt-empty');
+    const ic = el('div', 'wt-empty-icon');
+    ic.innerHTML = UI.shield;
+    const msg = el('p', 'wt-empty-msg', t('watchtowerNothingNeedsAttention', 'Nothing needs attention'));
+    emptyBox.append(ic, msg);
+    p.append(emptyBox);
+    const closeBtn = p.querySelector('button');
+    if (closeBtn) closeBtn.focus();
+    return;
+  }
+
+  // Score summary card
+  const scoreCard = el('div', 'wt-score-card');
+  const b = scoreBand(data.score != null ? data.score : 100);
+  const r = 26;
+  const circ = 2 * Math.PI * r;
+  const arc = circ * 0.75;
+  const filled = (arc * b.score) / 100;
+
+  const gauge = el('div', 'wt-score-gauge');
+  gauge.setAttribute('role', 'img');
+  gauge.setAttribute('aria-label', t('watchtowerScore', 'Security score: $1 of 100', [b.score]));
+  gauge.innerHTML = `<svg viewBox="0 0 64 64" width="56" height="56" class="wt-gauge-svg">
+    <circle cx="32" cy="32" r="${r}" fill="none" stroke="currentColor" class="wt-gauge-bg" stroke-width="5" stroke-dasharray="${arc} ${circ}" stroke-linecap="round"/>
+    <circle cx="32" cy="32" r="${r}" fill="none" stroke="${b.color}" stroke-width="5" stroke-dasharray="${filled} ${circ}" stroke-linecap="round"/>
+  </svg>
+  <div class="wt-gauge-text">
+    <span class="wt-gauge-num">${b.score}</span>
+  </div>`;
+
+  const scoreInfo = el('div', 'wt-score-info');
+  const scoreLbl = el('div', 'wt-score-label', t(b.labelKey, b.fallback));
+  scoreLbl.style.color = b.color;
+  const scoreSub = el('div', 'wt-score-sub muted', t('watchtowerScore', 'Security score: $1 of 100', [b.score]));
+  scoreInfo.append(scoreLbl, scoreSub);
+  scoreCard.append(gauge, scoreInfo);
+  p.append(scoreCard);
+
+  // Finding rows
+  const list = el('div', 'wt-findings-list');
+  list.setAttribute('role', 'list');
+
+  findings.forEach((f) => {
+    const row = el('div', 'wt-finding-row');
+    row.setAttribute('role', 'listitem');
+    row.setAttribute('tabindex', '0');
+    row.dataset.kind = f.kind;
+
+    const sev = V ? V.findingSeverity(f.kind) : (f.kind === 'weak' || f.kind === 'reused' || f.kind === 'pwned' || f.kind === 'expired' ? 'danger' : 'warn');
+    row.classList.add('sev-' + sev);
+
+    const dot = el('span', 'wt-dot ' + sev);
+    dot.setAttribute('aria-hidden', 'true');
+
+    const kindLabel = V ? V.findingLabel(f.kind, null, t) : f.kind;
+    const countStr = String(f.items.length);
+    const rowLabel = el('span', 'wt-finding-label', kindLabel + ' · ' + countStr);
+
+    const chev = el('span', 'wt-chev');
+    chev.innerHTML = UI.chevron;
+    chev.setAttribute('aria-hidden', 'true');
+
+    row.append(dot, rowLabel, chev);
+
+    const activate = () => renderWatchtowerDrillDown(p, f);
+    row.onclick = activate;
+    row.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = row.nextElementSibling || list.firstElementChild;
+        if (next) next.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = row.previousElementSibling || list.lastElementChild;
+        if (prev) prev.focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closePanel();
+      }
+    };
+    list.append(row);
+  });
+
+  p.append(list);
+
+  const firstRow = list.querySelector('.wt-finding-row');
+  if (firstRow) firstRow.focus();
+}
+
+function renderWatchtowerDrillDown(p, finding) {
+  p.textContent = '';
+  wtDrillKind = finding.kind;
+
+  // Header with back button
+  const head = el('div', 'wt-drill-head');
+  const backBtn = el('button', 'icon-btn wt-back-btn');
+  backBtn.type = 'button';
+  backBtn.title = t('back', 'Back');
+  backBtn.setAttribute('aria-label', t('back', 'Back'));
+  backBtn.innerHTML = UI.chevron;
+  backBtn.onclick = () => {
+    if (wtData) renderWatchtowerOverview(p, wtData);
+    else openWatchtower();
+  };
+
+  const kindLabel = V ? V.findingLabel(finding.kind, null, t) : finding.kind;
+  const title = el('h3', 'wt-drill-title', kindLabel + ' (' + finding.items.length + ')');
+  const closeBtn = iconBtn(UI.close, t('close', 'Close'), closePanel);
+  head.append(backBtn, title, closeBtn);
+  p.append(head);
+
+  const list = el('div', 'wt-items-list');
+  list.setAttribute('role', 'list');
+
+  finding.items.forEach((it) => {
+    const row = el('div', 'wt-item-row');
+    row.setAttribute('role', 'listitem');
+    row.setAttribute('tabindex', '0');
+    row.dataset.itemId = it.id;
+
+    const iconWrap = el('span', 'wt-item-icon');
+    if (typeof renderRowIcon === 'function') {
+      renderRowIcon(iconWrap, it, 20);
+    } else if (typeof categoryIcon === 'function') {
+      iconWrap.innerHTML = categoryIcon(it.category || 'login', 20);
+    }
+
+    const meta = el('div', 'wt-item-meta');
+    const tEl = el('span', 'wt-item-title', it.title || it.url || it.id);
+    const subText = it.username || it.url || '';
+    const uEl = el('span', 'wt-item-sub muted', subText);
+    meta.append(tEl, uEl);
+
+    row.append(iconWrap, meta);
+
+    const activate = () => {
+      openItemFromWatchtower(it.id);
+    };
+
+    row.onclick = activate;
+    row.onkeydown = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        activate();
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        const next = row.nextElementSibling || list.firstElementChild;
+        if (next) next.focus();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        const prev = row.previousElementSibling || list.lastElementChild;
+        if (prev) prev.focus();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        if (wtData) renderWatchtowerOverview(p, wtData);
+        else openWatchtower();
+      }
+    };
+
+    list.append(row);
+  });
+
+  p.append(list);
+
+  const firstItem = list.querySelector('.wt-item-row');
+  if (firstItem) firstItem.focus();
+}
+
+function openItemFromWatchtower(itemId) {
+  closePanel();
+  let idx = S.rows.findIndex((r) => r.id === itemId);
+  if (idx < 0) {
+    S.filter = 'all';
+    renderFilter();
+    applyFilter(false);
+    idx = S.rows.findIndex((r) => r.id === itemId);
+  }
+  if (idx >= 0) {
+    select(idx);
+  } else {
+    const it = S.all.find((r) => r.id === itemId) || { id: itemId, category: 'login', title: '' };
+    S.sel = -1;
+    renderDetailSkeleton(it);
+    send({ type: 'popup:get_item', item_id: itemId })
+      .then((res) => renderDetail(res.item))
+      .catch((err) => renderDetailError(err, () => openItemFromWatchtower(itemId)));
+  }
 }
 
 async function generate(len, digits, symbols, extra) {

@@ -22,6 +22,9 @@ test('view.js: findingSeverity and hasWatchtowerFindings', () => {
   assert.strictEqual(V.findingSeverity('passkey_available'), 'warn');
   assert.strictEqual(V.findingSeverity('expiring_soon'), 'warn');
   assert.strictEqual(V.findingSeverity('duplicate'), 'warn');
+  assert.strictEqual(V.findingSeverity('unused'), 'warn');
+  assert.strictEqual(V.findingSeverity('rotation_due'), 'warn');
+  assert.strictEqual(V.findingSeverity('rotation_soon'), 'warn', 'rotation_soon is a heads-up, not danger');
 
   assert.strictEqual(V.hasWatchtowerFindings(null), false);
   assert.strictEqual(V.hasWatchtowerFindings({}), false);
@@ -50,6 +53,30 @@ test('view.js: findingLabel formats chips correctly', () => {
   assert.strictEqual(V.findingLabel('expired', {}, fakeT), 'Expired');
   assert.strictEqual(V.findingLabel('expiring_soon', {}, fakeT), 'Expiring soon');
   assert.strictEqual(V.findingLabel('duplicate', {}, fakeT), 'Duplicate login');
+  assert.strictEqual(V.findingLabel('unused', {}, fakeT), 'Not used in over a year');
+  assert.strictEqual(V.findingLabel('rotation_due', {}, fakeT), 'Due for rotation');
+  assert.strictEqual(V.findingLabel('rotation_soon', {}, fakeT), 'Rotation due soon');
+});
+
+test('view.js: every Finding kind the core serializes has a localized chip label (issue #369)', () => {
+  // Parse the kinds straight from the core enum so a future finding can't fall back
+  // to a raw snake_case chip without this test noticing.
+  const auditSrc = fs.readFileSync(path.join(root, '..', 'crates', 'gitpass-core', 'src', 'audit', 'mod.rs'), 'utf8');
+  const m = auditSrc.match(/FINDING_KINDS: &\[&str\] = &\[([^\]]+)\]/);
+  assert.ok(m, 'FINDING_KINDS not found in core audit/mod.rs');
+  const kinds = [...m[1].matchAll(/"([a-z_]+)"/g)].map((x) => x[1]);
+  assert.ok(kinds.length >= 15, 'expected the full finding list, got ' + kinds.length);
+  const fakeT = (key, fallback, subs) => {
+    let s = fallback || key;
+    if (subs) s = s.replace(/\$(\d)/g, (_, n) => subs[Number(n) - 1]);
+    return s;
+  };
+  for (const kind of kinds) {
+    const label = V.findingLabel(kind, {}, fakeT);
+    assert.notStrictEqual(label, kind, `findingLabel('${kind}') returned the raw kind`);
+    assert.ok(label.length > 0, `findingLabel('${kind}') returned an empty label`);
+    assert.ok(!label.includes('_'), `findingLabel('${kind}') still looks like a raw kind: ${label}`);
+  }
 });
 
 const ITEMS = [

@@ -238,6 +238,69 @@ fn item_findings_contract_and_security() {
 }
 
 #[test]
+fn audit_summary_contract_and_security() {
+    let mut f = setup();
+    // 1. Locked gives locked
+    assert!(err(&mut f.host, json!({"cmd":"audit_summary"})).contains("locked"));
+
+    // Unlock
+    ok(&mut f.host, json!({"cmd":"unlock","password":PW}));
+
+    // Add 2 items with weak and reused password
+    let secret = "SECRET-pwd-123456";
+    let s1 = ok(&mut f.host, json!({
+        "cmd": "save_login",
+        "origin": "https://service1.example.com",
+        "username": "user1",
+        "password": secret,
+        "title": "Service 1"
+    }));
+    let id1 = s1["item_id"].as_str().unwrap().to_string();
+
+    let s2 = ok(&mut f.host, json!({
+        "cmd": "save_login",
+        "origin": "https://service2.example.com",
+        "username": "user2",
+        "password": secret,
+        "title": "Service 2"
+    }));
+    let id2 = s2["item_id"].as_str().unwrap().to_string();
+
+    let sum = ok(&mut f.host, json!({"cmd":"audit_summary"}));
+    assert!(sum["score"].is_number(), "score must be a number: {sum:?}");
+    let score = sum["score"].as_u64().unwrap();
+    assert!(score <= 100, "score must be <= 100: {score}");
+
+    let findings = sum["findings"].as_array().expect("findings array");
+    let kinds: Vec<&str> = findings.iter().map(|f| f["kind"].as_str().unwrap()).collect();
+    assert!(kinds.contains(&"weak"), "must contain weak finding: {sum:?}");
+    assert!(kinds.contains(&"reused"), "must contain reused finding: {sum:?}");
+
+    // Check items inside weak finding
+    let weak_finding = findings.iter().find(|f| f["kind"] == "weak").unwrap();
+    assert!(weak_finding["count"].as_u64().unwrap() >= 2);
+    let weak_items = weak_finding["items"].as_array().unwrap();
+    let weak_ids: Vec<&str> = weak_items.iter().map(|it| it["id"].as_str().unwrap()).collect();
+    assert!(weak_ids.contains(&id1.as_str()));
+    assert!(weak_ids.contains(&id2.as_str()));
+
+    // Verify item fields (id, title, username, url, category)
+    let item1_data = weak_items.iter().find(|it| it["id"] == id1.as_str()).unwrap();
+    assert_eq!(item1_data["title"], "Service 1");
+    assert_eq!(item1_data["username"], "user1");
+    assert_eq!(item1_data["url"], "https://service1.example.com");
+    assert_eq!(item1_data["category"], "login");
+
+    // 2. Security: secret password must never leak in audit_summary JSON
+    let json_str = sum.to_string();
+    assert!(!json_str.contains(secret), "secret password must never leak across boundary: {json_str}");
+
+    // 3. Locked state
+    ok(&mut f.host, json!({"cmd":"lock"}));
+    assert!(err(&mut f.host, json!({"cmd":"audit_summary"})).contains("locked"));
+}
+
+#[test]
 fn generator_history_is_read_only_newest_first_and_locked_refused() {
     let mut f = setup();
     assert!(err(&mut f.host, json!({"cmd":"generator_history"})).contains("locked"));

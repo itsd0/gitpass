@@ -509,6 +509,12 @@ if (filter === "suggested") base = (suggested || []).filter((i) => !i.archived &
         return t('watchtowerDuplicate', 'Duplicate login');
       case 'weak_ssh_key':
         return t('watchtowerWeakSshKey', 'Weak SSH key');
+      case 'unused':
+        return t('watchtowerUnused', 'Not used in over a year');
+      case 'rotation_due':
+        return t('watchtowerRotationDue', 'Due for rotation');
+      case 'rotation_soon':
+        return t('watchtowerRotationSoon', 'Rotation due soon');
       default:
         return String(kind);
     }

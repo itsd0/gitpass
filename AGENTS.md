@@ -84,7 +84,7 @@ They also cannot edit `.github/workflows` (and must not anyway).
 | `apps/desktop/src` | React/TypeScript UI (Vite, zustand, vitest). Browser mock in `src/api/mock.ts` |
 | `extension/` | Chromium MV3 extension (plain JS, `node --test`) |
 | `ios/` | SwiftUI app + `ios/rust/gitpass-ios-ffi` (uniffi), XcodeGen `project.yml` |
-| `.github/workflows` | PR CI runs on GitHub-hosted runners; only `release.yml` (v* tags, owner only) uses the self-hosted Mac — **owner only, do not edit unless an issue asks for it** |
+| `.github/workflows` | All workflows run on GitHub-hosted runners; `release.yml` (v* tags, owner only, `release` environment) — **owner only, do not edit unless an issue asks for it** |
 | `docs/RELEASE.md`, `scripts/` | Release notes/process, helper scripts |
 
 ## Setup

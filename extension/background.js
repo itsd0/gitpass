@@ -139,6 +139,7 @@ async function popupRoute(msg) {
     }
     case 'get_item': return host('get_item', { item_id: msg.item_id, include_deleted: !!msg.include_deleted });
     case 'item_findings': return host('item_findings', { item_id: msg.item_id });
+    case 'audit_summary': return host('audit_summary');
     case 'reveal': return host('reveal', { item_id: msg.item_id, field: msg.field, source: 'popup' });
     case 'totp': return host('totp', { item_id: msg.item_id });
     case 'generate': {

@@ -256,6 +256,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     descriptionKey: 'settings.colorPasswordsHelp',
     keywords: ['color', 'colour', 'digits', 'symbols', 'accessibility', 'reveal'],
   },
+  {
+    id: 'setting-row-warnings',
+    tab: 'general',
+    labelKey: 'settings.rowWarnings',
+    descriptionKey: 'settings.rowWarningsHelp',
+    keywords: ['watchtower', 'warning', 'icon', 'weak', 'reused', 'breached', 'list', 'security'],
+  },
 ];
 
 export interface SearchResult extends SearchableSetting {

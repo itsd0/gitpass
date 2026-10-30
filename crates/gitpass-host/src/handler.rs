@@ -511,10 +511,15 @@ impl Host {
                 }
                 let (_, iid, r) = self.record(arg_str(req, "item_id")?)?;
                 let field = arg_str(req, "field")?;
-                let value = match field {
-                    "notes" => r.item.notes.clone(),
-                    "url" => r.item.url.clone(),
-                    _ => r.find_field(field).and_then(|f| f.value),
+                let value = if let Some(idx_str) = field.strip_prefix("password_history:") {
+                    let idx: usize = idx_str.parse().map_err(|_| coded(code::BAD_REQUEST, "invalid password history index"))?;
+                    r.password_history.get(idx).map(|h| h.value.clone())
+                } else {
+                    match field {
+                        "notes" => r.item.notes.clone(),
+                        "url" => r.item.url.clone(),
+                        _ => r.find_field(field).and_then(|f| f.value),
+                    }
                 }.ok_or_else(|| coded(code::NOT_FOUND, format!("no field '{field}'")))?;
                 let _ = self.sess()?.touch_item_used(&iid);
                 Ok(json!({"value": value}))
@@ -713,6 +718,12 @@ impl Host {
                 let (_, _, rec) = self.record(item_id_str)?;
                 let report = self.get_audit_report()?;
                 Ok(crate::protocol::item_findings(vid, iid, &rec, &report))
+            }
+            "audit_summary" => {
+                let report = self.get_audit_report()?;
+                let recs = self.all_records(None)?;
+                let iter = recs.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                Ok(crate::protocol::audit_summary(&report, iter))
             }
             "site_icon" => {
                 let s = self.sess()?;

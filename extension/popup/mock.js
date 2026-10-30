@@ -105,7 +105,29 @@
         }
         return ok({ kinds: [] });
       }
-      case 'reveal': { const it = liveItem(msg.item_id); if (!it) return err('not_found'); detail(it); return ok({ value: secrets[msg.field] || '' }); }
+      case 'audit_summary': {
+        const item0 = liveItem('v1:i0');
+        const items = item0 ? [{ id: item0.id, title: item0.title, username: item0.username || 'octocat', url: item0.url || 'https://github.com', category: item0.category || 'login' }] : [];
+        return ok({
+          score: items.length > 0 ? 85 : 100,
+          items_checked: 2,
+          findings: items.length > 0 ? [
+            { kind: 'weak', count: 1, items },
+            { kind: 'reused', count: 1, items },
+          ] : [],
+        });
+      }
+      case 'reveal': {
+        const it = liveItem(msg.item_id);
+        if (!it) return err('not_found');
+        detail(it);
+        if (msg.field && msg.field.startsWith('password_history:')) {
+          const idx = parseInt(msg.field.split(':')[1], 10);
+          const val = (it.password_history && it.password_history[idx]?.value) || secrets[msg.field] || 'fake-old-pw';
+          return ok({ value: val });
+        }
+        return ok({ value: secrets[msg.field] || '' });
+      }
       case 'totp': { const s = Math.floor(Date.now() / 1000); return ok({ code: String(100000 + (Math.floor(s / 30) * 7919) % 900000), remaining: 30 - (s % 30), period: 30 }); }
       case 'generate': return ok({ password: 'Xk7#pQ2m-Vr9!tLz4wNb' });
       case 'generator_history': {

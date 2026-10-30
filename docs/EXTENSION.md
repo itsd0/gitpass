@@ -99,6 +99,14 @@ Open it from the toolbar icon, or with the keyboard command below.
   `gitpass gen --no-history` skips recording for a single CLI generation only.
   Note: when the desktop app is closed, the standalone host currently ignores
   that setting — see issue #225.
+- **Watchtower overview.** The shield button in the filter row opens the popup's
+  vault-wide Watchtower panel. It displays your overall security score (0–100)
+  with color-coded health rating, followed by finding rows with item counts for
+  every category that needs attention (e.g. *Weak password · 2*, *Reused password · 2*,
+  *Due for rotation · 1*). Clicking or pressing Enter on a finding row drills down
+  into the affected items (with website favicons and monograms); choosing an item
+  immediately opens its detail in the popup, while Esc goes back to the overview.
+  When everything is clean, a calm "Nothing needs attention" message is displayed.
 - **Related items.** When an item has linked related items, the detail view
   shows a **Related items** section below the fields and notes. Each row displays
   the item's category icon and title; clicking or pressing Enter opens that item's

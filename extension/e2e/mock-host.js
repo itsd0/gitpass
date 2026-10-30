@@ -102,6 +102,19 @@ function handle(m) {
       }
       return { kinds: [] };
     }
+    case 'audit_summary': { needUnlock();
+      const custom = (readJson(CTRL, {}).audit_summary);
+      if (custom) return custom;
+      const items = getItems();
+      const weak = items.filter((x) => x.id === 'v1:i1' || x.id === 'v1:i2').map((x) => ({
+        id: x.id, title: x.title, username: x.username || x._u || '', url: x.url || '', category: x.category || 'login',
+      }));
+      return {
+        score: weak.length > 0 ? 80 : 100,
+        items_checked: items.length,
+        findings: weak.length > 0 ? [{ kind: 'weak', count: weak.length, items: weak }] : [],
+      };
+    }
     case 'reveal': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); return { value: i && m.field === 'password' ? i._p : (i && i._u) || '' }; }
     case 'fill': { needUnlock(); const i = getItems().find((x) => x.id === m.item_id); if (!i) throw Object.assign(new Error('no item'), { code: 'not_found' });
       const matchOk = matches(origin).some((x) => x.id === i.id) || !!m.user_confirm;

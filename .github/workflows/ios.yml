@@ -1,6 +1,6 @@
 name: iOS
 
-# GitHub-hosted macos-latest only (never the self-hosted Mac, which is release-only).
+# GitHub-hosted macos-latest only (no self-hosted runners are used).
 # Builds the gitpass iOS app on macOS: the UniFFI XCFramework, the
 # Rust FFI tests, and an unsigned simulator build + test run.
 # This workflow never signs, never needs a team, and never touches
