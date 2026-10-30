@@ -4,17 +4,18 @@ class RO { observe() {} unobserve() {} disconnect() {} }
 (globalThis as any).ResizeObserver ??= RO;
 Element.prototype.scrollIntoView ??= () => {};
 
-class MemoryStorage {
-  private store: Record<string, string> = {};
-  get length() { return Object.keys(this.store).length; }
-  clear() { this.store = {}; }
-  getItem(key: string) { return this.store[key] ?? null; }
-  setItem(key: string, value: string) { this.store[key] = String(value); }
-  removeItem(key: string) { delete this.store[key]; }
-  key(index: number) { return Object.keys(this.store)[index] ?? null; }
-}
-if (typeof window !== 'undefined') {
-  const s = new MemoryStorage();
-  Object.defineProperty(window, 'localStorage', { value: s, configurable: true, writable: true });
-  Object.defineProperty(globalThis, 'localStorage', { value: s, configurable: true, writable: true });
+// Node 25 defines a dummy getter for `globalThis.localStorage` without Storage methods.
+if (typeof (globalThis as any).localStorage?.clear !== 'function') {
+  const store = new Map<string, string>();
+  const storage = (typeof window !== 'undefined' && window.localStorage && typeof window.localStorage.clear === 'function')
+    ? window.localStorage
+    : {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => { store.set(k, String(v)); },
+        removeItem: (k: string) => { store.delete(k); },
+        clear: () => { store.clear(); },
+        key: (i: number) => Array.from(store.keys())[i] ?? null,
+        get length() { return store.size; },
+      };
+  Object.defineProperty(globalThis, 'localStorage', { value: storage, writable: true, configurable: true });
 }

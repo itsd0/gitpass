@@ -498,6 +498,10 @@ pub fn subtitle(r: &ItemRecord) -> String {
                 _ => String::new(),
             }
         }
+        Category::ApiCredential => gitpass_core::mask::api_credential_secret(r)
+            .map(gitpass_core::mask::secret_hint)
+            .or_else(|| find(&|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())))
+            .unwrap_or_default(),
         _ => find(&|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())).unwrap_or_default(),
     }
 }
@@ -509,6 +513,8 @@ fn to_dto_sections(r: &ItemRecord) -> Vec<Section> {
                 f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8).map(|d| card_mask(&d))
             } else if r.category == Category::BankAccount && (f.id == "account_number" || f.id == "account_no" || f.label.to_lowercase().contains("account number")) {
                 f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>()).filter(|d| d.len() >= 4).map(|d| format!("•••• •••• •••• {}", &d[d.len() - 4..]))
+            } else if r.category == Category::ApiCredential {
+                f.value.as_deref().map(gitpass_core::mask::secret_hint)
             } else {
                 None
             }
@@ -848,7 +854,9 @@ impl App {
     pub fn list_items(&self, filter: &Filter) -> Result<Vec<ItemSummary>> {
         self.with(|u| {
             let all = Self::all_records(&u.session)?;
-            let q = filter.query.as_deref().unwrap_or("").trim().to_lowercase();
+            let q_str = filter.query.as_deref().unwrap_or("").trim();
+            let parsed_q = (!q_str.is_empty()).then(|| gitpass_core::search::parse_query(q_str));
+            let vnames: BTreeMap<String, String> = u.session.list_vaults()?.into_iter().map(|(id, m)| (id, m.name.clone())).collect();
             let usage = u.session.all_last_used();
             let mut v: Vec<(ItemSummary, u64)> = all.iter().filter(|(vid, _, r)| {
                 let live = r.deleted_at.is_none();
@@ -861,10 +869,28 @@ impl App {
                     FilterKind::Tag => live && !r.archived && filter.tag.as_ref().is_some_and(|t| r.tags.contains(t)),
                     FilterKind::Category => live && !r.archived && Some(r.category) == filter.category,
                 };
-                keep
+                // The item-type picker narrows every view (Recently deleted, Archive,
+                // Favorites, a vault, a tag), not only the Category sidebar entry.
+                if !keep || filter.category.is_some_and(|c| r.category != c) {
+                    return false;
+                }
+                if let Some(pq) = &parsed_q {
+                    let vn = vnames.get(vid.as_str()).map(|s| s.as_str());
+                    let cand = gitpass_core::search::CandidateInfo::from_record(r, vn);
+                    if !pq.matches(&cand) { return false; }
+                }
+                true
             }).map(|(vid, iid, r)| (summary(vid, iid, r, usage.get(iid).copied()), r.created_at.unwrap_or(0)))
-              .filter(|(s, _)| q.is_empty() || [s.title.as_str(), s.subtitle.as_str(), s.url.as_deref().unwrap_or("")].iter().any(|x| x.to_lowercase().contains(&q))
-                    || s.tags.iter().any(|t| t.to_lowercase().contains(&q)))
+              .filter(|(s, _)| {
+                  if let Some(pq) = &parsed_q {
+                      if pq.terms.is_empty() { return true; }
+                      let q = pq.terms.to_lowercase();
+                      [s.title.as_str(), s.subtitle.as_str(), s.url.as_deref().unwrap_or("")].iter().any(|x| x.to_lowercase().contains(&q))
+                          || s.tags.iter().any(|t| t.to_lowercase().contains(&q))
+                  } else {
+                      true
+                  }
+              })
               .collect();
             match filter.sort.unwrap_or(Sort::Updated) {
                 Sort::Title => v.sort_by(|a, b| a.0.title.to_lowercase().cmp(&b.0.title.to_lowercase())),
@@ -1358,8 +1384,8 @@ impl App {
         let fmt: import::ImportFormat = format.parse()?;
         let path = path.trim();
         let path = if let Some(rest) = path.strip_prefix("~/") { dirs::home_dir().map(|h| h.join(rest).display().to_string()).unwrap_or_else(|| path.to_string()) } else { path.to_string() };
-        let path = path.as_str();
-        let data = Zeroizing::new(std::fs::read(path).with_context(|| format!("cannot read {path}"))?);
+        let resolved = import::resolve_import_path(std::path::Path::new(&path));
+        let data = Zeroizing::new(std::fs::read(&resolved).with_context(|| format!("cannot read {}", resolved.display()))?);
         if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&String::from_utf8_lossy(&data)) { bail!("encrypted gitpass exports need a passphrase; import them with the CLI"); }
         let parsed = import::parse_bytes(fmt, &data, None)?;
         let mut categories = BTreeMap::new();

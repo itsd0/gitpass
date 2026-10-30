@@ -97,8 +97,8 @@ fn bitwarden_csv_fixture() {
 }
 
 #[test]
-fn onepassword_csv_fixture() {
-    let (rep, recs) = import_fixture(ImportFormat::OnePasswordCsv, "1password.csv");
+fn generic_csv_fixture() {
+    let (rep, recs) = import_fixture(ImportFormat::GenericCsv, "generic.csv");
     assert_eq!((rep.parsed, rep.added, rep.duplicates.len()), (5, 4, 1));
     check_common(&recs, false);
     let m = by(&recs, "Example Mail");
@@ -113,8 +113,8 @@ fn onepassword_csv_fixture() {
 }
 
 #[test]
-fn onepassword_1pux_fixture() {
-    let (rep, recs) = import_fixture(ImportFormat::OnePassword1pux, "1password.1pux");
+fn pux_fixture() {
+    let (rep, recs) = import_fixture(ImportFormat::Pux, "export.1pux");
     assert_eq!((rep.parsed, rep.added, rep.duplicates.len()), (13, 12, 1));
     check_common(&recs, false);
     let m = by(&recs, "Example Mail");
@@ -173,11 +173,11 @@ fn onepassword_1pux_fixture() {
 }
 
 #[test]
-fn onepassword_csv_bank_account_and_server() {
+fn generic_csv_bank_account_and_server() {
     let csv = "Title,Type,Username,Password,Url,Notes\n\
                Chase Checking,Bank Account,Alice Example,1234567890,,Monthly bills\n\
                Web Production,Server,ubuntu,SrvSecretPass123!,https://web.prod.invalid,Node 1\n";
-    let parsed = import::parse_bytes(ImportFormat::OnePasswordCsv, csv.as_bytes(), None).unwrap();
+    let parsed = import::parse_bytes(ImportFormat::GenericCsv, csv.as_bytes(), None).unwrap();
     assert_eq!(parsed.items.len(), 2);
     let bank = &parsed.items[0];
     assert_eq!(bank.category, Category::BankAccount);
@@ -243,31 +243,31 @@ fn apple_passwords_csv_fixture() {
 #[test]
 fn format_auto_detection() {
     let b_apple = fixture("apple-passwords.csv");
-    let b_one = fixture("1password.csv");
+    let b_one = fixture("generic.csv");
     let b_bw = fixture("bitwarden.csv");
     let b_kp = fixture("keepass.csv");
     let b_chrome = fixture("chrome.csv");
     let b_bw_json = fixture("bitwarden.json");
 
     assert_eq!(import::detect_format(std::str::from_utf8(&b_apple).unwrap()), Some(ImportFormat::ApplePasswordsCsv));
-    assert_eq!(import::detect_format(std::str::from_utf8(&b_one).unwrap()), Some(ImportFormat::OnePasswordCsv));
+    assert_eq!(import::detect_format(std::str::from_utf8(&b_one).unwrap()), Some(ImportFormat::GenericCsv));
     assert_eq!(import::detect_format(std::str::from_utf8(&b_bw).unwrap()), Some(ImportFormat::BitwardenCsv));
     assert_eq!(import::detect_format(std::str::from_utf8(&b_kp).unwrap()), Some(ImportFormat::KeepassCsv));
     assert_eq!(import::detect_format(std::str::from_utf8(&b_chrome).unwrap()), Some(ImportFormat::ChromeCsv));
     assert_eq!(import::detect_format(std::str::from_utf8(&b_bw_json).unwrap()), Some(ImportFormat::BitwardenJson));
 
-    // Headers specifically: Apple header vs 1Password 8 header
+    // Headers specifically: Apple header vs generic CSV header
     assert_eq!(
         import::detect_format("Title,URL,Username,Password,Notes,OTPAuth\nfoo,https://foo.test,u,p,n,\n"),
         Some(ImportFormat::ApplePasswordsCsv)
     );
     assert_eq!(
         import::detect_format("Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes\nfoo,https://foo.test,u,p,,false,false,,\n"),
-        Some(ImportFormat::OnePasswordCsv)
+        Some(ImportFormat::GenericCsv)
     );
 
     // Byte detection for 1pux zip and apple passwords csv
-    assert_eq!(import::detect_format_bytes(&fixture("1password.1pux")), Some(ImportFormat::OnePassword1pux));
+    assert_eq!(import::detect_format_bytes(&fixture("export.1pux")), Some(ImportFormat::Pux));
     assert_eq!(import::detect_format_bytes(&fixture("apple-passwords.csv")), Some(ImportFormat::ApplePasswordsCsv));
 }
 
@@ -288,8 +288,8 @@ fn malformed_files_error_cleanly() {
     assert!(import::parse_bytes(ImportFormat::GitpassJson, &fixture("malformed.json"), None).is_err());
     assert!(import::parse_bytes(ImportFormat::ChromeCsv, &fixture("malformed.csv"), None).is_err());
     assert!(import::parse_bytes(ImportFormat::ApplePasswordsCsv, &fixture("malformed.csv"), None).is_err());
-    assert!(import::parse_bytes(ImportFormat::OnePassword1pux, &fixture("malformed.json"), None).is_err());
-    assert!(import::parse_bytes(ImportFormat::OnePassword1pux, &fixture("1password.csv"), None).is_err());
+    assert!(import::parse_bytes(ImportFormat::Pux, &fixture("malformed.json"), None).is_err());
+    assert!(import::parse_bytes(ImportFormat::Pux, &fixture("generic.csv"), None).is_err());
     // wrong format picked: a CSV fed to the JSON importer
     assert!(import::parse_bytes(ImportFormat::BitwardenJson, &fixture("chrome.csv"), None).is_err());
     assert!(import::parse_bytes(ImportFormat::LastpassCsv, &fixture("malformed.csv"), None).is_err());
@@ -298,7 +298,7 @@ fn malformed_files_error_cleanly() {
 
 #[test]
 fn gitpass_json_roundtrip_keeps_categories_tags_and_flags() {
-    let (_, recs) = import_fixture(ImportFormat::OnePassword1pux, "1password.1pux");
+    let (_, recs) = import_fixture(ImportFormat::Pux, "export.1pux");
     let json = import::export_records_json(&recs).unwrap();
     let d = tempfile::tempdir().unwrap();
     let sk = store::init(d.path(), "fake-master-pw", fast()).unwrap();
@@ -380,12 +380,12 @@ fn protonpass_csv_fixture() {
 fn detect_format_coverage() {
     assert_eq!(import::detect_format(&fixture_str("bitwarden.json")), Some(ImportFormat::BitwardenJson));
     assert_eq!(import::detect_format(&fixture_str("bitwarden.csv")), Some(ImportFormat::BitwardenCsv));
-    assert_eq!(import::detect_format(&fixture_str("1password.csv")), Some(ImportFormat::OnePasswordCsv));
+    assert_eq!(import::detect_format(&fixture_str("generic.csv")), Some(ImportFormat::GenericCsv));
     assert_eq!(import::detect_format(&fixture_str("chrome.csv")), Some(ImportFormat::ChromeCsv));
     assert_eq!(import::detect_format(&fixture_str("keepass.csv")), Some(ImportFormat::KeepassCsv));
     assert_eq!(import::detect_format(&fixture_str("lastpass.csv")), Some(ImportFormat::LastpassCsv));
     assert_eq!(import::detect_format(&fixture_str("protonpass.csv")), Some(ImportFormat::ProtonPassCsv));
-    assert_eq!(import::detect_format_bytes(&fixture("1password.1pux")), Some(ImportFormat::OnePassword1pux));
+    assert_eq!(import::detect_format_bytes(&fixture("export.1pux")), Some(ImportFormat::Pux));
 }
 
 #[test]
@@ -422,4 +422,98 @@ fn protonpass_distinct_email_is_kept() {
     let same = p.items.iter().find(|r| r.item.title == "Same").unwrap();
     assert_eq!(same.item.username.as_deref(), Some("bob@example.invalid"));
     assert!(same.find_field("email").is_none());
+}
+
+#[test]
+fn legacy_import_format_aliases() {
+    assert_eq!("1password-csv".parse::<ImportFormat>().unwrap(), ImportFormat::GenericCsv);
+    assert_eq!("1password-1pux".parse::<ImportFormat>().unwrap(), ImportFormat::Pux);
+    assert_eq!("generic-csv".parse::<ImportFormat>().unwrap(), ImportFormat::GenericCsv);
+    assert_eq!("1pux".parse::<ImportFormat>().unwrap(), ImportFormat::Pux);
+}
+
+#[test]
+fn onepif_fixture_mapped_types_tags_totp_trashed_and_malformed() {
+    let p = import::parse_bytes(ImportFormat::OnePif, &fixture("export.1pif"), None).unwrap();
+
+    // 1. Check mapped types
+    let titles: Vec<String> = p.items.iter().map(|it| it.item.title.clone()).collect();
+    assert!(titles.contains(&"Example Web Form".to_string()));
+    assert!(titles.contains(&"Corporate Platinum Card".to_string()));
+    assert!(titles.contains(&"Server Backup Keys".to_string()));
+    assert!(titles.contains(&"Alice Identity".to_string()));
+    assert!(titles.contains(&"Primary Checking Account".to_string()));
+    assert!(titles.contains(&"Production App Server".to_string()));
+    assert!(titles.contains(&"Office HighSpeed Wi-Fi".to_string()));
+    assert!(titles.contains(&"City Gym Membership".to_string()));
+
+    // Trashed record skipped
+    assert!(!titles.contains(&"Old Deleted Service".to_string()));
+    // System record skipped
+    assert!(!titles.contains(&"Archived Folder".to_string()));
+
+    // 2. WebForm login fields, URL, tags, notes, and TOTP
+    let webform = p.items.iter().find(|it| it.item.title == "Example Web Form").unwrap();
+    assert_eq!(webform.category, Category::Login);
+    assert_eq!(webform.item.username.as_deref(), Some("alice_fake"));
+    assert_eq!(webform.item.password.as_deref(), Some("FAKE-pw-webform-123"));
+    assert_eq!(webform.item.url.as_deref(), Some("https://login.example.invalid"));
+    assert_eq!(webform.item.notes.as_deref(), Some("Important recovery note"));
+    assert_eq!(webform.item.totp.as_deref(), Some("otpauth://totp/Example:alice_fake?secret=JBSWY3DPEHPK3PXP"));
+    assert!(webform.tags.contains(&"work".to_string()));
+    assert!(webform.tags.contains(&"staging".to_string()));
+    assert_eq!(webform.created_at, Some(1700000000));
+    assert_eq!(webform.item.updated_at, "1700005000");
+
+    // 3. Credit Card
+    let card = p.items.iter().find(|it| it.item.title == "Corporate Platinum Card").unwrap();
+    assert_eq!(card.category, Category::CreditCard);
+    assert_eq!(card.find_field("number").and_then(|f| f.value), Some("4111222233334444".to_string()));
+    assert_eq!(card.find_field("cvv").and_then(|f| f.value), Some("999".to_string()));
+    assert_eq!(card.find_field("expiry").and_then(|f| f.value), Some("08/2029".to_string()));
+    assert_eq!(card.find_field("cardholder").and_then(|f| f.value), Some("Alice Fake".to_string()));
+
+    // 4. Identity
+    let id_item = p.items.iter().find(|it| it.item.title == "Alice Identity").unwrap();
+    assert_eq!(id_item.category, Category::Identity);
+    assert_eq!(id_item.find_field("first").and_then(|f| f.value), Some("Alice".to_string()));
+    assert_eq!(id_item.find_field("last").and_then(|f| f.value), Some("Fake".to_string()));
+    assert_eq!(id_item.find_field("email").and_then(|f| f.value), Some("alice@example.invalid".to_string()));
+
+    // 5. Bank Account
+    let bank = p.items.iter().find(|it| it.item.title == "Primary Checking Account").unwrap();
+    assert_eq!(bank.category, Category::BankAccount);
+    assert_eq!(bank.find_field("bank_name").and_then(|f| f.value), Some("Fake National Bank".to_string()));
+    assert_eq!(bank.find_field("account_holder").and_then(|f| f.value), Some("Alice Fake".to_string()));
+    assert_eq!(bank.find_field("account_number").and_then(|f| f.value), Some("123456789".to_string()));
+    assert_eq!(bank.find_field("routing_number").and_then(|f| f.value), Some("987654321".to_string()));
+
+    // 6. Server
+    let server = p.items.iter().find(|it| it.item.title == "Production App Server").unwrap();
+    assert_eq!(server.category, Category::Server);
+    assert_eq!(server.item.url.as_deref(), Some("https://app.example.invalid"));
+    assert_eq!(server.item.username.as_deref(), Some("deploy_user"));
+    assert_eq!(server.item.password.as_deref(), Some("FAKE-server-pw-456"));
+    assert_eq!(server.find_field("admin_console_url").and_then(|f| f.value), Some("https://admin.example.invalid".to_string()));
+
+    // 7. Wi-Fi
+    let wifi = p.items.iter().find(|it| it.item.title == "Office HighSpeed Wi-Fi").unwrap();
+    assert_eq!(wifi.category, Category::Wifi);
+    assert_eq!(wifi.find_field("ssid").and_then(|f| f.value), Some("OfficeGuestNet".to_string()));
+    assert_eq!(wifi.find_field("password").and_then(|f| f.value), Some("FAKE-wifi-secret-789".to_string()));
+    assert_eq!(wifi.find_field("security").and_then(|f| f.value), Some("WPA3".to_string()));
+
+    // 8. Unknown type mapped to Secure Note with warning
+    let gym = p.items.iter().find(|it| it.item.title == "City Gym Membership").unwrap();
+    assert_eq!(gym.category, Category::SecureNote);
+    assert!(p.warnings.iter().any(|w| w.contains("City Gym Membership: imported as Secure Note")));
+
+    // 9. Warnings report trashed skipped and malformed JSON
+    assert!(p.warnings.iter().any(|w| w.contains("Old Deleted Service: in source trash, skipped")));
+    assert!(p.warnings.iter().any(|w| w.contains("malformed JSON")));
+
+    // 10. Auto-detection
+    let data_str = fixture_str("export.1pif");
+    assert_eq!(import::detect_format(&data_str), Some(ImportFormat::OnePif));
+    assert_eq!(import::detect_format_bytes(&fixture("export.1pif")), Some(ImportFormat::OnePif));
 }
