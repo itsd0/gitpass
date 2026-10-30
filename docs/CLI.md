@@ -347,6 +347,7 @@ gitpass audit Personal --max-age-days 180
 gitpass audit --unused-months 24
 gitpass audit --hibp --json
 gitpass audit --include-ignored
+gitpass audit --fail-under 80
 ```
 
 `audit` checks live items: weak, reused and old passwords, missing TOTP, insecure URLs
@@ -356,7 +357,11 @@ credentials; it also reports offline 2FA/passkey availability. `--unused-months`
 last edit/creation time when the item was never used. Logins with a `--rotate-every`
 reminder are reported as `rotation_due` or `rotation_soon` (within 14 days). `--hibp` opts in to Have I
 Been Pwned k-anonymity checks (only five hex characters of a SHA-1 leave the machine).
-`--max-age-days` defaults to 365 and `--expiring-days` to 30. The scoring and checks are
+`--max-age-days` defaults to 365 and `--expiring-days` to 30. The first summary line
+also shows the shared Watchtower `score: NN/100` (same core function the desktop app
+uses); `--json` adds top-level `score` and `items_with_password` fields without changing
+the existing fields. `--fail-under N` (0-100) exits 1 with a message on stderr when the
+score is below N, so scripts can gate on it, with or without `--json`. The scoring and checks are
 documented in [WATCHTOWER.md](WATCHTOWER.md).
 
 ## Health check (`gitpass doctor`)
