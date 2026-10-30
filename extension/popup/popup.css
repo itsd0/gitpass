@@ -373,3 +373,9 @@ button.tag:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--accent
 .inline-err-msg { font-size: 14px; font-weight: 600; color: rgb(var(--fg)); margin: 0; }
 .inline-err-sub { font-size: 12px; color: rgb(var(--muted)); margin: 0; word-break: break-word; max-width: 220px; }
 .inline-err .btn-retry { margin-top: 8px; }
+
+.row .meta .u.text-danger { color: rgb(var(--danger)); font-weight: 500; }
+.trash-banner { margin: 8px 12px; padding: 8px 12px; border-radius: 6px; font-size: 12px; line-height: 1.4; background: rgb(var(--danger) / .1); border: 1px solid rgb(var(--danger) / .3); color: rgb(var(--fg)); }
+.trash-banner .trash-sub { color: rgb(var(--muted)); }
+.trash-banner .trash-sub.danger { color: rgb(var(--danger)); font-weight: 500; }
+.icon-btn:disabled { opacity: .4; cursor: not-allowed; pointer-events: none; }

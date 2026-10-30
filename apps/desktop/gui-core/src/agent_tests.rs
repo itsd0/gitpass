@@ -290,6 +290,77 @@ fn trash_and_restore_via_agent_use_the_shared_vault() {
 }
 
 #[test]
+fn list_archived_and_deleted_and_archive_unarchive_via_agent() {
+    let e = env();
+    let id = add_login(&e, "Agent Octo", "https://github.com", "octo", "agent-secret-pw-999");
+    let (mut c, _) = Client::connect(&e);
+
+    // Initial lists are empty
+    let arch_init = c.ok("list_archived", json!({}));
+    assert!(arch_init["items"].as_array().unwrap().is_empty());
+    let del_init = c.ok("list_deleted", json!({}));
+    assert!(del_init["items"].as_array().unwrap().is_empty());
+
+    // Archive permissions: requires popup source
+    assert_eq!(c.err("archive_item", json!({"item_id": id})), "denied");
+    assert_eq!(c.err("archive_item", json!({"item_id": id, "source": "page"})), "denied");
+
+    // Archive item via agent
+    assert_eq!(c.ok("archive_item", json!({"item_id": id, "source": "popup", "archived": true}))["ok"], json!(true));
+
+    // list_archived returns metadata only (no secrets)
+    let arch_list = c.ok("list_archived", json!({}));
+    let arch_items = arch_list["items"].as_array().unwrap();
+    assert_eq!(arch_items.len(), 1);
+    assert_eq!(arch_items[0]["id"], id);
+    assert_eq!(arch_items[0]["archived"], true);
+    let arch_str = arch_list.to_string();
+    assert!(!arch_str.contains("agent-secret-pw-999"), "secrets must never leak in archived summaries");
+
+    // Archived item leaves default list_items and match (suggestions)
+    assert!(c.ok("list_items", json!({}))["items"].as_array().unwrap().iter().all(|i| i["id"] != json!(id)));
+    assert!(c.ok("match", json!({"origin": "https://github.com"}))["items"].as_array().unwrap().is_empty());
+
+    // list_items with state: "archived" includes it
+    let state_arch = c.ok("list_items", json!({"state": "archived"}));
+    assert_eq!(state_arch["items"].as_array().unwrap().len(), 1);
+
+    // Unarchive item
+    assert_eq!(c.err("unarchive_item", json!({"item_id": id})), "denied");
+    assert_eq!(c.ok("unarchive_item", json!({"item_id": id, "source": "popup"}))["ok"], json!(true));
+    assert!(c.ok("list_archived", json!({}))["items"].as_array().unwrap().is_empty());
+    assert!(c.ok("list_items", json!({}))["items"].as_array().unwrap().iter().any(|i| i["id"] == json!(id)));
+
+    // Soft delete via trash_item
+    assert_eq!(c.ok("trash_item", json!({"item_id": id, "source": "popup"}))["ok"], json!(true));
+    let del_list = c.ok("list_deleted", json!({}));
+    let del_items = del_list["items"].as_array().unwrap();
+    assert_eq!(del_items.len(), 1);
+    assert_eq!(del_items[0]["id"], id);
+    assert!(del_items[0]["deleted_at"].is_string());
+    let del_str = del_list.to_string();
+    assert!(!del_str.contains("agent-secret-pw-999"), "secrets must never leak in deleted summaries");
+
+    // get_item with include_deleted: false is not_found; with true returns detail
+    assert_eq!(c.err("get_item", json!({"item_id": id})), "not_found");
+    assert_eq!(c.err("get_item", json!({"item_id": id, "include_deleted": false})), "not_found");
+    let del_detail = c.ok("get_item", json!({"item_id": id, "include_deleted": true}))["item"].clone();
+    assert_eq!(del_detail["id"], id);
+    assert!(del_detail["deleted_at"].is_string());
+    let flds = del_detail["fields"].as_array().unwrap();
+    let pw = flds.iter().find(|x| x["name"] == "password").unwrap();
+    assert_eq!(pw["concealed"], true);
+    assert!(pw.get("value").is_none());
+
+    // Cannot archive a deleted item
+    assert_eq!(c.err("archive_item", json!({"item_id": id, "source": "popup"})), "not_found");
+
+    // Restore item
+    assert_eq!(c.ok("restore_item", json!({"item_id": id, "source": "popup"}))["ok"], json!(true));
+    assert!(c.ok("list_deleted", json!({}))["items"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn lock_unlock_events_and_request_unlock() {
     let e = env();
     let (mut c, _) = Client::connect(&e);

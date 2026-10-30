@@ -127,15 +127,17 @@ async function popupRoute(msg) {
     }
     case 'list_vaults': return host('list_vaults');
     case 'list_items': {
-      const a = {}; for (const k of ['vault_id', 'category', 'query', 'limit', 'offset']) if (msg[k] != null) a[k] = msg[k];
+      const a = {}; for (const k of ['vault_id', 'category', 'query', 'limit', 'offset', 'state', 'filter', 'archived', 'deleted']) if (msg[k] != null) a[k] = msg[k];
       return host('list_items', a);
     }
+    case 'list_archived': return host('list_archived', { vault_id: msg.vault_id });
+    case 'list_deleted': return host('list_deleted', { vault_id: msg.vault_id });
     case 'match_active': {
       const { origin } = await activeOrigin();
       if (!origin) return { items: [], origin: null };
       return { ...(await host('match', { origin, include_passkeys: true })), origin };
     }
-    case 'get_item': return host('get_item', { item_id: msg.item_id });
+    case 'get_item': return host('get_item', { item_id: msg.item_id, include_deleted: !!msg.include_deleted });
     case 'item_findings': return host('item_findings', { item_id: msg.item_id });
     case 'reveal': return host('reveal', { item_id: msg.item_id, field: msg.field, source: 'popup' });
     case 'totp': return host('totp', { item_id: msg.item_id });
@@ -153,6 +155,8 @@ async function popupRoute(msg) {
     }
     case 'trash_item': return host('trash_item', { item_id: msg.item_id, source: 'popup' });
     case 'restore_item': return host('restore_item', { item_id: msg.item_id, source: 'popup' });
+    case 'archive_item': return host('archive_item', { item_id: msg.item_id, source: 'popup', archived: msg.archived !== false });
+    case 'unarchive_item': return host('unarchive_item', { item_id: msg.item_id, source: 'popup' });
     case 'update_password': return host('update_password', { item_id: msg.item_id, password: msg.password, username: msg.username });
     case 'save_login': return host('save_login', { origin: msg.origin, title: msg.title, username: msg.username, password: msg.password, vault_id: msg.vault_id });
     case 'set_favorite': return host('set_favorite', { item_id: msg.item_id, favorite: !!msg.favorite });
