@@ -6,6 +6,7 @@ import { useSettings } from '../useSettings';
 import { SettingsSection, SettingsRow } from '../SettingsSection';
 import { ChangePasswordDialog } from '../dialogs/ChangePasswordDialog';
 import { RotateKeyDialog } from '../dialogs/RotateKeyDialog';
+import { useApp } from '../../../lib/store';
 import { errMsg, NumberSetting } from '../shared';
 
 export function SecurityTab({ highlightedId }: { highlightedId?: string | null }) {
@@ -245,6 +246,16 @@ export function SecurityTab({ highlightedId }: { highlightedId?: string | null }
         >
           <Button variant="outline" size="sm" onClick={() => setPw(true)}>
             {t('settings.changePassword')}
+          </Button>
+        </SettingsRow>
+        <SettingsRow
+          id="setting-view-kit"
+          highlighted={highlightedId === 'setting-view-kit'}
+          label={t('settings.viewKit')}
+          description={t('settings.viewKitHelp')}
+        >
+          <Button size="sm" variant="outline" onClick={() => useApp.getState().openModal('emergency-kit')}>
+            {t('settings.viewKit')}
           </Button>
         </SettingsRow>
         <SettingsRow

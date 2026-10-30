@@ -210,13 +210,55 @@ function isSiteExcepted() {
 }
 
 // ---------- top-level ----------
+// ---------- Watchtower shield severity dot (issue #390) ----------
+// Background-only: never blocks the item list, never fires while locked, and a failed
+// audit_summary just leaves the shield plain. The dot re-checks after live vault changes
+// and after the Watchtower panel closes.
+let wtBadgeGen = 0;
+function refreshWatchtowerBadge() {
+  const btn = $('watchtowerBtn');
+  if (!btn || S.view !== 'unlocked-loaded') return;
+  const gen = ++wtBadgeGen;
+  send({ type: 'popup:audit_summary' }).then((res) => {
+    if (gen !== wtBadgeGen || S.view !== 'unlocked-loaded') return; // stale or locked meanwhile
+    const findings = (res && Array.isArray(res.findings)) ? res.findings : [];
+    let worst = null; // 'danger' | 'warn' | null
+    const ids = new Set();
+    for (const f of findings) {
+      const sev = V.findingSeverity(f && f.kind);
+      if (sev === 'danger') worst = 'danger';
+      else if (!worst) worst = 'warn';
+      for (const it of (f && Array.isArray(f.items) ? f.items : [])) ids.add(it && it.id);
+    }
+    btn.classList.toggle('wt-dot-danger', worst === 'danger');
+    btn.classList.toggle('wt-dot-warn', worst === 'warn' && !btn.classList.contains('wt-dot-danger'));
+    if (worst) {
+      const n = ids.size || findings.reduce((a, f) => a + (Number(f && f.count) || 0), 0);
+      const label = t('watchtowerAttention', 'Watchtower: $1 items need attention', [n]);
+      btn.setAttribute('aria-label', label);
+      btn.title = label;
+    } else {
+      btn.setAttribute('aria-label', t('watchtower', 'Watchtower'));
+      btn.title = t('watchtower', 'Watchtower');
+    }
+  }).catch(() => { /* host unreachable or audit failed: plain shield, no error surface */ });
+}
+function clearWatchtowerBadge() {
+  wtBadgeGen++;
+  const btn = $('watchtowerBtn');
+  if (!btn) return;
+  btn.classList.remove('wt-dot-danger', 'wt-dot-warn');
+  btn.setAttribute('aria-label', t('watchtower', 'Watchtower'));
+  btn.title = t('watchtower', 'Watchtower');
+}
+
 async function refresh() {
   let st = null, err = null;
   try { st = await send({ type: 'popup:status' }); } catch (e) { err = e; }
   const view = V.viewFor(st, err);
   S.view = view;
-  if (view === 'nohost') return showNoHost(err);
-  if (view === 'locked' || view === 'appdown') return showLocked(view, st);
+  if (view === 'nohost') { clearWatchtowerBadge(); return showNoHost(err); }
+  if (view === 'locked' || view === 'appdown') { clearWatchtowerBadge(); return showLocked(view, st); }
   show('unlocked');
   if (st && st.account) {
     const nm = String(st.account.name || ''); // never show a raw account UUID
@@ -224,6 +266,7 @@ async function refresh() {
     $('acct').title = st.account.email || '';
   }
   await loadData();
+  refreshWatchtowerBadge();
   if (!document.querySelector('.inline-err')) $('q').focus();
 }
 
@@ -857,6 +900,7 @@ let qt = null;
 $('q').oninput = () => { clearTimeout(qt); qt = setTimeout(() => { S.query = $('q').value.trim(); applyFilter(true); }, 80); };
 
 $('genBtn').innerHTML = UI.key; $('genBtn').onclick = () => (S.panel === 'gen' ? closePanel() : openGenerator());
+  if ($('watchtowerBtn')) { $('watchtowerBtn').innerHTML = UI.shield; $('watchtowerBtn').onclick = () => (S.panel === 'watchtower' ? closePanel() : openWatchtower()); }
   $('siteSettingsBtn').innerHTML = UI.gear; $('siteSettingsBtn').onclick = () => (S.panel === 'site-settings' ? closePanel() : openSiteSettings(S.origin));
 $('newBtn').innerHTML = UI.plus; $('newBtn').onclick = () => (S.panel === 'new' ? closePanel() : openNewItem());
 $('lock').innerHTML = UI.lock; $('searchIc').innerHTML = UI.search;
@@ -941,7 +985,13 @@ document.addEventListener('keydown', (e) => {
   if (!act) return;
   e.preventDefault();
   if (act === 'close') window.close();
-  else if (act === 'closePanel') closePanel();
+  else if (act === 'closePanel') {
+    if (S.panel === 'watchtower' && typeof wtDrillKind !== 'undefined' && wtDrillKind && typeof wtData !== 'undefined' && wtData) {
+      renderWatchtowerOverview($('panel'), wtData);
+    } else {
+      closePanel();
+    }
+  }
   else if (act === 'toggleShortcuts' || act === 'shortcuts') {
     if (S.panel === 'shortcuts') closePanel(); else openShortcuts();
   }
@@ -986,6 +1036,7 @@ function liveReload() {
     const top = $('list').scrollTop;
     applyFilter(false);
     $('list').scrollTop = top; renderList();
+    refreshWatchtowerBadge();
   }, 120);
 }
 

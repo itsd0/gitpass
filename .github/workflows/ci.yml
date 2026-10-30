@@ -1,7 +1,7 @@
 name: CI
 # Runs on GitHub-hosted runners only (ubuntu-latest for Rust/frontend/extension/supply chain,
-# macos-latest for the Tauri desktop crate). The self-hosted Mac is NEVER used for push/PR CI:
-# it is reserved for release.yml on v* tags pushed by the owner (fork PRs must not reach it).
+# macos-latest for the Tauri desktop crate). No self-hosted runners are used
+# anywhere (fork PRs get no secrets: release.yml has no PR trigger).
 # Isolation: test steps run with HOME pointed at a fresh temp dir, so tests can never touch a real
 # ~/.gitpass or ~/.gitconfig even if this file is later run somewhere else.
 #

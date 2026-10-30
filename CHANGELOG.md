@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### CLI
+- `gitpass get --json` now resolves `related_items` to `{"id", "title", "available"}` objects instead of
+  repeating the IDs, with missing or deleted targets reported as unavailable (#359). `edit --unlink`
+  now accepts a title as well as an ID, matching `--link`.
+
+### Docs
+- Format 5 note (#375): format 5, introduced in the 0.5.0 work for attachments, is now documented.
+  The manifest becomes v5 once any vault has attachment files, v4 with an identity or vault members,
+  otherwise v3; `format.json` still starts at 2 on `init` and is bumped to 5 only on a keyset re-wrap.
+  The 0.3/0.4 format notes previously in the README are already covered by the 0.3.0 and 0.4.0
+  entries below, so the README now carries only the current compatibility section.
+
 ## 0.6.7 — 2026-10-30
 
 ### Fixes

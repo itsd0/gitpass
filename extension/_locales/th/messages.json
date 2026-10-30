@@ -273,6 +273,30 @@
   "reveal": {
     "message": "แสดง"
   },
+  "passwordHistory": {
+    "message": "ประวัติรหัสผ่าน ($1)",
+    "description": "Disclosure label for previous passwords on a login item",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "passwordHistoryReplaced": {
+    "message": "เปลี่ยนเมื่อ $1",
+    "description": "Label indicating when a historical password was replaced",
+    "placeholders": {
+      "date": {
+        "content": "$1"
+      }
+    }
+  },
+  "revealPasswordHistory": {
+    "message": "แสดงรหัสผ่านในอดีต"
+  },
+  "copyPasswordHistory": {
+    "message": "คัดลอกรหัสผ่านในอดีต"
+  },
   "lastEdited": {
     "message": "แก้ไขล่าสุด"
   },
@@ -386,6 +410,10 @@
   },
   "csSaveCardQ": {
     "message": "บันทึกบัตรลงใน gitpass ไหม",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
+  "csAccount": {
+    "message": "บัญชี",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
   "csNoUser": {
@@ -1217,5 +1245,49 @@
   },
   "optColorPasswordsBody": {
     "message": "แสดงตัวเลขเป็นสีส้ม สัญลักษณ์เป็นสีน้ำเงิน และช่องว่างเป็นจุด เมื่อเปิดดูรหัสผ่าน การคัดลอกไม่เปลี่ยนแปลง"
+  },
+  "watchtowerUnused": {
+    "message": "ไม่ได้ใช้งานมากว่าหนึ่งปี"
+  },
+  "watchtowerRotationDue": {
+    "message": "ถึงเวลาเปลี่ยนรหัสผ่าน"
+  },
+  "watchtowerRotationSoon": {
+    "message": "ใกล้ถึงเวลาเปลี่ยนรหัสผ่าน"
+  },
+  "watchtower": {
+    "message": "Watchtower"
+  },
+  "watchtowerNothingNeedsAttention": {
+    "message": "ไม่มีสิ่งที่ต้องดำเนินการ"
+  },
+  "watchtowerScore": {
+    "message": "คะแนนความปลอดภัย: $1 จาก 100",
+    "placeholders": {
+      "score": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerScoreExcellent": {
+    "message": "ยอดเยี่ยม"
+  },
+  "watchtowerScoreGood": {
+    "message": "ดี"
+  },
+  "watchtowerScoreFair": {
+    "message": "พอใช้"
+  },
+  "watchtowerScorePoor": {
+    "message": "แย่"
+  },
+  "loadingWatchtower": {
+    "message": "กำลังโหลด Watchtower…"
+  },
+  "errWatchtowerLoad": {
+    "message": "ไม่สามารถโหลด Watchtower ได้"
+  },
+  "watchtowerAttention": {
+    "message": "Watchtower: มี $1 รายการที่ต้องตรวจสอบ"
   }
 }

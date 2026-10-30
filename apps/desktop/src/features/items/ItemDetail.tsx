@@ -461,7 +461,21 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
             <div key={s.id} className="mb-4">
               {s.title && <div className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted">{s.title}</div>}
               <div className="overflow-hidden rounded-lg border border-border bg-card">
-                {s.fields.map((f) => <FieldRow key={f.id} field={f} ctx={ctx} category={detail.category} strength={detail.passwordStrength} passwordChangedAt={/password/i.test(f.label) ? detail.passwordChangedAt : undefined} refTarget={refTarget} itemTitle={detail.title} username={detail.subtitle || detail.sections.flatMap((sec) => sec.fields).find((x) => x.id === 'username')?.value || undefined} />)}
+                {s.fields.map((f) => (
+                  <FieldRow
+                    key={f.id}
+                    field={f}
+                    ctx={ctx}
+                    category={detail.category}
+                    strength={detail.passwordStrength}
+                    passwordChangedAt={/password/i.test(f.label) ? detail.passwordChangedAt : undefined}
+                    refTarget={refTarget}
+                    itemTitle={detail.title}
+                    username={detail.subtitle || detail.sections.flatMap((sec) => sec.fields).find((x) => x.id === 'username')?.value || undefined}
+                    passwordHistory={/password/i.test(f.label) && detail.category === 'login' ? detail.passwordHistory : undefined}
+                    onHistoryCleared={refreshItems}
+                  />
+                ))}
               </div>
             </div>
           ))}

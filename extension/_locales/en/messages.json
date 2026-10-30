@@ -273,6 +273,30 @@
   "reveal": {
     "message": "Reveal"
   },
+  "passwordHistory": {
+    "message": "Password history ($1)",
+    "description": "Disclosure label for previous passwords on a login item",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "passwordHistoryReplaced": {
+    "message": "Replaced $1",
+    "description": "Label indicating when a historical password was replaced",
+    "placeholders": {
+      "date": {
+        "content": "$1"
+      }
+    }
+  },
+  "revealPasswordHistory": {
+    "message": "Reveal historical password"
+  },
+  "copyPasswordHistory": {
+    "message": "Copy historical password"
+  },
   "lastEdited": {
     "message": "Last edited"
   },
@@ -377,6 +401,9 @@
   },
   "csSaveCardQ": {
     "message": "Save card to gitpass?"
+  },
+  "csAccount": {
+    "message": "Account"
   },
   "csNoUser": {
     "message": "(no username)"
@@ -1138,5 +1165,49 @@
   },
   "optColorPasswordsBody": {
     "message": "Show digits in orange, symbols in blue and spaces as a dot when a password is revealed. Copying is unchanged."
+  },
+  "watchtowerUnused": {
+    "message": "Not used in over a year"
+  },
+  "watchtowerRotationDue": {
+    "message": "Due for rotation"
+  },
+  "watchtowerRotationSoon": {
+    "message": "Rotation due soon"
+  },
+  "watchtower": {
+    "message": "Watchtower"
+  },
+  "watchtowerNothingNeedsAttention": {
+    "message": "Nothing needs attention"
+  },
+  "watchtowerScore": {
+    "message": "Security score: $1 of 100",
+    "placeholders": {
+      "score": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerScoreExcellent": {
+    "message": "Excellent"
+  },
+  "watchtowerScoreGood": {
+    "message": "Good"
+  },
+  "watchtowerScoreFair": {
+    "message": "Fair"
+  },
+  "watchtowerScorePoor": {
+    "message": "Poor"
+  },
+  "loadingWatchtower": {
+    "message": "Loading Watchtower…"
+  },
+  "errWatchtowerLoad": {
+    "message": "Couldn't load Watchtower"
+  },
+  "watchtowerAttention": {
+    "message": "Watchtower: $1 items need attention"
   }
 }
