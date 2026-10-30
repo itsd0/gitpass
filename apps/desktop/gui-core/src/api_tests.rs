@@ -381,6 +381,7 @@ fn tools_generate_strength_watchtower_hibp() {
     assert_eq!(r.reused.len(), 1);
     assert_eq!(r.missing_totp.len(), 3);
     assert!(r.totp_available.is_empty() && r.passkey_available.is_empty());
+    assert!(r.unused.is_empty(), "fresh items are never unused");
     assert!(r.score < 100);
     // HIBP is opt-in: without Settings.hibpCheck no network check happens even if asked.
     assert!(!e.app.get_settings().hibp_check);
@@ -947,10 +948,27 @@ fn fingerprint_of_matches_identity_and_share() {
 #[test]
 fn settings_hibp_defaults_off_and_old_files_parse() {
     assert!(!Settings::default().hibp_check);
+    assert_eq!(Settings::default().watchtower_unused_months, 12);
     let old = r#"{"autoLockMinutes":5,"clipboardClearSecs":90,"theme":"dark","language":"en","biometricUnlock":false,"quickAccessHotkey":"X"}"#;
     let s: Settings = serde_json::from_str(old).unwrap();
     assert!(!s.hibp_check);
-    assert!(serde_json::to_string(&Settings::default()).unwrap().contains("\"hibpCheck\":false"));
+    assert_eq!(s.watchtower_unused_months, 12, "older settings files default the unused check to 12 months");
+    let json = serde_json::to_string(&Settings::default()).unwrap();
+    assert!(json.contains("\"hibpCheck\":false"));
+    assert!(json.contains("\"watchtowerUnusedMonths\":12"));
+}
+
+#[test]
+fn settings_watchtower_unused_months_accepts_only_known_values() {
+    let e = env();
+    for ok in [0u64, 6, 12, 24] {
+        let saved = e.app.set_settings(Settings { watchtower_unused_months: ok, ..e.app.get_settings() }).unwrap();
+        assert_eq!(saved.watchtower_unused_months, ok);
+    }
+    assert!(e.app.set_settings(Settings { watchtower_unused_months: 5, ..e.app.get_settings() }).is_err());
+    // Fresh items are not unused, so the new report field stays empty.
+    login(&e, "Recent fake", "recent@example.invalid", "Xq7#vR2!mK9@pL4$wZ");
+    assert!(e.app.watchtower(false).unwrap().unused.is_empty());
 }
 
 struct MemBio(std::sync::Mutex<Option<(String, String, String)>>);
