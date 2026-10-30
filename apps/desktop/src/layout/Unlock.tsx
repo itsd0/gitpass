@@ -5,6 +5,7 @@ import { useApp } from '../lib/store';
 import { Button, Input, Logo } from '../ui';
 import { EmergencyKitFlow } from '../features/onboarding/EmergencyKit';
 import { useT } from '../i18n';
+import { CapsLockHint, useCapsLockHint } from '../lib/capsLock';
 
 const msg = (x: unknown) => (x instanceof Error ? x.message : String(x));
 
@@ -24,6 +25,9 @@ export function Unlock() {
   const [saveSk, setSaveSk] = useState(false);
   const [created, setCreated] = useState<{ secretKey: string; account: string | null } | null>(null); const [showKit, setShowKit] = useState(false);
   const [saved, setSaved] = useState(false);
+  const capsPw = useCapsLockHint();
+  const capsNp = useCapsLockHint();
+  const capsNp2 = useCapsLockHint();
 
   useEffect(() => {
     api.status().then((s) => {
@@ -83,9 +87,11 @@ export function Unlock() {
       <form onSubmit={create} className="w-[380px] rounded-2xl border border-border bg-panel p-8 shadow-2xl">
         <div className="mb-6 flex flex-col items-center gap-3"><Logo size={56} /><h1 className="text-xl font-semibold">{t('unlock.createTitle')}</h1><p className="text-center text-xs text-muted">{exists ? (vaultPath || '…') : t('unlock.noVaultFound', { path: vaultPath || '…' })}</p></div>
         <label className="mb-1 block text-xs text-muted" htmlFor="npw">{t('unlock.masterPassword')}</label>
-        <Input id="npw" type="password" autoFocus autoComplete="new-password" className="h-10" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={t('unlock.newPasswordPlaceholder')} />
+        <Input id="npw" type="password" autoFocus autoComplete="new-password" className="h-10" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={t('unlock.newPasswordPlaceholder')} {...capsNp.fieldProps} />
+        <CapsLockHint id={capsNp.hintId} show={capsNp.show} />
         <label className="mb-1 mt-3 block text-xs text-muted" htmlFor="npw2">{t('unlock.confirmPassword')}</label>
-        <Input id="npw2" type="password" autoComplete="new-password" className="h-10" value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder={t('unlock.confirmPasswordPlaceholder')} />
+        <Input id="npw2" type="password" autoComplete="new-password" className="h-10" value={pw2} onChange={(e) => setPw2(e.target.value)} placeholder={t('unlock.confirmPasswordPlaceholder')} {...capsNp2.fieldProps} />
+        <CapsLockHint id={capsNp2.hintId} show={capsNp2.show} />
         <Input aria-label={t('unlock.vaultFolder')} className="mt-3" value={vaultPath} onChange={(e) => setVaultPath(e.target.value)} placeholder="~/.gitpass" />
         <label className="mt-3 flex items-center gap-2 text-xs text-muted"><input type="checkbox" checked={saveSk} onChange={(e) => setSaveSk(e.target.checked)} />{t('unlock.storeSecretKeyLocal')}</label>
         {err && <p className="mt-2 text-xs text-danger" role="alert">{err}</p>}
@@ -101,9 +107,10 @@ export function Unlock() {
         <div className="mb-6 flex flex-col items-center gap-3"><Logo size={56} /><h1 className="text-xl font-semibold">{t('unlock.title')}</h1><p className="text-center text-xs text-muted">{vaultPath || '…'}</p></div>
         <label className="mb-1 block text-xs text-muted" htmlFor="pw">{t('unlock.masterPassword')}</label>
         <div className="relative">
-          <Input id="pw" type="password" autoFocus autoComplete="off" className="h-10 pr-10" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={t('unlock.masterPasswordPlaceholder')} />
+          <Input id="pw" type="password" autoFocus autoComplete="off" className="h-10 pr-10" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={t('unlock.masterPasswordPlaceholder')} {...capsPw.fieldProps} />
           <button type="submit" disabled={busy || !pw} aria-label={t('unlock.submit')} className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md bg-accent text-white disabled:opacity-40">{busy ? <Loader2 size={15} className="animate-spin" /> : <ChevronRight size={16} />}</button>
         </div>
+        <CapsLockHint id={capsPw.hintId} show={capsPw.show} />
         {err && <p className="mt-2 text-xs text-danger" role="alert">{err}</p>}
         {!exists && <Button type="button" variant="outline" className="mt-3 w-full" onClick={() => { setMode('create'); setErr(''); }}><PlusCircle size={14} /> {t('unlock.noVaultHere')}</Button>}
         <button type="button" onClick={() => setShowSk(!showSk)} className="mt-4 flex items-center gap-1.5 text-xs text-accent hover:underline"><KeyRound size={12} />{showSk ? t('unlock.hideAdvanced') : t('unlock.showAdvanced')}</button>

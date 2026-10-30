@@ -1157,5 +1157,9 @@
   },
   "inArchive": {
     "message": "ဤ item ကို သိမ်းဆည်းထားပါသည်။"
+  },
+  "capsLockOn": {
+    "message": "Caps Lock ဖွင့်ထားပါသည်",
+    "description": "Shown under a master-password field while Caps Lock is on"
   }
 }
