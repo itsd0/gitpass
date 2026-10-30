@@ -1079,6 +1079,10 @@
   "inArchive": {
     "message": "This item is archived."
   },
+  "capsLockOn": {
+    "message": "Caps Lock is on",
+    "description": "Shown under a master-password field while Caps Lock is on"
+  },
   "optColorPasswords": {
     "message": "Colour-code revealed passwords"
   },

@@ -6,6 +6,9 @@ const assert = require('node:assert');
 const fs = require('fs'), path = require('path');
 const { JSDOM } = require('jsdom');
 const root = path.join(__dirname, '..');
+// content.js + content/*.js in manifest order, evaluated as ONE script: a browser shares
+// top-level let/const across content scripts, but jsdom w.eval calls do not share them.
+const CONTENT_SRC = ['content.js', 'content/messaging.js', 'content/settings.js', 'content/detection.js', 'content/totp.js', 'content/dropdown.js', 'content/username.js', 'content/banner.js', 'content/command.js', 'content/prompts.js', 'content/wiring.js'].map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
 
 test('content.js boots, badges login fields, ignores untrusted clicks', async () => {
   const html = fs.readFileSync(path.join(__dirname, 'pages', 'login.html'), 'utf8');
@@ -13,7 +16,7 @@ test('content.js boots, badges login fields, ignores untrusted clicks', async ()
   const w = dom.window, sent = [];
   w.HTMLElement.prototype.getBoundingClientRect = function () { return { left: 0, top: 0, right: 200, bottom: 30, width: 200, height: 30 }; };
   w.chrome = { runtime: { onMessage: { addListener() {} }, sendMessage: async (m) => { sent.push(m.type); return m.type === 'page:pending' ? { ok: true, result: { prompt: 'save', username: 'me' } } : { ok: true, result: { origin: 'https://site.example', items: [], password: 'x', username: 'u' } }; } }, i18n: { getMessage: () => '' } };
-  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js', 'content.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
+  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8')); w.eval(CONTENT_SRC);
   await new Promise((r) => setTimeout(r, 50));
   const hosts = w.document.querySelectorAll('gitpass-ui');
   assert.strictEqual(hosts.length, 3, 'one badge per form (2 forms) + banner, got ' + hosts.length);

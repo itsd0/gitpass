@@ -267,6 +267,7 @@ $('touchBtn').onclick = async () => {
 };
 $('usePw').onclick = () => { $('primaryBox').classList.add('hidden'); $('unlockForm').classList.remove('hidden'); $('pw').focus(); };
 $('backTouch').onclick = () => { $('unlockForm').classList.add('hidden'); $('primaryBox').classList.remove('hidden'); };
+if (typeof GitpassCapsLock !== 'undefined') GitpassCapsLock.attachCapsLockHint($('pw'), $('capsHint'));
 $('unlockForm').onsubmit = async (e) => {
   e.preventDefault();
   const btn = $('unlockBtn'); if (btn.disabled) return;

@@ -50,7 +50,9 @@ test('passwords are captured verbatim, usernames trimmed', () => {
   assert.deepStrictEqual(forms.captureCredentials(f), { kind: 'login', username: 'bob', password: ' pw with spaces ' });
 });
 
-test('content script never uses the page sessionStorage/localStorage', () => {
-  const src = fs.readFileSync(path.join(__dirname, '..', 'content.js'), 'utf8').replace(/\/\/.*$/gm, '');
+test('content script (all content/*.js files) never uses the page sessionStorage/localStorage', () => {
+  const src = ['content.js', 'content/messaging.js', 'content/settings.js', 'content/detection.js', 'content/totp.js',
+    'content/dropdown.js', 'content/username.js', 'content/banner.js', 'content/command.js', 'content/prompts.js',
+    'content/wiring.js'].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8')).join('\n').replace(/\/\/.*$/gm, '');
   assert.ok(!/sessionStorage|localStorage/.test(src));
 });

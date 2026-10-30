@@ -338,7 +338,92 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
         if (filter.kind === 'tag') xs = xs.filter((x) => x.tags.includes(filter.tag ?? ''));
     }
     if (filter.category) xs = xs.filter((x) => x.category === filter.category);
-    if (filter.query) { const q = filter.query.toLowerCase(); xs = xs.filter((x) => `${x.title} ${x.subtitle} ${x.url ?? ''} ${x.tags.join(' ')}`.toLowerCase().includes(q)); }
+    if (filter.query) {
+      const tokens = filter.query.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
+      const terms: string[] = [];
+      for (const tok of tokens) {
+        const negated = tok.startsWith('-');
+        const body = negated ? tok.slice(1) : tok;
+        const idx = body.indexOf(':');
+        if (idx !== -1) {
+          const op = body.slice(0, idx).toLowerCase();
+          let val = body.slice(idx + 1);
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          val = val.trim();
+          if (op === 'tag' && val) {
+            xs = xs.filter((x) => {
+              const m = x.tags.some((t) => t.toLowerCase() === val.toLowerCase());
+              return negated ? !m : m;
+            });
+            continue;
+          }
+          if (op === 'vault' && val) {
+            const vname = (id: string) => vaults.find((v) => v.id === id)?.name.toLowerCase() ?? '';
+            xs = xs.filter((x) => {
+              const m = vname(x.vaultId).startsWith(val.toLowerCase());
+              return negated ? !m : m;
+            });
+            continue;
+          }
+          if (op === 'type' && val) {
+            const catMap: Record<string, string> = { card: 'credit_card', note: 'secure_note', api: 'api_credential', ssh: 'ssh_key', bank: 'bank_account' };
+            const wantCat = catMap[val.toLowerCase()] ?? val.toLowerCase();
+            xs = xs.filter((x) => {
+              const m = x.category.toLowerCase() === wantCat;
+              return negated ? !m : m;
+            });
+            continue;
+          }
+          if (op === 'is') {
+            const vLow = val.toLowerCase();
+            if (vLow === 'favorite' || vLow === 'fav') {
+              xs = xs.filter((x) => (negated ? !x.favorite : x.favorite));
+              continue;
+            }
+            if (vLow === 'archived') {
+              xs = xs.filter((x) => (negated ? !x.archived : x.archived));
+              continue;
+            }
+          }
+          if (op === 'has') {
+            const vLow = val.toLowerCase();
+            if (vLow === 'otp' || vLow === 'totp') {
+              xs = xs.filter((x) => (negated ? !x.hasTotp : x.hasTotp));
+              continue;
+            }
+            if (vLow === 'passkey') {
+              xs = xs.filter((x) => (negated ? x.category !== 'passkey' : x.category === 'passkey'));
+              continue;
+            }
+            if (vLow === 'attachment' || vLow === 'attachments' || vLow === 'file' || vLow === 'files') {
+              xs = xs.filter((x) => (negated ? x.attachments.length === 0 : x.attachments.length > 0));
+              continue;
+            }
+            if (vLow === 'url' || vLow === 'website') {
+              xs = xs.filter((x) => (negated ? !x.url : Boolean(x.url)));
+              continue;
+            }
+          }
+          if (op === 'url' && val) {
+            xs = xs.filter((x) => {
+              const u = (x.url ?? '').toLowerCase();
+              const host = u.replace(/^[a-z]+:\/\//, '').split(/[/?#]/)[0].replace(/^www\./, '');
+              const target = val.toLowerCase().replace(/^[a-z]+:\/\//, '').split(/[/?#]/)[0].replace(/^www\./, '');
+              const m = host === target || host.endsWith(`.${target}`) || host.includes(target);
+              return negated ? !m : m;
+            });
+            continue;
+          }
+        }
+        terms.push(tok);
+      }
+      if (terms.length > 0) {
+        const q = terms.join(' ').toLowerCase();
+        xs = xs.filter((x) => `${x.title} ${x.subtitle} ${x.url ?? ''} ${x.tags.join(' ')}`.toLowerCase().includes(q));
+      }
+    }
     const sort = filter.sort ?? 'updated';
     xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : sort === 'recent' ? (b.lastUsed ?? 0) - (a.lastUsed ?? 0) || a.title.localeCompare(b.title) : b.updatedAt.localeCompare(a.updatedAt));
     return delay(xs.map(summary));

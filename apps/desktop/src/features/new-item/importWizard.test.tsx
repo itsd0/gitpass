@@ -135,6 +135,12 @@ describe('import wizard reducer', () => {
     expect(s.step).toBe('done');
   });
 
+  it('detects .1pif from filename and content', () => {
+    expect(detectImportFormat('export.1pif')).toBe('1pif');
+    expect(detectImportFormat('data.1pif')).toBe('1pif');
+    expect(detectImportFormat('random.txt', '***uuid***\n{"typeName":"webforms.WebForm"}')).toBe('1pif');
+  });
+
   it('offers all required formats including Apple Passwords / Safari', () => {
     expect(IMPORT_FORMATS.map((f) => f.id)).toEqual([
       'apple-passwords-csv',
@@ -142,6 +148,7 @@ describe('import wizard reducer', () => {
       'bitwarden-csv',
       'generic-csv',
       '1pux',
+      '1pif',
       'keepass-csv',
       'chrome-csv',
       'lastpass-csv',

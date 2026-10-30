@@ -1158,6 +1158,10 @@
   "inArchive": {
     "message": "รายการนี้ถูกเก็บถาวรแล้ว"
   },
+  "capsLockOn": {
+    "message": "Caps Lock เปิดอยู่",
+    "description": "Shown under a master-password field while Caps Lock is on"
+  },
   "optColorPasswords": {
     "message": "ไล่สีรหัสผ่านที่แสดงอยู่"
   },

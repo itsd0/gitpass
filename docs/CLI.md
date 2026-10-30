@@ -15,6 +15,15 @@ id prefix, or a title substring; `get`, `copy`, `totp`, `find` and `list --query
 rank fuzzy matches on title/username/url. When a query is ambiguous, use the item id or
 `--pick <n>` where the command offers it.
 
+Queries accept structured operators (combined with free text, case-insensitive):
+- `tag:<name>` (e.g. `tag:work`, `tag:"side project"`)
+- `vault:<name>` (case-insensitive prefix match on vault name)
+- `type:<category>` (`login`, `card`, `note`, `api`, `ssh`, `identity`, `passkey`, `bank`, `wifi`, `server`, `document`)
+- `is:favorite`, `is:archived`
+- `has:otp`, `has:passkey`, `has:attachment`, `has:url`
+- `url:<host>` (matches against URL host)
+- Leading `-` negates any operator (e.g. `-tag:old`, `-is:archived`)
+
 ## Global options
 
 | Option | Meaning |
@@ -224,18 +233,20 @@ diverged. See the README "GitHub sync" section.
 ```sh
 gitpass import Personal --from bitwarden-json export.json
 gitpass import Personal --from generic-csv export.csv --dry-run
+gitpass import Personal --format 1pif export.1pif
 gitpass import Personal --from gitpass-json backup.json --allow-duplicates
 gitpass export Personal --format gitpass-json --out backup.json --encrypted
 gitpass export Personal --format csv --out backup.csv --yes
 ```
 
-`--from` accepts every format and alias in `crates/gitpass-core/src/import.rs`
+`--from` (or `--format`) accepts every format and alias in `crates/gitpass-core/src/import.rs`
 (`ImportFormat`): `bitwarden-json`, `bitwarden-csv`, `generic-csv` (alias `1password-csv`),
-`1pux` (alias `1password-1pux`), `keepass-csv` (alias `keepassxc-csv`),
+`1pux` (alias `1password-1pux`), `1pif` (alias `onepif`), `keepass-csv` (alias `keepassxc-csv`),
 `chrome-csv`, `apple-passwords-csv` (aliases `apple-passwords`, `apple-csv`,
 `apple`, `safari-csv`, `safari`), `lastpass-csv` (alias `lastpass`),
 `protonpass-csv` (aliases `proton-pass-csv`, `protonpass`, `proton-pass`) and
 `gitpass-json`.
+If `--from` is omitted, the format is auto-detected from the file content.
 Duplicates (same title+username+url) are skipped unless `--allow-duplicates` is given;
 `--dry-run` writes nothing. An encrypted `gitpass-json` export prompts for the passphrase
 (or reads `GITPASS_EXPORT_PASSPHRASE`).

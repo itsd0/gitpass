@@ -553,7 +553,8 @@ impl Host {
                 let vault = req.get("vault_id").and_then(Value::as_str);
                 let cat = req.get("category").and_then(Value::as_str);
                 if let Some(c) = cat { c.parse::<Category>().map_err(|e| coded(code::BAD_REQUEST, e.to_string()))?; }
-                let q = req.get("query").and_then(Value::as_str).map(str::to_lowercase).filter(|q| !q.is_empty());
+                let q_raw = req.get("query").and_then(Value::as_str).map(str::trim).filter(|q| !q.is_empty());
+                let parsed_q = q_raw.map(gitpass_core::search::parse_query);
                 // No cap unless the caller asks for one: the popup lists every item (a silent default cap dropped items past the 500th title).
                 let limit = req.get("limit").and_then(Value::as_u64).map(|n| n as usize);
                 // Paging: a reply is capped at 1 MiB (framing::MAX_OUT), so big vaults are fetched in pages via `offset`.
@@ -573,11 +574,18 @@ impl Host {
                 };
                 for (vid, vname, iid, r) in recs {
                     if cat.is_some_and(|c| c != r.category.as_str()) { continue; }
+                    if let Some(pq) = &parsed_q {
+                        let cand = gitpass_core::search::CandidateInfo::from_record(&r, Some(vname.as_str()));
+                        if !pq.matches(&cand) { continue; }
+                    }
                     let mut s = summary(&vid, &vname, &iid, &r);
                     if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
-                    if let Some(q) = &q {
-                        let hay = format!("{} {} {}", r.item.title, s["subtitle"].as_str().unwrap_or(""), r.item.url.as_deref().unwrap_or("")).to_lowercase();
-                        if !hay.contains(q.as_str()) { continue; }
+                    if let Some(pq) = &parsed_q {
+                        if !pq.terms.is_empty() {
+                            let term = pq.terms.to_lowercase();
+                            let hay = format!("{} {} {}", r.item.title, s["subtitle"].as_str().unwrap_or(""), r.item.url.as_deref().unwrap_or("")).to_lowercase();
+                            if !hay.contains(term.as_str()) { continue; }
+                        }
                     }
                     out.push(s);
                 }
