@@ -43,6 +43,8 @@ import { TrashBar } from "./TrashBar";
 import { ItemContextMenu, type ItemMenuTarget } from "./ItemContextMenu";
 import { trashHint } from "./trash";
 import { rowFindingsMap, useBreachedIds, useRowWarnings, type RowFinding } from "./rowFindings";
+import { RowQuickActions } from "./RowQuickActions";
+import { clearRowFields, ensureRowFields } from "./rowFields";
 import type { WatchtowerReport } from "../../api/types";
 
 /** Every row has a fixed, explicit height (the DOM enforces it), so virtual offsets are exact: no overlap, no stray gaps. */
@@ -72,6 +74,9 @@ export function ItemList() {
   const density: ListDensity = useSettings((s) => s.settings?.listDensity ?? "comfortable");
   const compact = density === "compact";
   const multiOn = multiIds.length > 1;
+  const [listFocused, setListFocused] = useState(false);
+  // The quick-action cluster covers the row title in a very narrow list, so it is hidden below this width.
+  const [narrow, setNarrow] = useState(false);
   const t = useT();
   const {
     query,
@@ -191,6 +196,27 @@ export function ItemList() {
     )
       applySel(p);
   }, [order]);
+
+  // edits and syncs can change an item's fields, so drop the cached per-row field presence on every refresh
+  useEffect(() => clearRowFields(), [version]);
+  // the quick-action cluster hides in a narrow list where it would cover the title
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((es) => {
+      setNarrow((es[0]?.contentRect.width ?? 0) < 260);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  // keyboard selection loads the selected row's field presence (hover does the same via onMouseEnter below)
+  useEffect(() => {
+    const it = selectedItemId
+      ? items.find((x) => x.id === selectedItemId)
+      : undefined;
+    if (it && !it.deletedAt && (it.category === "login" || it.category === "credit_card"))
+      ensureRowFields(it.vaultId, it.id);
+  }, [selectedItemId, items]);
   function onRowClick(e: React.MouseEvent, id: string) {
     const toggle = e.metaKey || e.ctrlKey,
       range = e.shiftKey;
@@ -367,6 +393,11 @@ export function ItemList() {
         ref={parentRef}
         tabIndex={items.length === 0 ? -1 : 0}
         onKeyDown={onKey}
+        onFocus={() => setListFocused(true)}
+        onBlur={(e) => {
+          if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+            setListFocused(false);
+        }}
         onContextMenu={onContextMenu}
         className="flex-1 overflow-y-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
         role="listbox"
@@ -444,9 +475,14 @@ export function ItemList() {
                         onMouseDown={(e) => {
                           if (e.shiftKey) e.preventDefault();
                         }}
+                        onMouseEnter={() => {
+                          if (!r.item.deletedAt && (r.item.category === "login" || r.item.category === "credit_card"))
+                            ensureRowFields(r.item.vaultId, r.item.id);
+                        }}
+                        tabIndex={-1}
                         style={{ height: (compact ? ITEM_H_COMPACT : ITEM_H) - 2 }}
                         className={cn(
-                          "group mx-1.5 my-px box-border flex cursor-default items-center gap-2.5 overflow-hidden rounded-md px-2.5 transition-colors",
+                          "group relative mx-1.5 my-px box-border flex cursor-default items-center gap-2.5 overflow-hidden rounded-md px-2.5 outline-none transition-colors",
                           isSelected
                             ? "bg-accent/15 ring-1 ring-inset ring-accent hover:bg-accent/20"
                             : "hover:bg-hover"
@@ -585,6 +621,13 @@ export function ItemList() {
                         <Star
                           size={12}
                           className="shrink-0 fill-warn text-warn"
+                        />
+                      )}
+                      {!multiOn && !narrow && !r.item.deletedAt && (
+                        <RowQuickActions
+                          item={r.item}
+                          selected={isSelected}
+                          listFocused={listFocused}
                         />
                       )}
                     </div>

@@ -561,6 +561,8 @@ export const th: Partial<Record<Key, string>> = {
   "items.section.previous30Days": "30 วันที่ผ่านมา",
   "items.ariaLabel": "รายการ",
   "items.selectItem": "เลือก {title}",
+  "items.rowActions": "การกระทำด่วนสำหรับ {title}",
+  "itemKeys.copyNumber": "คัดลอกหมายเลข",
   "items.deselectItem": "ยกเลิกการเลือก {title}",
   "items.search.resultCount": "ผลลัพธ์ {count} รายการ",
   "items.search.resultOne": "ผลลัพธ์ 1 รายการ",

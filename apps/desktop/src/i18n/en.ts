@@ -599,6 +599,8 @@ export const en = {
   "items.section.previous30Days": "Previous 30 days",
   "items.ariaLabel": "Items",
   "items.selectItem": "Select {title}",
+  "items.rowActions": "Quick actions for {title}",
+  "itemKeys.copyNumber": "Copy number",
   "items.deselectItem": "Deselect {title}",
   "items.search.resultCount": "{count} results",
   "items.search.resultOne": "1 result",
