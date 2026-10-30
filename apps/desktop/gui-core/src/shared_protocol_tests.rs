@@ -222,6 +222,12 @@ fn test_host_and_agent_identical_protocol_json() {
 
         // 15. get_item for passkey
         json!({"cmd": "get_item", "item_id": passkey_id}),
+
+        // 16. list_archived
+        json!({"cmd": "list_archived"}),
+
+        // 17. list_deleted
+        json!({"cmd": "list_deleted"}),
     ];
 
     for (idx, req) in fixtures.iter().enumerate() {

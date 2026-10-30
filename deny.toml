@@ -26,7 +26,7 @@ ignore = [
     # RUSTSEC-2026-0367, -0368, -0369 (zip 2.6.1): all three require
     # `ZipArchive::extract` / `ZipStreamReader::extract`, which create
     # files/symlinks from archive entries and apply archive permissions.
-    # gitpass never calls extract: the only zip use is 1Password .1pux
+    # gitpass never calls extract: the only zip use is .1pux
     # import (`crates/gitpass-core/src/import.rs`), which opens the archive
     # and reads a single named entry (`export.data`) into memory with
     # `by_name` + `read_to_string`. No file, symlink, or permission is ever

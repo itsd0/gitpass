@@ -218,7 +218,7 @@ Merged from four parallel workspaces on top of 0.3.0. All crates, the desktop ap
   `accept` imports a one-time snapshot: there is no live two-way shared vault. `unshare` cannot take back what the member already copied.
 
 ### Import / export (data)
-- New `import.rs`: importers for `bitwarden-json`, `bitwarden-csv`, `1password-csv`, `keepass-csv`, `chrome-csv` and `gitpass-json`.
+- New `import.rs`: importers for `bitwarden-json`, `bitwarden-csv`, `generic-csv`, `keepass-csv`, `chrome-csv` and `gitpass-json`.
   CSV column matching is case-insensitive and accepts aliases. Unmapped columns are added to the notes. Duplicates
   (same title+username+url) are skipped unless `--allow-duplicates` is passed. `--dry-run` writes nothing.
 - `export --format gitpass-json|csv` writes PLAINTEXT and needs `--yes`. `--encrypted` writes passphrase-protected gitpass-json

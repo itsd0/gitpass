@@ -100,7 +100,7 @@ fn split_id(id: &str) -> Result<(&str, &str)> {
 
 pub use crate::protocol::{
     detail, field_val, fields_of, has_totp, is_card_number, kind_str, nonempty, secret_preview,
-    subtitle, summary, url_host,
+    subtitle, summary, url_host, WORD_SEPARATORS,
 };
 
 fn visible(r: &ItemRecord) -> bool { r.deleted_at.is_none() && !r.archived }
@@ -108,6 +108,11 @@ fn visible(r: &ItemRecord) -> bool { r.deleted_at.is_none() && !r.archived }
 /// Password generator: characters (`digits`, `symbols`), words (`words`) or a PIN (`pin`).
 /// The defaults, limits and separator come from gitpass-core, so the host, CLI and desktop app agree.
 pub fn generate(r: &gitpass_core::generate::Request) -> Result<String> {
+    if let Some(c) = r.separator {
+        if !WORD_SEPARATORS.contains(&c) {
+            return Err(coded(code::BAD_REQUEST, format!("invalid word separator {c:?}: use one of -, ., _, space")));
+        }
+    }
     let opts = gitpass_core::generate::Options::for_request(r).map_err(|m| coded(code::BAD_REQUEST, m))?;
     Ok(gitpass_core::generate::generate(&opts))
 }
@@ -311,6 +316,32 @@ impl Host {
         Ok(out)
     }
 
+    /// Every archived record: (vault id, vault name, item id, record).
+    fn archived_records(&self, only_vault: Option<&str>) -> Result<Vec<(String, String, String, ItemRecord)>> {
+        let s = self.sess()?;
+        let mut out = vec![];
+        for (vid, meta) in s.list_vaults()? {
+            if only_vault.is_some_and(|v| v != vid) { continue; }
+            for (iid, _, r) in s.list_records(&vid)? {
+                if r.deleted_at.is_none() && r.archived { out.push((vid.clone(), meta.name.clone(), iid, r)); }
+            }
+        }
+        Ok(out)
+    }
+
+    /// Every deleted record: (vault id, vault name, item id, record).
+    fn deleted_records(&self, only_vault: Option<&str>) -> Result<Vec<(String, String, String, ItemRecord)>> {
+        let s = self.sess()?;
+        let mut out = vec![];
+        for (vid, meta) in s.list_vaults()? {
+            if only_vault.is_some_and(|v| v != vid) { continue; }
+            for (iid, _, r) in s.list_records(&vid)? {
+                if r.deleted_at.is_some() { out.push((vid.clone(), meta.name.clone(), iid, r)); }
+            }
+        }
+        Ok(out)
+    }
+
     fn get_audit_report(&mut self) -> Result<Arc<gitpass_core::audit::AuditReport>> {
         if let Some(cached) = &self.audit_cache {
             return Ok(Arc::clone(cached));
@@ -385,10 +416,34 @@ impl Host {
             "request_unlock" => Err(coded(code::APP_NOT_RUNNING, "the gitpass app is not running; open it or unlock with password")),
             "lock" => { self.session = None; Ok(json!({"unlocked": false})) }
             "list_items" => {
+                let vault = req.get("vault_id").and_then(Value::as_str);
                 let usage = self.sess()?.all_last_used();
-                let records = self.all_records(None)?;
-                let iter = records.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                let recs = if req.get("state").and_then(Value::as_str) == Some("archived")
+                    || req.get("filter").and_then(Value::as_str) == Some("archive")
+                    || req.get("archived").and_then(Value::as_bool) == Some(true) {
+                    self.archived_records(vault)?
+                } else if req.get("state").and_then(Value::as_str) == Some("deleted")
+                    || req.get("filter").and_then(Value::as_str) == Some("deleted")
+                    || req.get("deleted").and_then(Value::as_bool) == Some(true) {
+                    self.deleted_records(vault)?
+                } else {
+                    self.all_records(vault)?
+                };
+                let iter = recs.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
                 crate::protocol::list_items(iter, req, &usage)
+            }
+            "list_archived" => {
+                let vault = req.get("vault_id").and_then(Value::as_str);
+                let usage = self.sess()?.all_last_used();
+                let recs = self.archived_records(vault)?;
+                let iter = recs.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                Ok(crate::protocol::list_archived(iter, vault, &usage))
+            }
+            "list_deleted" => {
+                let vault = req.get("vault_id").and_then(Value::as_str);
+                let recs = self.deleted_records(vault)?;
+                let iter = recs.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                Ok(crate::protocol::list_deleted(iter, vault))
             }
             "match" => {
                 let usage = self.sess()?.all_last_used();
@@ -410,10 +465,16 @@ impl Host {
                 Ok(json!({"items": out}))
             }
             "get_item" => {
-                let (vid, iid, r) = self.record(arg_str(req, "item_id")?)?;
-                let vname = self.vault_name(&vid)?;
-                let lu = self.sess()?.last_used(&iid);
-                Ok(crate::protocol::get_item(&vid, &vname, &iid, &r, lu))
+                let (vid, iid) = split_id(arg_str(req, "item_id")?)?;
+                let include_deleted = req.get("include_deleted").and_then(Value::as_bool).unwrap_or(false);
+                let s = self.sess()?;
+                let vname = self.vault_name(vid)?;
+                let (_, r) = s.read_record(vid, iid).map_err(|e| coded(code::NOT_FOUND, format!("item not found: {e:#}")))?;
+                if r.deleted_at.is_some() && !include_deleted {
+                    return Err(coded(code::NOT_FOUND, "item not found"));
+                }
+                let lu = s.last_used(iid);
+                Ok(crate::protocol::get_item(vid, &vname, iid, &r, lu))
             }
             "reveal" => {
                 if req.get("source").and_then(Value::as_str) != Some("popup") {
@@ -553,6 +614,19 @@ impl Host {
                 }
                 self.audit_cache = None;
                 Ok(json!({"ok": true}))
+            }
+            "archive_item" | "unarchive_item" => {
+                if req.get("source").and_then(Value::as_str) != Some("popup") {
+                    return Err(coded(code::DENIED, format!("{cmd} is allowed only from the popup")));
+                }
+                let (vid, iid) = split_id(arg_str(req, "item_id")?)?;
+                let s = self.sess()?;
+                let (_, r) = s.read_record(vid, iid).map_err(|e| coded(code::NOT_FOUND, format!("item not found: {e:#}")))?;
+                if r.deleted_at.is_some() { return Err(coded(code::NOT_FOUND, "item not found")); }
+                let archived = if cmd == "unarchive_item" { false } else { req.get("archived").and_then(Value::as_bool).unwrap_or(true) };
+                s.set_archived(vid, iid, archived)?;
+                self.audit_cache = None;
+                Ok(json!({"ok": true, "archived": archived}))
             }
             "generate" => crate::protocol::generate(req),
             "record_generated_password" => {

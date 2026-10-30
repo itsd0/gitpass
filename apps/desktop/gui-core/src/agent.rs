@@ -295,10 +295,29 @@ impl Agent {
                 Ok(json!({"vaults": v.iter().map(|x| json!({"id": x.id, "name": x.name, "item_count": x.item_count})).collect::<Vec<_>>()}))
             }
             "list_items" => {
-                let records = self.records()?;
-                let iter = records.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
                 let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
-                gitpass_host::protocol::list_items(iter, q, &usage)
+                let recs = if s("state").as_deref() == Some("archived") || s("filter").as_deref() == Some("archive") || q.get("archived").and_then(|v| v.as_bool()) == Some(true) {
+                    self.archived_records()?
+                } else if s("state").as_deref() == Some("deleted") || s("filter").as_deref() == Some("deleted") || q.get("deleted").and_then(|v| v.as_bool()) == Some(true) {
+                    self.deleted_records()?
+                } else {
+                    self.records()?
+                };
+                let iter = recs.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                gitpass_host::protocol::list_items(iter, q, &usage).map_err(host_err)
+            }
+            "list_archived" => {
+                let vault = s("vault_id").filter(|v| !v.is_empty());
+                let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
+                let recs = self.archived_records()?;
+                let iter = recs.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                Ok(gitpass_host::protocol::list_archived(iter, vault.as_deref(), &usage))
+            }
+            "list_deleted" => {
+                let vault = s("vault_id").filter(|v| !v.is_empty());
+                let recs = self.deleted_records()?;
+                let iter = recs.iter().map(|(v, vn, i, r)| (v.as_str(), vn.as_str(), i.as_str(), r));
+                Ok(gitpass_host::protocol::list_deleted(iter, vault.as_deref()))
             }
             "match" => {
                 let records = self.records()?;
@@ -308,7 +327,13 @@ impl Agent {
             }
             "get_item" => {
                 let (vid, iid) = split_id(&req("item_id")?)?;
-                let (vname, r) = self.record(&vid, &iid)?;
+                let include_deleted = q.get("include_deleted").and_then(|v| v.as_bool()).unwrap_or(false);
+                let (vname, r) = self.app.state.with(|u| {
+                    let name = u.session.list_vaults()?.into_iter().find(|(v, _)| v == &vid).map(|(_, m)| m.name.clone()).ok_or_else(|| err("not_found", "no such vault"))?;
+                    let (_, r) = u.session.read_record(&vid, &iid).map_err(|e| err("not_found", e.to_string()))?;
+                    if r.deleted_at.is_some() && !include_deleted { return Err(err("not_found", "item is deleted")); }
+                    Ok((name, r))
+                })?;
                 let lu = self.app.state.with(|x| Ok(x.session.last_used(&iid))).ok().flatten();
                 Ok(gitpass_host::protocol::get_item(&vid, &vname, &iid, &r, lu))
             }
@@ -457,7 +482,20 @@ impl Agent {
                 self.poll_state();
                 Ok(json!({"ok": true}))
             }
-            "generate" => gitpass_host::protocol::generate(q),
+            "archive_item" | "unarchive_item" => {
+                if source != "popup" { return Err(err("denied", format!("{cmd} is allowed only from the popup"))); }
+                let (vid, iid) = split_id(&req("item_id")?)?;
+                let archived = if cmd == "unarchive_item" { false } else { q.get("archived").and_then(|v| v.as_bool()).unwrap_or(true) };
+                self.app.state.with(|x| {
+                    let (_, r) = x.session.read_record(&vid, &iid).map_err(|e| err("not_found", format!("item not found: {e:#}")))?;
+                    if r.deleted_at.is_some() { return Err(err("not_found", "item is deleted")); }
+                    Ok(())
+                })?;
+                self.app.archive_item(&vid, &iid, archived).map_err(host_err)?;
+                self.poll_state();
+                Ok(json!({"ok": true, "archived": archived}))
+            }
+            "generate" => gitpass_host::protocol::generate(q).map_err(host_err),
             "record_generated_password" => {
                 let pw = q.get("password").and_then(|v| v.as_str()).ok_or_else(|| err("bad_request", "password is required"))?;
                 let source = q.get("source").and_then(|v| v.as_str()).unwrap_or("extension");
@@ -596,6 +634,24 @@ impl Agent {
             Ok(out)
         })
     }
+    fn archived_records(&self) -> Result<Vec<(String, String, String, ItemRecord)>> {
+        self.app.state.with(|u| {
+            let mut out = vec![];
+            for (vid, m) in u.session.list_vaults()? {
+                for (iid, _, r) in u.session.list_records(&vid)? { if r.deleted_at.is_none() && r.archived { out.push((vid.clone(), m.name.clone(), iid, r)); } }
+            }
+            Ok(out)
+        })
+    }
+    fn deleted_records(&self) -> Result<Vec<(String, String, String, ItemRecord)>> {
+        self.app.state.with(|u| {
+            let mut out = vec![];
+            for (vid, m) in u.session.list_vaults()? {
+                for (iid, _, r) in u.session.list_records(&vid)? { if r.deleted_at.is_some() { out.push((vid.clone(), m.name.clone(), iid, r)); } }
+            }
+            Ok(out)
+        })
+    }
     fn record(&self, vid: &str, iid: &str) -> Result<(String, ItemRecord)> {
         self.app.state.with(|u| {
             let name = u.session.list_vaults()?.into_iter().find(|(v, _)| v == vid).map(|(_, m)| m.name.clone()).ok_or_else(|| err("not_found", "no such vault"))?;
@@ -611,6 +667,7 @@ pub fn split_id(id: &str) -> Result<(String, String)> {
     if v.is_empty() || i.is_empty() { return Err(err("bad_request", "item_id must be '<vault_id>:<item_id>'")); }
     Ok((v.into(), i.into()))
 }
+
 
 /// Keep contract codes from gitpass-host's `CodedError` (e.g. `origin_mismatch`, `exists`).
 fn host_err(e: anyhow::Error) -> anyhow::Error {

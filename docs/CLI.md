@@ -71,6 +71,10 @@ gitpass add Personal --category secure-note --title "Recovery Guide" --notes-std
 gitpass add Personal --category credit-card --title "Bank Visa" --holder "Alice Doe" --expiry 11/30
 gitpass add Personal --category bank-account --title "Chase Checking" --bank "Chase" --holder "Alice Doe" --account-type checking --routing 021000021
 gitpass add Personal --category server --title "Production Web" --url 192.168.1.50 --username ubuntu --admin-url https://aws.amazon.com/console
+gitpass add Personal --category identity --title "Alice Personal" --first-name Alice --last-name Doe --email alice@example.com --phone "+1-555-0100" --address "123 Main St, Springfield"
+gitpass add Personal --category wifi --title "Home Wi-Fi" --ssid "HomeNet" --security WPA3
+gitpass add Personal --category ssh-key --title "Work Laptop" --generate ed25519
+gitpass add Personal --category ssh-key --title "Deploy Key" --private-key-file ~/.ssh/id_ed25519
 gitpass get Personal github
 gitpass get Personal github --password-only
 gitpass get Personal github --json --reveal
@@ -83,7 +87,12 @@ gitpass list Personal --sort recent   # title (default) or recent; ignored with 
 gitpass list Personal --query git --json
 gitpass find Personal "git hub"
 gitpass edit Personal github --notes "2FA enabled"
-gitpass edit Personal github --generate 32
+gitpass edit github --tag work --favorite
+gitpass edit github --untag old-tag --unfavorite
+gitpass archive github
+gitpass unarchive github
+gitpass undelete github
+gitpass mv github --to Work
 gitpass rm Personal github
 gitpass history github
 gitpass history github --vault Personal --json
@@ -91,10 +100,11 @@ gitpass restore github --version 3
 ```
 
 - `add` creates an item in the vault. `--category` (alias `--type`) chooses the category:
-  `login` (default), `api-credential`, `secure-note`, `credit-card`, `bank-account`, or `server`.
+  `login` (default), `api-credential`, `secure-note`, `credit-card`, `bank-account`, `server`,
+  `identity`, `wifi`, or `ssh-key`.
   Secrets are never accepted as command-line arguments to avoid shell-history leaks; `add` prompts
-  without echo, or accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`,
-  `--account-number-stdin`, `--pin-stdin`).
+  without echo, accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`,
+  `--account-number-stdin`, `--pin-stdin`), or reads key files (`--private-key-file`).
 - `get` prints the item, or only the password with `--password-only`. `--json` prints the
   item with concealed values set to `null` unless `--reveal` is also passed; see the
   README section "Scripting with --json".
@@ -102,8 +112,14 @@ gitpass restore github --version 3
   owned, then clear it; `--clear-secs 0` copies without waiting. `--quiet` never echoes
   the value when no clipboard is available.
 - `--field` takes `password`, `username`, `url`, `totp`, `notes` or `title`.
-- `edit` and `rm` take an item query; `edit` replaces only the fields you pass, and
-  `--password` / `--generate [N]` set a new password.
+- `edit` and `rm` take an item query; `edit` replaces only the fields you pass,
+  `--password` / `--generate [N]` set a new password, `--tag` / `--untag` add or remove tags (repeatable),
+  and `--favorite` / `--unfavorite` toggle favorite status.
+- `archive` and `unarchive` mark or unmark an item as archived.
+- `undelete` restores an item from Recently Deleted (searches deleted items only; clear error if the item is not deleted).
+- `mv <item> --to <vault>` moves an item to another vault, keeping its version history, attachments, tags and metadata.
+- `edit`, `archive`, `unarchive`, `undelete`, and `mv` accept `--vault` (or `<vault>/<item>` or `<vault> <item>`),
+  `--pick <N>`, and `--json`, and never print secrets.
 - `history` lists versions without secrets (current version first); `restore --version N`
   restores a previous version as a new version. Both accept `<vault>/<item>` instead of
   `--vault` and refuse to guess when several items match.
@@ -166,6 +182,20 @@ gitpass inject -i config.yml.tpl                  # render to stdout
 gitpass inject -i .env.template -o .env           # write mode 0600 (plaintext secrets on disk)
 ```
 
+```sh
+gitpass ref Personal GitHub                       # gp://Personal/GitHub/password
+gitpass ref Personal GitHub username              # standard fields: password, username, url, notes, title, totp
+gitpass ref Personal "AWS prod" "API Key" --copy  # custom field by label (or id); copies the reference
+```
+
+`gitpass ref <vault> <query> [field]` prints the reference for an item field (never the secret
+itself) so you do not have to type it by hand. Names are percent-encoded (`/` becomes `%2F`,
+a space `%20`), and the reference is resolved once before it is printed, so a reference
+that is printed always works with `run` and `inject`. Ambiguous queries list candidates like
+`gitpass get` (`--pick <n>`). `--copy` puts the reference on the clipboard without the
+concealed marker and without auto-clear, since it is not a secret. The desktop app has the
+same action on each field of an item.
+
 References are `gp://<vault>/<item>/<field>`; `run` resolves references from inherited
 environment variables and/or `--env-file` (which is optional and overrides inherited
 variables with the same name), puts resolved values only in the child's environment, and
@@ -193,15 +223,15 @@ diverged. See the README "GitHub sync" section.
 
 ```sh
 gitpass import Personal --from bitwarden-json export.json
-gitpass import Personal --from 1password-csv export.csv --dry-run
+gitpass import Personal --from generic-csv export.csv --dry-run
 gitpass import Personal --from gitpass-json backup.json --allow-duplicates
 gitpass export Personal --format gitpass-json --out backup.json --encrypted
 gitpass export Personal --format csv --out backup.csv --yes
 ```
 
 `--from` accepts every format and alias in `crates/gitpass-core/src/import.rs`
-(`ImportFormat`): `bitwarden-json`, `bitwarden-csv`, `1password-csv`,
-`1password-1pux` (alias `1pux`), `keepass-csv` (alias `keepassxc-csv`),
+(`ImportFormat`): `bitwarden-json`, `bitwarden-csv`, `generic-csv` (alias `1password-csv`),
+`1pux` (alias `1password-1pux`), `keepass-csv` (alias `keepassxc-csv`),
 `chrome-csv`, `apple-passwords-csv` (aliases `apple-passwords`, `apple-csv`,
 `apple`, `safari-csv`, `safari`), `lastpass-csv` (alias `lastpass`),
 `protonpass-csv` (aliases `proton-pass-csv`, `protonpass`, `proton-pass`) and

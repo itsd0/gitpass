@@ -198,6 +198,21 @@ fn fill_totp_save_update_vaults_generate() {
     assert_eq!(ok(&mut f.host, json!({"cmd":"generate","pin":true}))["password"].as_str().unwrap().len(), 6);
     assert_eq!(ok(&mut f.host, json!({"cmd":"generate","words":true}))["password"].as_str().unwrap().split('-').count(), 5);
 
+    // Memorable mode: separator and capitalize options (issue #326).
+    let g = ok(&mut f.host, json!({"cmd":"generate","len":4,"words":true,"separator":"_","capitalize":true}))["password"].as_str().unwrap().to_string();
+    assert_eq!(g.split('_').count(), 4, "{g}");
+    for w in g.split('_') {
+        assert!(w.chars().next().unwrap().is_ascii_uppercase(), "{w} in {g}");
+    }
+    let g = ok(&mut f.host, json!({"cmd":"generate","len":3,"words":true,"separator":" "}))["password"].as_str().unwrap().to_string();
+    assert_eq!(g.split(' ').count(), 3, "{g}");
+
+    // Invalid separator is rejected with bad_request.
+    assert_eq!(err(&mut f.host, json!({"cmd":"generate","words":true,"separator":"/"})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"generate","words":true,"separator":"invalid"})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"generate","words":true,"separator":""})).0, "bad_request");
+    assert_eq!(err(&mut f.host, json!({"cmd":"generate","words":true,"separator":123})).0, "bad_request");
+
     let st = ok(&mut f.host, json!({"cmd":"status"}));
     assert_eq!(st["app_running"], false);
     assert_eq!(err(&mut f.host, json!({"cmd":"request_unlock","reason":"x"})).0, "app_not_running");
@@ -228,4 +243,52 @@ fn create_item_any_category_standalone() {
     assert_eq!(err(&mut f.host, json!({"cmd":"create_item","item":{"category":"login","title":"x","sections":[{"id":"m","title":null,"fields":[
         {"id":"a","label":"a","kind":"text","value":"1"},{"id":"a","label":"a","kind":"text","value":"2"}]}]}})).0, "bad_request");
     assert_eq!(err(&mut f.host, json!({"cmd":"create_item","item":{"vaultId":"nope","category":"secure_note","title":"x"}})).0, "not_found");
+}
+
+#[test]
+fn host_generate_separator_and_capitalize_validation() {
+    use gitpass_core::generate::{Mode, Request};
+    use gitpass_host::handler::generate;
+
+    // Allowed separators are honored.
+    for sep in ['-', '.', '_', ' '] {
+        let r = Request {
+            mode: Mode::Words,
+            length: Some(4),
+            symbols: true,
+            digits: false,
+            separator: Some(sep),
+            capitalize: true,
+        };
+        let pw = generate(&r).unwrap();
+        assert_eq!(pw.split(sep).count(), 4, "{pw}");
+        for w in pw.split(sep) {
+            assert!(w.chars().next().unwrap().is_ascii_uppercase(), "{w} in {pw}");
+        }
+    }
+
+    // Invalid separators rejected.
+    for bad in ['/', 'a', '0', ':', '\n'] {
+        let r = Request {
+            mode: Mode::Words,
+            length: Some(4),
+            symbols: true,
+            digits: false,
+            separator: Some(bad),
+            capitalize: false,
+        };
+        assert!(generate(&r).is_err());
+    }
+
+    // Defaults unchanged when omitted.
+    let r = Request {
+        mode: Mode::Words,
+        length: Some(5),
+        symbols: true,
+        digits: true,
+        separator: None,
+        capitalize: false,
+    };
+    let pw = generate(&r).unwrap();
+    assert_eq!(pw.split('-').count(), 5, "{pw}");
 }

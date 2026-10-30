@@ -1,18 +1,17 @@
 import { forwardRef } from 'react';
-import { ArrowLeft, ArrowRight, KeyRound, PanelLeftOpen, Plus, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, KeyRound, Plus, Search } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { useItemsUI } from '../features/items';
 import { Button, Kbd, Tooltip } from '../ui';
 import { useT } from '../i18n';
 
 export const Toolbar = forwardRef<HTMLInputElement>(function Toolbar(_, ref) {
-  const { sidebarCollapsed, toggleSidebar, openModal, route, setRoute } = useApp();
+  const { openModal, route, setRoute } = useApp();
   const { query, setQuery } = useItemsUI();
   const t = useT();
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
   return (
     <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-panel px-3">
-      {sidebarCollapsed && <Button variant="ghost" size="icon" aria-label={t("sidebar.expand")} onClick={toggleSidebar}><PanelLeftOpen size={16} /></Button>}
       <Button variant="ghost" size="iconSm" aria-label={t("toolbar.back")} onClick={() => history.back()}><ArrowLeft size={15} /></Button>
       <Button variant="ghost" size="iconSm" aria-label={t("toolbar.forward")} onClick={() => history.forward()}><ArrowRight size={15} /></Button>
       <label className="flex h-8 flex-1 items-center gap-2 rounded-lg border border-border bg-bg px-2.5 focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/40">

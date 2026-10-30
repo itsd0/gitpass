@@ -352,4 +352,22 @@ describe('FieldRow i18n + a11y (#182)', () => {
     const code = await screen.findByLabelText('123456 เหลืออีก 12 วินาที');
     expect(code.textContent).toBe('123 456');
   });
+
+  it('copies a secret reference (not the value) without touching copyField', async () => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true });
+    const copyField = vi.spyOn(api, 'copyField').mockResolvedValue(undefined);
+    const fields = [{ id: 'username', label: 'username' }, { id: 'password', label: 'password' }];
+    const target = { vault: 'My Vault', item: 'Prod DB', fields };
+    const pw: Field = { id: 'password', label: 'password', kind: 'concealed', value: null };
+    render(<TooltipProvider><FieldRow field={pw} ctx={ctx} refTarget={target} /></TooltipProvider>);
+    await act(async () => { fireEvent.click(screen.getByLabelText('Copy secret reference for password')); });
+    expect(write).toHaveBeenCalledWith('gp://My%20Vault/Prod%20DB/password');
+    expect(copyField).not.toHaveBeenCalled();
+  });
+
+  it('shows no reference action without a target', () => {
+    wrap({ id: 'username', label: 'username', kind: 'text', value: 'demo' });
+    expect(screen.queryByLabelText(/secret reference/i)).toBeNull();
+  });
 });

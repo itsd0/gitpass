@@ -7,7 +7,7 @@
         "avatar": "",
         "email": "alice@example.com",
         "uuid": "FAKEACCOUNTUUID0000000000A",
-        "domain": "https://fake.1password.com/"
+        "domain": "https://fake.example.com/"
       },
       "vaults": [
         {

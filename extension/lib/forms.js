@@ -307,7 +307,7 @@
     if (list.length < 2 || !list[0].compareDocumentPosition) return list[0] || null;
     return list.reduce((a, b) => (a.compareDocumentPosition(b) & 4 /* FOLLOWING */ ? a : b));
   }
-  /** The ONE field per logical form group that gets the gitpass badge / dropdown (like 1Password):
+  /** The ONE field per logical form group that gets the gitpass badge / dropdown (like other password managers):
    *  login -> username (else password); signup -> username (else new password); change -> current (else new);
    *  card -> card number (else the first card field; Stripe-style iframes -> the card-number frame);
    *  identity -> the first identity field in the page; one-time code -> the code field.

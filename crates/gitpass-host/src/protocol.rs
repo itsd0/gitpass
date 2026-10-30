@@ -148,6 +148,10 @@ pub fn subtitle(r: &ItemRecord) -> String {
                 _ => String::new(),
             }
         }
+        Category::ApiCredential => gitpass_core::mask::api_credential_secret(r)
+            .map(gitpass_core::mask::secret_hint)
+            .or_else(|| fields_of(r).into_iter().find(|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())).and_then(|f| f.value))
+            .unwrap_or_default(),
         _ => fields_of(r)
             .into_iter()
             .find(|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty()))
@@ -160,7 +164,7 @@ pub fn subtitle(r: &ItemRecord) -> String {
 /// ItemSummary (contract): summary of an item.
 pub fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
     let url = nonempty(&r.item.url);
-    json!({
+    let mut s = json!({
         "id": format!("{vid}:{iid}"),
         "vault_id": vid,
         "vault_name": vname,
@@ -173,7 +177,12 @@ pub fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         "favorite": r.favorite,
         "updated_at": r.item.updated_at,
         "created_at": r.created_at,
-    })
+        "archived": r.archived,
+    });
+    if let Some(d) = r.deleted_at {
+        s["deleted_at"] = json!(gitpass_core::device::iso8601(d as i64));
+    }
+    s
 }
 
 /// ItemDetail (contract): summary + fields with secrets omitted (`concealed:true`, no value).
@@ -193,7 +202,7 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord, last_used: Opti
         if !secret {
             o["value"] = json!(f.value);
         } else if r.category == Category::ApiCredential {
-            if let Some(m) = f.value.as_deref().and_then(secret_preview) {
+            if let Some(m) = f.value.as_deref().map(gitpass_core::mask::secret_hint) {
                 o["masked"] = json!(m);
             }
         } else if k == "card_number" {
@@ -239,9 +248,6 @@ where
 
     let mut out = vec![];
     for (vid, vname, iid, r) in records {
-        if r.deleted_at.is_some() || r.archived {
-            continue;
-        }
         if let Some(v) = vault {
             if v != vid {
                 continue;
@@ -282,6 +288,58 @@ where
     let end = offset.saturating_add(out.len());
     let next_offset = (end < total).then_some(end);
     Ok(json!({"items": out, "total": total, "next_offset": next_offset}))
+}
+
+/// Shared pure logic for `list_archived` command.
+pub fn list_archived<'a, I>(
+    records: I,
+    vault: Option<&str>,
+    usage: &BTreeMap<String, u64>,
+) -> Value
+where
+    I: IntoIterator<Item = (&'a str, &'a str, &'a str, &'a ItemRecord)>,
+{
+    let mut items: Vec<(Value, String)> = records
+        .into_iter()
+        .filter(|(vid, _, _, _)| vault.as_ref().is_none_or(|v| v == vid))
+        .map(|(vid, vname, iid, r)| {
+            let mut s = summary(vid, vname, iid, r);
+            if let Some(lu) = usage.get(iid) {
+                s["last_used"] = json!(lu);
+            }
+            let title = r.item.title.to_lowercase();
+            (s, title)
+        })
+        .collect();
+    items.sort_by(|a, b| a.1.cmp(&b.1));
+    json!({ "items": items.into_iter().map(|x| x.0).collect::<Vec<_>>() })
+}
+
+/// Shared pure logic for `list_deleted` command.
+pub fn list_deleted<'a, I>(
+    records: I,
+    vault: Option<&str>,
+) -> Value
+where
+    I: IntoIterator<Item = (&'a str, &'a str, &'a str, &'a ItemRecord)>,
+{
+    let mut items: Vec<Value> = records
+        .into_iter()
+        .filter(|(vid, _, _, _)| vault.as_ref().is_none_or(|v| v == vid))
+        .map(|(vid, vname, iid, r)| summary(vid, vname, iid, r))
+        .collect();
+    items.sort_by(|a, b| {
+        let da = a.get("deleted_at").and_then(|v| v.as_str()).unwrap_or("");
+        let db = b.get("deleted_at").and_then(|v| v.as_str()).unwrap_or("");
+        db.cmp(da).then_with(|| {
+            a["title"]
+                .as_str()
+                .unwrap_or("")
+                .to_lowercase()
+                .cmp(&b["title"].as_str().unwrap_or("").to_lowercase())
+        })
+    });
+    json!({ "items": items })
 }
 
 /// Validate a requesting page origin (https, or http on loopback). Used in both proxy and fallback mode.
@@ -358,18 +416,34 @@ pub fn fill_card_or_identity(r: &ItemRecord, is_card: bool) -> Result<Value> {
     Ok(Value::Object(m))
 }
 
+/// Separators the generator offers for word passphrases; anything else is a bad request.
+pub const WORD_SEPARATORS: [char; 4] = ['-', '.', '_', ' '];
+
 /// Shared pure logic for `generate` command.
 pub fn generate(req: &Value) -> Result<Value> {
     use gitpass_core::generate::{Mode, Request};
     let flag = |k: &str, default: bool| req.get(k).and_then(Value::as_bool).unwrap_or(default);
     let (words, pin) = (flag("words", false), flag("pin", false));
+    let separator = match req.get("separator") {
+        None | Some(Value::Null) => None,
+        Some(Value::String(s)) => {
+            let mut chars = s.chars();
+            let c = chars.next();
+            if c.is_none() || chars.next().is_some() || !WORD_SEPARATORS.contains(&c.unwrap()) {
+                return Err(coded(code::BAD_REQUEST, format!("invalid word separator {s:?}: use one of -, ., _, space")));
+            }
+            c
+        }
+        Some(_) => return Err(coded(code::BAD_REQUEST, "separator must be a string")),
+    };
+    let capitalize = flag("capitalize", false);
     let r = Request {
         mode: if pin { Mode::Pin } else if words { Mode::Words } else { Mode::Random },
         length: req.get("len").and_then(Value::as_u64).map(|v| v as usize),
         symbols: flag("symbols", true),
         digits: flag("digits", true),
-        separator: None,
-        capitalize: false,
+        separator,
+        capitalize,
     };
     if let Some(rules) = req.get("rules").filter(|r| !r.is_null()) {
         if words || pin {

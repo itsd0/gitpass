@@ -142,7 +142,7 @@ fn filters_favorite_archive_delete_restore_purge_move_duplicate() {
     let n = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::SecureNote, title: "Note".into(),
         sections: vec![Section { id: "s".into(), title: None, fields: vec![fld("body", FieldKind::Multiline, Some("hello"))] }], notes: None, tags: None, favorite: None, url: None }).unwrap();
     assert_eq!(n.subtitle, "hello");
-    let f = |kind: FilterKind| Filter { kind, vault_id: Some(e.vault.clone()), tag: Some("work".into()), category: Some(Category::CreditCard), query: None, sort: Some(Sort::Title) };
+    let f = |kind: FilterKind| Filter { kind, vault_id: Some(e.vault.clone()), tag: Some("work".into()), category: (kind == FilterKind::Category).then_some(Category::CreditCard), query: None, sort: Some(Sort::Title) };
     let ids = |v: Vec<ItemSummary>| v.into_iter().map(|s| s.title).collect::<Vec<_>>();
     assert_eq!(ids(e.app.list_items(&f(FilterKind::All)).unwrap()), vec!["Alpha", "Example Bank", "Note"]);
     assert_eq!(ids(e.app.list_items(&f(FilterKind::Favorites)).unwrap()), vec!["Example Bank"]);
@@ -904,6 +904,82 @@ fn update_item_assigns_ids_for_new_fields_and_keeps_null_secrets() {
     let nd = e.app.get_item(&e.vault, &n.id).unwrap();
     assert_eq!(nd.sections[0].fields.len(), 2);
     assert_ne!(nd.sections[0].fields[0].id, nd.sections[0].fields[1].id);
+}
+
+#[test]
+fn api_credential_masked_hint_in_summary_and_detail_without_secret_leak() {
+    let e = env();
+    const LONG_KEY: &str = "sk-live-0123456789abcdefgh";
+    let api = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::ApiCredential,
+        title: "Stripe Production".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                fld("username", FieldKind::Text, Some("svc-payments")),
+                fld("credential", FieldKind::Concealed, Some(LONG_KEY)),
+            ],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+
+    let d = e.app.get_item(&e.vault, &api.id).unwrap();
+    assert_eq!(d.summary.subtitle, "sk-l••••••••efgh");
+    let cred_field = d.sections.iter().flat_map(|s| &s.fields).find(|f| f.id == "credential").unwrap();
+    assert_eq!(cred_field.masked.as_deref(), Some("sk-l••••••••efgh"));
+    assert_eq!(cred_field.value, None);
+
+    // Assert full secret never appears in serialized DTO
+    let json_str = serde_json::to_string(&d).unwrap();
+    assert!(!json_str.contains("0123456789abcd"), "secret middle leaked in JSON: {json_str}");
+
+    // Reveal returns the full secret unchanged
+    let revealed = e.app.reveal_field(&e.vault, &api.id, "credential").unwrap();
+    assert_eq!(&*revealed, LONG_KEY);
+
+    // Also test short and tiny keys
+    let short_api = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::ApiCredential,
+        title: "Short API".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![fld("credential", FieldKind::Concealed, Some("short-12345"))],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+    let short_d = e.app.get_item(&e.vault, &short_api.id).unwrap();
+    assert_eq!(short_d.summary.subtitle, "sh••••••••");
+    assert_eq!(short_d.sections[0].fields[0].masked.as_deref(), Some("sh••••••••"));
+    assert_eq!(short_d.sections[0].fields[0].value, None);
+
+    let tiny_api = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::ApiCredential,
+        title: "Tiny API".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![fld("credential", FieldKind::Concealed, Some("tiny"))],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+    let tiny_d = e.app.get_item(&e.vault, &tiny_api.id).unwrap();
+    assert_eq!(tiny_d.summary.subtitle, "••••••••");
+    assert_eq!(tiny_d.sections[0].fields[0].masked.as_deref(), Some("••••••••"));
+    assert_eq!(tiny_d.sections[0].fields[0].value, None);
 }
 
 #[test]
@@ -1822,6 +1898,23 @@ fn settings_render_notes_markdown_roundtrip_and_defaults() {
     let updated = e.app.set_settings(Settings { render_notes_markdown: false, ..initial }).unwrap();
     assert!(!updated.render_notes_markdown);
     assert!(!e.app.get_settings().render_notes_markdown);
+}
+
+#[test]
+fn item_type_picker_filters_every_view_including_recently_deleted() {
+    let e = env();
+    let a = login(&e, "Alpha", "a", "pw-a-FAKE-xx");
+    let b = card(&e);
+    let f = |kind: FilterKind, category: Option<Category>| Filter { kind, vault_id: Some(e.vault.clone()), tag: None, category, query: None, sort: Some(Sort::Title) };
+    let titles = |v: Vec<ItemSummary>| v.into_iter().map(|s| s.title).collect::<Vec<_>>();
+    assert_eq!(titles(e.app.list_items(&f(FilterKind::All, Some(Category::Login))).unwrap()), vec!["Alpha"]);
+    assert_eq!(titles(e.app.list_items(&f(FilterKind::Vault, Some(Category::CreditCard))).unwrap()), vec!["Example Bank"]);
+    e.app.delete_item(&e.vault, &a.id).unwrap();
+    e.app.delete_item(&e.vault, &b.id).unwrap();
+    assert_eq!(e.app.list_items(&f(FilterKind::Deleted, None)).unwrap().len(), 2);
+    assert_eq!(titles(e.app.list_items(&f(FilterKind::Deleted, Some(Category::CreditCard))).unwrap()), vec!["Example Bank"]);
+    assert_eq!(titles(e.app.list_items(&f(FilterKind::Deleted, Some(Category::Login))).unwrap()), vec!["Alpha"]);
+    assert!(e.app.list_items(&f(FilterKind::Deleted, Some(Category::Passkey))).unwrap().is_empty());
 }
 
 #[test]
