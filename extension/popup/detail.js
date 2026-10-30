@@ -73,7 +73,7 @@ async function select(idx) {
   S.sel = idx; S.revealed = {}; stopTotp();
   const list = $('list'), qInput = $('q');
   if (idx >= 0) {
-    list.scrollTop = V.scrollToRow(idx, list.scrollTop, list.clientHeight || 380, ROW_H);
+    list.scrollTop = V.scrollToRow(idx, list.scrollTop, list.clientHeight || 380, rowHeight());
     qInput && qInput.setAttribute('aria-activedescendant', 'row-' + idx);
     list.setAttribute('aria-activedescendant', 'row-' + idx);
   } else {

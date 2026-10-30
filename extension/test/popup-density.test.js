@@ -95,3 +95,44 @@ test('row markup and roles are identical in compact density (keyboard nav unchan
   assert.ok(first.querySelector('.u'), 'subtitle element present');
   assert.ok(first.querySelector('.ic'), 'icon element present');
 });
+
+test('virtualized list uses 36px units in compact mode after scrolling', async () => {
+  const items = [];
+  for (let i = 0; i < 200; i++) items.push(mk('r' + i, 'Row ' + i));
+  const { w } = popup(items, { settings: { density: 'compact' } });
+  await sleep(80);
+  const list = w.document.getElementById('list');
+  const inner = w.document.getElementById('listInner');
+  assert.strictEqual(list.classList.contains('compact'), true);
+  // jsdom reports clientHeight 0; the popup falls back to a 380px viewport.
+  list.scrollTop = 1800; // 50 compact rows down
+  list.dispatchEvent(new w.Event('scroll'));
+  await sleep(30);
+  const padTop = parseInt(inner.style.paddingTop, 10);
+  const padBottom = parseInt(inner.style.paddingBottom, 10);
+  assert.strictEqual(padTop % 36, 0, 'padTop in 36px units, got ' + padTop);
+  assert.strictEqual(padBottom % 36, 0, 'padBottom in 36px units, got ' + padBottom);
+  // Window covers the scrolled position: row 50 (offset 1800) must be rendered.
+  const rendered = [...inner.querySelectorAll('.row')].map((r) => parseInt(r.dataset.idx, 10));
+  assert.ok(rendered.includes(50), 'row at the scrolled offset is rendered, got range ' + rendered[0] + '-' + rendered[rendered.length - 1]);
+  assert.ok(padTop <= 50 * 36, 'padTop does not overshoot the first rendered row');
+  const total = padTop + rendered.length * 36 + padBottom;
+  assert.strictEqual(total, 200 * 36, 'padding + rows add up to the full compact list height');
+});
+
+test('switching density re-renders the virtualized list in the new units', async () => {
+  const items = [];
+  for (let i = 0; i < 200; i++) items.push(mk('r' + i, 'Row ' + i));
+  const { w, fireStorage } = popup(items, { settings: { density: 'comfortable' } });
+  await sleep(80);
+  const inner = w.document.getElementById('listInner');
+  inner.ownerDocument.getElementById('list').scrollTop = 2600; // 50 comfortable rows
+  inner.ownerDocument.getElementById('list').dispatchEvent(new w.Event('scroll'));
+  await sleep(30);
+  const padComfort = parseInt(inner.style.paddingTop, 10);
+  assert.strictEqual(padComfort % 52, 0, 'comfortable padTop in 52px units');
+  fireStorage({ settings: { newValue: { density: 'compact' } } }, 'local');
+  await sleep(30);
+  const padCompact = parseInt(inner.style.paddingTop, 10);
+  assert.strictEqual(padCompact % 36, 0, 'padTop recomputed in 36px units after live switch, got ' + padCompact);
+});
