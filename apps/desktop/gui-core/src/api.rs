@@ -1527,16 +1527,8 @@ impl App {
                     });
                 }
             }
-            let with_pw = items.iter().filter(|(_, _, i)| i.item.password.as_deref().is_some_and(|p| !p.is_empty())).count();
-            if with_pw > 0 {
-                let bad: BTreeSet<&String> = out.weak.iter().chain(out.breached.iter()).chain(out.reused.iter().flatten()).collect();
-                // Sites with documented TOTP surface as TotpAvailable instead of MissingTotp, but both mean
-                // "2FA not set up", so both keep the same weight in the score.
-                let missing_totp = out.missing_totp.len() + out.totp_available.len();
-                let penalty = bad.len() as f64 / with_pw as f64 * 80.0 + out.old.len() as f64 / with_pw as f64 * 10.0
-                    + missing_totp as f64 / items.len().max(1) as f64 * 10.0;
-                out.score = (100.0 - penalty).round().clamp(0.0, 100.0) as u8;
-            }
+            let with_pw = items.iter().filter(|(_, _, i)| audit::is_score_password_item(i)).count();
+            out.score = audit::score(&rep, with_pw);
             Ok(out)
         })
     }

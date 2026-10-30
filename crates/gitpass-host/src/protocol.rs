@@ -534,38 +534,8 @@ where
     I: IntoIterator<Item = (&'a str, &'a str, &'a str, &'a ItemRecord)>,
 {
     let recs: Vec<(&'a str, &'a str, &'a str, &'a ItemRecord)> = records.into_iter().collect();
-    let with_pw = recs.iter().filter(|(_, _, _, r)| r.item.password.as_deref().is_some_and(|p| !p.is_empty())).count();
-
-    let mut bad: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
-    let mut old_count = 0;
-    let mut missing_totp_count = 0;
-
-    for f in &report.per_item {
-        let full_id = format!("{}:{}", f.vault, f.id);
-        let mut has_bad = false;
-        let mut has_old = false;
-        let mut has_totp = false;
-        for x in &f.findings {
-            match x {
-                Finding::Weak { .. } | Finding::Reused { .. } | Finding::Pwned { .. } => has_bad = true,
-                Finding::Old { .. } => has_old = true,
-                Finding::MissingTotp | Finding::TotpAvailable { .. } => has_totp = true,
-                _ => {}
-            }
-        }
-        if has_bad { bad.insert(full_id); }
-        if has_old { old_count += 1; }
-        if has_totp { missing_totp_count += 1; }
-    }
-
-    let score = if with_pw > 0 {
-        let penalty = bad.len() as f64 / with_pw as f64 * 80.0
-            + old_count as f64 / with_pw as f64 * 10.0
-            + missing_totp_count as f64 / report.items_checked.max(1) as f64 * 10.0;
-        (100.0 - penalty).round().clamp(0.0, 100.0) as u8
-    } else {
-        100
-    };
+    let with_pw = recs.iter().filter(|(_, _, _, r)| gitpass_core::audit::is_score_password_item(r)).count();
+    let score = gitpass_core::audit::score(report, with_pw);
 
     let rec_map: std::collections::HashMap<(&str, &str), &'a ItemRecord> = recs
         .iter()
