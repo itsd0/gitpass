@@ -1380,14 +1380,16 @@ impl App {
             Ok(out)
         })
     }
-    pub fn import_file(&self, vault_id: &str, format: &str, path: &str, dry_run: bool) -> Result<ImportResult> {
+    /// Import a file into a vault. `password` is the export password for a password-protected
+    /// Bitwarden JSON export (ignored for other formats); encrypted gitpass exports stay CLI-only.
+    pub fn import_file(&self, vault_id: &str, format: &str, path: &str, dry_run: bool, password: Option<&str>) -> Result<ImportResult> {
         let fmt: import::ImportFormat = format.parse()?;
         let path = path.trim();
         let path = if let Some(rest) = path.strip_prefix("~/") { dirs::home_dir().map(|h| h.join(rest).display().to_string()).unwrap_or_else(|| path.to_string()) } else { path.to_string() };
         let resolved = import::resolve_import_path(std::path::Path::new(&path));
         let data = Zeroizing::new(std::fs::read(&resolved).with_context(|| format!("cannot read {}", resolved.display()))?);
         if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&String::from_utf8_lossy(&data)) { bail!("encrypted gitpass exports need a passphrase; import them with the CLI"); }
-        let parsed = import::parse_bytes(fmt, &data, None)?;
+        let parsed = import::parse_bytes(fmt, &data, password)?;
         let mut categories = BTreeMap::new();
         for r in &parsed.items { *categories.entry(r.category.as_str().to_string()).or_insert(0) += 1; }
         let preview = parsed.items.iter().take(50).map(|r| ImportPreviewItem { title: r.item.title.clone(), category: r.category,

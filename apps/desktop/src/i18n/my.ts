@@ -691,6 +691,8 @@ export const my: Partial<Record<Key, string>> = {
   "import.dropzoneHint": "Apple Passwords / Safari၊ Bitwarden၊ KeePass၊ Chrome၊ LastPass၊ Proton Pass နှင့် အခြား စကားဝှက်မန်နေဂျာများ (.csv, .json, .1pux, .1pif) တို့ကို ထောက်ပံ့သည်",
   "import.manualPath": "ဖိုင်လမ်းကြောင်း",
   "import.manualPathPlaceholder": "/path/to/export.csv, .json, သို့မဟုတ် .1pux",
+  "import.exportPassword": "Export စကားဝှက်",
+  "import.exportPasswordHint": "ဤ Bitwarden ထုတ်ယူချက်ကို စကားဝှက်ဖြင့် ကာကွယ်ထားသည်။ စကားဝှက်ကို ဖိုင်ဖွင့်ရန်သာ အသုံးပြုပြီး သိမ်းဆည်းထားမည် မဟုတ်ပါ။",
   "import.format": "ဖော်မတ်",
   "import.selectFormat": "ဖော်မတ် ရွေးချယ်ပါ",
   "import.formatLastpass": "LastPass (.csv)",

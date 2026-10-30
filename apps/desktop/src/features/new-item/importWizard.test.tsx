@@ -10,6 +10,7 @@ import {
   detectImportFormat,
   importReducer,
   initialImport,
+  isPasswordProtectedBitwarden,
 } from './importWizardLogic';
 import { ImportWizard } from './ImportWizard';
 
@@ -155,6 +156,22 @@ describe('import wizard reducer', () => {
       'protonpass-csv',
       'gitpass-json',
     ]);
+  });
+
+  it('recognises password-protected Bitwarden JSON and tracks the password', () => {
+    const protectedJson = fs.readFileSync(
+      path.join(FIXTURES_DIR, 'bitwarden-password-protected.json'),
+      'utf8'
+    );
+    expect(isPasswordProtectedBitwarden(protectedJson)).toBe(true);
+    expect(isPasswordProtectedBitwarden(fs.readFileSync(path.join(FIXTURES_DIR, 'bitwarden.json'), 'utf8'))).toBe(false);
+    expect(isPasswordProtectedBitwarden('not json')).toBe(false);
+
+    let s = initialImport('v1');
+    s = importReducer(s, { type: 'file', path: '/tmp/bw.json', format: 'bitwarden-json', needsPassword: true });
+    expect(s.needsPassword).toBe(true);
+    s = importReducer(s, { type: 'password', password: 'fake-export-password' });
+    expect(s.password).toBe('fake-export-password');
   });
 });
 
@@ -386,5 +403,67 @@ describe('ImportWizard component', () => {
     fireEvent.click(screen.getByText('Preview import'));
     expect(await screen.findByTestId('preview-Parsed')).toHaveProperty('textContent', '4');
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ format: 'apple-passwords-csv', dryRun: true }));
+  });
+});
+
+describe('ImportWizard password-protected Bitwarden export', () => {
+  const protectedJson = () =>
+    fs.readFileSync(path.join(FIXTURES_DIR, 'bitwarden-password-protected.json'), 'utf8');
+
+  it('auto-detects the password step and submits the export password on Enter', async () => {
+    const spy = vi.spyOn(api, 'importFile').mockImplementation(async (a: any) => ({
+      parsed: 2,
+      added: a.dryRun ? 0 : 2,
+      duplicates: 0,
+    }));
+    render(<ImportWizard onBack={() => {}} onDone={() => {}} />);
+    await waitFor(() => {
+      expect((screen.getByLabelText('Import into vault') as HTMLSelectElement).value).toBe('v_private');
+    });
+
+    // jsdom has no Blob.text(); give the dropped file the snippet the wizard reads in the app.
+    const file = new File([protectedJson()], 'bitwarden.json', { type: 'application/json' });
+    (file as any).slice = () => ({ text: async () => protectedJson() });
+    fireEvent.drop(screen.getByTestId('drop-zone'), { dataTransfer: { files: [file] } });
+    const password = await screen.findByLabelText('Export password');
+    expect((screen.getByLabelText('Format') as HTMLSelectElement).value).toBe('bitwarden-json');
+    expect(screen.getByTestId('export-password').textContent).toMatch(/only decrypts the file and is never saved/);
+
+    fireEvent.change(password, { target: { value: 'fake-export-password' } });
+    fireEvent.keyDown(password, { key: 'Enter' });
+
+    expect(await screen.findByTestId('preview-Parsed')).toHaveProperty('textContent', '2');
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'bitwarden-json', password: 'fake-export-password', dryRun: true })
+    );
+  });
+
+  it('reveals the password step when a file chosen by path needs one', async () => {
+    const spy = vi
+      .spyOn(api, 'importFile')
+      .mockRejectedValueOnce(
+        new Error('bitwarden-json: this export is password-protected; the export password is required')
+      )
+      .mockResolvedValueOnce({ parsed: 2, added: 0, duplicates: 0 });
+    render(<ImportWizard onBack={() => {}} onDone={() => {}} />);
+    await waitFor(() => {
+      expect((screen.getByLabelText('Import into vault') as HTMLSelectElement).value).toBe('v_private');
+    });
+
+    fireEvent.change(screen.getByLabelText('Export file path'), {
+      target: { value: '/tmp/bitwarden-protected.json' },
+    });
+    expect(screen.queryByLabelText('Export password')).toBeNull();
+    fireEvent.click(screen.getByText('Preview import'));
+
+    const password = await screen.findByLabelText('Export password');
+    expect(screen.getByRole('alert').textContent).toContain('export password is required');
+
+    fireEvent.change(password, { target: { value: 'fake-export-password' } });
+    fireEvent.click(screen.getByText('Preview import'));
+    expect(await screen.findByTestId('preview-Parsed')).toHaveProperty('textContent', '2');
+    expect(spy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ format: 'bitwarden-json', password: 'fake-export-password', dryRun: true })
+    );
   });
 });

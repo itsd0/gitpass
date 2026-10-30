@@ -4,14 +4,22 @@ use std::path::Path;
 use std::process::{Command, Stdio};
 
 fn gp(root: &Path, args: &[&str], stdin: Option<&str>) -> std::process::Output {
+    gp_env(root, args, stdin, &[])
+}
+
+fn gp_env(root: &Path, args: &[&str], stdin: Option<&str>, envs: &[(&str, &str)]) -> std::process::Output {
     let mut c = Command::new(env!("CARGO_BIN_EXE_gitpass"));
     c.args(args)
         .env("GITPASS_PATH", root)
         .env("GITPASS_PASSWORD", "fake-master-pw-123")
         .env("GITPASS_DEVICE_NAME", "test")
+        .env_remove("GITPASS_IMPORT_PASSWORD")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    for (k, v) in envs {
+        c.env(k, v);
+    }
     let mut ch = c.spawn().unwrap();
     {
         let mut i = ch.stdin.take().unwrap();
@@ -264,6 +272,41 @@ fn cli_import_apple_passwords_csv() {
     assert!(o.status.success());
     let out = String::from_utf8_lossy(&o.stdout);
     assert!(out.contains("parsed 2, added 0, 2 duplicate(s) skipped"));
+}
+
+#[test]
+fn cli_import_password_protected_bitwarden_json() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Personal"], None).status.success());
+
+    let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../gitpass-core/tests/fixtures/import/bitwarden-password-protected.json");
+    let file = d.path().join("bitwarden-password-protected.json");
+    std::fs::copy(&fixture, &file).unwrap();
+    let file = file.to_str().unwrap();
+    let export_pw = [("GITPASS_IMPORT_PASSWORD", "fake-export-password")];
+
+    // Dry run with the export password from the environment.
+    let o = gp_env(&root, &["import", "Personal", "--from", "bitwarden-json", file, "--dry-run"], None, &export_pw);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("[dry run] parsed 2, would add 2, 0 duplicate(s) skipped"));
+
+    // Real import, then read a decrypted field back through `get`.
+    let o = gp_env(&root, &["import", "Personal", "--from", "bitwarden-json", file], None, &export_pw);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert!(String::from_utf8_lossy(&o.stdout).contains("parsed 2, added 2, 0 duplicate(s) skipped"));
+    let o = gp(&root, &["get", "Personal", "Example Mail", "--reveal"], None);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("alice@example.com") && out.contains("FAKE-BW-Pass-1"), "{out}");
+
+    // A wrong export password fails with a clear error and imports nothing.
+    let wrong = [("GITPASS_IMPORT_PASSWORD", "not-the-export-password")];
+    let o = gp_env(&root, &["import", "Personal", "--from", "bitwarden-json", file, "--allow-duplicates"], None, &wrong);
+    assert!(!o.status.success());
+    assert!(String::from_utf8_lossy(&o.stderr).contains("wrong export password"));
 }
 
 #[test]

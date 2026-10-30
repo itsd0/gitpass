@@ -680,6 +680,8 @@ export const en = {
   "import.dropzoneHint": "Supports Apple Passwords / Safari, Bitwarden, KeePass, Chrome, LastPass, Proton Pass and other password managers (.csv, .json, .1pux, .1pif)",
   "import.manualPath": "Export file path",
   "import.manualPathPlaceholder": "/path/to/export.csv, .json, or .1pux",
+  "import.exportPassword": "Export password",
+  "import.exportPasswordHint": "This Bitwarden export is password-protected. The password only decrypts the file and is never saved.",
   "import.format": "Format",
   "import.selectFormat": "Select format",
   "import.formatLastpass": "LastPass (.csv)",
