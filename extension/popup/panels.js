@@ -22,6 +22,63 @@ function closePanel() {
 
 function panelHead(title) { const h = el('h3', null, title); h.append(iconBtn(UI.close, t('close', 'Close'), closePanel)); return h; }
 
+// ---------- site settings panel (issue #341) ----------
+// Per-site toggles for the active tab's origin: save prompts, submit-after-fill
+// (only when the global opt-in is on) and the inline menu. Backed by the
+// GitpassSiteSettings storage helpers (popup/sitesettings.js).
+async function openSiteSettings(origin) {
+  const SS = typeof GitpassSiteSettings !== 'undefined' ? GitpassSiteSettings : null;
+  if (!SS) return;
+  const domain = SS.domainOf(origin);
+  if (!domain) return;
+
+  prevFocus = document.activeElement;
+  const p = $('panel');
+  p.textContent = '';
+  p.classList.remove('hidden');
+  p.classList.remove('shortcuts-panel');
+  p.setAttribute('role', 'dialog');
+  p.setAttribute('aria-modal', 'true');
+  p.setAttribute('aria-label', t('siteSettings', 'Site settings'));
+  S.panel = 'site-settings';
+
+  p.append(panelHead(t('siteSettingsFor', 'Site settings: $1', [domain])));
+
+  const globals = await popupSettings();
+  const [neverSave, neverAuto, hiddenMenu] = await Promise.all([SS.getNeverSave(), SS.getNeverAutoSubmit(), SS.getHiddenInlineMenu()]);
+
+  const list = el('div', 'site-settings-list');
+  const mkRow = (labelKey, fallback, on, onFlip) => {
+    const l = el('label', 'tog site-settings-row');
+    const c = Object.assign(el('input'), { type: 'checkbox' });
+    c.checked = on;
+    c.onchange = async () => {
+      c.disabled = true;
+      try { await onFlip(c.checked); } catch (_) { /* keep prior state on storage failure */ c.checked = !c.checked; }
+      c.disabled = false;
+    };
+    l.append(c, el('span', null, t(labelKey, fallback)));
+    list.append(l);
+    return c;
+  };
+
+  mkRow('siteSaveLogins', 'Offer to save logins on this site', !neverSave.includes(domain), async (v) => {
+    await SS.setSavePrompts(domain, v);
+    await refreshNeverSave();
+    renderFilter();
+  });
+  if (globals.autoSubmitAfterFill) {
+    mkRow('siteAutoSubmit', 'Submit after fill on this site', !neverAuto.includes(domain), (v) => SS.setAutoSubmit(domain, v));
+  }
+  mkRow('siteInlineMenu', 'Show inline menu on this site', !hiddenMenu.includes(domain), (v) => SS.setInlineMenuShown(domain, v));
+
+  p.append(list);
+  const hint = el('p', 'muted site-settings-hint', t('siteSettingsHint', 'Changes apply the next time the page loads or rescans.'));
+  p.append(hint);
+  const first = list.querySelector('input');
+  if (first) first.focus();
+}
+
 function openShortcuts() {
   prevFocus = document.activeElement;
   const p = $('panel');

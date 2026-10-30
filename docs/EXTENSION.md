@@ -168,6 +168,25 @@ ignored when matching, so an exception for `example.com` also covers
 `www.example.com`. Remove a site with its Remove button to allow
 auto-submit there again.
 
+## Per-site settings in the popup
+
+When the popup is open on a web page, a small gear button sits next to
+the filter chips. It opens "Site settings" for the current site, with
+three toggles:
+
+- **Offer to save logins on this site** — off adds the site to the
+  "Never save" list (same list as the banner's "Never for this site").
+- **Submit after fill on this site** — shown only when the global
+  "Submit the form after filling a login" switch is on; off adds the
+  site to the "Never auto-submit" exceptions.
+- **Show inline menu on this site** — off hides the inline menu and
+  field badges on that site. Hidden sites are listed on the extension
+  options page under "Hide the inline menu on these sites", where you
+  can add or remove sites directly.
+
+All three match by hostname with the `www.` prefix ignored, and changes
+apply the next time the page loads or rescans.
+
 ## Website icons and monograms
 
 Login rows in the popup and in the inline autofill menu show the site's

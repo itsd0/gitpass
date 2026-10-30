@@ -1178,5 +1178,38 @@
   "capsLockOn": {
     "message": "Caps Lock ဖွင့်ထားပါသည်",
     "description": "Shown under a master-password field while Caps Lock is on"
+  },
+  "siteSettings": {
+    "message": "ဆိုက် ဆက်တင်များ"
+  },
+  "siteSettingsFor": {
+    "message": "ဆိုက် ဆက်တင်များ: $1"
+  },
+  "siteSaveLogins": {
+    "message": "ဤဆိုက်တွင် login များ သိမ်းရန် ကမ်းလှမ်းမည်"
+  },
+  "siteAutoSubmit": {
+    "message": "ဤဆိုက်တွင် ဖြည့်ပြီးနောက် အလိုအလျောက် တင်သွင်းမည်"
+  },
+  "siteInlineMenu": {
+    "message": "ဤဆိုက်တွင် inline မီနူး ပြမည်"
+  },
+  "siteSettingsHint": {
+    "message": "ပြောင်းလဲမှုများသည် စာမျက်နှာ နောက်တစ်ကြိမ် ဖွင့်သောအခါ သို့မဟုတ် ပြန်စကန်ချိန်တွင် သက်ရောက်မည်။"
+  },
+  "optHiddenInlineMenu": {
+    "message": "ဤဆိုက်များတွင် inline မီနူး ဖျောက်ထားမည်"
+  },
+  "optHiddenInlineMenuBody": {
+    "message": "gitpass သည် ဤဆိုက်များတွင် inline မီနူး သို့မဟုတ် field badge များ မပြပါ။"
+  },
+  "optHiddenInlineMenuEmpty": {
+    "message": "ဖျောက်ထားသော ဆိုက် မရှိပါ"
+  },
+  "optHiddenInlineMenuEmptyBody": {
+    "message": "inline မီနူး ဖျောက်ထားသော ဆိုက်များ ဤနေရာတွင် ပေါ်လာမည်။"
+  },
+  "optHiddenInlineMenuAdd": {
+    "message": "ဆိုက် ထည့်မည်"
   }
 }
