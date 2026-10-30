@@ -1367,7 +1367,6 @@ impl Session {
         rec.created_at.get_or_insert(up_sec);
         rec.clocks = Some(merge::stamp(None, &rec.item, now));
         merge::stamp_ext(None, &mut rec, now);
-        rec.history.clear();
         self.put_item(vid, &iid, 1, &rec)?;
         Ok(iid)
     }
@@ -1483,10 +1482,10 @@ impl Session {
             n.ignored_findings = r.ignored_findings.clone();
             n.archived = r.archived;
             if n.item.updated_at.is_empty() { n.item.updated_at = (now / 1000).to_string(); }
-            n.created_at.get_or_insert(now / 1000);
+            n.created_at = r.created_at.or(Some(now / 1000));
             n.clocks = Some(merge::stamp(None, &n.item, now));
             merge::stamp_ext(None, &mut n, now);
-            n.history.clear();
+            n.history = r.history.clone();
             let nid = uuid::Uuid::new_v4().to_string();
             if !r.attachments.is_empty() { atts.push((vid.clone(), iid.clone(), nid.clone(), r.attachments.clone())); }
             writes.push((to_vid.to_string(), nid, 1, n));
@@ -1604,6 +1603,9 @@ impl Session {
         let mut n = ItemRecord::from_snapshot(&r.snapshot());
         n.favorite = r.favorite;
         n.archived = r.archived;
+        n.ignored_findings = r.ignored_findings.clone();
+        n.history = r.history.clone();
+        n.created_at = r.created_at;
         let nid = self.add_record(to_vid, n)?;
         for a in &r.attachments {
             let bytes = zeroize::Zeroizing::new(self.read_attachment(vid, iid, &a.id)?);

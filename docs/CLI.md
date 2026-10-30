@@ -83,7 +83,12 @@ gitpass list Personal --sort recent   # title (default) or recent; ignored with 
 gitpass list Personal --query git --json
 gitpass find Personal "git hub"
 gitpass edit Personal github --notes "2FA enabled"
-gitpass edit Personal github --generate 32
+gitpass edit github --tag work --favorite
+gitpass edit github --untag old-tag --unfavorite
+gitpass archive github
+gitpass unarchive github
+gitpass undelete github
+gitpass mv github --to Work
 gitpass rm Personal github
 gitpass history github
 gitpass history github --vault Personal --json
@@ -102,8 +107,14 @@ gitpass restore github --version 3
   owned, then clear it; `--clear-secs 0` copies without waiting. `--quiet` never echoes
   the value when no clipboard is available.
 - `--field` takes `password`, `username`, `url`, `totp`, `notes` or `title`.
-- `edit` and `rm` take an item query; `edit` replaces only the fields you pass, and
-  `--password` / `--generate [N]` set a new password.
+- `edit` and `rm` take an item query; `edit` replaces only the fields you pass,
+  `--password` / `--generate [N]` set a new password, `--tag` / `--untag` add or remove tags (repeatable),
+  and `--favorite` / `--unfavorite` toggle favorite status.
+- `archive` and `unarchive` mark or unmark an item as archived.
+- `undelete` restores an item from Recently Deleted (searches deleted items only; clear error if the item is not deleted).
+- `mv <item> --to <vault>` moves an item to another vault, keeping its version history, attachments, tags and metadata.
+- `edit`, `archive`, `unarchive`, `undelete`, and `mv` accept `--vault` (or `<vault>/<item>` or `<vault> <item>`),
+  `--pick <N>`, and `--json`, and never print secrets.
 - `history` lists versions without secrets (current version first); `restore --version N`
   restores a previous version as a new version. Both accept `<vault>/<item>` instead of
   `--vault` and refuse to guess when several items match.
