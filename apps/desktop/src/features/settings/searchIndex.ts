@@ -249,6 +249,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     descriptionKey: 'settings.issuesHelp',
     keywords: ['bugs', 'feedback', 'report', 'github issues'],
   },
+  {
+    id: 'setting-color-passwords',
+    tab: 'general',
+    labelKey: 'settings.colorPasswords',
+    descriptionKey: 'settings.colorPasswordsHelp',
+    keywords: ['color', 'colour', 'digits', 'symbols', 'accessibility', 'reveal'],
+  },
 ];
 
 export interface SearchResult extends SearchableSetting {

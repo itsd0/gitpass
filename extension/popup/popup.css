@@ -230,6 +230,10 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .f .lbl { font-size: 11px; color: rgb(var(--label)); text-transform: lowercase; }
 .f .val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; word-break: break-all; }
 .f .val.plain { font-family: inherit; }
+.f .val .sec-digit { color: rgb(var(--accent)); }
+.f .val .sec-symbol { color: rgb(var(--symbol)); }
+.f .val .sec-space { position: relative; display: inline-block; width: 1ch; white-space: pre; }
+.f .val .sec-space::before { content: "\00b7"; position: absolute; left: 0; color: rgb(var(--muted)); }
 .f .val a { color: rgb(var(--accent)); text-decoration: none; }
 .f .grow { flex: 1; min-width: 0; }
 .f .acts { display: flex; gap: 2px; opacity: .7; }

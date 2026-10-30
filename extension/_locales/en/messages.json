@@ -1132,5 +1132,11 @@
   },
   "optHiddenInlineMenuAdd": {
     "message": "Add a site"
+  },
+  "optColorPasswords": {
+    "message": "Colour-code revealed passwords"
+  },
+  "optColorPasswordsBody": {
+    "message": "Show digits in orange, symbols in blue and spaces as a dot when a password is revealed. Copying is unchanged."
   }
 }

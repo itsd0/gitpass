@@ -347,6 +347,25 @@ if (filter === "suggested") base = (suggested || []).filter((i) => !i.archived &
     return v;
   }
 
+  /** Character class for colour-coding a revealed secret (issue #336): digits, symbols, spaces; any Unicode letter is a letter. */
+  function charKind(ch) {
+    if (/\p{Nd}/u.test(ch)) return 'digit';
+    if (/\p{L}|\p{M}/u.test(ch)) return 'letter';
+    if (/\s/u.test(ch)) return 'space';
+    return 'symbol';
+  }
+
+  /** Splits a secret into runs of the same class: [{ kind, text }]. Joining the texts gives back the exact value. */
+  function secretRuns(value) {
+    const runs = [];
+    for (const ch of Array.from(String(value == null ? '' : value))) {
+      const kind = charKind(ch);
+      const last = runs[runs.length - 1];
+      if (last && last.kind === kind) last.text += ch; else runs.push({ kind, text: ch });
+    }
+    return runs;
+  }
+
   /** Fields show the preview the host computed after decryption (f.masked: card last 4, API secret first4••••last4); otherwise fully masked. */
   function mask(kind, masked) { return masked || (kind === 'card_number' ? '•••• •••• •••• ••••' : '••••••••••'); }
 
@@ -576,7 +595,7 @@ if (filter === "suggested") base = (suggested || []).filter((i) => !i.archived &
     return (n / 1048576).toFixed(1) + ' MB';
   }
 
-  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, collectTags, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, quickActions, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache, parseDeletedAt, daysUntilPurge, daysDeletedAgo, formatTrashSubtitle, PURGE_AFTER_DAYS, formatSize };
+  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, collectTags, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, charKind, secretRuns, fillKind, primarySecretField, quickActions, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache, parseDeletedAt, daysUntilPurge, daysDeletedAgo, formatTrashSubtitle, PURGE_AFTER_DAYS, formatSize };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

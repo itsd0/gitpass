@@ -808,6 +808,8 @@ export const en = {
   "settings.textSize.large": "Large",
   "settings.textSize.largest": "Largest",
   "settings.textSizePreview": "The quick brown fox jumps over the lazy dog",
+  "settings.colorPasswords": "Colour-code revealed passwords",
+  "settings.colorPasswordsHelp": "Show digits in orange, symbols in blue and spaces as a dot when a password is revealed on this device",
   "cmd.textLarger": "Increase text size",
   "cmd.textSmaller": "Decrease text size",
   "cmd.textReset": "Reset text size",

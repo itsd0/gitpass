@@ -15,6 +15,7 @@ import { groupCardNumber } from '../../lib/cardMask';
 import { SafeMarkdown } from './SafeMarkdown';
 import { useSettings } from '../settings/useSettings';
 import { secretRef, type RefTarget } from '../../lib/secretRef';
+import { SecretText } from '../../lib/secretText';
 
 export const REVEAL_MS = 30_000;
 const DOTS = '••••••••••';
@@ -455,7 +456,7 @@ export function ConcealedValue({
       data-testid={`concealed-field-${field.id}`}
     >
       <div className="flex items-center gap-2">
-        <div className={cn('min-w-0 flex-1 break-all font-mono text-[14px]', revealed === null && 'tracking-widest')} data-testid="concealed-value">{revealed === null ? (field.masked || DOTS) : (shouldGroup ? groupCardNumber(revealed) : revealed)}</div>
+        <div className={cn('min-w-0 flex-1 break-all font-mono text-[14px]', revealed === null && 'tracking-widest')} data-testid="concealed-value">{revealed === null ? (field.masked || DOTS) : (shouldGroup ? groupCardNumber(revealed) : <SecretText value={revealed} />)}</div>
         <div className="flex opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <Tooltip content={t('largetype.action')}>
             <Button

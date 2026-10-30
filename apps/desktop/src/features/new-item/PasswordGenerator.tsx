@@ -7,6 +7,7 @@ import { useT, type Key } from '../../i18n';
 import { useApp } from '../../lib/store';
 import { useSettings } from '../settings/useSettings';
 import { cn } from '../../lib/utils';
+import { SecretText } from '../../lib/secretText';
 
 export type GeneratorMode = 'random' | 'memorable' | 'pin';
 
@@ -27,25 +28,12 @@ function clamp(val: number, min: number, max: number): number {
 export function ColoredPassword({ password }: { password: string }) {
   if (!password) return <span className="font-mono text-xl sm:text-2xl text-muted">…</span>;
   return (
-    <span
+    <SecretText
+      value={password}
+      testId="colored-password"
+      label={password}
       className="font-mono text-xl sm:text-2xl tracking-wider select-all break-all"
-      data-testid="colored-password"
-      aria-label="Generated password"
-    >
-      {Array.from(password).map((ch, idx) => {
-        let cls = 'text-fg';
-        if (/[0-9]/.test(ch)) {
-          cls = 'text-accent font-semibold';
-        } else if (/[^a-zA-Z0-9\s]/.test(ch)) {
-          cls = 'text-warn font-semibold';
-        }
-        return (
-          <span key={idx} className={cls}>
-            {ch}
-          </span>
-        );
-      })}
-    </span>
+    />
   );
 }
 
