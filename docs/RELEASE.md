@@ -140,7 +140,8 @@ placeholder instead of claiming the file exists.
 All workflows run on **GitHub-hosted runners**; the former self-hosted Mac runner was removed. CI and iOS use
 `ubuntu-latest` / `macos-latest`; `release.yml` builds macOS arm64 and x64 on `macos-14` (x64 is cross-compiled).
 
-- Tag builds and the publish job run in the `release` environment, whose deployment rule only allows `v*` tags.
+- Desktop builds (tag and dry run) and the publish job run in the `release` environment, whose deployment rules
+  allow `v*` tags and the `main` branch (needed so dry runs get the signing certificate). Publishing is tag-only.
   There is no required reviewer, so the unattended daily release (tags pushed by itsd0) does not stall; the
   owner-only actor guard in `release.yml` and the tag-only rule are the controls.
 - **Dry run:** `gh workflow run release.yml -R itsd0/gitpass` (on `main`) builds both DMGs and the signed updater
