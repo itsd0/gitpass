@@ -36,6 +36,33 @@
     return list[0].id;
   }
 
+  /** Only id/title/username are ever rendered or sent back; ignore anything else. */
+  function accountList(accounts) {
+    return (Array.isArray(accounts) ? accounts : [])
+      .filter((a) => a && typeof a.id === 'string' && a.id)
+      .map((a) => ({
+        id: a.id,
+        title: typeof a.title === 'string' ? a.title : '',
+        username: typeof a.username === 'string' ? a.username : '',
+      }));
+  }
+
+  /** The chosen account if it is in the list, else fallbackId if in list, else the first. */
+  function selectAccount(accounts, selectedId, fallbackId) {
+    const list = accountList(accounts);
+    if (!list.length) return '';
+    if (selectedId && list.some((a) => a.id === selectedId)) return selectedId;
+    if (fallbackId && list.some((a) => a.id === fallbackId)) return fallbackId;
+    return list[0].id;
+  }
+
+  /** Format account option text: "title · username" or "title · (no username)" */
+  function formatAccountOption(account, fallbackTitle, noUserText) {
+    const title = (account && account.title ? account.title : fallbackTitle) || '';
+    const user = (account && account.username ? account.username : noUserText) || '';
+    return title && user ? `${title} · ${user}` : title || user;
+  }
+
   /** Focus target for Tab / Shift+Tab at the edges of the banner; null lets the browser move normally. */
   function trapTab(key, shift, index, count) {
     if (key !== 'Tab' || count < 1) return null;
@@ -138,7 +165,8 @@
     return { number, name, expiry };
   }
 
-  const api = { MAX_TITLE, titleValue, titleError, titleForSave, vaultList, selectVault, trapTab, isEscape,
+  const api = { MAX_TITLE, titleValue, titleError, titleForSave, vaultList, selectVault,
+    accountList, selectAccount, formatAccountOption, trapTab, isEscape,
     cardDigits, cardLuhn, cardBrand, cardLast4, cardMasked, cardTitleDefault,
     normalizeCardExpiry, normalizeCardExpiryParts, sanitizeCardCapture };
   root.GitpassBanner = api;

@@ -412,6 +412,10 @@
     "message": "บันทึกบัตรลงใน gitpass ไหม",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
   },
+  "csAccount": {
+    "message": "บัญชี",
+    "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"
+  },
   "csNoUser": {
     "message": "(ไม่มีชื่อผู้ใช้)",
     "description": "v0.6 draft, reviewed for consistency with the desktop glossary (no native sign-off yet)"

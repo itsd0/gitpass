@@ -402,6 +402,9 @@
   "csSaveCardQ": {
     "message": "Save card to gitpass?"
   },
+  "csAccount": {
+    "message": "Account"
+  },
   "csNoUser": {
     "message": "(no username)"
   },
