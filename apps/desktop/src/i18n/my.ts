@@ -607,7 +607,6 @@ export const my: Partial<Record<Key, string>> = {
   'totp.scanQr': 'QR ကုဒ် စကင်ဖတ်ရန်',
   'totp.scanScreen': 'မျက်နှာပြင်မှ',
   'totp.scanClipboard': 'ကလစ်ဘုတ် ပုံမှ',
-  'totp.dropHint': 'စကင်ဖတ်ရန် ပုံကို ဤနေရာတွင် ချပါ',
   'totp.noQrFound': 'QR ကုဒ် မတွေ့ပါ',
   'totp.notTotp': 'ဤ QR ကုဒ်သည် တစ်ကြိမ်သုံးကုဒ် မဟုတ်ပါ',
   'totp.captureCancelled': 'မျက်နှာပြင် ဖမ်းယူခြင်းကို ပယ်ဖျက်လိုက်သည်',

@@ -211,7 +211,6 @@ export const en = {
   'totp.scanQr': 'Scan QR code',
   'totp.scanScreen': 'From screen',
   'totp.scanClipboard': 'From clipboard image',
-  'totp.dropHint': 'Drop an image here to scan',
   'totp.noQrFound': 'No QR code found',
   'totp.notTotp': "This QR code isn't a one-time code",
   'totp.captureCancelled': 'Screen capture was cancelled',

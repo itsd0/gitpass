@@ -599,7 +599,6 @@ export const th: Partial<Record<Key, string>> = {
   'totp.scanQr': 'สแกนรหัส QR',
   'totp.scanScreen': 'จากหน้าจอ',
   'totp.scanClipboard': 'จากรูปภาพในคลิปบอร์ด',
-  'totp.dropHint': 'ลากรูปภาพมาวางที่นี่เพื่อสแกน',
   'totp.noQrFound': 'ไม่พบรหัส QR',
   'totp.notTotp': 'รหัส QR นี้ไม่ใช่รหัสแบบใช้ครั้งเดียว',
   'totp.captureCancelled': 'ยกเลิกการจับภาพหน้าจอแล้ว',
