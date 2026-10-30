@@ -112,10 +112,15 @@ cards.forEach(([t, n, d], i) => add(i % 2 ? 'v_family' : 'v_private', 'credit_ca
 { const a = [...db.values()][5].detail; a.archived = true; const b = [...db.values()][22].detail; b.deletedAt = new Date(Date.now() - 29 * 86400000).toISOString(); }
 
 add('v_private', 'passkey', 'webauthn.example.invalid', 'demo@example.invalid', 6, [['site', 'text', 'webauthn.example.invalid'], ['user name', 'text', 'demo@example.invalid'], ['credential id', 'text', 'FAKE-cred-id'], ['private key', 'concealed', 'FAKE'], ['sign count', 'text', '3']]);
-let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, hideFromScreenRecording: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false, renderNotesMarkdown: true, showMenuBarIcon: true, rememberGeneratedPasswords: true };
+let settings: T.Settings = { autoLockMinutes: 10, clipboardClearSecs: 90, theme: 'dark', language: 'en', biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, lockOnSleep: true, lockOnScreenLock: true, lockOnUserSwitch: true, hideFromScreenRecording: true, generatorMode: 'random', generatorLength: 20, generatorDigits: true, generatorSymbols: true, showWebsiteIcons: false, renderNotesMarkdown: true, showMenuBarIcon: true, rememberGeneratedPasswords: true, watchtowerUnusedMonths: 12 };
 let mockGeneratorHistory: T.GeneratorHistoryEntry[] = [
   { id: "gh-1", value: "FAKE-mock-pw-1", createdAt: Math.floor(Date.now() / 1000) - 300, source: "desktop", host: null },
   { id: "gh-2", value: "FAKE-mock-pw-2", createdAt: Math.floor(Date.now() / 1000) - 7200, source: "extension", host: "github.com" },
+];
+let mockSshActivity: T.SshActivityEntry[] = [
+  { time: new Date(Date.now() - 45_000).toISOString(), keyTitle: 'Deploy key (demo server)', fingerprint: 'SHA256:FAKE0', keyType: 'ssh-ed25519', algorithm: 'ed25519', result: 'signed', client: 'git-upload-pack', pid: 4242 },
+  { time: new Date(Date.now() - 8 * 60_000).toISOString(), keyTitle: 'Personal laptop key', fingerprint: 'SHA256:FAKE1', keyType: 'ssh-rsa', algorithm: 'rsa-sha2-256', result: 'signed', client: 'ssh', pid: 4177 },
+  { time: new Date(Date.now() - 42 * 60_000).toISOString(), keyTitle: 'Personal laptop key', fingerprint: 'SHA256:FAKE1', keyType: 'ssh-rsa', algorithm: 'ssh-rsa', result: 'refused', client: 'ssh', pid: 4102 },
 ];
 let onboarding: T.Onboarding = { extensionInstalled: false, emergencyKitSaved: false, repoConnected: true, imported: false, dismissed: false };
 let unlocked = false;
@@ -430,6 +435,17 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     return delay(undefined);
   },
   totp_now: () => { const period = 30; const now = Math.floor(Date.now() / 1000); const code = String((Math.floor(now / period) * 7919) % 1000000).padStart(6, '0'); return delay({ code, remaining: period - (now % period), period }, 10); },
+  scan_totp: (_a: { source: 'screen' | 'clipboard' | 'image'; dataBase64?: string }) => {
+    return delay<T.ScannedTotp>({
+      uri: 'otpauth://totp/GitHub:octocat?secret=JBSWY3DPEHPK3PXP&issuer=GitHub&algorithm=SHA1&digits=6&period=30',
+      secret: 'JBSWY3DPEHPK3PXP',
+      issuer: 'GitHub',
+      account: 'octocat',
+      digits: 6,
+      period: 30,
+      algorithm: 'SHA1',
+    }, 20);
+  },
   create_item: ({ input }: { input: T.ItemInput }) => {
     const now = new Date().toISOString();
     const r: Rec = { secrets: {}, versions: [], detail: { id: uid('i'), vaultId: input.vaultId, category: input.category, title: input.title, subtitle: '', favorite: false, archived: false, deletedAt: null, tags: [], updatedAt: now, createdAt: now, url: null, sections: [], notes: null, attachments: [], history: [{ version: 1, updatedAt: now }], passwordStrength: null, hasTotp: false, passwordChangedAt: null } };
@@ -643,6 +659,16 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       }
     }
     const duplicates = [...dupMap.values()].filter((g) => g.length > 1);
+    // Demo of the unused-items check: logins not edited for the configured threshold (never-used
+    // items fall back to their edit time, like the Rust audit).
+    const unusedMonths = settings.watchtowerUnusedMonths ?? 12;
+    const unusedPool: T.UnusedItem[] = unusedMonths > 0
+      ? logins
+          .filter((r) => !r.detail.archived && !r.detail.deletedAt)
+          .map((r) => ({ id: r.detail.id, edited: Date.parse(r.detail.updatedAt) }))
+          .filter((x) => Number.isFinite(x.edited) && Date.now() - x.edited > (unusedMonths * 365 * 86400000) / 12)
+          .map((x) => ({ itemId: x.id, days: Math.floor((Date.now() - x.edited) / 86400000), lastUsed: false }))
+      : [];
 
     const isIgnored = (id: string, kind: string) => {
       const it = db.get(id);
@@ -716,6 +742,10 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     const activeInsecureUrls: string[] = [];
     for (const id of insecureUrls) checkOrIgnore(id, "insecure_url", "Saved with unencrypted HTTP URL", activeInsecureUrls);
 
+    const activeUnusedIds: string[] = [];
+    for (const u of unusedPool) checkOrIgnore(u.itemId, "unused", "Not used in a long time", activeUnusedIds);
+    const activeUnused = unusedPool.filter((u) => activeUnusedIds.includes(u.itemId));
+
     const activeBreached: string[] = [];
     if (hibp && activeWeak.length > 0) {
       const candidate = activeWeak[0];
@@ -736,6 +766,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
       insecureUrls: activeInsecureUrls,
       duplicates,
       weakSshKeys: [],
+      unused: activeUnused,
       weakReasons: Object.fromEntries(activeWeak.map((id) => [id, "contains the username"])),
       ignored: ignoredList,
       checkedAt: new Date().toISOString(),
@@ -758,6 +789,8 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     return mock.ssh_generate({ vaultId: a.vaultId, title: a.title || 'Imported key', comment: 'imported' });
   },
   ssh_agent_info: () => delay<T.SshAgentInfo>({ socketPath: '/Users/demo/Library/Application Support/gitpass/ssh-agent.sock', configLine: 'Host *\n  IdentityAgent "~/Library/Application Support/gitpass/ssh-agent.sock"', running: true, approveEachUse: !!settings.sshApproveEachUse }),
+  ssh_agent_activity: () => delay<T.SshActivityEntry[]>(mockSshActivity),
+  clear_ssh_agent_activity: () => { mockSshActivity = []; return delay<void>(undefined); },
   ssh_git_signing_config: (a: { vaultId: string; itemId: string; email?: string | null }) => {
     const rec = db.get(a.itemId);
     if (!rec) return Promise.reject(new Error('item not found'));
