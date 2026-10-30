@@ -345,7 +345,7 @@ async function openAndFill() {
 
 async function copyPrimary() {
   const d = S.detail; if (!d || d.deleted_at) return; const f = V.primarySecretField(d); if (!f) return;
-  await copy(await secretValue(d, f), f.kind === 'password' ? t('passwordCopied', 'Password copied') : t('copied', 'Copied'));
+  await copy(await secretValue(d, f), f.kind === 'password' ? t('passwordCopied', 'Password copied') : t('copied', 'Copied'), 30, { concealed: true });
 }
 
 async function copyUsername() {

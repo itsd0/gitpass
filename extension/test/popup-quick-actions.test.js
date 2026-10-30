@@ -110,7 +110,11 @@ test('clicking Copy password on the selected login copies via reveal and shows t
   await settle();
 
   assert.strictEqual(w.__gitpassMockClipboard, 'FAKE-SECRET');
-  assert.strictEqual(w.document.getElementById('toast').textContent, 'Password copied');
+  const toast = w.document.getElementById('toast');
+  assert.ok(toast.textContent.includes('Password copied'));
+  assert.ok(toast.textContent.includes('clears in 30s'));
+  assert.strictEqual(toast.querySelector('.toast-action').textContent, 'Clear now');
+  assert.strictEqual(toast.getAttribute('role'), 'status');
   const reveal = sent.filter((m) => m.type === 'popup:reveal');
   assert.strictEqual(reveal.length, 1, 'exactly one reveal, for the password field');
   assert.strictEqual(reveal[0].field, 'password');
@@ -131,7 +135,8 @@ test('clicking Copy username needs no reveal; clicking a card/API row selects it
   await settle();
   assert.strictEqual(w.document.querySelector('#detail h2').textContent, 'Gamma Card', 'clicking an unselected row selects it first');
   assert.strictEqual(w.__gitpassMockClipboard, 'FAKE-SECRET');
-  assert.strictEqual(w.document.getElementById('toast').textContent, 'Copied');
+  assert.ok(w.document.getElementById('toast').textContent.includes('Copied'));
+  assert.ok(w.document.getElementById('toast').textContent.includes('clears in 30s'));
   assert.ok(sent.some((m) => m.type === 'popup:reveal' && m.field === 'card_number'), 'card copy reveals the card number');
 
   rowFor(w, 'Delta API').querySelector('.quick-btn[data-action="copyCredential"]').click();

@@ -108,15 +108,20 @@ impl App {
         }
     }
 
-    /// Clears the clipboard immediately if it still holds the text copied by [`App::copy_field`].
-    pub fn clear_clipboard_if_ours(&self) {
+    /// Clears the clipboard immediately if it still holds the text copied by [`App::copy_field`]
+    /// or [`App::copy_password`]. Returns whether this call cleared it.
+    pub fn clear_clipboard_if_ours(&self) -> bool {
         if let Ok(mut lc) = self.last_copied.lock() {
             if let Some(token) = lc.take() {
                 if self.clipboard.get_text().as_deref() == Some(token.as_str()) {
                     let _ = self.clipboard.set_text("");
+                    // Drop any in-flight auto-clear so it cannot wipe a later copy of the same text.
+                    self.clip_gen.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    return true;
                 }
             }
         }
+        false
     }
 
     // ---------------- vaults

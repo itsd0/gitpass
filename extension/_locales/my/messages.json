@@ -95,6 +95,18 @@
   "copied": {
     "message": "ကူးယူပြီးပါပြီ"
   },
+  "clearsIn": {
+    "message": "$1 စက္ကန့်အတွင်း ရှင်းမည်"
+  },
+  "clearNow": {
+    "message": "ယခု ရှင်းရန်"
+  },
+  "cleared": {
+    "message": "ရှင်းပြီးပါပြီ"
+  },
+  "wontClear": {
+    "message": "အလိုအလျောက် ရှင်းမည်မဟုတ်ပါ"
+  },
   "fill": {
     "message": "ဖြည့်ရန်"
   },

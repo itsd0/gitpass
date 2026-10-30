@@ -66,31 +66,111 @@ function iconBtn(svg, title, onclick) {
   b.onclick = (e) => { e.stopPropagation(); Promise.resolve(onclick(b)).catch(showErr); }; return b;
 }
 let toastT = null;
-function toast(msg, ms = 1600) {
+let toastTick = null;
+let toastGen = 0;
+function stopToastClock() {
+  clearTimeout(toastT); toastT = null;
+  clearInterval(toastTick); toastTick = null;
+}
+function hideToast() {
+  stopToastClock();
   const e = $('toast'); if (!e) return;
-  clearTimeout(toastT);
-  e.textContent = msg;
+  e.classList.add('hidden');
+  e.replaceChildren();
+}
+function prepareToast() {
+  const e = $('toast'); if (!e) return null;
+  stopToastClock();
+  toastGen += 1;
+  e.replaceChildren();
+  e.setAttribute('role', 'status');
+  e.setAttribute('aria-live', 'polite');
   e.classList.remove('hidden');
-  toastT = setTimeout(() => { e.classList.add('hidden'); e.textContent = ''; }, ms);
+  return e;
+}
+function toast(msg, ms = 1600) {
+  const e = prepareToast(); if (!e) return;
+  e.append(el('span', 'toast-live', msg));
+  toastT = setTimeout(hideToast, ms);
+}
+function showCleared() {
+  const e = $('toast'); if (!e) return;
+  clearInterval(toastTick); toastTick = null;
+  e.replaceChildren();
+  e.setAttribute('role', 'status');
+  e.setAttribute('aria-live', 'polite');
+  e.append(el('span', 'toast-live', t('cleared', 'Cleared')));
+  e.classList.remove('hidden');
+  clearTimeout(toastT);
+  toastT = setTimeout(hideToast, 1600);
+}
+function prefersReducedMotion() {
+  try { return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); }
+  catch (_) { return false; }
+}
+/** Password, one-time code, card number/CVV, API secret — not username or URL. */
+function fieldIsSecret(f) {
+  if (!f) return false;
+  if (f.concealed) return true;
+  const kind = String(f.kind || '');
+  if (kind === 'password' || kind === 'totp' || kind === 'card_number' || kind === 'cvv' || kind === 'concealed') return true;
+  const label = String(f.label || f.name || '').toLowerCase();
+  return /(^|[^a-z])(cvv|cvc|pin)([^a-z]|$)|security code/.test(label);
+}
+/** Countdown while the popup is open. The ticking text is aria-hidden so the live region speaks once. */
+function showConcealedToast(label, clearSecs) {
+  const e = prepareToast(); if (!e) return toastGen;
+  const gen = toastGen;
+  if (!(clearSecs > 0)) {
+    e.append(el('span', 'toast-live', label + ' · ' + t('wontClear', "won't be cleared automatically")));
+    toastT = setTimeout(hideToast, 4000);
+    return gen;
+  }
+  const total = Math.max(1, Math.round(clearSecs));
+  let left = total;
+  const phrase = (n) => label + ' · ' + t('clearsIn', 'clears in $1s', [String(n)]);
+  const live = el('span', 'sr-only', phrase(total));
+  const visual = el('span', 'toast-visual', phrase(total));
+  visual.setAttribute('aria-hidden', 'true');
+  const btn = el('button', 'toast-action', t('clearNow', 'Clear now'));
+  btn.type = 'button';
+  const bar = el('span', 'toast-bar');
+  bar.setAttribute('aria-hidden', 'true');
+  const fill = el('span', 'toast-bar-fill');
+  fill.style.width = '100%';
+  fill.style.transition = prefersReducedMotion() ? 'none' : 'width 1s linear';
+  bar.append(fill);
+  btn.onclick = async () => {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    const ok = await clearClipboardIfOurs();
+    if (gen !== toastGen) return;
+    if (ok) showCleared();
+    else hideToast();
+  };
+  e.append(live, visual, document.createTextNode(' · '), btn, bar);
+  toastTick = setInterval(() => {
+    if (gen !== toastGen) { clearInterval(toastTick); toastTick = null; return; }
+    left -= 1;
+    if (left <= 0) { clearInterval(toastTick); toastTick = null; return; }
+    visual.textContent = phrase(left);
+    fill.style.width = ((left / total) * 100) + '%';
+  }, 1000);
+  return gen;
 }
 /** Toast with one action button (Undo after moving an item to Recently Deleted). */
 function toastAction(message, label, onAction, ms = 6000) {
-  const e = $('toast'); if (!e) return;
-  clearTimeout(toastT);
-  e.textContent = '';
+  const e = prepareToast(); if (!e) return;
   const b = el('button', 'toast-action', label);
   b.type = 'button';
   b.onclick = async () => {
     if (b.disabled) return;
     b.disabled = true;
-    clearTimeout(toastT);
-    e.classList.add('hidden');
-    e.textContent = '';
+    hideToast();
     try { await onAction(); } catch (err) { showErr(err); }
   };
   e.append(el('span', 'toast-msg', message), document.createTextNode(' · '), b);
-  e.classList.remove('hidden');
-  toastT = setTimeout(() => { e.classList.add('hidden'); e.textContent = ''; }, ms);
+  toastT = setTimeout(hideToast, ms);
 }
 // Host errors carry a contract code (locked/denied/not_found/origin_mismatch/bad_request/app_not_running/internal).
 function errText(e) {
@@ -133,19 +213,21 @@ async function clearClipboardIfOurs() {
   return false;
 }
 
-async function copy(text, label, clearSecs = 30) {
+async function copy(text, label, clearSecs = 30, opts) {
+  const concealed = opts === true || !!(opts && opts.concealed);
+  const name = label || t('copied', 'Copied');
   lastCopied = text;
-  if (clipTimer) clearTimeout(clipTimer);
-  if (window.__gitpassMock) {
-    window.__gitpassMockClipboard = text;
-    toast(label || t('copied', 'Copied'));
-  } else {
-    await navigator.clipboard.writeText(text);
-    toast(label || t('copied', 'Copied'));
-  }
+  if (clipTimer) { clearTimeout(clipTimer); clipTimer = null; }
+  if (window.__gitpassMock) window.__gitpassMockClipboard = text;
+  else await navigator.clipboard.writeText(text);
+  const gen = concealed ? showConcealedToast(name, clearSecs) : (toast(name), toastGen);
   if (clearSecs > 0) {
     clipTimer = setTimeout(() => {
-      clearClipboardIfOurs();
+      clearClipboardIfOurs().then((ok) => {
+        if (!concealed || gen !== toastGen) return;
+        if (ok) showCleared();
+        else hideToast();
+      });
     }, clearSecs * 1000);
   }
 }

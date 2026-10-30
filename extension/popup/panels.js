@@ -654,7 +654,7 @@ async function openGenerator(opts) {
     const prevHtml = copyBtn.innerHTML;
     copyBtn.innerHTML = '<span class="spinner"></span> <span>' + t('copy', 'Copy') + '</span>';
     try {
-      await copy(code.textContent, t('passwordCopied', 'Password copied'));
+      await copy(code.textContent, t('passwordCopied', 'Password copied'), 30, { concealed: true });
       void send({ type: 'popup:record_generated', password: code.textContent }).catch(() => {});
     } catch (err) {
       toast(errText(err));
@@ -715,7 +715,7 @@ function recentSection() {
       eyeB.setAttribute('aria-pressed', String(shown));
       eyeB.title = shown ? t('genRecentHide', 'Hide') : t('reveal', 'Reveal');
     };
-    const doCopy = () => copy(e.value, t('passwordCopied', 'Password copied'));
+    const doCopy = () => copy(e.value, t('passwordCopied', 'Password copied'), 30, { concealed: true });
     const copyB = iconBtn(UI.copy, t('copy', 'Copy'), doCopy);
     const eyeB = iconBtn(UI.eye, t('reveal', 'Reveal'), toggle); eyeB.setAttribute('aria-pressed', 'false');
     const acts = el('div', 'gen-recent-acts'); acts.append(copyB, eyeB);

@@ -89,6 +89,19 @@ export function SettingsPage({ initialTab }: { initialTab?: string } = {}) {
     }
   }, [highlightedId]);
 
+  // A concealed-copy toast links here when automatic clearing is off.
+  useEffect(() => {
+    if (route.name !== 'settings' || !route.highlight) return;
+    const id = route.highlight;
+    setHighlightedId(id);
+    const timer = window.setTimeout(() => {
+      const el = document.getElementById(id) || document.querySelector(`[data-setting-id="${id}"]`);
+      const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+      el?.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'nearest' });
+    }, 50);
+    return () => window.clearTimeout(timer);
+  }, [route]);
+
   function onSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === 'Escape') {
       e.preventDefault();

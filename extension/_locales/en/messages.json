@@ -95,6 +95,18 @@
   "copied": {
     "message": "Copied"
   },
+  "clearsIn": {
+    "message": "clears in $1s"
+  },
+  "clearNow": {
+    "message": "Clear now"
+  },
+  "cleared": {
+    "message": "Cleared"
+  },
+  "wontClear": {
+    "message": "won't be cleared automatically"
+  },
   "fill": {
     "message": "Fill"
   },

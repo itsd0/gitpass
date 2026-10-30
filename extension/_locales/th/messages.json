@@ -95,6 +95,18 @@
   "copied": {
     "message": "คัดลอกแล้ว"
   },
+  "clearsIn": {
+    "message": "ล้างใน $1 วินาที"
+  },
+  "clearNow": {
+    "message": "ล้างตอนนี้"
+  },
+  "cleared": {
+    "message": "ล้างแล้ว"
+  },
+  "wontClear": {
+    "message": "จะไม่ล้างอัตโนมัติ"
+  },
   "fill": {
     "message": "กรอก"
   },
