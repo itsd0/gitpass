@@ -91,7 +91,7 @@ svg.ui { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-wid
 .btn-link { background: none; border: none; color: rgb(var(--accent)); }
 .btn-link:hover { background: none; text-decoration: underline; }
 .field { position: relative; display: flex; }
-input[type=password], input[type=text], input[type=search], input[type=url], select {
+input[type=password], input[type=text], input[type=search], input[type=url], input[type=date], select {
   width: 100%; height: 32px; border-radius: 8px; border: 1px solid rgb(var(--border)); background: rgb(var(--card)); color: rgb(var(--fg)); padding: 0 10px; font: inherit; outline: none; }
 input:focus, select:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 3px rgb(var(--accent) / .25); }
 .field input { padding-right: 34px; }
@@ -222,6 +222,13 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .menu button:hover, .menu button:focus-visible { background: rgb(var(--hover)); outline: none; }
 .menu button.danger { color: rgb(var(--danger)); }
 .menu-sep { height: 1px; margin: 4px 6px; background: rgb(var(--border)); }
+/* Move-to-vault picker (#413): same panel as .menu, inside the .menu-wrap of the More button. */
+.move-picker { position: absolute; right: 0; top: 36px; z-index: 6; min-width: 200px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 8px; padding: 4px; box-shadow: 0 8px 24px #0008; }
+.move-picker-title { padding: 7px 8px 4px; color: rgb(var(--muted)); font-size: 12px; }
+.move-picker-item { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 8px; border: 0; background: none; color: rgb(var(--fg)); font: inherit; border-radius: 6px; cursor: pointer; text-align: left; }
+.move-picker-item:hover, .move-picker-item:focus-visible { background: rgb(var(--hover)); outline: none; }
+.move-picker-item:focus-visible { box-shadow: inset 0 0 0 2px rgb(var(--accent)); }
+.move-picker-count { color: rgb(var(--muted)); }
 
 /* Large type view (issue #278): orange frame, one character per cell, index numbers under each cell. */
 .largetype { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgb(0 0 0 / .55); }
@@ -365,15 +372,21 @@ button.tag:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--accent
 .gen-sep:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 1px; }
 .gen-cap-row { margin-top: -2px; }
 .tog { display: flex; align-items: center; gap: 6px; font-size: 13px !important; color: rgb(var(--fg)) !important; }
-.toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; max-width: 92%; background: rgb(var(--fg)); color: rgb(var(--bg)); padding: 6px 14px; border-radius: 99px; font-size: 12px; z-index: 20; }
+.toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; max-width: 92%; background: rgb(var(--fg)); color: rgb(var(--bg)); padding: 6px 14px 8px; border-radius: 99px; font-size: 12px; z-index: 20; overflow: hidden; }
 .toast-action { border: 0; padding: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }
 .toast-action:focus-visible { outline: 2px solid rgb(var(--bg)); outline-offset: 2px; border-radius: 4px; }
+.toast-bar { position: absolute; left: 10px; right: 10px; bottom: 3px; height: 2px; border-radius: 99px; background: rgb(var(--bg) / .28); pointer-events: none; }
+.toast-bar-fill { display: block; height: 100%; border-radius: 99px; background: rgb(var(--accent)); }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .toast-bar-fill { transition: none !important; }
+}
 
 /* inline login edit */
 .inline-edit { flex: 1; min-height: 0; overflow-y: auto; max-width: none; gap: 6px; padding: 0 4px 8px 0; }
 .inline-edit label { font-size: 11px; color: rgb(var(--label)); margin-top: 4px; }
 .inline-edit label:first-child { margin-top: 0; }
-.inline-edit input[type=text], .inline-edit input[type=password], .inline-edit input[type=url] { width: 100%; }
+.inline-edit input[type=text], .inline-edit input[type=password], .inline-edit input[type=url], .inline-edit input[type=date] { width: 100%; }
 .inline-edit textarea { width: 100%; box-sizing: border-box; background: rgb(var(--card)); color: rgb(var(--fg)); border: 1px solid rgb(var(--border)); border-radius: 8px; padding: 7px 9px; outline: none; font: 12px/1.4 ui-monospace, Menlo, monospace; resize: vertical; min-height: 64px; }
 .inline-edit textarea:focus { border-color: rgb(var(--accent)); box-shadow: 0 0 0 3px rgb(var(--accent) / .25); }
 .inline-edit .edit-pw, .inline-edit .edit-url { display: flex; align-items: center; gap: 6px; }

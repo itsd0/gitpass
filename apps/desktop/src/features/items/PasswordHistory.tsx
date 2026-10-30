@@ -5,6 +5,7 @@ import type { PasswordHistoryRef } from '../../api/types';
 import { useT } from '../../i18n';
 import { cn, fmtDateLong } from '../../lib/utils';
 import { Button, Dialog, DialogContent, Tooltip, toast } from '../../ui';
+import { toastConcealedCopied } from '../../lib/concealedCopy';
 import { errText } from './actions';
 import { SecretText } from '../../lib/secretText';
 import { REVEAL_MS } from './FieldView';
@@ -85,7 +86,7 @@ export function PasswordHistory({ history, ctx, onCleared }: PasswordHistoryProp
         itemId: ctx.itemId,
         fieldId: `password_history:${index}`,
       });
-      toast('Copied password');
+      toastConcealedCopied(t('itemKeys.passwordCopied'));
     } catch (e) {
       toast(errText(e), 'danger');
     }

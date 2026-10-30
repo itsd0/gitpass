@@ -5,7 +5,9 @@ import type { Field, ItemDetail, ItemSummary } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { Avatar, Kbd, toast } from '../../ui';
 import { useT } from '../../i18n';
+import { toastConcealedCopied } from '../../lib/concealedCopy';
 import { useApp } from '../../lib/store';
+import { useSettings } from '../settings/useSettings';
 import { rank } from '../palette/fuzzy';
 
 /** Pick the field ids used for copy actions from an item detail (secrets never leave Rust). */
@@ -17,6 +19,7 @@ export function pickFields(d: ItemDetail): { username?: Field; password?: Field;
 
 export function QuickAccess({ onDone }: { onDone?: () => void }) {
   const t = useT(); const [q, setQ] = useState(''); const [items, setItems] = useState<ItemSummary[]>([]); const [sel, setSel] = useState(0);
+  useEffect(() => { if (!useSettings.getState().settings) void useSettings.getState().load(); }, []);
   const [detail, setDetail] = useState<ItemDetail | null>(null); const [totp, setTotp] = useState<{ code: string; remaining: number } | null>(null); const inputRef = useRef<HTMLInputElement>(null);
   useEffect(() => { let live = true; const h = setTimeout(() => api.listItems({ filter: { kind: 'all', query: q || undefined } })
     .then((r) => live && setItems(q ? rank(q, r, (x) => [x.title, x.subtitle, x.url ?? '']) : r)).catch(() => live && setItems([])), 60); return () => { live = false; clearTimeout(h); }; }, [q]);
@@ -28,7 +31,12 @@ export function QuickAccess({ onDone }: { onDone?: () => void }) {
     tick(); const iv = setInterval(tick, 1000); return () => { live = false; clearInterval(iv); }; }, [detail]);
   const copy = async (which: 'password' | 'username') => {
     if (!cur) return; const d = detail ?? await api.getItem({ vaultId: cur.vaultId, itemId: cur.id }); const f = pickFields(d)[which]; if (!f) return;
-    try { await api.copyField({ vaultId: cur.vaultId, itemId: cur.id, fieldId: f.id }); toast(t(which === 'password' ? 'qa.passwordCopied' : 'qa.usernameCopied')); onDone?.(); }
+    try {
+      await api.copyField({ vaultId: cur.vaultId, itemId: cur.id, fieldId: f.id });
+      if (which === 'password') toastConcealedCopied(t('qa.passwordCopied'));
+      else toast(t('qa.usernameCopied'));
+      onDone?.();
+    }
     catch (e) { toast(t('common.error', { msg: String((e as Error)?.message ?? e) }), 'danger'); } };
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => Math.min(s + 1, items.length - 1)); }

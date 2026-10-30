@@ -155,13 +155,15 @@ async function popupRoute(msg) {
     }
     case 'update_login': {
       const args = { item_id: msg.item_id, source: 'popup' }; // extension pages only; content scripts can't reach popup:*
-      for (const k of ['title', 'username', 'password', 'notes']) if (msg[k] != null) args[k] = String(msg[k]);
+      for (const k of ['title', 'username', 'password', 'notes', 'credential', 'hostname', 'expires', 'note_field']) if (msg[k] != null) args[k] = String(msg[k]);
       if (Array.isArray(msg.urls)) args.urls = msg.urls.map(String);
+      if (Array.isArray(msg.tags)) args.tags = msg.tags.map((t) => String(t));
       return host('update_login', args);
     }
     case 'trash_item': return host('trash_item', { item_id: msg.item_id, source: 'popup' });
     case 'restore_item': return host('restore_item', { item_id: msg.item_id, source: 'popup' });
     case 'archive_item': return host('archive_item', { item_id: msg.item_id, source: 'popup', archived: msg.archived !== false });
+    case 'move_item': return host('move_item', { item_id: msg.item_id, to_vault_id: msg.to_vault_id, source: 'popup' });
     case 'unarchive_item': return host('unarchive_item', { item_id: msg.item_id, source: 'popup' });
     case 'update_password': return host('update_password', { item_id: msg.item_id, password: msg.password, username: msg.username });
     case 'save_login': return host('save_login', { origin: msg.origin, title: msg.title, username: msg.username, password: msg.password, vault_id: msg.vault_id });

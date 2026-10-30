@@ -95,6 +95,18 @@
   "copied": {
     "message": "ကူးယူပြီးပါပြီ"
   },
+  "clearsIn": {
+    "message": "$1 စက္ကန့်အတွင်း ရှင်းမည်"
+  },
+  "clearNow": {
+    "message": "ယခု ရှင်းရန်"
+  },
+  "cleared": {
+    "message": "ရှင်းပြီးပါပြီ"
+  },
+  "wontClear": {
+    "message": "အလိုအလျောက် ရှင်းမည်မဟုတ်ပါ"
+  },
   "fill": {
     "message": "ဖြည့်ရန်"
   },
@@ -338,6 +350,36 @@
   },
   "edit": {
     "message": "တည်းဖြတ်ရန်"
+  },
+  "editLogin": {
+    "message": "လော့ဂင်ကို တည်းဖြတ်ရန်"
+  },
+  "editSecureNote": {
+    "message": "လုံခြုံသော မှတ်စုကို တည်းဖြတ်ရန်"
+  },
+  "editApiCredential": {
+    "message": "API အထောက်အထားကို တည်းဖြတ်ရန်"
+  },
+  "credential": {
+    "message": "အထောက်အထား"
+  },
+  "showCredential": {
+    "message": "အထောက်အထား ပြရန်"
+  },
+  "hideCredential": {
+    "message": "အထောက်အထား ဖျောက်ရန်"
+  },
+  "hostname": {
+    "message": "ဟိုစ့်အမည်"
+  },
+  "expiry": {
+    "message": "သက်တမ်းကုန်ဆုံးရက်"
+  },
+  "expiryInvalid": {
+    "message": "သက်တမ်းကုန်ဆုံးရက်သည် YYYY-MM-DD ဖြစ်ရပါမည်"
+  },
+  "tagsPh": {
+    "message": "ကော်မာဖြင့် ခြားပါ"
   },
   "cancel": {
     "message": "မလုပ်တော့ရန်"
@@ -762,7 +804,7 @@
     "message": "ဝဘ်ဆိုဒ်ကို ဖွင့်ရန်"
   },
   "shortcutEdit": {
-    "message": "လော့ဂင်ကို တည်းဖြတ်ရန်"
+    "message": "အရာကို တည်းဖြတ်ရန်"
   },
   "shortcutGen": {
     "message": "စကားဝှက် ထုတ်ပေးကိရိယာ"
@@ -1115,6 +1157,12 @@
   },
   "movedToTrash": {
     "message": "မကြာသေးမီက ဖျက်လိုက်သည်များသို့ ရွှေ့ပြီးပါပြီ"
+  },
+  "moveToVault": {
+    "message": "Vault သို့ ရွှေ့ရန်…"
+  },
+  "movedToVault": {
+    "message": "$1 သို့ ရွှေ့ပြီးပါပြီ"
   },
   "itemRestored": {
     "message": "မူလအတိုင်း ပြန်လည်ရယူပြီးပါပြီ"

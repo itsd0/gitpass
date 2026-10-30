@@ -95,6 +95,18 @@
   "copied": {
     "message": "Copied"
   },
+  "clearsIn": {
+    "message": "clears in $1s"
+  },
+  "clearNow": {
+    "message": "Clear now"
+  },
+  "cleared": {
+    "message": "Cleared"
+  },
+  "wontClear": {
+    "message": "won't be cleared automatically"
+  },
   "fill": {
     "message": "Fill"
   },
@@ -338,6 +350,36 @@
   },
   "edit": {
     "message": "Edit"
+  },
+  "editLogin": {
+    "message": "Edit login"
+  },
+  "editSecureNote": {
+    "message": "Edit secure note"
+  },
+  "editApiCredential": {
+    "message": "Edit API credential"
+  },
+  "credential": {
+    "message": "Credential"
+  },
+  "showCredential": {
+    "message": "Show credential"
+  },
+  "hideCredential": {
+    "message": "Hide credential"
+  },
+  "hostname": {
+    "message": "Hostname"
+  },
+  "expiry": {
+    "message": "Expiry"
+  },
+  "expiryInvalid": {
+    "message": "Expiry must be YYYY-MM-DD"
+  },
+  "tagsPh": {
+    "message": "Comma separated"
   },
   "cancel": {
     "message": "Cancel"
@@ -692,7 +734,7 @@
     "message": "Open website"
   },
   "shortcutEdit": {
-    "message": "Edit login"
+    "message": "Edit item"
   },
   "shortcutGen": {
     "message": "Password generator"
@@ -1035,6 +1077,12 @@
   },
   "movedToTrash": {
     "message": "Moved to Recently Deleted"
+  },
+  "moveToVault": {
+    "message": "Move to vault…"
+  },
+  "movedToVault": {
+    "message": "Moved to $1"
   },
   "itemRestored": {
     "message": "Item restored"

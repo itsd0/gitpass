@@ -92,8 +92,11 @@ test('clicking a list code copies it without changing the selection', async (t) 
   await settle();
 
   assert.strictEqual(w.__gitpassMockClipboard, '123456');
-  assert.strictEqual(w.document.getElementById('toast').textContent, 'Copied');
-  assert.ok(!w.document.getElementById('toast').classList.contains('hidden'));
+  const totpToast = w.document.getElementById('toast');
+  assert.ok(totpToast.textContent.includes('Copied'));
+  assert.ok(totpToast.textContent.includes('clears in 30s'));
+  assert.ok(totpToast.querySelector('button.toast-action'));
+  assert.ok(!totpToast.classList.contains('hidden'));
   assert.strictEqual(w.document.querySelector('#detail h2').textContent, 'Plain login', 'clicking the code does not select the row');
 });
 

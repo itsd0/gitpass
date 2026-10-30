@@ -17,15 +17,123 @@ pub const MAX_WORDS: usize = 20;
 pub const MIN_PIN: usize = 4;
 pub const MAX_PIN: usize = 16;
 
-/// 128 short, easy-to-spell words: ~7 bits of entropy per word.
-pub const WORDLIST: &[&str] = &["acorn","amber","anchor","apple","arrow","aspen","atlas","badge","bamboo","banjo","beacon","birch","bison","blossom","breeze","bridge",
-    "cactus","canyon","carbon","cedar","cherry","cinder","citrus","clover","cobalt","comet","coral","cosmos","crane","crystal","dahlia","delta",
-    "desert","dolphin","dragon","drift","eagle","ember","falcon","fern","fjord","forest","fossil","galaxy","garnet","geyser","glacier","granite",
-    "harbor","hazel","heron","horizon","indigo","island","ivory","jasmine","jungle","kayak","kernel","lagoon","lantern","lava","lemon","lilac",
-    "lotus","lunar","magnet","mango","maple","marble","meadow","meteor","mint","mosaic","nectar","nebula","oasis","ocean","olive","onyx",
-    "orbit","orchid","otter","panda","pebble","pepper","phoenix","pine","planet","plum","polar","prairie","quartz","quill","radar","raven",
-    "reef","ripple","river","rocket","saffron","salmon","sapphire","savanna","sequoia","shadow","sierra","silver","sparrow","spruce","summit","sunset",
-    "thistle","thunder","tiger","topaz","tulip","tundra","turtle","velvet","violet","walnut","willow","winter","zebra","zenith","yarrow","yonder"];
+/// EFF large wordlist (7,776 words, CC BY 3.0, https://www.eff.org/dice), words only.
+/// Dice numbers are not included. Four words contain a hyphen (`drop-down`, `felt-tip`,
+/// `t-shirt`, `yo-yo`), so a `-` join cannot be counted by splitting on `-`.
+const EFF_WORDLIST_TXT: &str = include_str!("eff_large_wordlist.txt");
+
+/// Passphrase words. Drawn with `SliceRandom::choose` from `OsRng`, which samples
+/// uniformly (no modulo bias). ~12.9 bits per word (`log2(7776)`).
+pub static WORDLIST: std::sync::LazyLock<Vec<&'static str>> =
+    std::sync::LazyLock::new(|| EFF_WORDLIST_TXT.lines().filter(|w| !w.is_empty()).collect());
+
+/// Entropy of one word drawn uniformly from [`WORDLIST`]: `log2(7776)`.
+pub fn word_entropy_bits() -> f64 { (WORDLIST.len() as f64).log2() }
+
+/// Entropy of a passphrase of `words` words from [`WORDLIST`].
+pub fn passphrase_entropy_bits(words: usize) -> f64 { words as f64 * word_entropy_bits() }
+
+/// Word count when `pw` is a passphrase of [`WORDLIST`] words joined by `-`, `.`, `_` or
+/// space. Each word may have its first letter capitalized. At most one word may carry a
+/// single trailing digit (the generator's digits option). `None` for anything else,
+/// including character-mode passwords and PINs.
+pub fn passphrase_word_count(pw: &str) -> Option<usize> {
+    passphrase_parts(pw).map(|p| p.len())
+}
+
+/// Entropy of `pw` when [`passphrase_word_count`] recognizes it.
+pub fn passphrase_entropy(pw: &str) -> Option<f64> {
+    passphrase_word_count(pw).map(passphrase_entropy_bits)
+}
+
+fn in_wordlist(word: &str) -> bool { WORDLIST.binary_search(&word).is_ok() }
+
+/// Lowercase wordlist key for a token: first letter may be capitalized, and the token
+/// may end with one digit. `None` when the shape is not `[A-Za-z][a-z-]*[0-9]?`.
+fn word_key(token: &str) -> Option<String> {
+    if token.is_empty() { return None; }
+    let (stem, stripped) = if token.as_bytes().last().is_some_and(|b| b.is_ascii_digit()) {
+        (&token[..token.len() - 1], true)
+    } else {
+        (token, false)
+    };
+    if stem.is_empty() || (stripped && stem.as_bytes().last().is_some_and(|b| b.is_ascii_digit())) { return None; }
+    let mut chars = stem.chars();
+    let first = chars.next()?;
+    if !chars.all(|c| c.is_ascii_lowercase() || c == '-') { return None; }
+    if first.is_ascii_lowercase() { return Some(stem.to_string()); }
+    if first.is_ascii_uppercase() {
+        let mut s = String::with_capacity(stem.len());
+        s.push(first.to_ascii_lowercase());
+        s.push_str(&stem[first.len_utf8()..]);
+        return Some(s);
+    }
+    None
+}
+
+fn token_in_wordlist(token: &str) -> bool { word_key(token).as_deref().is_some_and(in_wordlist) }
+
+/// Split `pw` into word tokens when it is a passphrase.
+fn passphrase_parts(pw: &str) -> Option<Vec<&str>> {
+    if pw.is_empty() { return None; }
+    let dot = pw.contains('.');
+    let under = pw.contains('_');
+    let space = pw.contains(' ');
+    let joins = [dot, under, space].into_iter().filter(|on| *on).count();
+    if joins > 1 { return None; }
+    let sep = if dot { '.' } else if under { '_' } else if space { ' ' } else if pw.contains('-') { '-' } else { return None; };
+    if pw.chars().any(|c| !(c.is_ascii_alphanumeric() || c == '-' || c == sep)) { return None; }
+    let parts = if sep == '-' { split_hyphen_join(pw)? } else { split_plain_join(pw, sep)? };
+    if !(MIN_WORDS..=MAX_WORDS).contains(&parts.len()) { return None; }
+    let mut digits = 0usize;
+    for part in &parts {
+        if !token_in_wordlist(part) { return None; }
+        if part.as_bytes().last().is_some_and(|b| b.is_ascii_digit()) { digits += 1; }
+    }
+    if digits > 1 { return None; }
+    Some(parts)
+}
+
+fn split_plain_join(pw: &str, sep: char) -> Option<Vec<&str>> {
+    let parts: Vec<&str> = pw.split(sep).collect();
+    if parts.len() < 2 || parts.iter().any(|p| p.is_empty()) { return None; }
+    Some(parts)
+}
+
+/// `-` is both the join and the hyphen inside four EFF words. Try a plain word up to the
+/// next `-`, then a hyphenated word spanning one internal `-`, and backtrack if the rest
+/// does not parse. The left half of each hyphenated word is not itself in the list, so
+/// the successful parse is unique for this wordlist.
+fn split_hyphen_join(pw: &str) -> Option<Vec<&str>> {
+    fn rec<'a>(s: &'a str, out: &mut Vec<&'a str>) -> bool {
+        if s.is_empty() { return !out.is_empty(); }
+        if out.len() >= MAX_WORDS { return false; }
+        let mut cands: Vec<(&str, &str)> = Vec::new();
+        if let Some(h1) = s.find('-') {
+            let plain = &s[..h1];
+            if token_in_wordlist(plain) { cands.push((plain, &s[h1 + 1..])); }
+            let after = &s[h1 + 1..];
+            if let Some(h2) = after.find('-') {
+                let end = h1 + 1 + h2;
+                let hy = &s[..end];
+                if token_in_wordlist(hy) { cands.push((hy, &s[end + 1..])); }
+            } else if token_in_wordlist(s) {
+                cands.push((s, ""));
+            }
+        } else if token_in_wordlist(s) {
+            cands.push((s, ""));
+        }
+        cands.sort_by_key(|(tok, _)| std::cmp::Reverse(tok.len()));
+        for (tok, rest) in cands {
+            out.push(tok);
+            if rec(rest, out) { return true; }
+            out.pop();
+        }
+        false
+    }
+    let mut out = Vec::new();
+    if rec(pw, &mut out) { Some(out) } else { None }
+}
 
 /// Character-mode digits skip 0 and 1 (easy to confuse with O and l).
 const DIGITS: &[u8] = b"23456789";
@@ -266,22 +374,30 @@ mod tests {
 
     #[test]
     fn passphrase_words_separator_capitalize_and_digit() {
-        let plain = generate(&opts(5, true, false, true, false));
-        let parts: Vec<&str> = plain.split('-').collect();
+        // `.` is never inside a word, so the split count is exact. `-` joins are checked
+        // with passphrase_word_count because four EFF words themselves contain a hyphen.
+        let plain = generate(&Options { separator: '.', ..opts(5, true, false, true, false) });
+        let parts: Vec<&str> = plain.split('.').collect();
         assert_eq!(parts.len(), 5, "{plain}");
         assert!(parts.iter().all(|w| WORDLIST.contains(w)), "{plain}");
+
+        let dashed = generate(&opts(5, true, false, true, false));
+        assert_eq!(passphrase_word_count(&dashed), Some(5), "{dashed}");
+        assert!(dashed.contains('-'), "{dashed}");
 
         let dotted = Options { separator: '.', capitalize: true, ..opts(4, true, false, true, false) };
         let titled = generate(&dotted);
         let parts: Vec<&str> = titled.split('.').collect();
         assert_eq!(parts.len(), 4, "{titled}");
         assert!(parts.iter().all(|w| w.chars().next().unwrap().is_ascii_uppercase()), "{titled}");
+        assert!(parts.iter().all(|w| WORDLIST.contains(&w.to_ascii_lowercase().as_str())), "{titled}");
 
-        let digits = Options { digits: true, ..opts(6, true, true, true, false) };
+        let digits = Options { digits: true, separator: '.', ..opts(6, true, true, true, false) };
         let with_digit = generate(&digits);
-        let parts: Vec<&str> = with_digit.split('-').collect();
+        let parts: Vec<&str> = with_digit.split('.').collect();
         assert_eq!(parts.len(), 6, "{with_digit}");
         assert_eq!(parts.iter().filter(|w| w.ends_with(|c: char| c.is_ascii_digit())).count(), 1, "{with_digit}");
+        assert!(parts.iter().all(|w| WORDLIST.contains(&w.trim_end_matches(|c: char| c.is_ascii_digit()))), "{with_digit}");
     }
 
     #[test]
@@ -329,10 +445,56 @@ mod tests {
     }
 
     #[test]
-    fn wordlist_has_128_unique_ascii_words() {
-        assert_eq!(WORDLIST.len(), 128);
-        let unique: std::collections::BTreeSet<_> = WORDLIST.iter().collect();
+    fn wordlist_is_the_eff_large_list() {
+        assert_eq!(WORDLIST.len(), 7776);
+        let unique: std::collections::BTreeSet<_> = WORDLIST.iter().copied().collect();
         assert_eq!(unique.len(), WORDLIST.len());
-        assert!(WORDLIST.iter().all(|w| w.bytes().all(|b| b.is_ascii_lowercase())));
+        assert!(WORDLIST.iter().all(|w| !w.is_empty() && w.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')));
+        assert!(WORDLIST.iter().copied().eq(EFF_WORDLIST_TXT.lines().filter(|w| !w.is_empty())));
+        let mut sorted = WORDLIST.clone();
+        sorted.sort_unstable();
+        assert_eq!(sorted.as_slice(), WORDLIST.as_slice(), "binary search requires the checked-in order");
+        assert!((word_entropy_bits() - (7776f64).log2()).abs() < 1e-12);
+        assert_eq!(passphrase_entropy_bits(5), 5.0 * word_entropy_bits());
+        // The hyphen splitter depends on this: each hyphenated word's left half is not a word.
+        for w in WORDLIST.iter().filter(|w| w.contains('-')) {
+            let (left, _) = w.split_once('-').unwrap();
+            assert!(!in_wordlist(left), "{w}");
+        }
+    }
+
+    #[test]
+    fn passphrase_entropy_is_log2_7776_per_word() {
+        let five = "abacus.abdomen.abdominal.abide.ability";
+        assert_eq!(passphrase_word_count(five), Some(5));
+        assert_eq!(passphrase_entropy(five), Some(passphrase_entropy_bits(5)));
+        assert_eq!(passphrase_word_count("Abacus.Abdomen.Abdominal"), Some(3));
+        assert_eq!(passphrase_word_count("abacus3-abdomen-abdominal"), Some(3));
+        assert_eq!(passphrase_word_count("drop-down-abacus-abdomen"), Some(3));
+        assert_eq!(passphrase_word_count("drop-down.abacus.felt-tip"), Some(3));
+        assert_eq!(passphrase_word_count("t-shirt_yo-yo_abacus_zoom"), Some(4));
+        assert_eq!(passphrase_word_count("Abacus Abdomen Abdominal"), Some(3));
+        assert_eq!(passphrase_word_count("Yo-yo.T-shirt.Drop-down"), Some(3));
+        assert_eq!(passphrase_word_count("abacus"), None);
+        assert_eq!(passphrase_word_count("abacus-notaword-abdominal"), None);
+        assert_eq!(passphrase_word_count("abacus1-abdomen2-abdominal"), None);
+        assert_eq!(passphrase_word_count("abacus.abdomen.abdominal!"), None);
+        assert_eq!(passphrase_word_count("k7QmN4pL2xR9wT"), None);
+        assert_eq!(passphrase_word_count("123456"), None);
+    }
+
+    #[test]
+    fn passphrase_sample_uses_many_distinct_words() {
+        // 100 passphrases x 20 words = 2000 uniform draws from 7776 words.
+        // The expected distinct count is about 1770, so 1000 is a conservative floor.
+        let mut seen = std::collections::BTreeSet::new();
+        for _ in 0..100 {
+            let p = generate(&Options { separator: '.', ..opts(20, true, false, true, false) });
+            for w in p.split('.') {
+                assert!(WORDLIST.contains(&w), "{p}");
+                seen.insert(w.to_string());
+            }
+        }
+        assert!(seen.len() > 1000, "only {} distinct words in 2000 draws", seen.len());
     }
 }

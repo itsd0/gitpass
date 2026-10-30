@@ -30,6 +30,8 @@ export const api = {
   getItem: (a:{vaultId:string; itemId:string}) => call<T.ItemDetail>('get_item', a),
   revealField: (a:{vaultId:string; itemId:string; fieldId:string; version?:number|null}) => call<string>('reveal_field', a),
   copyField: (a:{vaultId:string; itemId:string; fieldId:string}) => call<void>('copy_field', a),
+  /** True only when the clipboard still held the value gitpass copied. */
+  clearClipboardIfOurs: () => call<boolean>('clear_clipboard_if_ours'),
   totpNow: (a:{vaultId:string; itemId:string}) => call<{code:string; remaining:number; period:number}>('totp_now', a),
   scanTotp: (a: { source: 'screen' | 'clipboard' | 'image'; dataBase64?: string }) => call<T.ScannedTotp>('scan_totp', a),
   createItem: (a:{input:T.ItemInput}) => call<T.ItemSummary>('create_item', a),

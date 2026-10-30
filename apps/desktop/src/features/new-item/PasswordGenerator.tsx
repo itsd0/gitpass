@@ -4,6 +4,7 @@ import type { GeneratorHistoryEntry } from '../../api/types';
 import { api } from '../../api/client';
 import { Button, Input, Modal, Tooltip, toast } from '../../ui';
 import { useT, type Key } from '../../i18n';
+import { toastConcealedCopied } from '../../lib/concealedCopy';
 import { useApp } from '../../lib/store';
 import { useSettings } from '../settings/useSettings';
 import { cn } from '../../lib/utils';
@@ -182,7 +183,7 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin, o
   const copyEntry = async (value: string) => {
     try {
       await api.copyPassword({ password: value });
-      toast(t('generator.copied'));
+      toastConcealedCopied(t('generator.copied'));
     } catch (e) {
       toast(String((e as Error)?.message ?? e), 'danger');
     }
@@ -337,7 +338,7 @@ export function PasswordGenerator({ onUse, standalone, onClose, onSaveAsLogin, o
     if (!pw) return;
     try {
       await api.copyPassword({ password: pw });
-      toast(t('generator.copied'));
+      toastConcealedCopied(t('generator.copied'));
     } catch (e) {
       toast(String((e as Error)?.message ?? e), 'danger');
     }

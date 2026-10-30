@@ -2,6 +2,7 @@ import { api } from '../../api/client';
 import type { Field, ItemDetail } from '../../api/types';
 import { toast } from '../../ui';
 import { translate, useI18n, type Key } from '../../i18n';
+import { toastConcealedCopied } from '../../lib/concealedCopy';
 import { pickFields } from '../quick-access/QuickAccess';
 
 export const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -20,7 +21,7 @@ export async function copyPrimarySecret(vaultId: string, itemId: string) {
     const f = pickPrimarySecret(await api.getItem({ vaultId, itemId }));
     if (!f) { toast(tr('itemKeys.noSecret')); return; }
     await api.copyField({ vaultId, itemId, fieldId: f.id });
-    toast(tr(/pass/i.test(f.label) ? 'itemKeys.passwordCopied' : 'itemKeys.secretCopied'));
+    toastConcealedCopied(tr(/pass/i.test(f.label) ? 'itemKeys.passwordCopied' : 'itemKeys.secretCopied'));
   } catch (e) { toast(errText(e), 'danger'); }
 }
 
@@ -40,7 +41,7 @@ export async function copyTotpCode(vaultId: string, itemId: string) {
     const f = pickFields(await api.getItem({ vaultId, itemId })).totp;
     if (!f) { toast(tr('itemKeys.noTotp')); return; }
     await api.copyField({ vaultId, itemId, fieldId: f.id });
-    toast(tr('itemKeys.totpCopied'));
+    toastConcealedCopied(tr('itemKeys.totpCopied'));
   } catch (e) { toast(errText(e), 'danger'); }
 }
 

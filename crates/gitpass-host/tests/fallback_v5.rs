@@ -203,8 +203,9 @@ fn fill_totp_save_update_vaults_generate() {
     assert!(g.chars().any(|c| c.is_ascii_digit()) && g.chars().any(|c| !c.is_ascii_alphanumeric()));
 
     // Passphrase and PIN modes share gitpass-core's generator with the CLI and desktop app.
+    // The default `-` join is counted with passphrase_word_count: four EFF words contain a hyphen.
     let g = ok(&mut f.host, json!({"cmd":"generate","len":5,"words":true}))["password"].as_str().unwrap().to_string();
-    assert_eq!(g.split('-').count(), 5, "{g}");
+    assert_eq!(gitpass_core::generate::passphrase_word_count(&g), Some(5), "{g}");
     let g = ok(&mut f.host, json!({"cmd":"generate","len":6,"pin":true,"digits":false,"symbols":false}))["password"].as_str().unwrap().to_string();
     assert_eq!(g.len(), 6, "{g}");
     assert!(g.chars().all(|c| c.is_ascii_digit()), "{g}");
@@ -213,14 +214,16 @@ fn fill_totp_save_update_vaults_generate() {
     assert_eq!(err(&mut f.host, json!({"cmd":"generate","len":7})).0, "bad_request");
     assert_eq!(err(&mut f.host, json!({"cmd":"generate","len":129})).0, "bad_request");
 
-    // Parity with the desktop app and CLI: a passphrase with symbols off joins words with '.', not '-'.
+    // Parity with the desktop app and CLI: a passphrase with symbols off joins words with '.'.
+    // A `-` inside a word is possible (four EFF words contain a hyphen), so the join is
+    // checked by splitting on `.` rather than by the absence of `-`.
     let g = ok(&mut f.host, json!({"cmd":"generate","len":4,"words":true,"symbols":false,"digits":false}))["password"].as_str().unwrap().to_string();
     assert_eq!(g.split('.').count(), 4, "{g}");
-    assert!(!g.contains('-'), "{g}");
+    assert!(g.split('.').all(|w| gitpass_core::generate::WORDLIST.contains(&w)), "{g}");
     // Defaults per mode when `len` is absent.
     assert_eq!(ok(&mut f.host, json!({"cmd":"generate"}))["password"].as_str().unwrap().len(), 20);
     assert_eq!(ok(&mut f.host, json!({"cmd":"generate","pin":true}))["password"].as_str().unwrap().len(), 6);
-    assert_eq!(ok(&mut f.host, json!({"cmd":"generate","words":true}))["password"].as_str().unwrap().split('-').count(), 5);
+    assert_eq!(gitpass_core::generate::passphrase_word_count(ok(&mut f.host, json!({"cmd":"generate","words":true}))["password"].as_str().unwrap()), Some(5));
 
     // Memorable mode: separator and capitalize options (issue #326).
     let g = ok(&mut f.host, json!({"cmd":"generate","len":4,"words":true,"separator":"_","capitalize":true}))["password"].as_str().unwrap().to_string();
@@ -274,8 +277,9 @@ fn host_generate_separator_and_capitalize_validation() {
     use gitpass_core::generate::{Mode, Request};
     use gitpass_host::handler::generate;
 
-    // Allowed separators are honored.
-    for sep in ['-', '.', '_', ' '] {
+    // Allowed separators are honored. `.`, `_` and space never occur inside a word.
+    // `-` does (four EFF words), so that join is counted with passphrase_word_count.
+    for sep in ['.', '_', ' '] {
         let r = Request {
             mode: Mode::Words,
             length: Some(4),
@@ -290,6 +294,17 @@ fn host_generate_separator_and_capitalize_validation() {
             assert!(w.chars().next().unwrap().is_ascii_uppercase(), "{w} in {pw}");
         }
     }
+    let r = Request {
+        mode: Mode::Words,
+        length: Some(4),
+        symbols: true,
+        digits: false,
+        separator: Some('-'),
+        capitalize: true,
+    };
+    let pw = generate(&r).unwrap();
+    assert_eq!(gitpass_core::generate::passphrase_word_count(&pw), Some(4), "{pw}");
+    assert!(pw.contains('-'), "{pw}");
 
     // Invalid separators rejected.
     for bad in ['/', 'a', '0', ':', '\n'] {
@@ -314,5 +329,5 @@ fn host_generate_separator_and_capitalize_validation() {
         capitalize: false,
     };
     let pw = generate(&r).unwrap();
-    assert_eq!(pw.split('-').count(), 5, "{pw}");
+    assert_eq!(gitpass_core::generate::passphrase_word_count(&pw), Some(5), "{pw}");
 }
