@@ -787,5 +787,17 @@ export const en = {
   "cmd.textLarger": "Increase text size",
   "cmd.textSmaller": "Decrease text size",
   "cmd.textReset": "Reset text size",
+  "ctx.menuLabel": "Item actions",
+  "ctx.moveToVault": "Move to vault…",
+  "ctx.moveToTrash": "Move to Recently Deleted",
+  "ctx.favoriteN": "Add {n} items to Favorites",
+  "ctx.unfavoriteN": "Remove {n} items from Favorites",
+  "ctx.moveN": "Move {n} items to vault…",
+  "ctx.archiveN": "Archive {n} items",
+  "ctx.unarchiveN": "Unarchive {n} items",
+  "ctx.trashN": "Move {n} items to Recently Deleted",
+  "ctx.restoreN": "Restore {n} items",
+  "ctx.purgeN": "Delete {n} items permanently…",
+  "ctx.noVaults": "No other vault",
 } as const;
 export type Key = keyof typeof en;
