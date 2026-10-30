@@ -335,6 +335,47 @@ fn create_item_any_category_via_agent() {
 }
 
 #[test]
+fn agent_api_credential_masked_hint_in_summary_and_detail() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+    const LONG_KEY: &str = "sk-live-0123456789abcdefgh";
+    let api = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::ApiCredential,
+        title: "Agent API Item".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                fld("username", FieldKind::Text, "svc"),
+                fld("credential", FieldKind::Concealed, LONG_KEY),
+            ],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+
+    let list = c.ok("list_items", json!({"category": "api_credential"}));
+    let items = list["items"].as_array().unwrap();
+    let item = items.iter().find(|i| i["title"] == "Agent API Item").unwrap();
+    assert_eq!(item["subtitle"], "sk-l••••••••efgh");
+
+    let detail = c.ok("get_item", json!({"item_id": format!("{}:{}", e.vault, api.id)}))["item"].clone();
+    let cred = detail["fields"].as_array().unwrap().iter().find(|f| f["name"] == "credential").unwrap();
+    assert_eq!(cred["concealed"], true);
+    assert_eq!(cred["masked"], "sk-l••••••••efgh");
+    assert!(cred.get("value").is_none());
+
+    // Assert full secret never appears in serialized JSON
+    let list_str = list.to_string();
+    assert!(!list_str.contains("0123456789abcd"));
+    let detail_str = detail.to_string();
+    assert!(!detail_str.contains("0123456789abcd"));
+}
+
+#[test]
 fn changed_event_pushed_for_gui_and_agent_writes() {
     let e = env();
     let (mut c, _) = Client::connect(&e);

@@ -22,7 +22,7 @@ export function FieldRow({ field, ctx, strength, category, passwordChangedAt }: 
   return (
     <div className="group relative border-b border-border px-4 py-2.5 last:border-b-0 hover:bg-hover/50" data-testid={`field-${field.id}`}>
       <div className="text-xs text-label">{field.label}</div>
-      {field.kind === 'concealed' ? <ConcealedValue field={field} ctx={ctx} strength={strength} passwordChangedAt={passwordChangedAt} />
+      {field.kind === 'concealed' ? <ConcealedValue field={field} ctx={ctx} strength={strength} category={category} passwordChangedAt={passwordChangedAt} />
         : field.kind === 'totp' ? <TotpValue ctx={ctx} fieldId={field.id} />
         : <PlainValue field={field} ctx={ctx} category={category} />}
     </div>
@@ -84,7 +84,7 @@ function PlainValue({ field, ctx, category }: { field: Field; ctx: Ctx; category
 }
 
 /** Concealed values are never in the payload; only fetched via revealField, auto-hidden after 30s. */
-export function ConcealedValue({ field, ctx, strength, passwordChangedAt }: { field: Field; ctx: Ctx; strength?: number | null; passwordChangedAt?: string | null }) {
+export function ConcealedValue({ field, ctx, strength, category, passwordChangedAt }: { field: Field; ctx: Ctx; strength?: number | null; category?: ItemCategory; passwordChangedAt?: string | null }) {
   const t = useT();
   const [revealed, setRevealed] = useState<string | null>(null);
   const [largeTypeOpen, setLargeTypeOpen] = useState(false);
@@ -136,6 +136,9 @@ export function ConcealedValue({ field, ctx, strength, passwordChangedAt }: { fi
     }
   };
 
+  const isApi = category === 'api_credential';
+  const shouldGroup = !isApi && Boolean(field.masked);
+
   return (
     <div
       ref={containerRef}
@@ -145,7 +148,7 @@ export function ConcealedValue({ field, ctx, strength, passwordChangedAt }: { fi
       data-testid={`concealed-field-${field.id}`}
     >
       <div className="flex items-center gap-2">
-        <div className={cn('min-w-0 flex-1 break-all font-mono text-[14px]', revealed === null && 'tracking-widest')} data-testid="concealed-value">{revealed === null ? (field.masked || DOTS) : field.masked ? groupCardNumber(revealed) : revealed}</div>
+        <div className={cn('min-w-0 flex-1 break-all font-mono text-[14px]', revealed === null && 'tracking-widest')} data-testid="concealed-value">{revealed === null ? (field.masked || DOTS) : (shouldGroup ? groupCardNumber(revealed) : revealed)}</div>
         <div className="flex opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           <Tooltip content={t('largetype.action')}>
             <Button

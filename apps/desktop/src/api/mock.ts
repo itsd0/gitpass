@@ -2,7 +2,7 @@
 // Concealed values are kept in a private map and only returned by reveal_field,
 // mirroring the Rust security model (detail payloads carry value: null).
 import type * as T from './types';
-import { cardDigits, cardLabel, cardMask } from '../lib/cardMask';
+import { cardDigits, cardLabel, cardMask, secretHint } from '../lib/cardMask';
 
 const delay = <R>(v: R, ms = 60): Promise<R> => new Promise((r) => setTimeout(() => r(structuredClone(v)), ms));
 let seq = 1000;
@@ -195,6 +195,11 @@ const subtitleFor = (input: T.ItemInput): string => {
     if (u && h) return `${u}@${h}`;
     return u || h || '';
   }
+  if (input.category === 'api_credential') {
+    const cred = flds.find((x) => x.kind === 'concealed' && (x.id === 'credential' || x.id === 'key' || x.id === 'api_key' || x.id === 'secret'))
+      || flds.find((x) => x.kind === 'concealed' && x.value);
+    if (cred?.value) return secretHint(cred.value);
+  }
   const u = flds.find((x) => x.kind === 'text' || x.kind === 'email');
   return u?.value ?? '';
 };
@@ -204,7 +209,12 @@ function applyInput(r: Rec, input: T.ItemInput) {
     const id = x.id || uid('f'); const hidden = x.kind === 'concealed' || x.kind === 'totp';
     // null concealed value on update = "unchanged"
     if (hidden) { const v = x.value ?? r.secrets[id]; if (v != null) secrets[id] = v; }
-    return { ...x, id, value: hidden ? null : x.value };
+    const masked = input.category === 'credit_card' && hidden && (x.id === 'number' || x.label === 'number') && cardDigits(x.value ?? r.secrets[id]).length >= 8
+      ? cardMask(x.value ?? r.secrets[id])
+      : input.category === 'api_credential' && hidden && (x.value ?? r.secrets[id])
+      ? secretHint(x.value ?? r.secrets[id])
+      : undefined;
+    return { ...x, id, value: hidden ? null : x.value, ...(masked ? { masked } : {}) };
   }) }));
   r.secrets = secrets;
   Object.assign(r.detail, { vaultId: input.vaultId, category: input.category, title: input.title, sections, notes: input.notes ?? null,
