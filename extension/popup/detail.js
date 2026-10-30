@@ -1,7 +1,64 @@
 'use strict';
 // ---------- detail ----------
 let detailSeq = 0;
+let detailNavHistory = [];
+let isNavigatingDetail = false;
+
+async function openRelatedItem(r) {
+  if (!r || !r.available) return;
+  if (S.detail) {
+    detailNavHistory.push(S.detail.id);
+  }
+  await navigateToItem(r.id);
+}
+
+async function goBackDetail() {
+  if (!detailNavHistory.length) return;
+  const prevId = detailNavHistory.pop();
+  await navigateToItem(prevId, true);
+}
+
+async function navigateToItem(itemId, isBack = false) {
+  isNavigatingDetail = true;
+  try {
+    let idx = S.rows.findIndex((row) => row.id === itemId || row.id.endsWith(':' + itemId));
+    if (idx >= 0) {
+      await select(idx);
+      return;
+    }
+    const inAll = S.all && S.all.find((row) => row.id === itemId || row.id.endsWith(':' + itemId));
+    if (inAll) {
+      S.query = '';
+      const qIn = $('q');
+      if (qIn) qIn.value = '';
+      S.filter = 'all';
+      renderFilter();
+      applyFilter(false);
+      idx = S.rows.findIndex((row) => row.id === itemId || row.id.endsWith(':' + itemId));
+      if (idx >= 0) {
+        await select(idx);
+        return;
+      }
+    }
+    const res = await send({ type: 'popup:get_item', item_id: itemId });
+    if (res && res.item) {
+      S.sel = -1;
+      renderList();
+      S.detail = res.item;
+      renderDetail(res.item);
+    }
+  } catch (e) {
+    console.error('navigateToItem error:', e);
+    if (typeof showErr === 'function') showErr(e);
+  } finally {
+    isNavigatingDetail = false;
+  }
+}
+
 async function select(idx) {
+  if (!isNavigatingDetail) {
+    detailNavHistory = [];
+  }
   const target = S.rows[idx];
   if (S.edit) {
     if (target && target.id === S.edit.id) return;
@@ -76,6 +133,15 @@ async function select(idx) {
 function renderDetail(d) {
   const pane = $('detail'); pane.textContent = '';
   const head = el('div', 'd-head');
+  if (detailNavHistory.length > 0) {
+    const backBtn = el('button', 'icon-btn back-item-btn');
+    backBtn.type = 'button';
+    backBtn.title = t('back', 'Back');
+    backBtn.setAttribute('aria-label', t('back', 'Back'));
+    backBtn.innerHTML = '<svg class="ui" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>';
+    backBtn.onclick = () => goBackDetail();
+    head.append(backBtn);
+  }
   const ic = el('span', 'ic'); renderRowIcon(ic, d, 28);
   const g = el('div', 'grow'); g.append(el('h2', null, d.title), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
   head.append(ic, g, moreMenu(d));
@@ -193,6 +259,58 @@ function renderDetail(d) {
   for (const f of d.fields || []) box.append(fieldRow(d, f));
   if (box.children.length) pane.append(box);
   if (d.notes) pane.append(el('div', 'notes', d.notes));
+  if (d.related_items && d.related_items.length) {
+    const relSec = el('div', 'd-related');
+    relSec.setAttribute('role', 'region');
+    relSec.setAttribute('aria-label', t('relatedItems', 'Related items'));
+    const relTitle = el('div', 'd-related-title', t('relatedItems', 'Related items'));
+    const relList = el('div', 'd-related-list');
+    relList.setAttribute('role', 'list');
+    for (const r of d.related_items) {
+      const isAvail = Boolean(r.available);
+      const row = el('div', 'related-row' + (isAvail ? '' : ' unavailable'));
+      row.setAttribute('role', 'listitem');
+      row.setAttribute('tabindex', isAvail ? '0' : '-1');
+      row.dataset.itemId = r.id;
+
+      const ic = el('span', 'related-ic');
+      if (isAvail && r.category) {
+        ic.innerHTML = categoryIcon(r.category, 20);
+      } else {
+        ic.innerHTML = UI.link;
+      }
+
+      const tEl = el('span', 'related-title', isAvail ? r.title : t('itemNotAvailable', 'Item not available'));
+      tEl.title = isAvail ? r.title : t('itemNotAvailable', 'Item not available');
+      row.append(ic, tEl);
+
+      if (isAvail) {
+        row.onclick = () => openRelatedItem(r);
+      }
+      row.onkeydown = (e) => {
+        if (e.key === 'Enter') {
+          if (isAvail) {
+            e.preventDefault();
+            e.stopPropagation();
+            openRelatedItem(r);
+          }
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          e.stopPropagation();
+          const next = row.nextElementSibling;
+          if (next && next.focus) next.focus();
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          e.stopPropagation();
+          const prev = row.previousElementSibling;
+          if (prev && prev.focus) prev.focus();
+        }
+      };
+      relList.append(row);
+    }
+    relSec.append(relTitle, relList);
+    pane.append(relSec);
+  }
   if (d.attachments && d.attachments.length) {
     const attSec = el('div', 'd-attachments');
     attSec.setAttribute('role', 'region');

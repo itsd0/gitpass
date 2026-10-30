@@ -1138,5 +1138,11 @@
   },
   "optColorPasswordsBody": {
     "message": "Show digits in orange, symbols in blue and spaces as a dot when a password is revealed. Copying is unchanged."
+  },
+  "relatedItems": {
+    "message": "Related items"
+  },
+  "itemNotAvailable": {
+    "message": "Item not available"
   }
 }

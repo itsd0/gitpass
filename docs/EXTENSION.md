@@ -99,6 +99,13 @@ Open it from the toolbar icon, or with the keyboard command below.
   `gitpass gen --no-history` skips recording for a single CLI generation only.
   Note: when the desktop app is closed, the standalone host currently ignores
   that setting — see issue #225.
+- **Related items.** When an item has linked related items, the detail view
+  shows a **Related items** section below the fields and notes. Each row displays
+  the item's category icon and title; clicking or pressing Enter opens that item's
+  detail view in the popup. A Back button (or Backspace / Alt+Left) returns to the
+  previously viewed item. If a linked item was removed or is in an unavailable vault,
+  it displays a muted "Item not available" entry. Related items are read-only in the
+  extension (linking and unlinking is managed in the desktop app or CLI).
 - **Opening gitpass.** Actions like "Open in gitpass" and "Open Watchtower" in
   the popup use `open_in_app` to bring the desktop app to the front and navigate
   directly to the item or target view (Watchtower, generator history, or

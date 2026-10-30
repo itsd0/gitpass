@@ -55,8 +55,12 @@
     const attachments = (it && it.has_attachments) ? [
       { id: 'att-1', name: 'passport-scan.pdf', size: 1258291, mime: 'application/pdf' },
     ] : [];
+    const related_items = (it && it.id === 'v1:i0') ? [
+      { id: 'v1:i1', title: 'Recovery codes', category: 'secure_note', available: true },
+      { id: 'v2:i2', title: 'OpenAI API', category: 'api_credential', available: true },
+    ] : [];
     const dAt = trashed.has(it.id) ? new Date(now - 864e5 * 2).toISOString() : undefined;
-    return { ...it, fields, attachments, archived: archived.has(it.id), deleted_at: dAt, notes: it.notes != null ? it.notes : (it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : ''), tags: ['demo'], created_at: now - 864e5 * 30 };
+    return { ...it, fields, attachments, related_items, archived: archived.has(it.id), deleted_at: dAt, notes: it.notes != null ? it.notes : (it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : ''), tags: ['demo'], created_at: now - 864e5 * 30 };
   }
   let unlocked = !['locked', 'appdown', 'nohost'].includes(P.get('view'));
   const appRunning = P.get('view') !== 'appdown';

@@ -245,6 +245,19 @@ mark.hl { background: rgb(var(--accent) / .22); color: rgb(var(--fg)); font-weig
 .ring .fg { stroke: rgb(var(--accent)); transition: stroke-dashoffset 1s linear; }
 .ring.low .fg { stroke: rgb(var(--danger)); }
 .notes { margin-top: 12px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; }
+.d-related { margin-top: 12px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 10px; padding: 10px 12px; }
+.d-related-title { font-size: 11px; color: rgb(var(--label)); text-transform: lowercase; margin-bottom: 6px; }
+.d-related-list { display: flex; flex-direction: column; gap: 4px; }
+.related-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px; outline: none; cursor: pointer; user-select: none; }
+.related-row:hover, .related-row:focus-visible { background: rgb(var(--hover)); }
+.related-row:focus-visible { box-shadow: 0 0 0 2px rgb(var(--accent) / .35); outline: none; }
+.related-row.unavailable { cursor: default; opacity: 0.6; }
+.related-row.unavailable:hover, .related-row.unavailable:focus-visible { background: none; }
+.related-ic { display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: rgb(var(--accent)); }
+.related-ic svg { width: 20px; height: 20px; }
+.related-title { flex: 1; min-width: 0; font-size: 13px; font-weight: 500; color: rgb(var(--fg)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.related-row.unavailable .related-title { color: rgb(var(--muted)); font-style: italic; }
+.back-item-btn { margin-right: -4px; }
 .d-attachments { margin-top: 12px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 10px; padding: 10px 12px; }
 .d-attachments-title { font-size: 11px; color: rgb(var(--label)); text-transform: lowercase; margin-bottom: 6px; }
 .d-attachments-list { display: flex; flex-direction: column; gap: 4px; }

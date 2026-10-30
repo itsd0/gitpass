@@ -934,6 +934,14 @@ document.addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && (e.key === 'e' || e.key === 'E') && !inForm && S.detail && S.detail.category === 'login') {
     e.preventDefault(); startEdit(); return;
   }
+  // Backspace or Alt+Left navigates back in detail history if present
+  if (((e.altKey && e.key === 'ArrowLeft') || e.key === 'Backspace') && !inEditable && !inForm) {
+    if (typeof detailNavHistory !== 'undefined' && detailNavHistory.length > 0) {
+      e.preventDefault();
+      goBackDetail();
+      return;
+    }
+  }
   const sel = window.getSelection && String(window.getSelection());
   const inputSel = a && a.tagName === 'INPUT' && a.selectionStart !== a.selectionEnd;
   const selected = S.rows[S.sel];
