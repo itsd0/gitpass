@@ -508,6 +508,37 @@ impl Session {
     }
     /// Verify-only re-unlock used after a sync pull: same integrity/rollback checks, but never touches the
     /// device registry or upgrades the KDF, so the working tree stays exactly as committed/pulled.
+    /// Read-only unlock: opens the keyset and loads the Account Key without modifying any
+    /// on-disk files (does not touch device registry, does not reseal manifest, does not upgrade KDF).
+    pub fn unlock_readonly(root: &Path, password: &str, secret: &SecretKey) -> Result<Self> {
+        crate::unlock_throttle::check_throttle(root)?;
+        let fmt = read_format(root)?;
+        if fmt.version < MIN_READ_FORMAT { bail!("vault is format v{}; run `gitpass migrate` to upgrade to v{FORMAT_VERSION}", fmt.version); }
+        let (auk, account_key) = match open_keyset_auk(root, &fmt, &root.join("keyset.enc"), password, secret) {
+            Ok(k) => {
+                let _ = crate::unlock_throttle::record_success(root);
+                k
+            }
+            Err(e) => {
+                let _ = crate::unlock_throttle::record_failure(root);
+                return Err(e);
+            }
+        };
+        let device_kek = device_kek(&auk, &fmt.account_id);
+        drop(auk);
+        let device_id = crate::device::local_device_id(root).unwrap_or_default();
+        Ok(Session {
+            root: root.to_path_buf(),
+            fmt,
+            account_key,
+            kdf_upgraded: false,
+            accepted_problems: vec![],
+            device_id,
+            device_revoked: false,
+            device_kek,
+        })
+    }
+
     pub fn reopen_verify(root: &Path, password: &str, secret: &SecretKey, accept_rollback: bool) -> Result<Self> {
         let fmt = read_format(root)?;
         let opts = UnlockOpts { accept_rollback, target_kdf: fmt.kdf.clone() };

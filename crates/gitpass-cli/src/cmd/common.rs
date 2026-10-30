@@ -62,6 +62,13 @@ pub(crate) fn unlock_full(cli: &Cli, root: &Path) -> Result<(Session, Zeroizing<
     Ok((s, pw, sk))
 }
 
+pub(crate) fn unlock_readonly(root: &Path) -> Result<Session> {
+    gitpass_core::unlock_throttle::check_throttle(root)?;
+    let pw = prompt_secret("GITPASS_PASSWORD", "Master password: ")?;
+    let sk = load_secret_key(root)?;
+    Session::unlock_readonly(root, &pw, &sk)
+}
+
 pub(crate) fn unlock(cli: &Cli, root: &Path) -> Result<Session> { Ok(unlock_full(cli, root)?.0) }
 
 pub(crate) fn new_password() -> Result<Zeroizing<String>> {
