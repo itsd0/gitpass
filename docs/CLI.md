@@ -105,6 +105,8 @@ gitpass mv github --to Work
 gitpass rm Personal github
 gitpass history github
 gitpass history github --vault Personal --json
+gitpass show github --password-history
+gitpass show github --password-history --reveal
 gitpass restore github --version 3
 ```
 
@@ -114,9 +116,11 @@ gitpass restore github --version 3
   Secrets are never accepted as command-line arguments to avoid shell-history leaks; `add` prompts
   without echo, accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`,
   `--account-number-stdin`, `--pin-stdin`), or reads key files (`--private-key-file`).
-- `get` prints the item, or only the password with `--password-only`. `--json` prints the
+- `get` and `show` print the item, or only the password with `--password-only`. `--json` prints the
   item with concealed values set to `null` unless `--reveal` is also passed; see the
   README section "Scripting with --json".
+- `show <item> --password-history` (and `get <vault> <item> --password-history`) lists previous passwords
+  with replacement dates (masked by default; use `--reveal` to show values, or `--json` for structured output).
 - `get --copy` and `copy` block for `--clear-secs` (default 30) while the clipboard is
   owned, then clear it; `--clear-secs 0` copies without waiting. `--quiet` never echoes
   the value when no clipboard is available.
@@ -131,8 +135,8 @@ gitpass restore github --version 3
   `--pick <N>`, and `--json`, and never print secrets.
 - `history` lists versions without secrets (current version first); `restore --version N`
   restores a previous version as a new version. Both accept `<vault>/<item>` instead of
-  `--vault` and refuse to guess when several items match.
-- `list`, `find`, `get` and `get --json` skip archived and deleted items unless
+  `--vault` and refuse to guess when several items match. To view previous passwords with replacement dates on a login item, see `gitpass show <item> --password-history`.
+- `list`, `find`, `get`, `show` and `get --json` skip archived and deleted items unless
   `--include-archived` is passed.
 
 ## Attachments

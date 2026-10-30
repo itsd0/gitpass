@@ -1373,7 +1373,7 @@ fn dedup_targets(t: &[(String, String)]) -> Vec<(String, String)> {
     t.iter().filter(|x| seen.insert((*x).clone())).cloned().collect()
 }
 
-// ---------- format v5: typed items, soft delete, history, attachments ----------
+// ---------- format v5: typed items, soft delete, history, attachments, password history ----------
 impl Session {
     /// Add a v5 record (any category). Stamps legacy + v5 clocks and `created_at`; history starts empty.
     pub fn add_record(&self, vid: &str, mut rec: ItemRecord) -> Result<String> {
@@ -1386,6 +1386,9 @@ impl Session {
         rec.clocks = Some(merge::stamp(None, &rec.item, now));
         merge::stamp_ext(None, &mut rec, now);
         rec.history.clear();
+        if rec.password_history.len() > crate::item::PASSWORD_HISTORY_LIMIT {
+            rec.password_history.truncate(crate::item::PASSWORD_HISTORY_LIMIT);
+        }
         self.put_item(vid, &iid, 1, &rec)?;
         Ok(iid)
     }
@@ -1417,6 +1420,19 @@ impl Session {
         if new.removed_attachments.is_empty() { new.removed_attachments = old.removed_attachments.clone(); }
         if new.attachments.is_empty() {
             new.attachments = old.attachments.iter().filter(|a| !new.removed_attachments.contains(&a.id)).cloned().collect();
+        }
+        // Login password history: if the password changed, push old password onto history (newest first, capped at 20)
+        if old.category == crate::item::Category::Login && old.item.password != new.item.password {
+            if let Some(old_pw) = old.item.password.as_deref().map(str::trim).filter(|p| !p.is_empty()) {
+                new.password_history = old.password_history.clone();
+                new.password_history.insert(0, crate::item::PasswordHistoryEntry {
+                    value: old_pw.to_string(),
+                    replaced_at: crate::device::iso8601((now / 1000) as i64),
+                });
+                if new.password_history.len() > crate::item::PASSWORD_HISTORY_LIMIT {
+                    new.password_history.truncate(crate::item::PASSWORD_HISTORY_LIMIT);
+                }
+            }
         }
         new.clocks = Some(merge::stamp(Some((&old.item, old.clocks_or_legacy())), &new.item, now));
         merge::stamp_ext(Some(&old), &mut new, now);

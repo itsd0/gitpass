@@ -328,6 +328,31 @@ EXAMPLES:
         /// Include archived and deleted items
         #[arg(long)]
         include_archived: bool,
+        /// List previous passwords with replacement dates
+        #[arg(long)]
+        password_history: bool,
+    },
+    /// Show an item or its password history
+    Show {
+        /// Item query (id, title, or <vault>/<item>)
+        item: String,
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Vault containing the item
+        #[arg(long)]
+        vault: Option<String>,
+        /// List previous passwords with replacement dates
+        #[arg(long)]
+        password_history: bool,
+        /// Reveal concealed field values
+        #[arg(long)]
+        reveal: bool,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+        /// Include archived and deleted items
+        #[arg(long)]
+        include_archived: bool,
     },
     /// Copy an item field (default password) to the clipboard; blocks up to --clear-secs, then clears it
     Copy { vault: String, query: String,
@@ -496,7 +521,7 @@ EXAMPLES:
     },
     /// Remove an item
     Rm { vault: String, id: String },
-    /// Version history of an item (no secrets)
+    /// Version history of an item (no secrets). For previous passwords on a login item, see `gitpass show <item> --password-history`.
     History {
         /// Item query (id, title, or <vault>/<item>)
         item: String,
@@ -1569,6 +1594,14 @@ struct CliItemDetail {
     related_item_ids: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     related_items: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    password_history: Vec<CliPasswordHistoryEntry>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+struct CliPasswordHistoryEntry {
+    replaced_at: String,
+    password: String,
 }
 
 fn ts(s: &str) -> String {
@@ -1728,6 +1761,14 @@ fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<Stri
         fields,
         related_item_ids: r.related_item_ids.clone(),
         related_items: r.related_item_ids.clone(),
+        password_history: if r.category == Category::Login {
+            r.password_history.iter().map(|h| CliPasswordHistoryEntry {
+                replaced_at: ts(&h.replaced_at),
+                password: if reveal { h.value.clone() } else { "••••••••••".to_string() },
+            }).collect()
+        } else {
+            vec![]
+        },
     }
 }
 
@@ -2767,7 +2808,7 @@ fn run() -> Result<()> {
             };
             println!("added {}", s.add_record(&vid, rec)?);
         }
-        Cmd::Get { vault, query, password_only, pick, copy, field, clear_secs, quiet, json, reveal, include_archived } => {
+        Cmd::Get { vault, query, password_only, pick, copy, field, clear_secs, quiet, json, reveal, include_archived, password_history } => {
             if *json && *password_only {
                 bail!("cannot combine --json and --password-only");
             }
@@ -2777,7 +2818,23 @@ fn run() -> Result<()> {
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;
             let (id, rec) = pick_record(&s, &vid, query, *pick, *include_archived)?;
-            if *json {
+            if *password_history {
+                let entries: Vec<CliPasswordHistoryEntry> = rec.password_history.iter().map(|h| {
+                    CliPasswordHistoryEntry {
+                        replaced_at: ts(&h.replaced_at),
+                        password: if *reveal { h.value.clone() } else { "••••••••••".to_string() },
+                    }
+                }).collect();
+                if *json {
+                    println!("{}", serde_json::to_string_pretty(&entries)?);
+                } else if entries.is_empty() {
+                    println!("No password history for this item.");
+                } else {
+                    for e in &entries {
+                        println!("{}  {}", e.replaced_at, e.password);
+                    }
+                }
+            } else if *json {
                 if *reveal {
                     let _ = s.touch_item_used(&id);
                 }
@@ -2805,6 +2862,50 @@ fn run() -> Result<()> {
                     }
                 }).collect();
                 print_item(&id, &rec, *reveal, &related_titles);
+            }
+        }
+        Cmd::Show { item, item2, vault, password_history, reveal, json, include_archived } => {
+            let s = unlock(&cli, &root)?;
+            let (vault_arg, item_query) = match item2 {
+                Some(ref i2) => (Some(item.as_str()), i2.as_str()),
+                None => (vault.as_deref(), item.as_str()),
+            };
+            let (vid, iid) = resolve_item_across_vaults(&s, vault_arg, item_query)?;
+            let (_, rec) = s.read_record(&vid, &iid)?;
+            if !include_archived && (rec.deleted_at.is_some() || rec.archived) {
+                bail!("item '{iid}' is archived or deleted (use --include-archived to include it)");
+            }
+            if *password_history {
+                let entries: Vec<CliPasswordHistoryEntry> = rec.password_history.iter().map(|h| {
+                    CliPasswordHistoryEntry {
+                        replaced_at: ts(&h.replaced_at),
+                        password: if *reveal { h.value.clone() } else { "••••••••••".to_string() },
+                    }
+                }).collect();
+                if *json {
+                    println!("{}", serde_json::to_string_pretty(&entries)?);
+                } else if entries.is_empty() {
+                    println!("No password history for this item.");
+                } else {
+                    for e in &entries {
+                        println!("{}  {}", e.replaced_at, e.password);
+                    }
+                }
+            } else if *json {
+                if *reveal {
+                    let _ = s.touch_item_used(&iid);
+                }
+                let last_used_at = s.last_used(&iid).map(|t| gitpass_core::device::iso8601(t as i64));
+                let detail = item_detail(&iid, &rec, *reveal, last_used_at);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                let related_titles: Vec<String> = rec.related_item_ids.iter().map(|rid| {
+                    match s.get_record_by_id(rid) {
+                        Ok(Some((_, _, rel_rec))) if rel_rec.deleted_at.is_none() => rel_rec.item.title.clone(),
+                        _ => "Item not available".to_string(),
+                    }
+                }).collect();
+                print_item(&iid, &rec, *reveal, &related_titles);
             }
         }
         Cmd::Copy { vault, query, field, pick, clear_secs, quiet } => {

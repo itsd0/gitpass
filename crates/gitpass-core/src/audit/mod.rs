@@ -1213,4 +1213,32 @@ mod tests {
         assert_eq!(rep_ign.ignored_per_item.len(), 1);
         assert!(rep_ign.ignored_per_item[0].findings.contains(&Finding::WeakSshKey { bits: 2048 }));
     }
+
+    #[test]
+    fn test_watchtower_own_password_history_not_flagged_as_reused() {
+        let mut it = Item::default();
+        it.title = "Single Item".into();
+        it.username = Some("alice".into());
+        it.password = Some("Complex-P@ssword-1234!".into());
+        it.url = Some("https://example.com".into());
+        it.updated_at = "1700000000".into();
+        let mut login = ItemRecord::new(it);
+        login.password_history.push(crate::item::PasswordHistoryEntry {
+            value: "Complex-P@ssword-1234!".into(),
+            replaced_at: "2024-01-01T00:00:00Z".into(),
+        });
+        login.password_history.push(crate::item::PasswordHistoryEntry {
+            value: "Older-Complex-P@ss-5678!".into(),
+            replaced_at: "2023-01-01T00:00:00Z".into(),
+        });
+
+        let items = vec![("vault1".into(), "item1".into(), login)];
+        let report = audit(&items, &AuditOpts::default(), None).unwrap();
+        assert_eq!(report.reused, 0);
+        assert_eq!(report.reused_groups, 0);
+        let item1 = report.per_item.iter().find(|i| i.id == "item1");
+        if let Some(i) = item1 {
+            assert!(!i.findings.iter().any(|f| matches!(f, Finding::Reused { .. })));
+        }
+    }
 }

@@ -85,6 +85,9 @@ pub struct ItemRecord {
     /// Item ids of related items (one-way references within the same account).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related_item_ids: Vec<String>,
+    /// Prior passwords on a login item (newest first, capped at [`crate::item::PASSWORD_HISTORY_LIMIT`]).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub password_history: Vec<crate::item::PasswordHistoryEntry>,
 }
 fn is_login(c: &Category) -> bool { *c == Category::Login }
 fn is_false(b: &bool) -> bool { !*b }
@@ -360,6 +363,16 @@ fn merge_ext(local: &ItemRecord, remote: &ItemRecord, out: &mut ItemRecord) -> (
     out.history.sort_by_key(|h| h.version);
     let n = out.history.len();
     if n > crate::item::HISTORY_LIMIT { out.history.drain(..n - crate::item::HISTORY_LIMIT); }
+    // password_history: union by (value, replaced_at), keep newest PASSWORD_HISTORY_LIMIT
+    for ph in &remote.password_history {
+        if !out.password_history.iter().any(|x| x.value == ph.value && x.replaced_at == ph.replaced_at) {
+            out.password_history.push(ph.clone());
+        }
+    }
+    out.password_history.sort_by(|a, b| b.replaced_at.cmp(&a.replaced_at));
+    if out.password_history.len() > crate::item::PASSWORD_HISTORY_LIMIT {
+        out.password_history.truncate(crate::item::PASSWORD_HISTORY_LIMIT);
+    }
     out.created_at = match (local.created_at, remote.created_at) { (Some(a), Some(b)) => Some(a.min(b)), (a, b) => a.or(b) };
     (from_r, conf)
 }

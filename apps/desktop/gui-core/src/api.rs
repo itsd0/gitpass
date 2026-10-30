@@ -72,6 +72,11 @@ pub struct RelatedItem {
     pub available: bool,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordHistoryRef {
+    pub replaced_at: String,
+}
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDetail {
@@ -90,6 +95,8 @@ pub struct ItemDetail {
     pub related_items: Vec<RelatedItem>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related_item_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub password_history: Vec<PasswordHistoryRef>,
 }
 /// One item reference for bulk commands.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -632,6 +639,11 @@ fn detail(s: &Session, vid: &str, iid: &str, version: u64, r: &ItemRecord, findi
         password_changed_at: r.password_changed_at().map(|t| iso8601(t as i64)),
         related_items: resolve_related_items(s, &r.related_item_ids),
         related_item_ids: r.related_item_ids.clone(),
+        password_history: if r.category == Category::Login {
+            r.password_history.iter().map(|h| PasswordHistoryRef { replaced_at: ts(&h.replaced_at) }).collect()
+        } else {
+            vec![]
+        },
     }
 }
 
@@ -998,6 +1010,12 @@ impl App {
                 Some(v) => u.session.item_version(vault_id, item_id, v)?,
                 None => u.session.read_record(vault_id, item_id)?.1,
             };
+            if let Some(idx_str) = field_id.strip_prefix("password_history:") {
+                let idx: usize = idx_str.parse().map_err(|_| anyhow!("invalid history index"))?;
+                let entry = r.password_history.get(idx).ok_or_else(|| anyhow!("no password history at index {idx}"))?;
+                let _ = u.session.touch_item_used(item_id);
+                return Ok(Zeroizing::new(entry.value.clone()));
+            }
             let f = r.find_field(field_id).or_else(|| {
                 if version.is_some() {
                     u.session.read_record(vault_id, item_id).ok().and_then(|(_, cur)| cur.find_field(field_id))
@@ -1015,6 +1033,12 @@ impl App {
     pub fn copy_field(&self, vault_id: &str, item_id: &str, field_id: &str) -> Result<()> {
         let (v, markers) = self.with(|u| {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
+            if let Some(idx_str) = field_id.strip_prefix("password_history:") {
+                let idx: usize = idx_str.parse().map_err(|_| anyhow!("invalid history index"))?;
+                let entry = r.password_history.get(idx).ok_or_else(|| anyhow!("no password history at index {idx}"))?;
+                let _ = u.session.touch_item_used(item_id);
+                return Ok((Zeroizing::new(entry.value.clone()), Some(PasteboardMarkers::SECRET)));
+            }
             let f = r.find_field(field_id).ok_or_else(|| anyhow!("item has no field '{field_id}'"))?;
             let markers = is_secret_copy(r.category, &f).then_some(PasteboardMarkers::SECRET);
             let raw = f.value.clone().filter(|v| !v.is_empty()).ok_or_else(|| anyhow!("field '{field_id}' is empty"))?;
@@ -1157,6 +1181,13 @@ impl App {
     }
     pub fn remove_related_item(&self, vault_id: &str, item_id: &str, related_id: &str) -> Result<()> {
         self.write(|u| u.session.remove_related_item(vault_id, item_id, related_id))
+    }
+    pub fn clear_password_history(&self, vault_id: &str, item_id: &str) -> Result<()> {
+        self.write(|u| {
+            let (_, mut r) = u.session.read_record(vault_id, item_id)?;
+            r.password_history.clear();
+            u.session.update_record(vault_id, item_id, r)
+        })
     }
     /// Permanently delete every item in Recently Deleted (all vaults) in one commit.
     /// Returns how many items were purged; an empty trash is a no-op.

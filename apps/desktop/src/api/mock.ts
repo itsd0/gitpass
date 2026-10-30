@@ -8,7 +8,7 @@ const delay = <R>(v: R, ms = 60): Promise<R> => new Promise((r) => setTimeout(()
 let seq = 1000;
 const uid = (p: string) => `${p}_${(seq++).toString(36)}`;
 
-interface Rec { detail: T.ItemDetail; secrets: Record<string, string>; versions: T.ItemDetail[] }
+interface Rec { detail: T.ItemDetail; secrets: Record<string, string>; versions: T.ItemDetail[]; passwordHistory?: { value: string; replacedAt: string }[] }
 
 // Fake keys in the real wire format (base64 of 32 bytes, optional `gitpass-x25519:` prefix).
 const PUB_RE = /^(gitpass-x25519:)?[A-Za-z0-9+/]{43}=$/;
@@ -58,7 +58,8 @@ function add(vaultId: string, category: T.ItemCategory, title: string, subtitle:
     history: [{ version: 1, updatedAt: ts }], passwordStrength: pwField ? strength(secrets[pwField.id]) : null, passwordChangedAt: pwField ? ts : null,
     hasTotp: fs.some((x) => x.kind === 'totp'), ignoredFindings: [], ...extra,
   };
-  db.set(d.id, { detail: d, secrets, versions: [] });
+  const pwHistory = extra.passwordHistory ? extra.passwordHistory.map((h, i) => ({ value: `old-fake-pw-${i + 1}`, replacedAt: h.replacedAt })) : [];
+  db.set(d.id, { detail: d, secrets, versions: [], passwordHistory: pwHistory });
   return d;
 }
 
@@ -225,6 +226,16 @@ function applyInput(r: Rec, input: T.ItemInput) {
   const pw = sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed');
   r.detail.passwordStrength = pw && secrets[pw.id] ? strength(secrets[pw.id]) : null;
   if (pw && secrets[pw.id]) { if (!r.detail.passwordChangedAt) r.detail.passwordChangedAt = r.detail.updatedAt; } else { r.detail.passwordChangedAt = null; }
+  const oldPwFld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed' && /password/i.test(x.label));
+  const oldPw = oldPwFld ? r.secrets[oldPwFld.id] : undefined;
+  const newPwFld = sections.flatMap((s) => s.fields).find((x) => x.kind === 'concealed' && /password/i.test(x.label));
+  const newPw = newPwFld ? secrets[newPwFld.id] : undefined;
+  if (r.detail.category === 'login' && oldPw && newPw && oldPw !== newPw) {
+    if (!r.passwordHistory) r.passwordHistory = [];
+    r.passwordHistory.unshift({ value: oldPw, replacedAt: new Date().toISOString() });
+    if (r.passwordHistory.length > 20) r.passwordHistory.splice(20);
+    r.detail.passwordHistory = r.passwordHistory.map((h) => ({ replacedAt: h.replacedAt }));
+  }
 }
 /** Rough browser-mock copy of core `change_password_url` (the real derivation runs in Rust). */
 function changePwUrl(raw: string | null | undefined): string | undefined {
@@ -454,16 +465,33 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   reveal_field: (a: { itemId: string; fieldId: string; version?: number | null }) => {
     const r = get(a.itemId);
     r.detail.lastUsed = Math.floor(Date.now() / 1000);
+    if (a.fieldId.startsWith('password_history:')) {
+      const idx = parseInt(a.fieldId.replace('password_history:', ''), 10);
+      const val = r.passwordHistory?.[idx]?.value;
+      return val == null ? Promise.reject(new Error('no password history at index')) : delay(val);
+    }
     const v = r.secrets[a.fieldId] ?? r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId)?.value;
     return v == null ? Promise.reject(new Error('not a concealed field')) : delay(v);
   },
   copy_field: (a: { itemId: string; fieldId: string }) => {
     const r = get(a.itemId);
     r.detail.lastUsed = Math.floor(Date.now() / 1000);
+    if (a.fieldId.startsWith('password_history:')) {
+      const idx = parseInt(a.fieldId.replace('password_history:', ''), 10);
+      const val = r.passwordHistory?.[idx]?.value ?? '';
+      navigator.clipboard?.writeText(val).catch(() => {});
+      return delay(undefined);
+    }
     const fld = r.detail.sections.flatMap((s) => s.fields).find((x) => x.id === a.fieldId);
     const v = r.secrets[a.fieldId] ?? fld?.value ?? '';
     // In Tauri the copy happens in Rust; the browser mock best-effort uses the clipboard API.
     navigator.clipboard?.writeText(v).catch(() => {});
+    return delay(undefined);
+  },
+  clear_password_history: (a: { itemId: string }) => {
+    const r = get(a.itemId);
+    r.passwordHistory = [];
+    r.detail.passwordHistory = [];
     return delay(undefined);
   },
   totp_now: () => { const period = 30; const now = Math.floor(Date.now() / 1000); const code = String((Math.floor(now / period) * 7919) % 1000000).padStart(6, '0'); return delay({ code, remaining: period - (now % period), period }, 10); },

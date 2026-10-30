@@ -112,3 +112,60 @@ fn history_and_restore_workflow() {
     assert!(!out_del.status.success());
     assert!(String::from_utf8_lossy(&out_del.stderr).contains("cannot restore version of deleted item"));
 }
+
+#[test]
+fn show_password_history_masked_and_revealed() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Personal"], None).status.success());
+
+    let sk = SecretKey::parse(&std::fs::read_to_string(root.join("secret.key")).unwrap()).unwrap();
+    let s = Session::unlock(&root, "fake-master-pw-123", &sk).unwrap();
+    let vid = s.resolve_vault("Personal").unwrap();
+
+    let mut it = Item::default();
+    it.title = "Test Service".into();
+    it.username = Some("bob@example.invalid".into());
+    it.password = Some("pw-initial-secret".into());
+    let mut r1 = ItemRecord::new(it);
+    r1.category = Category::Login;
+    let item_id = s.add_record(&vid, r1).unwrap();
+
+    // Update password to trigger history entry
+    let (_, mut r2) = s.read_record(&vid, &item_id).unwrap();
+    r2.item.password = Some("pw-updated-current".into());
+    s.update_record(&vid, &item_id, r2).unwrap();
+
+    // 1. gitpass show <item> --password-history lists masked values by default
+    let out_masked = gp(&root, &["show", &item_id, "--password-history"], None);
+    assert!(out_masked.status.success(), "stderr: {}", String::from_utf8_lossy(&out_masked.stderr));
+    let masked_str = String::from_utf8_lossy(&out_masked.stdout);
+    assert!(masked_str.contains("••••••••••"), "stdout: {masked_str}");
+    assert!(!masked_str.contains("pw-initial-secret"), "should mask secrets");
+
+    // 2. gitpass show <item> --password-history --reveal shows the real historical password
+    let out_reveal = gp(&root, &["show", &item_id, "--password-history", "--reveal"], None);
+    assert!(out_reveal.status.success(), "stderr: {}", String::from_utf8_lossy(&out_reveal.stderr));
+    let reveal_str = String::from_utf8_lossy(&out_reveal.stdout);
+    assert!(reveal_str.contains("pw-initial-secret"), "stdout: {reveal_str}");
+
+    // 3. gitpass show <item> --password-history --json
+    let out_json = gp(&root, &["show", &item_id, "--password-history", "--json"], None);
+    assert!(out_json.status.success(), "stderr: {}", String::from_utf8_lossy(&out_json.stderr));
+    let json_val: Vec<serde_json::Value> = serde_json::from_str(&String::from_utf8_lossy(&out_json.stdout)).unwrap();
+    assert_eq!(json_val.len(), 1);
+    assert_eq!(json_val[0]["password"], "••••••••••");
+    assert!(!json_val[0]["replaced_at"].as_str().unwrap().is_empty());
+
+    // 4. gitpass show <item> --password-history --json --reveal
+    let out_json_rev = gp(&root, &["show", &item_id, "--password-history", "--json", "--reveal"], None);
+    assert!(out_json_rev.status.success());
+    let json_rev_val: Vec<serde_json::Value> = serde_json::from_str(&String::from_utf8_lossy(&out_json_rev.stdout)).unwrap();
+    assert_eq!(json_rev_val[0]["password"], "pw-initial-secret");
+
+    // 5. gitpass get Personal <item> --password-history also works
+    let out_get_hist = gp(&root, &["get", "Personal", &item_id, "--password-history", "--reveal"], None);
+    assert!(out_get_hist.status.success());
+    assert!(String::from_utf8_lossy(&out_get_hist.stdout).contains("pw-initial-secret"));
+}

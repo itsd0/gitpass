@@ -670,3 +670,43 @@ fn session_related_item_linking_and_unlinking() {
     let (_, r1) = s.read_record(&vid, &id1).unwrap();
     assert!(r1.related_item_ids.is_empty());
 }
+
+#[test]
+fn test_password_history_tracked_on_password_changes_and_capped() {
+    let (_d, _sk, s, v) = vault();
+    let mut initial_rec = rec(Category::Login, "Login 1", vec![]);
+    initial_rec.item.password = Some("pw-0".into());
+    let id = s.add_record(&v, initial_rec).unwrap();
+
+    let (_, r0) = s.read_record(&v, &id).unwrap();
+    assert!(r0.password_history.is_empty(), "history starts empty");
+
+    // 1. Edit notes without changing password: no history added
+    let mut r_note = r0.clone();
+    r_note.item.notes = Some("note added".into());
+    s.update_record(&v, &id, r_note).unwrap();
+    let (_, r1) = s.read_record(&v, &id).unwrap();
+    assert!(r1.password_history.is_empty(), "editing notes does not append password history");
+
+    // 2. Change password to pw-1: pw-0 is in history
+    let mut r_pw1 = r1.clone();
+    r_pw1.item.password = Some("pw-1".into());
+    s.update_record(&v, &id, r_pw1).unwrap();
+    let (_, r2) = s.read_record(&v, &id).unwrap();
+    assert_eq!(r2.password_history.len(), 1);
+    assert_eq!(r2.password_history[0].value, "pw-0");
+    assert!(!r2.password_history[0].replaced_at.is_empty());
+
+    // 3. Change password 25 times to test capping at 20
+    for i in 2..=26 {
+        let (_, cur) = s.read_record(&v, &id).unwrap();
+        let mut next = cur.clone();
+        next.item.password = Some(format!("pw-{i}"));
+        s.update_record(&v, &id, next).unwrap();
+    }
+    let (_, r_final) = s.read_record(&v, &id).unwrap();
+    assert_eq!(r_final.password_history.len(), 20, "capped at 20");
+    // Newest first: pw-25 was replaced by pw-26, so pw-25 is at index 0
+    assert_eq!(r_final.password_history[0].value, "pw-25");
+    assert_eq!(r_final.password_history[19].value, "pw-6");
+}
