@@ -63,6 +63,11 @@ fn bitwarden_json_fixture() {
     let pin = m.view_sections().into_iter().flat_map(|s| s.fields).find(|f| f.label == "Recovery PIN").unwrap();
     assert_eq!((pin.kind, pin.value.as_deref()), (FieldKind::Concealed, Some("4242"))); // hidden field stays concealed
     assert_eq!(m.item.updated_at, "1741944413");
+    assert_eq!(m.password_history.len(), 2);
+    assert_eq!(m.password_history[0].value, "Older-P@ss-2025");
+    assert_eq!(m.password_history[0].replaced_at, "2025-01-15T10:30:00.000Z");
+    assert_eq!(m.password_history[1].value, "Oldest-P@ss-2024");
+    assert_eq!(m.password_history[1].replaced_at, "2024-05-01T08:00:00.000Z");
     assert_eq!(by(&recs, "ဘဏ် အကောင့်").tags, vec!["မိသားစု"]);
     let c = by(&recs, "Fake Visa");
     assert_eq!(c.category, Category::CreditCard);
@@ -464,6 +469,9 @@ fn onepif_fixture_mapped_types_tags_totp_trashed_and_malformed() {
     assert!(webform.tags.contains(&"staging".to_string()));
     assert_eq!(webform.created_at, Some(1700000000));
     assert_eq!(webform.item.updated_at, "1700005000");
+    assert_eq!(webform.password_history.len(), 1);
+    assert_eq!(webform.password_history[0].value, "FAKE-pw-webform-older");
+    assert_eq!(webform.password_history[0].replaced_at, "2023-11-14T22:46:40Z");
 
     // 3. Credit Card
     let card = p.items.iter().find(|it| it.item.title == "Corporate Platinum Card").unwrap();

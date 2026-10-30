@@ -322,6 +322,31 @@ EXAMPLES:
         /// Include archived and deleted items
         #[arg(long)]
         include_archived: bool,
+        /// List previous passwords with replacement dates
+        #[arg(long)]
+        password_history: bool,
+    },
+    /// Show an item or its password history
+    Show {
+        /// Item query (id, title, or <vault>/<item>)
+        item: String,
+        #[arg(hide = true)]
+        item2: Option<String>,
+        /// Vault containing the item
+        #[arg(long)]
+        vault: Option<String>,
+        /// List previous passwords with replacement dates
+        #[arg(long)]
+        password_history: bool,
+        /// Reveal concealed field values
+        #[arg(long)]
+        reveal: bool,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+        /// Include archived and deleted items
+        #[arg(long)]
+        include_archived: bool,
     },
     /// Copy an item field (default password) to the clipboard; blocks up to --clear-secs, then clears it
     Copy { vault: String, query: String,
@@ -404,6 +429,15 @@ EXAMPLES:
         /// Unmark item as favorite
         #[arg(long, conflicts_with = "favorite")]
         unfavorite: bool,
+        /// Remind me to change this login's password every 30d, 90d, 180d or 365d (or `none` to clear)
+        #[arg(long = "rotate-every", value_name = "30d|90d|180d|365d|none")]
+        rotate_every: Option<String>,
+        /// Add a related item link (by title or ID, repeatable)
+        #[arg(long = "link", alias = "related", action = clap::ArgAction::Append)]
+        link: Vec<String>,
+        /// Remove a related item link (by title or ID, repeatable)
+        #[arg(long = "unlink", alias = "unrelated", action = clap::ArgAction::Append)]
+        unlink: Vec<String>,
         /// Choose the n-th (1-based) ranked candidate when several match
         #[arg(long)]
         pick: Option<usize>,
@@ -484,7 +518,7 @@ EXAMPLES:
     },
     /// Remove an item
     Rm { vault: String, id: String },
-    /// Version history of an item (no secrets)
+    /// Version history of an item (no secrets). For previous passwords on a login item, see `gitpass show <item> --password-history`.
     History {
         /// Item query (id, title, or <vault>/<item>)
         item: String,
@@ -602,7 +636,8 @@ EXAMPLES:
     Device { #[command(subcommand)] cmd: DeviceCmd },
     /// Account identity (X25519) used for vault sharing
     Identity { #[command(subcommand)] cmd: IdentityCmd },
-    /// Import items from another password manager's export file
+    /// Import items from another password manager's export file (a password-protected Bitwarden
+    /// JSON asks for the export password: $GITPASS_IMPORT_PASSWORD or a prompt)
     Import {
         vault: String,
         /// bitwarden-json | bitwarden-csv | generic-csv | 1pux | 1pif | keepass-csv | chrome-csv | apple-passwords-csv | lastpass-csv | protonpass-csv | gitpass-json
@@ -627,7 +662,7 @@ EXAMPLES:
     ///
     /// Finding kinds: weak (incl. passwords containing the username or site name), reused, old,
     /// pwned (only with --hibp), duplicate, expired, expiring_soon, insecure_url, missing_totp,
-    /// totp_available, passkey_available, weak_ssh_key, unused. Findings you ignored in the app are counted but only
+    /// totp_available, passkey_available, weak_ssh_key, unused, rotation_due, rotation_soon. Findings you ignored in the app are counted but only
     /// listed with --include-ignored. See docs/WATCHTOWER.md.
     Audit {
         /// Vault (default: all vaults)

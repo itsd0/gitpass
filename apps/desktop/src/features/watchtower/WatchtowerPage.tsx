@@ -106,6 +106,8 @@ const ISSUE_TO_KIND: Record<IssueKey, string> = {
   insecureUrls: "insecure_url",
   weakSshKey: "weak_ssh_key",
   unused: "unused",
+  rotationDue: "rotation_due",
+  rotationSoon: "rotation_soon",
 };
 
 export function WatchtowerPage() {
@@ -121,6 +123,8 @@ export function WatchtowerPage() {
     { key: "insecureUrls" as const, titleKey: "watchtower.insecureUrls" as const, descKey: "watchtower.insecureUrlsDesc" as const, Icon: Globe },
     { key: "weakSshKey" as const, titleKey: "watchtower.weakSshKey" as const, descKey: "watchtower.weakSshKeyDesc" as const, Icon: Key },
     { key: "unused" as const, titleKey: "watchtower.unusedItems" as const, descKey: "watchtower.unusedItemsDesc" as const, Icon: History },
+    { key: "rotationDue" as const, titleKey: "watchtower.rotationDue" as const, descKey: "watchtower.rotationDueDesc" as const, Icon: RefreshCw },
+    { key: "rotationSoon" as const, titleKey: "watchtower.rotationSoon" as const, descKey: "watchtower.rotationSoonDesc" as const, Icon: CalendarClock },
   ].map((c) => ({ ...c, title: t(c.titleKey), desc: t(c.descKey) }));
   const { selectItem, setRoute, setEditing } = useApp();
   const settings = useSettings((st) => st.settings);
@@ -377,7 +381,8 @@ export function WatchtowerPage() {
               : null;
           const kind = ISSUE_TO_KIND[key];
           // Change password is offered for password-related findings only (issue #92).
-          const canChangePassword = key === "weak" || key === "reused" || key === "breached";
+          const canChangePassword = key === "weak" || key === "reused" || key === "breached" || key === "rotationDue" || key === "rotationSoon";
+          const rotationDays = new Map((key === "rotationDue" ? report?.rotationDue : key === "rotationSoon" ? report?.rotationSoon : undefined)?.map((r) => [r.itemId, r.days]));
           return (
             <section key={key} aria-label={title} className="rounded-xl border border-border bg-panel p-4">
               <div className="flex items-center gap-2">
@@ -387,7 +392,7 @@ export function WatchtowerPage() {
                     ids.length
                       ? key === "expired"
                         ? "text-danger"
-                        : key === "expiringSoon"
+                        : key === "expiringSoon" || key === "rotationSoon"
                         ? "text-accent"
                         : "text-warn"
                       : "text-ok"
@@ -651,7 +656,17 @@ export function WatchtowerPage() {
                       key={id}
                       id={id}
                       title={titles[id]?.title ?? id}
-                      reason={key === "weak" ? report?.weakReasons?.[id] : undefined}
+                      reason={
+                        key === "weak"
+                          ? report?.weakReasons?.[id]
+                          : key === "rotationDue"
+                          ? t("watchtower.rotationDueReason", { n: rotationDays.get(id) ?? 0 })
+                          : key === "rotationSoon"
+                          ? rotationDays.get(id) === 1
+                            ? t("watchtower.rotationSoonReasonOne")
+                            : t("watchtower.rotationSoonReason", { n: rotationDays.get(id) ?? 0 })
+                          : undefined
+                      }
                       onOpen={() => open(id)}
                       onIgnore={() => ignoreFinding(id, kind)}
                       onChangePassword={

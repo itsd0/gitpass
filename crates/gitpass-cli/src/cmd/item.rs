@@ -647,7 +647,7 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             };
             println!("added {}", s.add_record(&vid, rec)?);
         }
-        Cmd::Get { vault, query, password_only, pick, copy, field, clear_secs, quiet, json, reveal, include_archived } => {
+        Cmd::Get { vault, query, password_only, pick, copy, field, clear_secs, quiet, json, reveal, include_archived, password_history } => {
             if *json && *password_only {
                 bail!("cannot combine --json and --password-only");
             }
@@ -657,7 +657,23 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             let s = unlock(cli, root)?;
             let vid = s.resolve_vault(vault)?;
             let (id, rec) = pick_record(&s, &vid, query, *pick, *include_archived)?;
-            if *json {
+            if *password_history {
+                let entries: Vec<CliPasswordHistoryEntry> = rec.password_history.iter().map(|h| {
+                    CliPasswordHistoryEntry {
+                        replaced_at: ts(&h.replaced_at),
+                        password: if *reveal { h.value.clone() } else { "••••••••••".to_string() },
+                    }
+                }).collect();
+                if *json {
+                    println!("{}", serde_json::to_string_pretty(&entries)?);
+                } else if entries.is_empty() {
+                    println!("No password history for this item.");
+                } else {
+                    for e in &entries {
+                        println!("{}  {}", e.replaced_at, e.password);
+                    }
+                }
+            } else if *json {
                 if *reveal {
                     let _ = s.touch_item_used(&id);
                 }
@@ -678,7 +694,57 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
                 }).unwrap_or_default();
                 println!("{secret}");
             } else {
-                print_item(&id, &rec, *reveal);
+                let related_titles: Vec<String> = rec.related_item_ids.iter().map(|rid| {
+                    match s.get_record_by_id(rid) {
+                        Ok(Some((_, _, rel_rec))) if rel_rec.deleted_at.is_none() => rel_rec.item.title.clone(),
+                        _ => "Item not available".to_string(),
+                    }
+                }).collect();
+                print_item(&id, &rec, *reveal, &related_titles);
+            }
+        }
+        Cmd::Show { item, item2, vault, password_history, reveal, json, include_archived } => {
+            let s = unlock(cli, root)?;
+            let (vault_arg, item_query) = match item2 {
+                Some(ref i2) => (Some(item.as_str()), i2.as_str()),
+                None => (vault.as_deref(), item.as_str()),
+            };
+            let (vid, iid) = resolve_item_across_vaults(&s, vault_arg, item_query)?;
+            let (_, rec) = s.read_record(&vid, &iid)?;
+            if !include_archived && (rec.deleted_at.is_some() || rec.archived) {
+                bail!("item '{iid}' is archived or deleted (use --include-archived to include it)");
+            }
+            if *password_history {
+                let entries: Vec<CliPasswordHistoryEntry> = rec.password_history.iter().map(|h| {
+                    CliPasswordHistoryEntry {
+                        replaced_at: ts(&h.replaced_at),
+                        password: if *reveal { h.value.clone() } else { "••••••••••".to_string() },
+                    }
+                }).collect();
+                if *json {
+                    println!("{}", serde_json::to_string_pretty(&entries)?);
+                } else if entries.is_empty() {
+                    println!("No password history for this item.");
+                } else {
+                    for e in &entries {
+                        println!("{}  {}", e.replaced_at, e.password);
+                    }
+                }
+            } else if *json {
+                if *reveal {
+                    let _ = s.touch_item_used(&iid);
+                }
+                let last_used_at = s.last_used(&iid).map(|t| gitpass_core::device::iso8601(t as i64));
+                let detail = item_detail(&iid, &rec, *reveal, last_used_at);
+                println!("{}", serde_json::to_string_pretty(&detail)?);
+            } else {
+                let related_titles: Vec<String> = rec.related_item_ids.iter().map(|rid| {
+                    match s.get_record_by_id(rid) {
+                        Ok(Some((_, _, rel_rec))) if rel_rec.deleted_at.is_none() => rel_rec.item.title.clone(),
+                        _ => "Item not available".to_string(),
+                    }
+                }).collect();
+                print_item(&iid, &rec, *reveal, &related_titles);
             }
         }
         Cmd::Copy { vault, query, field, pick, clear_secs, quiet } => {
@@ -808,11 +874,16 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             untag,
             favorite,
             unfavorite,
+            rotate_every,
+            link,
+            unlink,
             pick,
             json,
         } => {
+            let rotation = rotate_every.as_deref().map(parse_rotation).transpose()?;
             let s = unlock(cli, root)?;
             let (vid, iid, mut rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, false)?;
+            if let Some(r) = rotation { rec.rotate_every_days = r; }
             if let Some(v) = title { rec.item.title = v.clone(); }
             if let Some(v) = username { rec.item.username = Some(v.clone()); }
             if let Some(v) = url { rec.item.url = Some(v.clone()); }
@@ -836,6 +907,25 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             }
             if *unfavorite {
                 rec.favorite = false;
+            }
+            for l in link {
+                let l_trim = l.trim();
+                if l_trim.is_empty() { continue; }
+                let target_id = if s.find_item_vault(l_trim)?.is_some() {
+                    l_trim.to_string()
+                } else {
+                    pick_record(&s, &vid, l_trim, *pick, false).map(|(id, _)| id)?
+                };
+                if target_id == iid {
+                    bail!("cannot link an item to itself");
+                }
+                if !rec.related_item_ids.contains(&target_id) {
+                    rec.related_item_ids.push(target_id);
+                }
+            }
+            for u in unlink {
+                let u_trim = u.trim();
+                rec.related_item_ids.retain(|id| id != u_trim);
             }
             rec.item.updated_at = store::now();
             s.update_record(&vid, &iid, rec)?;

@@ -6,9 +6,7 @@
 # ("Writing release notes") for the labelling convention.
 #
 # NOTE: this file only affects releases created in the repo that contains it.
-# Releases are currently drafted on itsd0/gitpass-releases, so until #292
-# moves release hosting to itsd0/gitpass, copy this file to
-# itsd0/gitpass-releases (same path) for its drafts to pick it up.
+# Releases are created on itsd0/gitpass (#292), so this copy applies directly.
 changelog:
   exclude:
     labels:

@@ -18,8 +18,14 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
                 _ => import::detect_format_bytes(&data)
                     .ok_or_else(|| anyhow::anyhow!("could not auto-detect format; specify --from <format>"))?,
             };
-            let pass = if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&String::from_utf8_lossy(&data)) {
-                Some(prompt_secret("GITPASS_EXPORT_PASSPHRASE", "Export passphrase: ")?) } else { None };
+            let text = String::from_utf8_lossy(&data);
+            let pass = match fmt {
+                import::ImportFormat::GitpassJson if import::is_encrypted_export(&text) =>
+                    Some(prompt_secret("GITPASS_EXPORT_PASSPHRASE", "Export passphrase: ")?),
+                import::ImportFormat::BitwardenJson if import::bitwarden_json_needs_password(&text) =>
+                    Some(prompt_secret("GITPASS_IMPORT_PASSWORD", "Export password: ")?),
+                _ => None,
+            };
             let parsed = import::parse_bytes(fmt, &data, pass.as_deref().map(|s| s.as_str()))?;
             let s = unlock(cli, root)?;
             let vid = s.resolve_vault(vault)?;

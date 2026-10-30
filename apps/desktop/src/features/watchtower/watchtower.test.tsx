@@ -451,4 +451,32 @@ describe('watchtower score', () => {
     expect(screen.queryByText('Weak passwords')).toBeNull();
     useSettings.setState({ settings: null });
   });
+
+  it("renders Due for rotation and Rotation due soon cards with the change-password action", async () => {
+    vi.mocked(api.watchtower).mockResolvedValue({
+      score: 90, weak: [], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [],
+      expired: [], expiringSoon: [], insecureUrls: [], duplicates: [],
+      rotationDue: [{ itemId: 'i3', everyDays: 90, days: 120 }],
+      rotationSoon: [{ itemId: 'i3x', everyDays: 90, days: 1 }],
+      ignored: [], checkedAt: '', hibpChecked: false,
+    });
+    const r = { score: 0, weak: [], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [], expired: [], expiringSoon: [], insecureUrls: [], duplicates: [], rotationDue: [{ itemId: 'a', everyDays: 30, days: 31 }], rotationSoon: [{ itemId: 'b', everyDays: 30, days: 3 }], checkedAt: '', hibpChecked: false };
+    expect(issueIds(r, 'rotationDue')).toEqual(['a']);
+    expect(issueIds(r, 'rotationSoon')).toEqual(['b']);
+    render(<WatchtowerPage />);
+    await screen.findByTestId('score');
+    expect(screen.getByTestId('count-rotationDue').textContent).toBe('1');
+    expect(screen.getByTestId('count-rotationSoon').textContent).toBe('1');
+    expect(screen.getByText('Due for rotation')).toBeTruthy();
+    expect(screen.getByTestId('chip-reason-i3').textContent).toBe('(120 days old)');
+    expect(screen.getByTestId('chip-reason-i3x').textContent).toBe('(in 1 day)');
+  });
+
+  it("localizes the rotation cards in Burmese and Thai", () => {
+    for (const lang of ['my', 'th'] as const) {
+      for (const k of ['watchtower.rotationDue', 'watchtower.rotationSoon', 'rotation.due', 'editor.rotateEvery'] as const) {
+        expect(translate(lang, k)).not.toBe(translate('en', k));
+      }
+    }
+  });
 });

@@ -18,7 +18,7 @@ fn categories_summaries_and_detail() {
     assert_eq!(by("GitHub")["has_totp"], true);
     assert_eq!(by("GitHub")["vault_name"], "Personal");
     assert_eq!(by("Visa")["category"], "credit_card");
-    assert_eq!(by("Visa")["subtitle"], "•••• 1234");
+    assert_eq!(by("Visa")["subtitle"], "Visa •••• 1234");
     assert_eq!(by("Me")["category"], "identity");
     assert_eq!(by("Me")["subtitle"], "Test Person");
     assert_eq!(by("Wifi notes")["category"], "secure_note");
@@ -95,6 +95,30 @@ fn reveal_and_card_identity_need_user_action() {
     assert_eq!(ok(&mut f.host, json!({"cmd":"set_favorite","item_id":f.login,"favorite":false}))["favorite"], false);
     assert_eq!(ok(&mut f.host, json!({"cmd":"get_item","item_id":f.login}))["item"]["favorite"], false);
     assert_eq!(err(&mut f.host, json!({"cmd":"set_favorite","item_id":f.login})).0, "bad_request");
+}
+
+#[test]
+fn password_history_detail_and_reveal() {
+    let mut f = v5_vault();
+    ok(&mut f.host, json!({"cmd":"unlock","password":PW}));
+    // Initially GitHub login has no password history
+    let d0 = ok(&mut f.host, json!({"cmd":"get_item","item_id":f.login}))["item"].clone();
+    assert!(d0.get("password_history").is_none());
+
+    // Update login password to create a history entry
+    ok(&mut f.host, json!({"cmd":"update_login","item_id":f.login,"password":"NEW-PASSWORD-xyz","source":"popup"}));
+    let d1 = ok(&mut f.host, json!({"cmd":"get_item","item_id":f.login}))["item"].clone();
+    let hist = d1["password_history"].as_array().expect("has password_history");
+    assert_eq!(hist.len(), 1);
+    assert!(hist[0]["replaced_at"].as_str().is_some());
+
+    // Reveal password_history:0
+    let rev = ok(&mut f.host, json!({"cmd":"reveal","item_id":f.login,"field":"password_history:0","source":"popup"}));
+    assert_eq!(rev["value"], "FAKE-gh-pw");
+
+    // Invalid index
+    assert_eq!(err(&mut f.host, json!({"cmd":"reveal","item_id":f.login,"field":"password_history:99","source":"popup"})).0, "not_found");
+    assert_eq!(err(&mut f.host, json!({"cmd":"reveal","item_id":f.login,"field":"password_history:abc","source":"popup"})).0, "bad_request");
 }
 
 #[test]

@@ -17,7 +17,7 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 | **extension** | `extension/` | MV3 service worker (`background.js`, `bg-*.js`), content scripts on all https pages (`content.js`, `lib/forms.js`, `lib/passkey-main.js` in MAIN world, `lib/passkey-bridge.js`), popup, options |
 | **desktop** | `apps/desktop/gui-core`, `apps/desktop/src-tauri`, `apps/desktop/src` | Tauri app: Rust API (`api.rs`), browser agent UNIX socket (`agent.rs`), ssh-agent (`ssh_agent.rs`), favicon fetcher (`favicon.rs`), Touch ID/Keychain (`biometric.rs`), updater, React UI |
 | **ios** | `ios/`, `ios/rust/gitpass-ios-ffi` | SwiftUI app + AutoFill credential provider via UniFFI |
-| **release** | `.github/workflows`, `docs/RELEASE.md`, `scripts/`, `tauri.conf.json` updater | Build, signing, minisign-verified auto-update from `gitpass-releases` |
+| **release** | `.github/workflows`, `docs/RELEASE.md`, `scripts/`, `tauri.conf.json` updater | Build, signing, minisign-verified auto-update from `itsd0/gitpass` releases (mirrored to `gitpass-releases` during the transition) |
 
 ## Trust boundaries and entry points
 1. **Web page -> extension.** Any https page (and http loopback) runs alongside content scripts and the MAIN-world passkey shim. Page-controlled DOM, frames, messages and WebAuthn calls. Threat: credential/passkey release to the wrong origin, phishing lookalikes, content-script message spoofing.
@@ -44,7 +44,7 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 - Supply chain (npm/crates dependencies, GitHub Actions).
 
 ## Existing controls
-Argon2id (256 MiB, t=3, p=4) + Secret Key two-secret KDF; XChaCha20-Poly1305 everywhere with structured AAD; padding buckets; Zeroize types; manifest hash/epoch checks; atomic writes + lock file; origin matching rules in `crates/gitpass-host/src/origin.rs`; native-host `allowed_origins`; agent socket permissions + UID + token; secrets never written by the extension; concealed pasteboard + auto-clear; favicon SSRF guards; low-order point rejection in sealbox; signed shares; `cargo deny`/`cargo audit` in CI; actions pinned by SHA.
+Argon2id (256 MiB, t=3, p=4) + Secret Key two-secret KDF; XChaCha20-Poly1305 everywhere with structured AAD; padding buckets; Zeroize types; manifest hash/epoch checks; atomic writes + lock file; origin matching rules in `crates/gitpass-host/src/origin.rs`; native-host `allowed_origins`; agent socket permissions + UID + token; secrets never written by the extension; concealed pasteboard + auto-clear; favicon SSRF guards; low-order point rejection in sealbox; signed shares; `cargo deny`/`cargo audit` in CI; actions pinned by SHA; unlock failure throttling (after 3 consecutive failed master password attempts per vault, further attempts are refused with exponential backoff doubling from 2 s up to a 5 min cap; state persists in `.gitpass-throttle.json` with clock rollback protection and monotonic timer).
 
 ## Open questions
 - Should same-user local malware be treated as fully trusted (the agent token is readable by the user)? Currently in scope.

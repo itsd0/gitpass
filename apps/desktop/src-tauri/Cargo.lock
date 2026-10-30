@@ -1695,12 +1695,14 @@ dependencies = [
 
 [[package]]
 name = "gitpass-core"
-version = "0.6.5"
+version = "0.6.7"
 dependencies = [
+ "aes",
  "anyhow",
  "argon2",
  "base64 0.22.1",
  "blake3",
+ "cbc",
  "chacha20poly1305",
  "csv",
  "dirs 5.0.1",
@@ -1709,6 +1711,7 @@ dependencies = [
  "hkdf",
  "hmac 0.12.1",
  "p256 0.14.0",
+ "pbkdf2",
  "rand",
  "rsa",
  "serde",
@@ -1727,7 +1730,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-desktop"
-version = "0.6.5"
+version = "0.6.7"
 dependencies = [
  "anyhow",
  "arboard",
@@ -1751,7 +1754,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-gui-core"
-version = "0.6.5"
+version = "0.6.7"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -1773,7 +1776,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-host"
-version = "0.6.5"
+version = "0.6.7"
 dependencies = [
  "anyhow",
  "dirs 5.0.1",
@@ -1787,7 +1790,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-pasteboard"
-version = "0.6.5"
+version = "0.6.7"
 dependencies = [
  "anyhow",
  "objc2",
@@ -3251,6 +3254,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ed6a7761f76e3b9f92dfb0a60a6a6477c61024b775147ff0973a02653abaf2"
 dependencies = [
  "digest 0.10.7",
+ "hmac 0.12.1",
 ]
 
 [[package]]

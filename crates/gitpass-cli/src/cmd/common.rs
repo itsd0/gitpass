@@ -44,6 +44,7 @@ pub(crate) fn do_migrate(root: &Path, pw: &str, sk: &SecretKey) -> Result<()> {
 }
 
 pub(crate) fn unlock_full(cli: &Cli, root: &Path) -> Result<(Session, Zeroizing<String>, SecretKey)> {
+    gitpass_core::unlock_throttle::check_throttle(root)?;
     let pw = prompt_secret("GITPASS_PASSWORD", "Master password: ")?;
     let sk = load_secret_key(root)?;
     if store::read_format(root)?.version < store::MIN_READ_FORMAT {
@@ -551,7 +552,7 @@ pub(crate) fn validate_add_flags(flags: &AddFlags) -> Result<()> {
     }
     Ok(())
 }
-pub(crate) fn print_item(id: &str, r: &ItemRecord, reveal: bool) {
+pub(crate) fn print_item(id: &str, r: &ItemRecord, reveal: bool, related: &[String]) {
     let it = &r.item;
     println!("id:       {id}");
     println!("title:    {}", it.title);
@@ -566,6 +567,7 @@ pub(crate) fn print_item(id: &str, r: &ItemRecord, reveal: bool) {
             if let Some(t) = r.password_changed_at() {
                 println!("password changed: {}", gitpass_core::device::iso8601(t as i64));
             }
+            if let Some(d) = r.rotate_every_days { println!("rotate every: {d} days"); }
         }
         if let Some(v) = &it.url { println!("url:      {v}"); }
         if let Some(v) = &it.totp {
@@ -614,6 +616,9 @@ pub(crate) fn print_item(id: &str, r: &ItemRecord, reveal: bool) {
                 println!("notes:    {v}");
             }
         }
+    }
+    if !related.is_empty() {
+        println!("related:  {}", related.join(", "));
     }
 }
 
@@ -671,10 +676,24 @@ pub(crate) struct CliItemDetail {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) password_changed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) rotate_every_days: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) last_used_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) notes: Option<String>,
     pub(crate) fields: Vec<CliField>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) related_item_ids: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) related_items: Vec<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub(crate) password_history: Vec<CliPasswordHistoryEntry>,
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub(crate) struct CliPasswordHistoryEntry {
+    pub(crate) replaced_at: String,
+    pub(crate) password: String,
 }
 
 pub(crate) fn ts(s: &str) -> String {
@@ -741,6 +760,17 @@ pub(crate) fn resolve_item_across_vaults(s: &Session, vault: Option<&str>, item:
         0 => bail!("no item matches '{item}'"),
         1 => Ok((matches[0].0.clone(), matches[0].1.clone())),
         _ => bail!("multiple items match '{item}'; specify --vault or <vault>/<item>"),
+    }
+}
+
+/// Parse `--rotate-every`: `30d`, `90d`, `180d`, `365d` (the `d` is optional) or `none`.
+pub(crate) fn parse_rotation(v: &str) -> Result<Option<u32>> {
+    let t = v.trim().to_lowercase();
+    if t == "none" || t == "off" { return Ok(None); }
+    let days = t.strip_suffix('d').unwrap_or(&t).parse::<u32>().ok().filter(|d| gitpass_core::merge::ROTATION_DAYS.contains(d));
+    match days {
+        Some(d) => Ok(Some(d)),
+        None => bail!("--rotate-every must be 30d, 90d, 180d, 365d or none (got '{v}')"),
     }
 }
 
@@ -829,9 +859,20 @@ pub(crate) fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: 
         created_at: r.created_at.map(|c| gitpass_core::device::iso8601(c as i64)),
         updated_at: ts(&r.item.updated_at),
         password_changed_at: r.password_changed_at().map(|t| gitpass_core::device::iso8601(t as i64)),
+        rotate_every_days: r.rotate_every_days,
         last_used_at,
         notes: r.item.notes.clone().filter(|n| !n.trim().is_empty()),
         fields,
+        related_item_ids: r.related_item_ids.clone(),
+        related_items: r.related_item_ids.clone(),
+        password_history: if r.category == Category::Login {
+            r.password_history.iter().map(|h| CliPasswordHistoryEntry {
+                replaced_at: ts(&h.replaced_at),
+                password: if reveal { h.value.clone() } else { "••••••••••".to_string() },
+            }).collect()
+        } else {
+            vec![]
+        },
     }
 }
 

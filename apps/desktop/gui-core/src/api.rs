@@ -11,7 +11,7 @@ use gitpass_core::audit::{self, AuditOpts, Finding, PwnedRangeClient};
 use gitpass_core::crypto::SecretKey;
 use gitpass_core::device::iso8601;
 use gitpass_core::item::{Category, FieldKind};
-use gitpass_core::merge::ItemRecord;
+use gitpass_core::merge::{ItemRecord, RotationStatus};
 use gitpass_core::store::{Item, Session, UnlockOpts};
 use gitpass_core::{import, item, totp};
 use gitpass_pasteboard::PasteboardMarkers;
@@ -50,7 +50,17 @@ pub struct ItemSummary {
     pub ignored_findings: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub last_used: Option<u64>,
+    /// The login's "change password every N days" reminder (30, 90, 180 or 365); absent when unset.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotate_every_days: Option<u32>,
+    /// Set when that reminder is due, or falls due within 14 days (drives the list/detail pill).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotation: Option<RotationInfo>,
 }
+/// Rotation reminder state: `state` is `"due"` (`days` = age of the password) or `"soon"` (`days` = days left).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RotationInfo { pub state: String, pub every_days: u32, pub days: u64 }
 /// Active Watchtower finding for the item-detail banner (description is English, like the audit text).
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -58,6 +68,25 @@ pub struct FindingInfo { pub kind: String, pub description: String }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryRef { pub version: u64, pub updated_at: String }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RelatedItem {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vault_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<Category>,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    pub available: bool,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordHistoryRef {
+    pub replaced_at: String,
+}
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDetail {
@@ -72,6 +101,12 @@ pub struct ItemDetail {
     pub findings: Vec<FindingInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password_changed_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_items: Vec<RelatedItem>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_item_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub password_history: Vec<PasswordHistoryRef>,
 }
 /// One item reference for bulk commands.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -111,6 +146,7 @@ pub struct ItemInput {
     pub vault_id: String, pub category: Category, pub title: String, pub sections: Vec<Section>,
     #[serde(default)] pub notes: Option<String>, #[serde(default)] pub tags: Option<Vec<String>>,
     #[serde(default)] pub favorite: Option<bool>, #[serde(default)] pub url: Option<String>,
+    #[serde(default)] pub related_item_ids: Option<Vec<String>>,
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -145,6 +181,15 @@ pub struct IgnoredFindingItem {
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct RotationItem {
+    pub item_id: String,
+    pub every_days: u32,
+    /// Due: whole days since the password changed. Soon: whole days until the reminder is due.
+    pub days: u64,
+}
+
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct UnusedItem {
     pub item_id: String,
     /// Whole days since the last use, or since the last edit/creation when the item was never used here.
@@ -164,6 +209,12 @@ pub struct WatchtowerReport {
     pub weak_ssh_keys: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unused: Vec<UnusedItem>,
+    /// Logins past their own "change password every N days" reminder.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rotation_due: Vec<RotationItem>,
+    /// Logins whose reminder falls due within 14 days.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rotation_soon: Vec<RotationItem>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
     pub weak_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -179,6 +230,11 @@ pub enum Theme { Dark, Light, System }
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Language { En, My, Th }
+/// Item-list row density. Serializes as "comfortable" / "compact" (JSON key
+/// `listDensity` via the struct's camelCase rename).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ListDensity { #[default] Comfortable, Compact }
 fn default_true() -> bool { true }
 fn default_quick_access_hotkey() -> String { "CommandOrControl+Shift+Space".into() }
 
@@ -219,12 +275,17 @@ pub struct Settings {
     #[serde(default)] pub show_website_icons: bool,
     /// Display: render notes and secure notes as safe Markdown (default on).
     #[serde(default = "default_true")] pub render_notes_markdown: bool,
+    /// Item-list density (default comfortable; older settings files without
+    /// the field deserialize to comfortable).
+    #[serde(default)] pub list_density: ListDensity,
     /// Menu bar: Show gitpass in the macOS menu bar (default on).
     #[serde(default = "default_true")] pub show_menu_bar_icon: bool,
     /// Remember generated passwords in an encrypted vault history (default on).
     #[serde(default = "default_true")] pub remember_generated_passwords: bool,
     /// Watchtower "Unused items" threshold in months: 6, 12 or 24; 0 turns the check off (default 12).
     #[serde(default = "default_unused_months")] pub watchtower_unused_months: u64,
+    /// Last seen app version for showing the "What's new" release sheet once per upgrade.
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub last_seen_version: Option<String>,
 }
 fn default_unused_months() -> u64 { 12 }
 impl Default for Settings {
@@ -235,8 +296,8 @@ impl Default for Settings {
             hide_from_screen_recording: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
-            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, remember_generated_passwords: true,
-            watchtower_unused_months: 12 }
+            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, list_density: ListDensity::Comfortable, remember_generated_passwords: true,
+            watchtower_unused_months: 12, last_seen_version: None }
     }
 }
 
@@ -272,7 +333,8 @@ pub struct UnlockState { pub unlocked: bool, pub vault_path: String, pub account
     /// true when `vault_path` already holds a gitpass vault (format.json); false => offer "create".
     #[serde(default)] pub vault_exists: bool,
     /// true when biometric unlock is enabled and supported on this machine.
-    #[serde(default)] pub biometric_available: bool }
+    #[serde(default)] pub biometric_available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub throttled_secs: Option<u64> }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAccountResult { pub vault_path: String, pub secret_key: String }
@@ -559,12 +621,47 @@ fn summary(vid: &str, iid: &str, r: &ItemRecord, last_used: Option<u64>) -> Item
         change_password_url: r.item.url.as_deref().and_then(audit::change_password_url),
         ignored_findings: r.ignored_findings.clone(),
         last_used,
+        rotate_every_days: r.rotate_every_days,
+        rotation: if r.is_finding_ignored("rotation_due") || r.is_finding_ignored("rotation_soon") { None } else {
+            match r.rotation_status(now_secs()) {
+                Some(RotationStatus::Due { every_days, days }) => Some(RotationInfo { state: "due".into(), every_days, days }),
+                Some(RotationStatus::Soon { every_days, in_days }) => Some(RotationInfo { state: "soon".into(), every_days, days: in_days }),
+                None => None,
+            }
+        },
     }
 }
+fn now_secs() -> u64 { std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) }
 
 fn has_totp(r: &ItemRecord) -> bool { r.view_sections().iter().flat_map(|s| s.fields.iter()).any(|f| f.kind == FieldKind::Totp && f.value.is_some()) }
 
-fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>) -> ItemDetail {
+fn resolve_related_items(s: &Session, ids: &[String]) -> Vec<RelatedItem> {
+    ids.iter().map(|rid| {
+        match s.get_record_by_id(rid) {
+            Ok(Some((vid, _, r))) if r.deleted_at.is_none() => {
+                let sub = subtitle(&r);
+                RelatedItem {
+                    id: rid.clone(),
+                    vault_id: Some(vid),
+                    category: Some(r.category),
+                    title: r.item.title.clone(),
+                    subtitle: if sub.is_empty() { None } else { Some(sub) },
+                    available: true,
+                }
+            }
+            _ => RelatedItem {
+                id: rid.clone(),
+                vault_id: None,
+                category: None,
+                title: "Item not available".to_string(),
+                subtitle: None,
+                available: false,
+            },
+        }
+    }).collect()
+}
+
+fn detail(s: &Session, vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>) -> ItemDetail {
     let pw = r.view_sections().into_iter().flat_map(|s| s.fields).find(|f| f.kind == FieldKind::Concealed && f.value.is_some());
     ItemDetail {
         summary: summary(vid, iid, r, last_used), version, sections: to_dto_sections(r), notes: r.item.notes.clone(),
@@ -574,6 +671,13 @@ fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<Find
         has_totp: has_totp(r),
         findings,
         password_changed_at: r.password_changed_at().map(|t| iso8601(t as i64)),
+        related_items: resolve_related_items(s, &r.related_item_ids),
+        related_item_ids: r.related_item_ids.clone(),
+        password_history: if r.category == Category::Login {
+            r.password_history.iter().map(|h| PasswordHistoryRef { replaced_at: ts(&h.replaced_at) }).collect()
+        } else {
+            vec![]
+        },
     }
 }
 
@@ -710,25 +814,42 @@ impl App {
         let g = self.state.inner.lock().map_err(|_| anyhow!("state poisoned"))?;
         Ok(match &g.unlocked {
             Some(u) => UnlockState { unlocked: true, vault_path: u.session.root.display().to_string(), account: Some(u.session.fmt.account_id.clone()), vault_exists: true,
-                biometric_available: false },
+                biometric_available: false, throttled_secs: None },
             None => {
                 let vp = self.read_local().last_vault_path.unwrap_or_else(|| crate::default_vault_dir().display().to_string());
-                let exists = PathBuf::from(&vp).join("format.json").exists();
+                let p = PathBuf::from(&vp);
+                let exists = p.join("format.json").exists();
                 let bio = exists && self.biometric.supported() && self.get_settings().biometric_unlock;
-                UnlockState { unlocked: false, vault_path: vp, account: None, vault_exists: exists, biometric_available: bio }
+                let throttled_secs = if exists {
+                    gitpass_core::unlock_throttle::seconds_remaining(&p)
+                } else {
+                    None
+                };
+                UnlockState { unlocked: false, vault_path: vp, account: None, vault_exists: exists, biometric_available: bio, throttled_secs }
             }
         })
     }
     pub fn unlock(&self, vault_path: &str, password: &str, secret_key: Option<&str>) -> Result<UnlockState> {
+        self.unlock_internal(vault_path, password, secret_key, false)
+    }
+
+    fn unlock_internal(&self, vault_path: &str, password: &str, secret_key: Option<&str>, is_biometric: bool) -> Result<UnlockState> {
         let dir = PathBuf::from(if vault_path.trim().is_empty() { crate::default_vault_dir().display().to_string() } else { vault_path.trim().to_string() });
         if password.is_empty() { bail!("master password is empty"); }
         if !dir.join("format.json").exists() { bail!("{} is not a gitpass vault (no format.json)", dir.display()); }
+        if !is_biometric {
+            gitpass_core::unlock_throttle::check_throttle(&dir)?;
+        }
         let sk = match secret_key.filter(|k| !k.trim().is_empty()) {
             Some(k) => crate::parse_secret_key(k)?,
             None => crate::read_secret_key_file(&dir.join("secret.key"))?,
         };
         let opts = { let o = self.unlock_opts.lock().map_err(|_| anyhow!("poisoned"))?; UnlockOpts { accept_rollback: o.accept_rollback, target_kdf: o.target_kdf.clone() } };
-        self.state.unlock_with_opts(&dir, password, sk, None, &opts)?;
+        if is_biometric {
+            self.state.unlock_biometric_with_opts(&dir, password, sk, None, &opts)?;
+        } else {
+            self.state.unlock_with_opts(&dir, password, sk, None, &opts)?;
+        }
         let _ = self.update_local(|l| l.last_vault_path = Some(dir.display().to_string()));
         self.ensure_default_vault();
         self.status()
@@ -760,7 +881,7 @@ impl App {
         if !self.get_settings().biometric_unlock { bail!("biometric unlock is not enabled"); }
         let vp = if vault_path.trim().is_empty() { self.status()?.vault_path } else { vault_path.trim().to_string() };
         let (pw, sk) = self.biometric.load(&vp, "unlock gitpass")?;
-        self.unlock(&vp, &pw, Some(&sk))
+        self.unlock_internal(&vp, &pw, Some(&sk), true)
     }
     pub fn lock(&self) {
         self.clear_clipboard_if_ours();
@@ -910,7 +1031,7 @@ impl App {
             let (v, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
-            Ok(detail(vault_id, item_id, v, &r, findings, last_used))
+            Ok(detail(&u.session, vault_id, item_id, v, &r, findings, last_used))
         })
     }
     /// The ONLY call that returns a stored secret value.
@@ -923,6 +1044,12 @@ impl App {
                 Some(v) => u.session.item_version(vault_id, item_id, v)?,
                 None => u.session.read_record(vault_id, item_id)?.1,
             };
+            if let Some(idx_str) = field_id.strip_prefix("password_history:") {
+                let idx: usize = idx_str.parse().map_err(|_| anyhow!("invalid history index"))?;
+                let entry = r.password_history.get(idx).ok_or_else(|| anyhow!("no password history at index {idx}"))?;
+                let _ = u.session.touch_item_used(item_id);
+                return Ok(Zeroizing::new(entry.value.clone()));
+            }
             let f = r.find_field(field_id).or_else(|| {
                 if version.is_some() {
                     u.session.read_record(vault_id, item_id).ok().and_then(|(_, cur)| cur.find_field(field_id))
@@ -940,6 +1067,12 @@ impl App {
     pub fn copy_field(&self, vault_id: &str, item_id: &str, field_id: &str) -> Result<()> {
         let (v, markers) = self.with(|u| {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
+            if let Some(idx_str) = field_id.strip_prefix("password_history:") {
+                let idx: usize = idx_str.parse().map_err(|_| anyhow!("invalid history index"))?;
+                let entry = r.password_history.get(idx).ok_or_else(|| anyhow!("no password history at index {idx}"))?;
+                let _ = u.session.touch_item_used(item_id);
+                return Ok((Zeroizing::new(entry.value.clone()), Some(PasteboardMarkers::SECRET)));
+            }
             let f = r.find_field(field_id).ok_or_else(|| anyhow!("item has no field '{field_id}'"))?;
             let markers = is_secret_copy(r.category, &f).then_some(PasteboardMarkers::SECRET);
             let raw = f.value.clone().filter(|v| !v.is_empty()).ok_or_else(|| anyhow!("field '{field_id}' is empty"))?;
@@ -1034,6 +1167,11 @@ impl App {
         r.item.url = nonempty(input.url.clone());
         if let Some(t) = &input.tags { let mut t: Vec<String> = t.iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect(); t.dedup(); r.tags = t; }
         if let Some(f) = input.favorite { r.favorite = f; }
+        if let Some(rids) = &input.related_item_ids {
+            let mut ids: Vec<String> = rids.iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect();
+            ids.dedup();
+            r.related_item_ids = ids;
+        }
         let secs: Vec<item::Section> = input.sections.iter().map(|s| item::Section { id: s.id.clone(), title: s.title.clone(), fields: s.fields.iter().map(|f| {
             let value = match &f.value { None if f.kind.is_secret() => old.find_field(&f.id).and_then(|o| o.value), v => v.clone() };
             item::Field { id: f.id.clone(), label: f.label.clone(), kind: f.kind, value, removed: false }
@@ -1063,12 +1201,30 @@ impl App {
         })
     }
     pub fn set_favorite(&self, vault_id: &str, item_id: &str, favorite: bool) -> Result<()> { self.write(|u| u.session.set_favorite(vault_id, item_id, favorite)) }
+    /// Set or clear (`None`) the "change password every N days" reminder (30, 90, 180 or 365).
+    pub fn set_rotation(&self, vault_id: &str, item_id: &str, days: Option<u32>) -> Result<()> { self.write(|u| u.session.set_rotation(vault_id, item_id, days)) }
     pub fn archive_item(&self, vault_id: &str, item_id: &str, archived: bool) -> Result<()> { self.write(|u| u.session.set_archived(vault_id, item_id, archived)) }
     pub fn delete_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.soft_delete(vault_id, item_id)) }
     pub fn restore_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.restore(vault_id, item_id)) }
     pub fn purge_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.purge_item(vault_id, item_id)) }
     pub fn ignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.ignore_finding(vault_id, item_id, kind)) }
     pub fn unignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.unignore_finding(vault_id, item_id, kind)) }
+    pub fn add_related_item(&self, vault_id: &str, item_id: &str, related_id: &str) -> Result<()> {
+        if item_id == related_id {
+            anyhow::bail!("cannot link an item to itself");
+        }
+        self.write(|u| u.session.add_related_item(vault_id, item_id, related_id))
+    }
+    pub fn remove_related_item(&self, vault_id: &str, item_id: &str, related_id: &str) -> Result<()> {
+        self.write(|u| u.session.remove_related_item(vault_id, item_id, related_id))
+    }
+    pub fn clear_password_history(&self, vault_id: &str, item_id: &str) -> Result<()> {
+        self.write(|u| {
+            let (_, mut r) = u.session.read_record(vault_id, item_id)?;
+            r.password_history.clear();
+            u.session.update_record(vault_id, item_id, r)
+        })
+    }
     /// Permanently delete every item in Recently Deleted (all vaults) in one commit.
     /// Returns how many items were purged; an empty trash is a no-op.
     pub fn empty_trash(&self) -> Result<usize> {
@@ -1143,7 +1299,7 @@ impl App {
         self.with(|u| {
             let r = u.session.item_version(vault_id, item_id, version)?;
             let (_, cur) = u.session.read_record(vault_id, item_id)?;
-            let last_used = u.session.last_used(item_id); let mut d = detail(vault_id, item_id, version, &r, Vec::new(), last_used);
+            let last_used = u.session.last_used(item_id); let mut d = detail(&u.session, vault_id, item_id, version, &r, Vec::new(), last_used);
             d.history.clear();
             d.attachments.clear();
             if let Some(h) = cur.history.iter().find(|h| h.version == version) { d.summary.updated_at = ts(&h.updated_at); }
@@ -1157,7 +1313,7 @@ impl App {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
-            Ok(detail(vault_id, item_id, new_v, &r, findings, last_used))
+            Ok(detail(&u.session, vault_id, item_id, new_v, &r, findings, last_used))
         })
     }
     pub fn add_attachment(&self, vault_id: &str, item_id: &str, path: &str) -> Result<Attachment> {
@@ -1325,6 +1481,8 @@ impl App {
                 duplicates: vec![],
                 weak_ssh_keys: vec![],
                 unused: vec![],
+                rotation_due: vec![],
+                rotation_soon: vec![],
                 weak_reasons: HashMap::new(),
                 ignored: vec![],
                 checked_at: gitpass_core::device::now_iso8601(), hibp_checked: hibp };
@@ -1351,6 +1509,8 @@ impl App {
                         Finding::Unused { days } => out.unused.push(UnusedItem {
                             item_id: f.id.clone(), days: *days, last_used: last_used.contains_key(&f.id),
                         }),
+                        Finding::RotationDue { every_days, days } => out.rotation_due.push(RotationItem { item_id: f.id.clone(), every_days: *every_days, days: *days }),
+                        Finding::RotationSoon { every_days, in_days } => out.rotation_soon.push(RotationItem { item_id: f.id.clone(), every_days: *every_days, days: *in_days }),
                     }
                 }
             }
@@ -1380,14 +1540,16 @@ impl App {
             Ok(out)
         })
     }
-    pub fn import_file(&self, vault_id: &str, format: &str, path: &str, dry_run: bool) -> Result<ImportResult> {
+    /// Import a file into a vault. `password` is the export password for a password-protected
+    /// Bitwarden JSON export (ignored for other formats); encrypted gitpass exports stay CLI-only.
+    pub fn import_file(&self, vault_id: &str, format: &str, path: &str, dry_run: bool, password: Option<&str>) -> Result<ImportResult> {
         let fmt: import::ImportFormat = format.parse()?;
         let path = path.trim();
         let path = if let Some(rest) = path.strip_prefix("~/") { dirs::home_dir().map(|h| h.join(rest).display().to_string()).unwrap_or_else(|| path.to_string()) } else { path.to_string() };
         let resolved = import::resolve_import_path(std::path::Path::new(&path));
         let data = Zeroizing::new(std::fs::read(&resolved).with_context(|| format!("cannot read {}", resolved.display()))?);
         if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&String::from_utf8_lossy(&data)) { bail!("encrypted gitpass exports need a passphrase; import them with the CLI"); }
-        let parsed = import::parse_bytes(fmt, &data, None)?;
+        let parsed = import::parse_bytes(fmt, &data, password)?;
         let mut categories = BTreeMap::new();
         for r in &parsed.items { *categories.entry(r.category.as_str().to_string()).or_insert(0) += 1; }
         let preview = parsed.items.iter().take(50).map(|r| ImportPreviewItem { title: r.item.title.clone(), category: r.category,
@@ -1786,5 +1948,47 @@ mod passkey_site_url_tests {
         assert_eq!(passkey_site_url(Some(""), None), None);
         assert_eq!(passkey_site_url(None, Some("http://example.com")), None);
         assert_eq!(passkey_site_url(None, None), None);
+    }
+}
+
+#[cfg(test)]
+mod rotation_summary_tests {
+    use super::*;
+
+    fn old_login(days_ago: u64, every: Option<u32>) -> ItemRecord {
+        let changed = now_secs() - days_ago * 86400;
+        let mut it = Item::default();
+        it.title = "FAKE Bank".into();
+        it.password = Some("FAKE-Rotation-Pass-1".into());
+        it.updated_at = changed.to_string();
+        let mut r = ItemRecord::new(it);
+        r.created_at = Some(changed);
+        r.rotate_every_days = every;
+        r
+    }
+
+    #[test]
+    fn summary_reports_due_soon_and_unset() {
+        let due = summary("v", "i", &old_login(95, Some(90)), None);
+        assert_eq!(due.rotate_every_days, Some(90));
+        assert_eq!(due.rotation, Some(RotationInfo { state: "due".into(), every_days: 90, days: 95 }));
+        let soon = summary("v", "i", &old_login(80, Some(90)), None);
+        assert_eq!(soon.rotation, Some(RotationInfo { state: "soon".into(), every_days: 90, days: 10 }));
+        let fine = summary("v", "i", &old_login(10, Some(365)), None);
+        assert_eq!((fine.rotate_every_days, fine.rotation), (Some(365), None));
+        let unset = summary("v", "i", &old_login(500, None), None);
+        assert_eq!((unset.rotate_every_days, unset.rotation.clone()), (None, None));
+        let json = serde_json::to_value(&unset).unwrap();
+        assert!(json.get("rotateEveryDays").is_none() && json.get("rotation").is_none());
+        let json = serde_json::to_value(&due).unwrap();
+        assert_eq!(json["rotateEveryDays"], 90);
+        assert_eq!(json["rotation"]["state"], "due");
+    }
+
+    #[test]
+    fn ignoring_the_finding_hides_the_pill() {
+        let mut r = old_login(95, Some(90));
+        r.ignore_finding("rotation_due");
+        assert_eq!(summary("v", "i", &r, None).rotation, None);
     }
 }

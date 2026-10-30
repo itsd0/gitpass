@@ -7,14 +7,11 @@ import { useT } from '../../i18n';
 import { useApp } from '../../lib/store';
 import type { FeatureDef } from '../registry';
 
-export type CharKind = 'digit' | 'symbol' | 'letter' | 'space';
+import { charKind, kindClass, type CharKind } from '../../lib/secretText';
+import { useColorPasswords } from '../settings/colorPasswords';
 
-export function charKind(char: string): CharKind {
-  if (/\d/.test(char)) return 'digit';
-  if (/[a-zA-Z]/.test(char)) return 'letter';
-  if (/\s/.test(char)) return 'space';
-  return 'symbol';
-}
+export { charKind };
+export type { CharKind };
 
 export interface CharCell {
   char: string;
@@ -66,6 +63,7 @@ export function LargeTypeDialog({
     }
   }, [open, locked, onOpenChange]);
 
+  const colored = useColorPasswords((s) => s.enabled);
   const groups = useMemo(() => groupCharacters(value), [value]);
 
   return (
@@ -120,10 +118,10 @@ export function LargeTypeDialog({
                       <span
                         className={cn(
                           'font-mono text-3xl font-semibold leading-none select-all',
-                          item.kind === 'digit' && 'large-type-digit text-orange-500 dark:text-orange-400',
-                          item.kind === 'symbol' && 'large-type-symbol text-blue-500 dark:text-blue-400',
-                          item.kind === 'letter' && 'large-type-letter text-fg',
-                          item.kind === 'space' && 'text-muted'
+                          item.kind === 'digit' && 'large-type-digit',
+                          item.kind === 'symbol' && 'large-type-symbol',
+                          item.kind === 'letter' && 'large-type-letter',
+                          colored ? kindClass(item.kind) : 'text-fg'
                         )}
                       >
                         {item.char === ' ' ? '␣' : item.char}

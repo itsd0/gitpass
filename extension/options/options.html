@@ -50,6 +50,18 @@
       </div>
       <div class="setting-row">
         <div class="setting-meta">
+          <label for="colorPasswords" class="setting-label" data-i18n="optColorPasswords">Colour-code revealed passwords</label>
+          <span class="setting-desc" data-i18n="optColorPasswordsBody">Show digits in orange, symbols in blue and spaces as a dot when a password is revealed. Copying is unchanged.</span>
+        </div>
+        <div class="setting-control">
+          <label class="switch">
+            <input type="checkbox" id="colorPasswords">
+            <span class="slider" aria-hidden="true"></span>
+          </label>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-meta">
           <span class="setting-label" data-i18n="optWebsiteIcons">Website icons</span>
           <span class="setting-desc" data-i18n="optWebsiteIconsBody">Website icons and monograms are displayed in the popup and autofill menu. To enable or disable icon downloads, use 'Show website icons' in the gitpass desktop app settings.</span>
         </div>
@@ -151,6 +163,25 @@
         <div class="setting-control">
           <input id="never-auto-submit-add" class="text-input" type="text" placeholder="example.com" autocomplete="off" spellcheck="false">
           <button id="never-auto-submit-add-btn" class="btn btn-sec" type="button" data-i18n="optNeverAutoSubmitAdd">Add a site</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Hidden inline menu sites -->
+    <section class="card section-card" id="hidden-inline-menu-section" aria-labelledby="sec-hidden-inline-menu-title">
+      <h2 id="sec-hidden-inline-menu-title" class="section-title" data-i18n="optHiddenInlineMenu">Hide the inline menu on these sites</h2>
+      <p class="section-desc" data-i18n="optHiddenInlineMenuBody">gitpass will not show the inline menu or field badges on these sites.</p>
+
+      <div id="hidden-inline-menu-list" class="never-save-list"></div>
+      <div id="hidden-inline-menu-empty" class="empty-state" data-i18n="optHiddenInlineMenuEmpty" style="display:none">No sites hidden</div>
+      <p id="hidden-inline-menu-empty-desc" class="empty-desc hidden" data-i18n="optHiddenInlineMenuEmptyBody">Sites you hide the inline menu on will appear here.</p>
+      <div class="setting-row">
+        <div class="setting-meta">
+          <label for="hidden-inline-menu-add" class="setting-label" data-i18n="optHiddenInlineMenuAdd">Add a site</label>
+        </div>
+        <div class="setting-control">
+          <input id="hidden-inline-menu-add" class="text-input" type="text" placeholder="example.com" autocomplete="off" spellcheck="false">
+          <button id="hidden-inline-menu-add-btn" class="btn btn-sec" type="button" data-i18n="optHiddenInlineMenuAdd">Add a site</button>
         </div>
       </div>
     </section>

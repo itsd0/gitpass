@@ -1,4 +1,4 @@
-import { ZoomIn, ZoomOut, RotateCcw, AtSign, Copy, FolderInput, Globe, Pencil, Timer, Home, KeyRound, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap } from 'lucide-react';
+import { ZoomIn, ZoomOut, RotateCcw, AtSign, Copy, FolderInput, Globe, Pencil, Timer, Home, KeyRound, LayoutGrid, Lock, Maximize2, Moon, Plus, RefreshCw, Settings, ShieldCheck, Tag, Users, Keyboard, Zap, Sparkles } from 'lucide-react';
 import { api } from '../../api/client';
 import { translate, useI18n, type Key } from '../../i18n';
 import type { PaletteCommand } from '../registry';
@@ -23,10 +23,12 @@ export function builtinCommands(): PaletteCommand[] {
     { id: 'go-settings', labelKey: 'cmd.settings', icon: Settings, keywords: ['preferences'], shortcut: 'mod+,', run: () => app.setRoute({ name: 'settings' }) },
     { id: 'go-people', labelKey: 'cmd.people', icon: Users, keywords: ['share', 'members'], run: () => app.setRoute({ name: 'people' }) },
     { id: 'toggle-theme', labelKey: 'cmd.toggleTheme', icon: Moon, keywords: ['dark', 'light'], run: async () => { const s = useSettings.getState(); if (!s.settings) await s.load(); await s.save({ theme: isDark() ? 'light' : 'dark' }).catch((e) => toast(String(e), 'danger')); } },
+    { id: 'toggle-list-density', labelKey: 'cmd.toggleListDensity', icon: LayoutGrid, keywords: ['density', 'compact', 'comfortable', 'list', 'rows'], run: async () => { const s = useSettings.getState(); if (!s.settings) await s.load(); const next = (s.settings?.listDensity ?? 'comfortable') === 'compact' ? 'comfortable' : 'compact'; await s.save({ listDensity: next }).catch((e) => toast(String(e), 'danger')); } },
     { id: 'text-larger', labelKey: 'cmd.textLarger', icon: ZoomIn, keywords: ['zoom', 'font', 'bigger', 'text size'], run: () => useTextSize.getState().step(1) },
     { id: 'text-smaller', labelKey: 'cmd.textSmaller', icon: ZoomOut, keywords: ['zoom', 'font', 'text size'], run: () => useTextSize.getState().step(-1) },
     { id: 'text-reset', labelKey: 'cmd.textReset', icon: RotateCcw, keywords: ['zoom', 'font', 'default', 'text size'], run: () => useTextSize.getState().reset() },
     { id: 'sync', labelKey: 'cmd.sync', icon: RefreshCw, keywords: ['git', 'push', 'pull'], run: async () => { try { toast((await api.sync({ merge: false })).message); } catch (e) { toast(String((e as Error).message ?? e), 'danger'); } } },
+    { id: 'whats-new', labelKey: 'cmd.whatsNew', icon: Sparkles, keywords: ['what', 'new', 'release', 'notes', 'changelog', 'update'], run: () => app.openModal('whats-new') },
     { id: 'shortcuts', labelKey: 'cmd.shortcuts', icon: Keyboard, keywords: ['help', 'keys'], shortcut: '?', run: openShortcutsHelp },
   ];
   const hasSelection = Boolean(app.selectedItemId || app.multiIds.length > 0);

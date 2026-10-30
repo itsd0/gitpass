@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { builtinCommands } from './commands';
 import { useApp } from '../../lib/store';
+import { useSettings } from '../settings/useSettings';
+import { api } from '../../api/client';
 
 describe('palette builtin commands with selection', () => {
   it('does not include move-to-vault and add-tag when nothing is selected', () => {
@@ -26,6 +28,19 @@ describe('palette builtin commands with selection', () => {
     const cmds = builtinCommands();
     expect(cmds.some((c) => c.id === 'move-to-vault')).toBe(true);
     expect(cmds.some((c) => c.id === 'add-tag')).toBe(true);
+  });
+
+  it('toggle-list-density flips the saved density', async () => {
+    const base = { autoLockMinutes: 10, clipboardClearSecs: 30, theme: 'dark' as const, language: 'en' as const, biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false, listDensity: 'comfortable' as const };
+    useSettings.setState({ settings: { ...base }, error: null });
+    vi.spyOn(api, 'setSettings').mockImplementation(async ({ settings }) => { useSettings.setState({ settings, error: null }); return settings; });
+    const cmd = builtinCommands().find((c) => c.id === 'toggle-list-density');
+    expect(cmd?.label).toBe('Toggle compact list');
+    await cmd?.run();
+    expect(useSettings.getState().settings?.listDensity).toBe('compact');
+    await builtinCommands().find((c) => c.id === 'toggle-list-density')?.run();
+    expect(useSettings.getState().settings?.listDensity).toBe('comfortable');
+    vi.restoreAllMocks();
   });
 
   it.each(['deleted', 'archive'] as const)('hides move-to-vault and add-tag in %s', (kind) => {

@@ -80,13 +80,13 @@ fn fld(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), lab
 fn add_login(e: &Env, title: &str, url: &str, user: &str, pw: &str) -> String {
     let s = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some(url.into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, user), fld("password", FieldKind::Concealed, pw)] }],
-        notes: None, tags: None, favorite: None }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     format!("{}:{}", e.vault, s.id)
 }
 fn add_card(e: &Env) -> String {
     let s = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "Example Bank".into(), url: None,
         sections: vec![Section { id: "card".into(), title: Some("Card".into()), fields: vec![fld("number", FieldKind::Concealed, "4111 1111 1111 1111"), fld("cvv", FieldKind::Concealed, "123")] }],
-        notes: None, tags: None, favorite: Some(true) }).unwrap();
+        notes: None, tags: None, favorite: Some(true), related_item_ids: None }).unwrap();
     format!("{}:{}", e.vault, s.id)
 }
 
@@ -447,8 +447,7 @@ fn agent_api_credential_masked_hint_in_summary_and_detail() {
         }],
         notes: None,
         tags: None,
-        favorite: None,
-    }).unwrap();
+        favorite: None, related_item_ids: None }).unwrap();
 
     let list = c.ok("list_items", json!({"category": "api_credential"}));
     let items = list["items"].as_array().unwrap();
@@ -804,4 +803,33 @@ fn record_generated_password_agent_contract_and_settings() {
 
     let hist3 = e.app.get_generator_history().unwrap();
     assert_eq!(hist3.len(), 2);
+}
+
+#[test]
+fn agent_get_item_attachments_metadata_only_no_file_bytes() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+
+    let item_id = add_login(&e, "Attachment Test Login", "https://example.com", "alice", "pw123");
+    let iid = item_id.split_once(':').unwrap().1;
+    let secret_payload = b"AGENT-SOCKET-SECRET-ATTACHMENT-PAYLOAD-BYTES";
+    let tmp_file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp_file.path(), secret_payload).unwrap();
+    e.app.add_attachment(&e.vault, iid, &tmp_file.path().display().to_string()).unwrap();
+
+    // 1. list_items: has_attachments is true
+    let list_res = c.ok("list_items", json!({}));
+    let items = list_res["items"].as_array().unwrap();
+    let found = items.iter().find(|i| i["title"] == "Attachment Test Login").expect("item found");
+    assert_eq!(found["has_attachments"], true);
+
+    // 2. get_item: returns attachment metadata
+    let get_res = c.ok("get_item", json!({"item_id": item_id}));
+    let detail = &get_res["item"];
+    assert_eq!(detail["has_attachments"], true);
+    let atts = detail["attachments"].as_array().expect("attachments array");
+    assert_eq!(atts.len(), 1);
+    assert_eq!(atts[0]["size"], secret_payload.len() as u64);
+    let raw_json = serde_json::to_string(&get_res).unwrap();
+    assert!(!raw_json.contains("AGENT-SOCKET-SECRET-ATTACHMENT-PAYLOAD-BYTES"));
 }

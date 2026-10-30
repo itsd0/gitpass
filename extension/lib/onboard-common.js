@@ -17,7 +17,7 @@
       try { getPort().postMessage({ ...msg, rid: id }); } catch (e) { waiting.delete(id); rej(e); }
     });
   }
-  const DEFAULTS = { autolockFollowsApp: true, autofill: true, savePrompts: true, autoFillTotp: false, showBadge: true, autoSubmitAfterFill: false };
+  const DEFAULTS = { autolockFollowsApp: true, autofill: true, savePrompts: true, autoFillTotp: false, showBadge: true, autoSubmitAfterFill: false, colorPasswords: true };
   function getSettings() { return new Promise((res) => chrome.storage.local.get('settings', (r) => res(Object.assign({}, DEFAULTS, (r && r.settings) || {})))); }
   function setSettings(patch) { return getSettings().then((s) => new Promise((res) => { const n = Object.assign(s, patch); chrome.storage.local.set({ settings: n }, () => res(n)); })); }
   function getNeverSave() {
@@ -54,5 +54,19 @@
       chrome.storage.local.set({ neverAutoSubmit: list }, () => res(list));
     });
   }
-  root.GitpassOnboard = { send, getSettings, setSettings, getNeverSave, setNeverSave, removeNeverSave, getNeverAutoSubmit, setNeverAutoSubmit, DEFAULTS };
+  // Per-site "Hide inline menu here" list for issue #341. Same shape as neverAutoSubmit, separate key.
+  function getHiddenInlineMenu() {
+    return new Promise((res) => {
+      chrome.storage.local.get(['hiddenInlineMenu'], (r) => {
+        const list = (r && r.hiddenInlineMenu) || [];
+        res(Array.isArray(list) ? list : []);
+      });
+    });
+  }
+  function setHiddenInlineMenu(list) {
+    return new Promise((res) => {
+      chrome.storage.local.set({ hiddenInlineMenu: list }, () => res(list));
+    });
+  }
+  root.GitpassOnboard = { send, getSettings, setSettings, getNeverSave, setNeverSave, removeNeverSave, getNeverAutoSubmit, setNeverAutoSubmit, getHiddenInlineMenu, setHiddenInlineMenu, DEFAULTS };
 })(globalThis);

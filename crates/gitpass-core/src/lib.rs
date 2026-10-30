@@ -24,11 +24,12 @@ pub mod passkey;
 pub mod store;
 pub mod sync;
 pub mod totp;
+pub mod unlock_throttle;
 
 pub use merge::{merge_records as merge_items, ItemRecord, MergeReport};
 pub use search::rank as fuzzy_find;
 pub use gen_history::{GeneratorHistory, GeneratorHistoryEntry};
-pub use item::{Category, FieldKind};
+pub use item::{Category, FieldKind, PasswordHistoryEntry};
 pub use mask::{api_credential_secret, secret_hint};
 pub use store::{Item, Session, UnlockOpts, FORMAT_VERSION, MIN_READ_FORMAT};
 pub use totp::code_now as totp_now;
