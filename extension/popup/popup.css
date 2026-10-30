@@ -294,6 +294,14 @@ button.tag:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--accent
 .gen-recent-all { align-self: flex-start; padding-left: 0; font-size: 12px; cursor: pointer; }
 .gen-row { display: flex; align-items: center; gap: 10px; }
 .gen-row input[type=range] { flex: 1; accent-color: rgb(var(--accent)); }
+.gen-sep-row { justify-content: space-between; }
+.gen-sep-lab { font-size: 12px; color: rgb(var(--muted)); }
+.gen-seps { display: flex; gap: 2px; background: rgb(var(--card)); border: 1px solid rgb(var(--border)); border-radius: 8px; padding: 2px; }
+.gen-sep { width: 36px; height: 28px; border: 0; background: none; color: rgb(var(--muted)); font-family: ui-monospace, Menlo, monospace; font-size: 13px; border-radius: 6px; cursor: pointer; display: grid; place-items: center; }
+.gen-sep:hover { color: rgb(var(--fg)); }
+.gen-sep.sel { background: rgb(var(--accent)); color: #fff; font-weight: 600; }
+.gen-sep:focus-visible { outline: 2px solid rgb(var(--accent)); outline-offset: 1px; }
+.gen-cap-row { margin-top: -2px; }
 .tog { display: flex; align-items: center; gap: 6px; font-size: 13px !important; color: rgb(var(--fg)) !important; }
 .toast { position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 2px; max-width: 92%; background: rgb(var(--fg)); color: rgb(var(--bg)); padding: 6px 14px; border-radius: 99px; font-size: 12px; z-index: 20; }
 .toast-action { border: 0; padding: 0; background: none; color: inherit; font: inherit; font-weight: 700; text-decoration: underline; cursor: pointer; }

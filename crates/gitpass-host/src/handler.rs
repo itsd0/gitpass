@@ -231,9 +231,17 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
 
 fn visible(r: &ItemRecord) -> bool { r.deleted_at.is_none() && !r.archived }
 
+/// Separators the generator offers for word passphrases; anything else is a bad request.
+pub const WORD_SEPARATORS: [char; 4] = ['-', '.', '_', ' '];
+
 /// Password generator: characters (`digits`, `symbols`), words (`words`) or a PIN (`pin`).
 /// The defaults, limits and separator come from gitpass-core, so the host, CLI and desktop app agree.
 pub fn generate(r: &gitpass_core::generate::Request) -> Result<String> {
+    if let Some(c) = r.separator {
+        if !WORD_SEPARATORS.contains(&c) {
+            return Err(coded(code::BAD_REQUEST, format!("invalid word separator {c:?}: use one of -, ., _, space")));
+        }
+    }
     let opts = gitpass_core::generate::Options::for_request(r).map_err(|m| coded(code::BAD_REQUEST, m))?;
     Ok(gitpass_core::generate::generate(&opts))
 }
@@ -730,13 +738,25 @@ impl Host {
                 use gitpass_core::generate::{Mode, Request};
                 let flag = |k: &str, default: bool| req.get(k).and_then(Value::as_bool).unwrap_or(default);
                 let (words, pin) = (flag("words", false), flag("pin", false));
+                let separator = match req.get("separator") {
+                    None | Some(Value::Null) => None,
+                    Some(Value::String(s)) => {
+                        let mut chars = s.chars();
+                        let c = chars.next();
+                        if c.is_none() || chars.next().is_some() || !WORD_SEPARATORS.contains(&c.unwrap()) {
+                            return Err(coded(code::BAD_REQUEST, format!("invalid word separator {s:?}: use one of -, ., _, space")));
+                        }
+                        c
+                    }
+                    Some(_) => return Err(coded(code::BAD_REQUEST, "separator must be a string")),
+                };
                 let r = Request {
                     mode: if pin { Mode::Pin } else if words { Mode::Words } else { Mode::Random },
                     length: req.get("len").and_then(Value::as_u64).map(|v| v as usize),
                     symbols: flag("symbols", true),
                     digits: flag("digits", true),
-                    separator: None,
-                    capitalize: false,
+                    separator,
+                    capitalize: flag("capitalize", false),
                 };
                 if let Some(rules) = req.get("rules").filter(|r| !r.is_null()) {
                     if words || pin { return Err(coded(code::BAD_REQUEST, "rules apply to random passwords only")); }

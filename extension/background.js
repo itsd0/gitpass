@@ -139,7 +139,12 @@ async function popupRoute(msg) {
     case 'item_findings': return host('item_findings', { item_id: msg.item_id });
     case 'reveal': return host('reveal', { item_id: msg.item_id, field: msg.field, source: 'popup' });
     case 'totp': return host('totp', { item_id: msg.item_id });
-    case 'generate': return host('generate', { len: msg.len, digits: !!msg.digits, symbols: !!msg.symbols, words: !!msg.words, pin: !!msg.pin });
+    case 'generate': {
+      const args = { len: msg.len, digits: !!msg.digits, symbols: !!msg.symbols, words: !!msg.words, pin: !!msg.pin };
+      if (msg.separator != null) args.separator = msg.separator;
+      if (msg.capitalize != null) args.capitalize = !!msg.capitalize;
+      return host('generate', args);
+    }
     case 'create_item': {
       const it = msg.item && typeof msg.item === 'object' ? msg.item : null;
       if (!it || typeof it.category !== 'string' || it.category === 'passkey') throw Object.assign(new Error('bad item'), { code: 'bad_request' });

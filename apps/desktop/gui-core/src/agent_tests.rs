@@ -137,6 +137,16 @@ fn locked_responses() {
     assert!(c.ok("generate", json!({"len": 24, "digits": true, "symbols": false}))["password"].as_str().unwrap().len() == 24);
     assert_eq!(c.err("generate", json!({"len": 4})), "bad_request");
     assert_eq!(c.ok("generate", json!({"pin": true}))["password"].as_str().unwrap().len(), 6);
+
+    let g = c.ok("generate", json!({"words": true, "separator": "_", "capitalize": true}))["password"].as_str().unwrap().to_string();
+    assert_eq!(g.split('_').count(), 5);
+    for w in g.split('_') {
+        assert!(w.chars().next().unwrap().is_ascii_uppercase());
+    }
+    assert_eq!(c.err("generate", json!({"words": true, "separator": "/"})), "bad_request");
+    assert_eq!(c.err("generate", json!({"words": true, "separator": "invalid"})), "bad_request");
+    assert_eq!(c.err("generate", json!({"words": true, "separator": ""})), "bad_request");
+    assert_eq!(c.err("generate", json!({"words": true, "separator": 123})), "bad_request");
 }
 
 #[test]

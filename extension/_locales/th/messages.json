@@ -50,6 +50,15 @@
   "genWords": {
     "message": "จำนวนคำ"
   },
+  "genSeparator": {
+    "message": "ตัวคั่น"
+  },
+  "genSeparatorSpace": {
+    "message": "ช่องว่าง"
+  },
+  "genCapitalize": {
+    "message": "ขึ้นต้นด้วยตัวพิมพ์ใหญ่"
+  },
   "genIncludeDigits": {
     "message": "ใส่ตัวเลข"
   },
