@@ -58,7 +58,9 @@ Without it the tag-triggered `build + publish` step fails; `workflow_dispatch` b
 
 ### Cutting a release
 1. Bump the version in `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/package.json`, the Cargo manifests.
-2. Update `apps/desktop/src/whats-new/` highlights for the new version.
+2. Add a `RELEASES` entry for the new version in `apps/desktop/src/whats-new/releases.ts` (3–6 highlights, en/my/th).
+   Required: the desktop test `has highlights for the app version being released` fails CI when the bumped
+   version has no entry, so the release PR cannot merge without it.
 3. `git tag vX.Y.Z && git push origin vX.Y.Z` (on `itsd0/gitpass`).
 4. Review the draft on `itsd0/gitpass-releases`, then publish it (non-prerelease) so the updater sees it.
 
