@@ -50,6 +50,15 @@
   "genWords": {
     "message": "Words"
   },
+  "genSeparator": {
+    "message": "Separator"
+  },
+  "genSeparatorSpace": {
+    "message": "Space"
+  },
+  "genCapitalize": {
+    "message": "Capitalize"
+  },
   "genIncludeDigits": {
     "message": "Include digits"
   },

@@ -50,6 +50,15 @@
   "genWords": {
     "message": "စကားလုံးများ"
   },
+  "genSeparator": {
+    "message": "ခွဲခြားသင်္ကေတ"
+  },
+  "genSeparatorSpace": {
+    "message": "နေရာလွတ်"
+  },
+  "genCapitalize": {
+    "message": "စာလုံးကြီး"
+  },
   "genIncludeDigits": {
     "message": "ဂဏန်းများ ထည့်ရန်"
   },

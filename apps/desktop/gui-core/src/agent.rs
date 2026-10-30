@@ -492,7 +492,27 @@ impl Agent {
                 let pin = q.get("pin").and_then(|v| v.as_bool()).unwrap_or(false);
                 let words = q.get("words").and_then(|v| v.as_bool()).unwrap_or(false);
                 let mode = if pin { Mode::Pin } else if words { Mode::Words } else { Mode::Random };
-                let r = Request { mode, length: q.get("len").and_then(|v| v.as_u64()).map(|v| v as usize), symbols: b("symbols"), digits: b("digits"), ..Request::new(mode) };
+                let separator = match q.get("separator") {
+                    None | Some(Value::Null) => None,
+                    Some(Value::String(s)) => {
+                        let mut chars = s.chars();
+                        let c = chars.next();
+                        if c.is_none() || chars.next().is_some() || !crate::api::WORD_SEPARATORS.contains(&c.unwrap()) {
+                            return Err(err("bad_request", format!("invalid word separator {s:?}: use one of -, ., _, space")));
+                        }
+                        c
+                    }
+                    Some(_) => return Err(err("bad_request", "separator must be a string")),
+                };
+                let capitalize = q.get("capitalize").and_then(|v| v.as_bool()).unwrap_or(false);
+                let r = Request {
+                    mode,
+                    length: q.get("len").and_then(|v| v.as_u64()).map(|v| v as usize),
+                    symbols: b("symbols"),
+                    digits: b("digits"),
+                    separator,
+                    capitalize,
+                };
                 Ok(json!({"password": api::generate(&r).map_err(|e| err("bad_request", e.to_string()))?}))
             }
             "record_generated_password" => {
