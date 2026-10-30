@@ -13,7 +13,7 @@ pub use dates::{parse_expiry, unused_threshold_days};
 pub use hibp::{pwned_count, PwnedRangeClient, HIBP_RANGE_URL};
 pub use sites::{lookup_mfa_site, mfa_sites, parse_mfa_site_list, site_support, SiteSupport};
 pub use scoring::{is_score_password_item, score, SCORE_WEIGHT_BAD_PASSWORDS, SCORE_WEIGHT_MISSING_2FA, SCORE_WEIGHT_OLD_PASSWORDS, SCORE_WEIGHT_REUSED_OLD_PASSWORD};
-pub use strength::{contains_personal_info, entropy_bits, weakness};
+pub use strength::{contains_personal_info, entropy_bits, pattern_estimate, weakness};
 pub use url::{change_password_url, decode_punycode, extract_site_name, insecure_url_host};
 pub(crate) use url::host_of;
 
