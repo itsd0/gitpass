@@ -29,7 +29,7 @@ export interface Settings { autoLockMinutes: number; clipboardClearSecs: number;
 export interface SyncStatus { remote: string|null; lastSync: string|null; ahead: number; behind: number; dirty: boolean; }
 export interface Identity { publicKey: string; fingerprint: string; }
 export interface Onboarding { extensionInstalled: boolean; emergencyKitSaved: boolean; repoConnected: boolean; imported: boolean; dismissed: boolean; }
-export interface UnlockState { unlocked: boolean; vaultPath: string; account: string|null; vaultExists?: boolean; biometricAvailable?: boolean; }
+export interface UnlockState { unlocked: boolean; vaultPath: string; account: string|null; vaultExists?: boolean; biometricAvailable?: boolean; throttledSecs?: number; }
 export interface CreateAccountResult { vaultPath: string; secretKey: string; }
 export interface GeneratorHistoryEntry {
   id: string;

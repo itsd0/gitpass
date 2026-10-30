@@ -173,6 +173,9 @@
   "unlockReason": {
     "message": "ปลดล็อกส่วนขยายเบราว์เซอร์ gitpass"
   },
+  "unlockThrottled": {
+    "message": "พยายามมากเกินไป ลองใหม่อีกครั้งในอีก $1 วินาที"
+  },
   "unlockCancelled": {
     "message": "ยกเลิกการปลดล็อกแล้ว"
   },
@@ -1088,6 +1091,20 @@
   "itemRestored": {
     "message": "กู้คืนรายการแล้ว"
   },
+  "attachments": {
+    "message": "ไฟล์แนบ"
+  },
+  "hasAttachments": {
+    "message": "มีไฟล์แนบ"
+  },
+  "openAttachmentInGitpass": {
+    "message": "เปิด $1 ใน gitpass",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
+  },
   "filterArchive": {
     "message": "คลังข้อมูล"
   },
@@ -1157,5 +1174,9 @@
   },
   "inArchive": {
     "message": "รายการนี้ถูกเก็บถาวรแล้ว"
+  },
+  "capsLockOn": {
+    "message": "Caps Lock เปิดอยู่",
+    "description": "Shown under a master-password field while Caps Lock is on"
   }
 }

@@ -272,6 +272,7 @@ impl Agent {
                 let st = self.app.status()?;
                 let mut v = json!({"unlocked": st.unlocked, "app_running": true, "idle_timeout_secs": self.app.get_settings().auto_lock_minutes * 60});
                 if let Some(a) = self.account() { v["account"] = a; }
+                if let Some(secs) = st.throttled_secs { v["throttled_secs"] = json!(secs); }
                 Ok(v)
             }
             "request_unlock" => {
@@ -667,6 +668,7 @@ pub fn split_id(id: &str) -> Result<(String, String)> {
     if v.is_empty() || i.is_empty() { return Err(err("bad_request", "item_id must be '<vault_id>:<item_id>'")); }
     Ok((v.into(), i.into()))
 }
+
 
 
 /// Keep contract codes from gitpass-host's `CodedError` (e.g. `origin_mismatch`, `exists`).

@@ -12,6 +12,7 @@ import {
   detectImportFormat,
   importReducer,
   initialImport,
+  isPasswordProtectedBitwarden,
   type ImportFormatOption,
   type ImportStep,
 } from './importWizardLogic';
@@ -86,13 +87,19 @@ export function ImportWizard({ onBack, onDone }: { onBack: () => void; onDone: (
         format: s.format!,
         path: s.path.trim(),
         dryRun,
+        password: s.format === 'bitwarden-json' ? s.password : undefined,
       });
       dispatch(dryRun ? { type: 'preview', preview: r } : { type: 'done', result: r });
       if (!dryRun) {
         api.setOnboarding({ patch: { imported: true } }).catch(() => {});
       }
     } catch (e) {
-      dispatch({ type: 'error', error: String(e) });
+      const error = String(e);
+      dispatch({ type: 'error', error });
+      // A file picked by path gives us no content snippet: reveal the password step on demand.
+      if (s.format === 'bitwarden-json' && error.includes('export password is required')) {
+        dispatch({ type: 'needsPassword' });
+      }
     } finally {
       setBusy(false);
     }
@@ -111,6 +118,7 @@ export function ImportWizard({ onBack, onDone }: { onBack: () => void; onDone: (
       path,
       format: detected ?? s.format,
       autoDetected: !!detected,
+      needsPassword: detected === 'bitwarden-json' && isPasswordProtectedBitwarden(snippet),
     });
   };
 
@@ -319,6 +327,24 @@ export function ImportWizard({ onBack, onDone }: { onBack: () => void; onDone: (
               />
             </label>
           </div>
+
+          {s.needsPassword && s.format === 'bitwarden-json' && (
+            <div className="rounded-lg border border-accent/30 bg-accent/10 p-2.5" data-testid="export-password">
+              <label className="block text-xs font-medium text-fg">
+                {t('import.exportPassword')}
+                <Input
+                  type="password"
+                  autoComplete="off"
+                  autoFocus
+                  className="mt-1"
+                  aria-label={t('import.exportPassword')}
+                  value={s.password}
+                  onChange={(e) => dispatch({ type: 'password', password: e.target.value })}
+                />
+              </label>
+              <p className="mt-1 text-[11px] text-muted">{t('import.exportPasswordHint')}</p>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block text-xs text-muted">

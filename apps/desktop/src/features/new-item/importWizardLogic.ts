@@ -21,6 +21,7 @@ export const IMPORT_FORMATS = [
   { id: 'bitwarden-csv', label: 'Bitwarden (.csv)', labelKey: 'import.formatBitwardenCsv', ext: 'csv' },
   { id: 'generic-csv', label: 'Other password manager (.csv)', labelKey: 'import.formatGenericCsv', ext: 'csv' },
   { id: '1pux', label: '1PUX export file (.1pux)', labelKey: 'import.format1pux', ext: '1pux' },
+  { id: '1pif', label: '.1pif export file (.1pif)', labelKey: 'import.format1pif', ext: '1pif' },
   { id: 'keepass-csv', label: 'KeePass (.csv)', labelKey: 'import.formatKeepassCsv', ext: 'csv' },
   { id: 'chrome-csv', label: 'Chrome / Chromium (.csv)', labelKey: 'import.formatChromeCsv', ext: 'csv' },
   { id: 'lastpass-csv', label: 'LastPass (.csv)', labelKey: 'import.formatLastpass', ext: 'csv' },
@@ -41,13 +42,18 @@ export interface ImportState {
   result: ImportResult | null;
   error: string | null;
   autoDetected?: boolean;
+  /** The file is a Bitwarden export that needs its export password. */
+  needsPassword?: boolean;
+  password: string;
 }
 
 export type ImportAction =
-  | { type: 'file'; path: string; format?: string | null; autoDetected?: boolean }
+  | { type: 'file'; path: string; format?: string | null; autoDetected?: boolean; needsPassword?: boolean }
   | { type: 'format'; format: string; autoDetected?: boolean }
   | { type: 'path'; path: string }
   | { type: 'vault'; vaultId: string }
+  | { type: 'password'; password: string }
+  | { type: 'needsPassword' }
   | { type: 'preview'; preview: ImportResult }
   | { type: 'done'; result: ImportResult }
   | { type: 'error'; error: string }
@@ -62,7 +68,19 @@ export const initialImport = (vaultId: string | null = null): ImportState => ({
   result: null,
   error: null,
   autoDetected: false,
+  needsPassword: false,
+  password: '',
 });
+
+/** True when the JSON snippet is a Bitwarden export protected by a user-chosen password. */
+export function isPasswordProtectedBitwarden(content: string): boolean {
+  try {
+    const parsed = JSON.parse(content.trim());
+    return parsed?.encrypted === true && parsed?.passwordProtected === true;
+  } catch {
+    return false;
+  }
+}
 
 /** Pure function to detect the import format from filename and optional content/header. */
 export function detectImportFormat(filename: string, contentOrHeader?: string): ImportFormatId | null {
@@ -73,7 +91,16 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
     return '1pux';
   }
 
+  // 1b. .1pif files or folder with data.1pif
+  if (lowerName.endsWith('.1pif') || lowerName.includes('1pif') || lowerName.endsWith('data.1pif')) {
+    return '1pif';
+  }
+
   const content = contentOrHeader?.trim() ?? '';
+
+  if (content.includes('***') && content.includes('"typeName"')) {
+    return '1pif';
+  }
 
   // 2. JSON files or JSON content
   if (lowerName.endsWith('.json') || content.startsWith('{')) {
@@ -180,6 +207,7 @@ export function importReducer(s: ImportState, a: ImportAction): ImportState {
         path: a.path,
         format: a.format !== undefined ? a.format : s.format,
         autoDetected: a.autoDetected ?? false,
+        needsPassword: a.needsPassword ?? false,
         error: null,
       };
     case 'format':
@@ -196,6 +224,10 @@ export function importReducer(s: ImportState, a: ImportAction): ImportState {
     }
     case 'vault':
       return { ...s, vaultId: a.vaultId };
+    case 'password':
+      return { ...s, password: a.password, error: null };
+    case 'needsPassword':
+      return { ...s, needsPassword: true };
     case 'preview':
       return { ...s, preview: a.preview, step: 'preview', error: null };
     case 'done':

@@ -608,11 +608,12 @@ EXAMPLES:
     Device { #[command(subcommand)] cmd: DeviceCmd },
     /// Account identity (X25519) used for vault sharing
     Identity { #[command(subcommand)] cmd: IdentityCmd },
-    /// Import items from another password manager's export file
+    /// Import items from another password manager's export file (a password-protected Bitwarden
+    /// JSON asks for the export password: $GITPASS_IMPORT_PASSWORD or a prompt)
     Import {
         vault: String,
-        /// bitwarden-json | bitwarden-csv | generic-csv | 1pux | keepass-csv | chrome-csv | apple-passwords-csv | lastpass-csv | protonpass-csv | gitpass-json
-        #[arg(long = "from")] from: String,
+        /// bitwarden-json | bitwarden-csv | generic-csv | 1pux | 1pif | keepass-csv | chrome-csv | apple-passwords-csv | lastpass-csv | protonpass-csv | gitpass-json
+        #[arg(long = "from", alias = "format")] from: Option<String>,
         file: PathBuf,
         /// Parse and count only; write nothing
         #[arg(long)] dry_run: bool,
@@ -923,6 +924,7 @@ fn do_migrate(root: &Path, pw: &str, sk: &SecretKey) -> Result<()> {
 }
 
 fn unlock_full(cli: &Cli, root: &Path) -> Result<(Session, Zeroizing<String>, SecretKey)> {
+    gitpass_core::unlock_throttle::check_throttle(root)?;
     let pw = prompt_secret("GITPASS_PASSWORD", "Master password: ")?;
     let sk = load_secret_key(root)?;
     if store::read_format(root)?.version < store::MIN_READ_FORMAT {
@@ -1720,10 +1722,11 @@ fn pick_record(s: &Session, vid: &str, query: &str, pick: Option<usize>, include
     if !include_archived {
         recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
     }
-    let ranked = gitpass_core::search::rank_by(
+    let vname = s.vault_meta(vid).map(|m| m.name.clone()).unwrap_or_default();
+    let ranked = gitpass_core::search::rank_by_candidate(
         query,
         recs.into_iter().map(|(id, _, rec)| (id, rec)),
-        |r| &r.item,
+        |r| gitpass_core::search::CandidateInfo::from_record(r, Some(vname.as_str())),
     );
 
     if ranked.is_empty() {
@@ -2809,11 +2812,12 @@ fn run() -> Result<()> {
             if !include_archived {
                 recs.retain(|(_, _, r)| r.deleted_at.is_none() && !r.archived);
             }
+            let vname = s.vault_meta(&vid).map(|m| m.name.clone()).unwrap_or_default();
             let usage = s.all_last_used();
-            let ranked = gitpass_core::search::rank_by(
+            let ranked = gitpass_core::search::rank_by_candidate(
                 query,
                 recs.into_iter().map(|(id, _, rec)| (id, rec)),
-                |r| &r.item,
+                |r| gitpass_core::search::CandidateInfo::from_record(r, Some(vname.as_str())),
             );
             if *json {
                 let summaries: Vec<CliItemSummary> = ranked.iter().map(|(_, id, rec)| {
@@ -2849,14 +2853,17 @@ fn run() -> Result<()> {
             }
             let usage = s.all_last_used();
             let items: Vec<(String, ItemRecord)> = match query {
-                Some(q) => gitpass_core::search::rank_by(
-                    q,
-                    recs.into_iter().map(|(id, _, rec)| (id, rec)),
-                    |r| &r.item,
-                )
-                .into_iter()
-                .map(|(_, id, rec)| (id, rec))
-                .collect(),
+                Some(q) => {
+                    let vname = s.vault_meta(&vid).map(|m| m.name.clone()).unwrap_or_default();
+                    gitpass_core::search::rank_by_candidate(
+                        q,
+                        recs.into_iter().map(|(id, _, rec)| (id, rec)),
+                        |r| gitpass_core::search::CandidateInfo::from_record(r, Some(vname.as_str())),
+                    )
+                    .into_iter()
+                    .map(|(_, id, rec)| (id, rec))
+                    .collect()
+                }
                 None => {
                     if *sort == Some(ListSort::Recent) {
                         recs.sort_by(|a, b| {
@@ -3261,10 +3268,21 @@ fn run() -> Result<()> {
         }
         Cmd::Import { vault, from, file, dry_run, allow_duplicates } => {
             use gitpass_core::import;
-            let fmt: import::ImportFormat = from.parse()?;
-            let data = Zeroizing::new(std::fs::read(file).with_context(|| format!("reading {}", file.display()))?);
-            let pass = if fmt == import::ImportFormat::GitpassJson && import::is_encrypted_export(&String::from_utf8_lossy(&data)) {
-                Some(prompt_secret("GITPASS_EXPORT_PASSPHRASE", "Export passphrase: ")?) } else { None };
+            let resolved = import::resolve_import_path(file);
+            let data = Zeroizing::new(std::fs::read(&resolved).with_context(|| format!("reading {}", resolved.display()))?);
+            let fmt: import::ImportFormat = match from.as_deref() {
+                Some(f) if !f.is_empty() => f.parse()?,
+                _ => import::detect_format_bytes(&data)
+                    .ok_or_else(|| anyhow::anyhow!("could not auto-detect format; specify --from <format>"))?,
+            };
+            let text = String::from_utf8_lossy(&data);
+            let pass = match fmt {
+                import::ImportFormat::GitpassJson if import::is_encrypted_export(&text) =>
+                    Some(prompt_secret("GITPASS_EXPORT_PASSPHRASE", "Export passphrase: ")?),
+                import::ImportFormat::BitwardenJson if import::bitwarden_json_needs_password(&text) =>
+                    Some(prompt_secret("GITPASS_IMPORT_PASSWORD", "Export password: ")?),
+                _ => None,
+            };
             let parsed = import::parse_bytes(fmt, &data, pass.as_deref().map(|s| s.as_str()))?;
             let s = unlock(&cli, &root)?;
             let vid = s.resolve_vault(vault)?;

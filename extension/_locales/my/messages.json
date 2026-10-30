@@ -173,6 +173,9 @@
   "unlockReason": {
     "message": "gitpass browser extension ကို သော့ဖွင့်ရန်"
   },
+  "unlockThrottled": {
+    "message": "ကြိုးစားမှု အကြိမ်အရေအတွက် များလွန်းသည်။ $1 စက္ကန့်အကြာတွင် ထပ်မံကြိုးစားပါ။"
+  },
   "unlockCancelled": {
     "message": "သော့ဖွင့်ခြင်းကို ပယ်ဖျက်လိုက်သည်"
   },
@@ -1088,6 +1091,20 @@
   "itemRestored": {
     "message": "မူလအတိုင်း ပြန်လည်ရယူပြီးပါပြီ"
   },
+  "attachments": {
+    "message": "တွဲထားသော ဖိုင်များ"
+  },
+  "hasAttachments": {
+    "message": "တွဲထားသော ဖိုင်များ ရှိသည်"
+  },
+  "openAttachmentInGitpass": {
+    "message": "$1 ကို gitpass တွင် ဖွင့်ပါ",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
+  },
   "filterArchive": {
     "message": "သိမ်းဆည်းထားသည်များ"
   },
@@ -1157,5 +1174,9 @@
   },
   "inArchive": {
     "message": "ဤ item ကို သိမ်းဆည်းထားပါသည်။"
+  },
+  "capsLockOn": {
+    "message": "Caps Lock ဖွင့်ထားပါသည်",
+    "description": "Shown under a master-password field while Caps Lock is on"
   }
 }

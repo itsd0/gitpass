@@ -53,17 +53,24 @@ pub mod code {
     pub const BAD_REQUEST: &str = "bad_request";
     pub const APP_NOT_RUNNING: &str = "app_not_running";
     pub const INTERNAL: &str = "internal";
+    pub const THROTTLED: &str = "throttled";
 }
 
 /// An error carrying a contract error code.
 #[derive(Debug)]
-pub struct CodedError { pub code: &'static str, pub message: String }
+pub struct CodedError { pub code: &'static str, pub message: String, pub retry_after_secs: Option<u64> }
 impl std::fmt::Display for CodedError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, "{}", self.message) }
 }
 impl std::error::Error for CodedError {}
-pub fn coded(code: &'static str, message: impl Into<String>) -> anyhow::Error { CodedError { code, message: message.into() }.into() }
-
+pub fn coded(code: &'static str, message: impl Into<String>) -> anyhow::Error { CodedError { code, message: message.into(), retry_after_secs: None }.into() }
+pub fn coded_throttled(secs: u64) -> anyhow::Error {
+    CodedError {
+        code: code::THROTTLED,
+        message: format!("Too many attempts. Try again in {secs} s"),
+        retry_after_secs: Some(secs),
+    }.into()
+}
 /// Build an error response frame.
 pub fn error_frame(id: Value, code: &str, message: &str) -> Value {
     json!({"id": id, "ok": false, "error": code, "message": message})
@@ -282,10 +289,23 @@ impl Host {
         self.expire_if_idle();
         match self.dispatch(req) {
             Ok(r) => json!({"id": id, "ok": true, "result": r}),
-            Err(e) => match e.downcast_ref::<CodedError>() {
-                Some(c) => error_frame(id, c.code, &c.message),
-                None => error_frame(id, code::INTERNAL, &format!("{e:#}")),
-            },
+            Err(e) => {
+                if let Some(t) = e.downcast_ref::<gitpass_core::unlock_throttle::ThrottledError>() {
+                    let mut frame = error_frame(id, code::THROTTLED, &format!("Too many attempts. Try again in {} s", t.seconds_remaining));
+                    frame["seconds_remaining"] = json!(t.seconds_remaining);
+                    frame["retry_after_secs"] = json!(t.seconds_remaining);
+                    frame
+                } else if let Some(c) = e.downcast_ref::<CodedError>() {
+                    let mut frame = error_frame(id, c.code, &c.message);
+                    if let Some(secs) = c.retry_after_secs {
+                        frame["seconds_remaining"] = json!(secs);
+                        frame["retry_after_secs"] = json!(secs);
+                    }
+                    frame
+                } else {
+                    error_frame(id, code::INTERNAL, &format!("{e:#}"))
+                }
+            }
         }
     }
 
@@ -389,6 +409,7 @@ impl Host {
                 "version": env!("CARGO_PKG_VERSION"),
                 "idle_timeout_secs": self.cfg.idle_timeout.as_secs(),
                 "secret_key_file": self.cfg.secret_key_path.is_file(),
+                "throttled_secs": gitpass_core::unlock_throttle::seconds_remaining(&self.cfg.vault_path),
             })),
             // Fallback only: password + Secret Key, in memory only.
             "unlock" => {
@@ -404,8 +425,15 @@ impl Host {
                 if store::read_format(root)?.version < store::MIN_READ_FORMAT {
                     return Err(coded(code::INTERNAL, "vault uses an old format; run `gitpass migrate` first"));
                 }
+                gitpass_core::unlock_throttle::check_throttle(root).map_err(|t| coded_throttled(t.seconds_remaining))?;
                 // Verify-only unlock: keeps the vault's KDF params and writes nothing on unlock.
-                let s = Session::reopen_verify(root, &pw, &sk, false).map_err(|e| coded(code::DENIED, format!("{e:#}")))?;
+                let s = Session::reopen_verify(root, &pw, &sk, false).map_err(|e| {
+                    if let Some(t) = e.downcast_ref::<gitpass_core::unlock_throttle::ThrottledError>() {
+                        coded_throttled(t.seconds_remaining)
+                    } else {
+                        coded(code::DENIED, format!("{e:#}"))
+                    }
+                })?;
                 if s.device_revoked { return Err(coded(code::DENIED, "this device is revoked")); }
                 self.session = Some(s);
                 self.audit_cache = None;

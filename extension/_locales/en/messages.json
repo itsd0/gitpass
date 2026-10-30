@@ -173,6 +173,9 @@
   "unlockReason": {
     "message": "Unlock the gitpass browser extension"
   },
+  "unlockThrottled": {
+    "message": "Too many attempts. Try again in $1 s"
+  },
   "unlockCancelled": {
     "message": "Unlock was cancelled"
   },
@@ -1009,6 +1012,20 @@
   "itemRestored": {
     "message": "Item restored"
   },
+  "attachments": {
+    "message": "Attachments"
+  },
+  "hasAttachments": {
+    "message": "Has attachments"
+  },
+  "openAttachmentInGitpass": {
+    "message": "Open $1 in gitpass",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
+  },
   "filterArchive": {
     "message": "Archive"
   },
@@ -1078,5 +1095,9 @@
   },
   "inArchive": {
     "message": "This item is archived."
+  },
+  "capsLockOn": {
+    "message": "Caps Lock is on",
+    "description": "Shown under a master-password field while Caps Lock is on"
   }
 }

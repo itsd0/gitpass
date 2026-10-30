@@ -1,0 +1,148 @@
+***00000000-0000-0000-0000-000000000001***
+{
+  "uuid": "00000000-0000-0000-0000-00000001",
+  "typeName": "webforms.WebForm",
+  "title": "Example Web Form",
+  "location": "https://login.example.invalid",
+  "createdAt": 1700000000,
+  "updatedAt": 1700005000,
+  "openContents": {
+    "tags": ["work", "staging"]
+  },
+  "secureContents": {
+    "notesPlain": "Important recovery note",
+    "fields": [
+      {
+        "designation": "username",
+        "name": "login_user",
+        "type": "T",
+        "value": "alice_fake"
+      },
+      {
+        "designation": "password",
+        "name": "login_password",
+        "type": "P",
+        "value": "FAKE-pw-webform-123"
+      },
+      {
+        "name": "totp",
+        "type": "T",
+        "value": "otpauth://totp/Example:alice_fake?secret=JBSWY3DPEHPK3PXP"
+      },
+      {
+        "name": "security_question",
+        "type": "T",
+        "value": "Blue"
+      }
+    ]
+  }
+}
+***00000000-0000-0000-0000-000000000002***
+{
+  "uuid": "00000000-0000-0000-0000-00000002",
+  "typeName": "wallet.financial.CreditCard",
+  "title": "Corporate Platinum Card",
+  "createdAt": 1700001000,
+  "updatedAt": 1700006000,
+  "secureContents": {
+    "ccnum": "4111222233334444",
+    "cardholder": "Alice Fake",
+    "cvv": "999",
+    "expiry": "08/2029",
+    "type": "Visa",
+    "pin": "1234",
+    "bank": "First Fake Bank"
+  }
+}
+***00000000-0000-0000-0000-000000000003***
+{
+  "uuid": "00000000-0000-0000-0000-00000003",
+  "typeName": "secureNotes.SecureNote",
+  "title": "Server Backup Keys",
+  "createdAt": 1700002000,
+  "secureContents": {
+    "notesPlain": "Recovery phrases and secrets"
+  }
+}
+***00000000-0000-0000-0000-000000000004***
+{
+  "uuid": "00000000-0000-0000-0000-00000004",
+  "typeName": "identities.Identity",
+  "title": "Alice Identity",
+  "secureContents": {
+    "firstname": "Alice",
+    "lastname": "Fake",
+    "email": "alice@example.invalid",
+    "defphone": "+1-555-0199",
+    "birthdate": "1990-05-15",
+    "address": "123 Fake Street\nSpringfield, OR 97477"
+  }
+}
+***00000000-0000-0000-0000-000000000005***
+{
+  "uuid": "00000000-0000-0000-0000-00000005",
+  "typeName": "wallet.financial.BankAccount",
+  "title": "Primary Checking Account",
+  "secureContents": {
+    "bankName": "Fake National Bank",
+    "owner": "Alice Fake",
+    "accountNo": "123456789",
+    "routingNo": "987654321",
+    "accountType": "Checking"
+  }
+}
+***00000000-0000-0000-0000-000000000006***
+{
+  "uuid": "00000000-0000-0000-0000-00000006",
+  "typeName": "wallet.computer.UnixServer",
+  "title": "Production App Server",
+  "secureContents": {
+    "url": "https://app.example.invalid",
+    "username": "deploy_user",
+    "password": "FAKE-server-pw-456",
+    "admin_console_url": "https://admin.example.invalid",
+    "hosting_provider_name": "CloudProvider"
+  }
+}
+***00000000-0000-0000-0000-000000000007***
+{
+  "uuid": "00000000-0000-0000-0000-00000007",
+  "typeName": "wallet.computer.Router",
+  "title": "Office HighSpeed Wi-Fi",
+  "secureContents": {
+    "network_name": "OfficeGuestNet",
+    "wireless_password": "FAKE-wifi-secret-789",
+    "wireless_security": "WPA3"
+  }
+}
+***00000000-0000-0000-0000-000000000008***
+{
+  "uuid": "00000000-0000-0000-0000-00000008",
+  "typeName": "system.folder",
+  "title": "Archived Folder"
+}
+***00000000-0000-0000-0000-000000000009***
+{
+  "uuid": "00000000-0000-0000-0000-00000009",
+  "typeName": "webforms.WebForm",
+  "title": "Old Deleted Service",
+  "trashed": true,
+  "secureContents": {
+    "fields": [
+      { "designation": "username", "value": "old_user" }
+    ]
+  }
+}
+***00000000-0000-0000-0000-000000000010***
+{
+  "uuid": "00000000-0000-0000-0000-00000010",
+  "typeName": "wallet.membership.GymMembership",
+  "title": "City Gym Membership",
+  "secureContents": {
+    "membership_no": "GYM-998877",
+    "pin": "5555"
+  }
+}
+***00000000-0000-0000-0000-000000000011***
+{ this is malformed json
+***END***

@@ -10,15 +10,20 @@ use crate::crypto::{open, random_bytes, seal, Envelope, KdfParams, Key32};
 use crate::item::{Category, Field, FieldKind, Section};
 use crate::merge::ItemRecord;
 use crate::store::{now, Item, Session};
+use aes::Aes256;
 use anyhow::{anyhow, bail, Context, Result};
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::{engine::general_purpose::STANDARD as B64, Engine};
+use cbc::cipher::{block_padding::Pkcs7, BlockDecryptMut, KeyIvInit};
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use sha2::Sha256;
 use std::collections::{BTreeMap, HashSet};
+use zeroize::Zeroizing;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ImportFormat { BitwardenJson, BitwardenCsv, GenericCsv, Pux, KeepassCsv, ChromeCsv, ApplePasswordsCsv, GitpassJson, LastpassCsv, ProtonPassCsv }
+pub enum ImportFormat { BitwardenJson, BitwardenCsv, GenericCsv, Pux, OnePif, KeepassCsv, ChromeCsv, ApplePasswordsCsv, GitpassJson, LastpassCsv, ProtonPassCsv }
 
 impl std::str::FromStr for ImportFormat {
     type Err = anyhow::Error;
@@ -28,13 +33,14 @@ impl std::str::FromStr for ImportFormat {
             "bitwarden-csv" => Self::BitwardenCsv,
             "generic-csv" | "1password-csv" => Self::GenericCsv,
             "1pux" | "1password-1pux" => Self::Pux,
+            "1pif" | "onepif" => Self::OnePif,
             "keepass-csv" | "keepassxc-csv" => Self::KeepassCsv,
             "chrome-csv" => Self::ChromeCsv,
             "apple-passwords-csv" | "apple-passwords" | "apple-csv" | "apple" | "safari-csv" | "safari" => Self::ApplePasswordsCsv,
             "gitpass-json" => Self::GitpassJson,
             "lastpass-csv" | "lastpass" => Self::LastpassCsv,
             "protonpass-csv" | "proton-pass-csv" | "protonpass" | "proton-pass" => Self::ProtonPassCsv,
-            o => bail!("unknown import format '{o}' (bitwarden-json, bitwarden-csv, generic-csv, 1pux, keepass-csv, chrome-csv, apple-passwords-csv, gitpass-json, lastpass-csv, protonpass-csv)"),
+            o => bail!("unknown import format '{o}' (bitwarden-json, bitwarden-csv, generic-csv, 1pux, 1pif, keepass-csv, chrome-csv, apple-passwords-csv, gitpass-json, lastpass-csv, protonpass-csv)"),
         })
     }
 }
@@ -43,12 +49,13 @@ impl std::str::FromStr for ImportFormat {
 #[derive(Default)]
 pub struct Parsed { pub items: Vec<ItemRecord>, pub warnings: Vec<String> }
 
-/// Parse text `data` in `format`. `passphrase` is only needed for encrypted gitpass-json exports.
+/// Parse text `data` in `format`. `passphrase` is needed for encrypted gitpass-json exports and for
+/// password-protected Bitwarden JSON exports (it is the export password there).
 /// (.1pux is a zip archive: use [`parse_bytes`].)
 pub fn parse(format: ImportFormat, data: &str, passphrase: Option<&str>) -> Result<Parsed> {
     let data = data.strip_prefix('\u{feff}').unwrap_or(data); // tolerate UTF-8 BOM (Excel / other password managers)
     match format {
-        ImportFormat::BitwardenJson => parse_bitwarden_json(data),
+        ImportFormat::BitwardenJson => parse_bitwarden_json(data, passphrase),
         ImportFormat::GitpassJson => parse_gitpass_json(data, passphrase),
         ImportFormat::BitwardenCsv => parse_csv(data, &BITWARDEN_CSV),
         ImportFormat::GenericCsv => parse_csv(data, &GENERIC_CSV),
@@ -56,6 +63,7 @@ pub fn parse(format: ImportFormat, data: &str, passphrase: Option<&str>) -> Resu
         ImportFormat::ChromeCsv => parse_csv(data, &CHROME_CSV),
         ImportFormat::ApplePasswordsCsv => parse_csv(data, &APPLE_PASSWORDS_CSV),
         ImportFormat::Pux => parse_1pux_json(data),
+        ImportFormat::OnePif => parse_onepif(data),
         ImportFormat::LastpassCsv => parse_csv(data, &LASTPASS_CSV),
         ImportFormat::ProtonPassCsv => parse_csv(data, &PROTONPASS_CSV),
     }
@@ -66,6 +74,15 @@ pub fn parse_bytes(format: ImportFormat, data: &[u8], passphrase: Option<&str>) 
     if format == ImportFormat::Pux { return parse_1pux(data); }
     let s = std::str::from_utf8(data).map_err(|_| anyhow!("file is not UTF-8 text; is this the right format?"))?;
     parse(format, s, passphrase)
+}
+
+/// If `path` is a directory containing `data.1pif`, resolve to `data.1pif`, otherwise keep `path`.
+pub fn resolve_import_path(path: &std::path::Path) -> std::path::PathBuf {
+    if path.is_dir() && path.join("data.1pif").exists() {
+        path.join("data.1pif")
+    } else {
+        path.to_path_buf()
+    }
 }
 
 fn opt(s: Option<&str>) -> Option<String> {
@@ -415,10 +432,11 @@ fn month_year(m: Option<String>, y: Option<String>) -> Option<String> {
 
 // ---------------------------------------------------------------- Bitwarden JSON
 
-fn parse_bitwarden_json(data: &str) -> Result<Parsed> {
+fn parse_bitwarden_json(data: &str, export_password: Option<&str>) -> Result<Parsed> {
     let v: Value = serde_json::from_str(data).context("bitwarden-json: invalid JSON")?;
     if v.get("encrypted").and_then(Value::as_bool) == Some(true) {
-        bail!("bitwarden-json: this is an ENCRYPTED Bitwarden export; re-export as unencrypted JSON (or CSV)");
+        let clear = decrypt_bitwarden_export(&v, export_password)?;
+        return parse_bitwarden_json(&clear, None);
     }
     let folders: BTreeMap<String, String> = v.get("folders").and_then(Value::as_array).into_iter().flatten()
         .filter_map(|f| Some((f.get("id")?.as_str()?.to_string(), f.get("name")?.as_str()?.to_string()))).collect();
@@ -432,7 +450,7 @@ fn parse_bitwarden_json(data: &str) -> Result<Parsed> {
         if it.get("deletedDate").is_some_and(|d| !d.is_null()) { out.warnings.push(format!("item {i} ({title}): in Bitwarden trash, skipped")); continue; }
         let ty = it.get("type").and_then(Value::as_u64).unwrap_or(1);
         let cat = match ty { 1 => Category::Login, 2 => Category::SecureNote, 3 => Category::CreditCard, 4 => Category::Identity, 5 => Category::SshKey, _ => Category::SecureNote };
-        let mut r = record(title, cat);
+        let mut r = record(title.clone(), cat);
         r.item.notes = s(it, "notes");
         r.favorite = it.get("favorite").and_then(Value::as_bool).unwrap_or(false);
         if let Some(f) = s(it, "folderId").and_then(|fid| folders.get(&fid).cloned()) { add_tag(&mut r, &f); }
@@ -494,6 +512,121 @@ fn parse_bitwarden_json(data: &str) -> Result<Parsed> {
         out.items.push(r);
     }
     Ok(out)
+}
+
+// ------------------------------------------------ Bitwarden password-protected JSON
+
+/// True when `data` is a Bitwarden JSON export protected by a user-chosen password
+/// (`encrypted` + `passwordProtected`). Account-key-encrypted exports return false.
+pub fn bitwarden_json_needs_password(data: &str) -> bool {
+    serde_json::from_str::<Value>(data).is_ok_and(|v| is_password_protected(&v))
+}
+
+fn is_password_protected(v: &Value) -> bool {
+    v.get("encrypted").and_then(Value::as_bool) == Some(true)
+        && v.get("passwordProtected").and_then(Value::as_bool) == Some(true)
+}
+
+// Bounds Bitwarden clients accept for import KDF parameters. An import file is attacker controlled
+// and Argon2 allocates `kdfMemory` MiB up front, so reject out-of-range values before deriving.
+const BW_PBKDF2_ITER_MIN: u64 = 5_000;
+const BW_PBKDF2_ITER_MAX: u64 = 2_000_000;
+const BW_ARGON2_ITER_MIN: u64 = 2;
+const BW_ARGON2_ITER_MAX: u64 = 10;
+const BW_ARGON2_MEMORY_MIN: u64 = 16; // MiB
+const BW_ARGON2_MEMORY_MAX: u64 = 1024;
+const BW_ARGON2_PARALLELISM_MIN: u64 = 1;
+const BW_ARGON2_PARALLELISM_MAX: u64 = 16;
+
+fn within(v: u64, lo: u64, hi: u64) -> bool { (lo..=hi).contains(&v) }
+
+/// Decrypt a password-protected Bitwarden JSON export: derive the key from the export password with
+/// the file's KDF settings, HKDF-Expand it into the AES-256-CBC and HMAC-SHA256 keys, verify
+/// `encKeyValidation_DO_NOT_EDIT`, then MAC-verify and decrypt `data`.
+fn decrypt_bitwarden_export(v: &Value, export_password: Option<&str>) -> Result<Zeroizing<String>> {
+    if !is_password_protected(v) {
+        bail!("bitwarden-json: this export is encrypted with your Bitwarden account key, not an export password; in Bitwarden choose “Password protected” or an unencrypted export");
+    }
+    let password = export_password
+        .filter(|p| !p.is_empty())
+        .ok_or_else(|| anyhow!("bitwarden-json: this export is password-protected; the export password is required"))?;
+    let field = |k: &str| {
+        v.get(k).and_then(Value::as_str).filter(|s| !s.is_empty())
+            .ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing or has an empty \"{k}\""))
+    };
+    let master = bitwarden_export_key(password, field("salt")?, v)?;
+    let mut enc_key = Zeroizing::new([0u8; 32]);
+    let mut mac_key = Zeroizing::new([0u8; 32]);
+    let hk = hkdf::Hkdf::<Sha256>::from_prk(master.as_slice())
+        .map_err(|_| anyhow!("bitwarden-json: invalid export key material"))?;
+    hk.expand(b"enc", enc_key.as_mut_slice()).map_err(|_| anyhow!("bitwarden-json: cannot stretch the export key"))?;
+    hk.expand(b"mac", mac_key.as_mut_slice()).map_err(|_| anyhow!("bitwarden-json: cannot stretch the export key"))?;
+    // A MAC failure on the validation blob means the password is wrong; on the payload it means tampering.
+    bitwarden_decrypt(field("encKeyValidation_DO_NOT_EDIT")?, enc_key.as_slice(), mac_key.as_slice())
+        .map_err(|_| anyhow!("bitwarden-json: wrong export password (or the file is corrupted)"))?;
+    let plain = bitwarden_decrypt(field("data")?, enc_key.as_slice(), mac_key.as_slice())
+        .map_err(|_| anyhow!("bitwarden-json: encrypted contents failed the integrity check (tampered file or wrong password)"))?;
+    let text = std::str::from_utf8(plain.as_slice()).context("bitwarden-json: decrypted export is not UTF-8")?;
+    Ok(Zeroizing::new(text.to_string()))
+}
+
+/// Derive the 32-byte export key from the password and the file's KDF settings. Bitwarden feeds the
+/// salt text itself (a base64 string) to the KDF as UTF-8, not the decoded bytes.
+fn bitwarden_export_key(password: &str, salt: &str, v: &Value) -> Result<Zeroizing<[u8; 32]>> {
+    let num = |k: &str| v.get(k).and_then(Value::as_u64);
+    let kdf = num("kdfType").ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing \"kdfType\""))?;
+    let mut key = Zeroizing::new([0u8; 32]);
+    match kdf {
+        0 => {
+            let iterations = num("kdfIterations").ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing \"kdfIterations\""))?;
+            if !within(iterations, BW_PBKDF2_ITER_MIN, BW_PBKDF2_ITER_MAX) {
+                bail!("bitwarden-json: unsupported PBKDF2 iteration count {iterations} (expected {BW_PBKDF2_ITER_MIN}–{BW_PBKDF2_ITER_MAX})");
+            }
+            pbkdf2::pbkdf2_hmac::<Sha256>(password.as_bytes(), salt.as_bytes(), iterations as u32, key.as_mut_slice());
+        }
+        1 => {
+            let iterations = num("kdfIterations").ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing \"kdfIterations\""))?;
+            let memory = num("kdfMemory").ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing \"kdfMemory\""))?;
+            let parallelism = num("kdfParallelism").ok_or_else(|| anyhow!("bitwarden-json: encrypted export is missing \"kdfParallelism\""))?;
+            if !within(iterations, BW_ARGON2_ITER_MIN, BW_ARGON2_ITER_MAX)
+                || !within(memory, BW_ARGON2_MEMORY_MIN, BW_ARGON2_MEMORY_MAX)
+                || !within(parallelism, BW_ARGON2_PARALLELISM_MIN, BW_ARGON2_PARALLELISM_MAX)
+            {
+                bail!("bitwarden-json: unsupported Argon2id settings (iterations {iterations}, memory {memory} MiB, parallelism {parallelism})");
+            }
+            let params = Params::new((memory * 1024) as u32, iterations as u32, parallelism as u32, Some(32))
+                .map_err(|e| anyhow!("bitwarden-json: unsupported Argon2id settings: {e}"))?;
+            Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
+                .hash_password_into(password.as_bytes(), salt.as_bytes(), key.as_mut_slice())
+                .map_err(|_| anyhow!("bitwarden-json: cannot derive the export key"))?;
+        }
+        other => bail!("bitwarden-json: unsupported KDF type {other} (expected 0 = PBKDF2-SHA256 or 1 = Argon2id)"),
+    }
+    Ok(key)
+}
+
+/// Decrypt one Bitwarden `EncString` of type 2 (`2.<iv>|<ciphertext>|<mac>`, AesCbc256_HmacSha256).
+/// The MAC covers IV ‖ ciphertext and is checked before AES-CBC/PKCS7 decryption.
+fn bitwarden_decrypt(field: &str, enc_key: &[u8], mac_key: &[u8]) -> Result<Zeroizing<Vec<u8>>> {
+    let Some(rest) = field.strip_prefix("2.") else {
+        bail!("bitwarden-json: encrypted field is not AesCbc256_HmacSha256");
+    };
+    let mut parts = rest.split('|');
+    let (Some(iv), Some(ct), Some(mac), None) = (parts.next(), parts.next(), parts.next(), parts.next()) else {
+        bail!("bitwarden-json: malformed encrypted field");
+    };
+    let bad = || anyhow!("bitwarden-json: malformed encrypted field");
+    let iv = B64.decode(iv).map_err(|_| bad())?;
+    let mut ct = B64.decode(ct).map_err(|_| bad())?;
+    let mac = B64.decode(mac).map_err(|_| bad())?;
+    let mut h = Hmac::<Sha256>::new_from_slice(mac_key).map_err(|_| anyhow!("bitwarden-json: invalid MAC key"))?;
+    h.update(&iv);
+    h.update(&ct);
+    h.verify_slice(&mac).map_err(|_| anyhow!("bitwarden-json: MAC check failed"))?;
+    let dec = cbc::Decryptor::<Aes256>::new_from_slices(enc_key, &iv)
+        .map_err(|_| anyhow!("bitwarden-json: invalid AES key or IV"))?;
+    let pt = dec.decrypt_padded_mut::<Pkcs7>(&mut ct).map_err(|_| anyhow!("bitwarden-json: invalid encrypted payload"))?;
+    Ok(Zeroizing::new(pt.to_vec()))
 }
 
 // ---------------------------------------------------------------- .1pux
@@ -605,7 +738,7 @@ fn parse_1pux_json(data: &str) -> Result<Parsed> {
                 if state == "trashed" || state == "deleted" { out.warnings.push(format!("{title}: in source trash, skipped")); continue; }
                 let cu = s(it, "categoryUuid").unwrap_or_else(|| "001".into());
                 let cat = pux_category(&cu);
-                let mut r = record(title, cat);
+                let mut r = record(title.clone(), cat);
                 r.archived = state == "archived";
                 r.favorite = it.get("favIndex").and_then(Value::as_i64).unwrap_or(0) > 0;
                 if let Some(n) = &vname { add_tag(&mut r, n); }
@@ -688,6 +821,321 @@ fn parse_1pux_json(data: &str) -> Result<Parsed> {
             }
         }
     }
+    Ok(out)
+}
+
+
+// ---------------------------------------------------------------- .1pif
+
+fn onepif_category(type_name: &str) -> Category {
+    let t = type_name.to_ascii_lowercase();
+    if t.contains("webform") || t == "passwords.password" || t.ends_with(".login") {
+        Category::Login
+    } else if t.contains("creditcard") || t.ends_with(".card") {
+        Category::CreditCard
+    } else if t.contains("bankaccount") {
+        Category::BankAccount
+    } else if t.contains("identity") || t.contains("passport") || t.contains("driver") {
+        Category::Identity
+    } else if t.contains("router") || t.contains("wifi") {
+        Category::Wifi
+    } else if t.contains("server") || t.contains("database") {
+        Category::Server
+    } else if t.contains("ssh") {
+        Category::SshKey
+    } else if t.contains("api") {
+        Category::ApiCredential
+    } else if t.contains("document") {
+        Category::Document
+    } else {
+        Category::SecureNote
+    }
+}
+
+/// .1pif = text file with one JSON record per line/chunk, separated by lines `***<id>***`.
+fn parse_onepif(data: &str) -> Result<Parsed> {
+    let mut out = Parsed::default();
+    let mut chunks = Vec::new();
+    let mut current = String::new();
+    for line in data.lines() {
+        let t = line.trim();
+        if t.starts_with("***") && t.ends_with("***") && t.len() >= 6 {
+            let trimmed = current.trim();
+            if !trimmed.is_empty() {
+                chunks.push(trimmed.to_string());
+                current.clear();
+            }
+        } else {
+            current.push_str(line);
+            current.push('\n');
+        }
+    }
+    let trimmed = current.trim();
+    if !trimmed.is_empty() {
+        chunks.push(trimmed.to_string());
+    }
+
+    if chunks.is_empty() {
+        bail!("1pif: no records found in export");
+    }
+
+    let s = |o: &Value, k: &str| opt(o.get(k).and_then(Value::as_str));
+
+    for (i, chunk) in chunks.iter().enumerate() {
+        let v: Value = match serde_json::from_str(chunk) {
+            Ok(v) => v,
+            Err(e) => {
+                out.warnings.push(format!("1pif item {i}: malformed JSON ({e}), skipped"));
+                continue;
+            }
+        };
+
+        let type_name = v.get("typeName").and_then(Value::as_str).unwrap_or("");
+        if type_name.starts_with("system.") {
+            continue;
+        }
+
+        let empty = Value::Null;
+        let sec = v.get("secureContents").unwrap_or(&empty);
+        let open = v.get("openContents").unwrap_or(&empty);
+
+        let title = s(&v, "title")
+            .or_else(|| s(open, "title"))
+            .or_else(|| s(sec, "title"));
+        let Some(title) = title else {
+            out.warnings.push(format!("1pif item {i}: no title, skipped"));
+            continue;
+        };
+
+        if v.get("trashed").and_then(Value::as_bool) == Some(true)
+            || open.get("trashed").and_then(Value::as_bool) == Some(true)
+            || sec.get("trashed").and_then(Value::as_bool) == Some(true)
+        {
+            out.warnings.push(format!("{title}: in source trash, skipped"));
+            continue;
+        }
+
+        let cat = onepif_category(type_name);
+        let mut r = record(title.clone(), cat);
+
+        if cat == Category::SecureNote && !type_name.to_ascii_lowercase().contains("note") && !type_name.is_empty() {
+            out.warnings.push(format!("{title}: imported as Secure Note (type: {type_name})"));
+        }
+
+        let updated_at = v.get("updatedAt").or_else(|| v.get("modified")).and_then(Value::as_u64)
+            .or_else(|| open.get("updatedAt").or_else(|| open.get("modified")).and_then(Value::as_u64))
+            .or_else(|| sec.get("updatedAt").or_else(|| sec.get("modified")).and_then(Value::as_u64));
+        if let Some(t) = updated_at {
+            r.item.updated_at = t.to_string();
+        }
+
+        let created_at = v.get("createdAt").or_else(|| v.get("created")).and_then(Value::as_u64)
+            .or_else(|| open.get("createdAt").or_else(|| open.get("created")).and_then(Value::as_u64))
+            .or_else(|| sec.get("createdAt").or_else(|| sec.get("created")).and_then(Value::as_u64));
+        r.created_at = created_at;
+
+        // Tags from openContents.tags or tags
+        if let Some(tags) = open.get("tags").or_else(|| v.get("tags")) {
+            if let Some(arr) = tags.as_array() {
+                for t in arr {
+                    if let Some(ts) = t.as_str() { add_tag(&mut r, ts); }
+                }
+            } else if let Some(s) = tags.as_str() {
+                for t in s.split([',', ';']) { add_tag(&mut r, t); }
+            }
+        }
+
+        r.item.notes = s(sec, "notesPlain")
+            .or_else(|| s(sec, "notes"))
+            .or_else(|| s(&v, "notesPlain"))
+            .or_else(|| s(&v, "notes"));
+
+        // URLs
+        let mut urls: Vec<String> = Vec::new();
+        if let Some(u) = s(&v, "location").or_else(|| s(sec, "location")).or_else(|| s(open, "location")) {
+            if !urls.contains(&u) { urls.push(u); }
+        }
+        if let Some(u) = s(&v, "url").or_else(|| s(sec, "url")).or_else(|| s(open, "url")) {
+            if !urls.contains(&u) { urls.push(u); }
+        }
+        let url_arr = v.get("URLs")
+            .or_else(|| open.get("URLs"))
+            .or_else(|| sec.get("URLs"))
+            .and_then(Value::as_array);
+        if let Some(arr) = url_arr {
+            for item in arr {
+                let u = s(item, "url").or_else(|| opt(item.as_str()));
+                if let Some(u) = u {
+                    if !urls.contains(&u) { urls.push(u); }
+                }
+            }
+        }
+        let login_like = cat == Category::Login || cat == Category::Server;
+        if login_like {
+            r.item.url = urls.first().cloned();
+        }
+        let extra_urls: Vec<Option<Field>> = urls.iter().skip(usize::from(login_like)).enumerate()
+            .map(|(n, u)| fld(&format!("url{}", n + 1), "website", FieldKind::Url, Some(u.clone())))
+            .collect();
+        push_section(&mut r, "urls", Some("Websites"), extra_urls);
+
+        // Map web form fields (secureContents.fields)
+        if let Some(fields) = sec.get("fields").and_then(Value::as_array) {
+            for f in fields {
+                let val = s(f, "value");
+                if let Some(ref v) = val {
+                    if (v.starts_with("otpauth://") || v.contains("otpauth://totp/")) && r.item.totp.is_none() {
+                        r.item.totp = Some(v.clone());
+                        continue;
+                    }
+                }
+                let des = s(f, "designation").map(|d| d.to_ascii_lowercase());
+                let name = s(f, "name").map(|n| n.to_ascii_lowercase());
+                match (des.as_deref(), name.as_deref(), login_like) {
+                    (Some("username"), _, true) if r.item.username.is_none() => r.item.username = val,
+                    (_, Some("username" | "email"), true) if r.item.username.is_none() => r.item.username = val,
+                    (Some("password"), _, true) if r.item.password.is_none() => r.item.password = val,
+                    (_, Some("password"), true) if r.item.password.is_none() => r.item.password = val,
+                    _ => {
+                        if let Some(v) = val {
+                            let kind = if s(f, "type").as_deref() == Some("P") { FieldKind::Concealed } else { FieldKind::Text };
+                            let label = s(f, "title").or_else(|| s(f, "name")).or_else(|| s(f, "designation")).unwrap_or_else(|| "field".into());
+                            let id = next_id(&r, "custom");
+                            push_section(&mut r, "custom", Some("Custom fields"), vec![fld(&id, &label, kind, Some(v))]);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Direct top-level fields in secureContents
+        if login_like {
+            if r.item.username.is_none() {
+                r.item.username = s(sec, "username").or_else(|| s(&v, "username"));
+            }
+            if r.item.password.is_none() {
+                r.item.password = s(sec, "password").or_else(|| s(&v, "password"));
+            }
+        }
+
+        // Check for TOTP in secureContents top-level
+        if r.item.totp.is_none() {
+            if let Some(o) = sec.as_object() {
+                for (_, val) in o {
+                    if let Some(vs) = val.as_str() {
+                        if vs.starts_with("otpauth://") || vs.contains("otpauth://totp/") {
+                            r.item.totp = Some(vs.to_string());
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Category-specific fields from secureContents
+        let mut handled_keys = HashSet::new();
+        handled_keys.insert("fields".to_string());
+        handled_keys.insert("sections".to_string());
+        handled_keys.insert("notesPlain".to_string());
+        handled_keys.insert("notes".to_string());
+        handled_keys.insert("location".to_string());
+        handled_keys.insert("url".to_string());
+        handled_keys.insert("URLs".to_string());
+        handled_keys.insert("passwordHistory".to_string());
+        if login_like {
+            handled_keys.insert("username".to_string());
+            handled_keys.insert("password".to_string());
+        }
+
+        if let Some(sec_obj) = sec.as_object() {
+            for (k, val) in sec_obj {
+                if handled_keys.contains(k) { continue; }
+                let val_str = match val {
+                    Value::String(s) => Some(s.clone()),
+                    Value::Number(n) => Some(n.to_string()),
+                    Value::Bool(b) => Some(b.to_string()),
+                    _ => None,
+                };
+                let Some(val_str) = val_str.map(|x| x.trim().to_string()).filter(|x| !x.is_empty()) else { continue };
+
+                if let Some(mapped_id) = pux_field_id(cat, k) {
+                    let kind = match mapped_id {
+                        "number" | "cvv" | "pin" | "password" | "private_key" | "credential" => FieldKind::Concealed,
+                        "url" | "admin_console_url" => FieldKind::Url,
+                        "email" => FieldKind::Email,
+                        "phone" | "branch_phone" => FieldKind::Phone,
+                        "address" | "branch_address" | "public_key" => FieldKind::Multiline,
+                        "expiry" | "valid_from" => FieldKind::MonthYear,
+                        "birth" => FieldKind::Date,
+                        _ => FieldKind::Text,
+                    };
+                    let formatted_val = if mapped_id == "expiry" && val_str.len() == 6 && val_str.chars().all(|c| c.is_ascii_digit()) {
+                        format!("{}/{}", &val_str[4..6], &val_str[0..4])
+                    } else {
+                        val_str
+                    };
+                    let section_id = match cat {
+                        Category::Identity => mapped_id,
+                        _ => "main",
+                    };
+                    push_section(&mut r, section_id, None, vec![fld(mapped_id, mapped_id, kind, Some(formatted_val))]);
+                } else {
+                    let id = next_id(&r, "custom");
+                    push_section(&mut r, "custom", Some("Custom fields"), vec![fld(&id, k, FieldKind::Text, Some(val_str))]);
+                }
+            }
+        }
+
+        // Process secureContents.sections if present
+        if let Some(sections) = sec.get("sections").and_then(Value::as_array) {
+            for (si, sec_el) in sections.iter().enumerate() {
+                let stitle = s(sec_el, "title").or_else(|| s(sec_el, "name"));
+                let sid = s(sec_el, "name").filter(|n| !n.is_empty()).unwrap_or_else(|| format!("sec{si}"));
+                if let Some(fields) = sec_el.get("fields").and_then(Value::as_array) {
+                    for f in fields {
+                        let fname = s(f, "n").or_else(|| s(f, "name")).or_else(|| s(f, "id")).unwrap_or_default();
+                        let ftitle = s(f, "t").or_else(|| s(f, "title")).unwrap_or_else(|| fname.clone());
+                        let fval = s(f, "v").or_else(|| s(f, "value"));
+                        let Some(fval) = fval else { continue };
+
+                        if (fval.starts_with("otpauth://") || fval.contains("otpauth://totp/")) && r.item.totp.is_none() {
+                            r.item.totp = Some(fval);
+                            continue;
+                        }
+
+                        if let Some(mapped_id) = pux_field_id(cat, &fname) {
+                            let kind = match mapped_id {
+                                "number" | "cvv" | "pin" | "password" | "private_key" | "credential" => FieldKind::Concealed,
+                                "url" | "admin_console_url" => FieldKind::Url,
+                                "email" => FieldKind::Email,
+                                "phone" | "branch_phone" => FieldKind::Phone,
+                                "address" | "branch_address" | "public_key" => FieldKind::Multiline,
+                                "expiry" | "valid_from" => FieldKind::MonthYear,
+                                "birth" => FieldKind::Date,
+                                _ => FieldKind::Text,
+                            };
+                            let target = match cat {
+                                Category::Identity => mapped_id,
+                                _ => "main",
+                            };
+                            push_section(&mut r, target, None, vec![fld(mapped_id, &ftitle, kind, Some(fval))]);
+                        } else {
+                            let kind = if s(f, "k").as_deref() == Some("concealed") || fname.to_ascii_lowercase().contains("password") || fname.to_ascii_lowercase().contains("pin") {
+                                FieldKind::Concealed
+                            } else {
+                                FieldKind::Text
+                            };
+                            let id = next_id(&r, "custom");
+                            push_section(&mut r, &sid, stitle.as_deref().or(Some("Custom fields")), vec![fld(&id, &ftitle, kind, Some(fval))]);
+                        }
+                    }
+                }
+            }
+        }
+
+        out.items.push(r);
+    }
+
     Ok(out)
 }
 
@@ -848,6 +1296,13 @@ pub fn import_items(s: &Session, vid: &str, parsed: Parsed, opts: ImportOpts) ->
 
 /// Auto-detect the import format from text content or headers.
 pub fn detect_format(data: &str) -> Option<ImportFormat> {
+    // Check .1pif separator and typeName
+    if data.contains("\"typeName\"") && data.lines().any(|l| {
+        let t = l.trim();
+        t.starts_with("***") && t.ends_with("***") && t.len() >= 6
+    }) {
+        return Some(ImportFormat::OnePif);
+    }
     let data = data.strip_prefix('\u{feff}').unwrap_or(data);
     let trimmed = data.trim_start();
     if trimmed.starts_with('{') {
@@ -855,7 +1310,9 @@ pub fn detect_format(data: &str) -> Option<ImportFormat> {
             if v.get("gitpass_export").is_some() || v.get("gitpass_encrypted_export").is_some() {
                 return Some(ImportFormat::GitpassJson);
             }
-            if v.get("items").is_some() || v.get("folders").is_some() || v.get("collections").is_some() {
+            if v.get("items").is_some() || v.get("folders").is_some() || v.get("collections").is_some()
+                || v.get("encKeyValidation_DO_NOT_EDIT").is_some()
+                || (v.get("encrypted").and_then(Value::as_bool) == Some(true) && v.get("data").is_some()) {
                 return Some(ImportFormat::BitwardenJson);
             }
         }

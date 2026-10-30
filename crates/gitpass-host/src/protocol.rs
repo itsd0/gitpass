@@ -174,6 +174,7 @@ pub fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         "url": url,
         "favicon_host": url.and_then(url_host),
         "has_totp": has_totp(r),
+        "has_attachments": !r.attachments.is_empty(),
         "favorite": r.favorite,
         "updated_at": r.item.updated_at,
         "created_at": r.created_at,
@@ -221,6 +222,15 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord, last_used: Opti
     }
     let m = v.as_object_mut().unwrap();
     m.insert("fields".into(), json!(fields));
+    let attachments: Vec<Value> = r.attachments.iter().map(|a| {
+        json!({
+            "id": a.id,
+            "name": a.name,
+            "size": a.size,
+            "mime": a.mime,
+        })
+    }).collect();
+    m.insert("attachments".into(), json!(attachments));
     m.insert("notes".into(), json!(nonempty(&r.item.notes)));
     m.insert("tags".into(), json!(r.tags));
     m.insert("created_at".into(), json!(r.created_at));
@@ -242,7 +252,8 @@ where
         Some(c) => Some(c.parse::<Category>().map_err(|e| coded(code::BAD_REQUEST, e.to_string()))?),
         None => None,
     };
-    let q = req.get("query").and_then(Value::as_str).map(str::to_lowercase).filter(|q| !q.is_empty());
+    let q_raw = req.get("query").and_then(Value::as_str).map(str::trim).filter(|q| !q.is_empty());
+    let parsed_q = q_raw.map(gitpass_core::search::parse_query);
     let limit = req.get("limit").and_then(Value::as_u64).map(|n| n as usize);
     let offset = req.get("offset").and_then(Value::as_u64).unwrap_or(0) as usize;
 
@@ -258,20 +269,29 @@ where
                 continue;
             }
         }
+        if let Some(pq) = &parsed_q {
+            let cand = gitpass_core::search::CandidateInfo::from_record(r, Some(vname));
+            if !pq.matches(&cand) {
+                continue;
+            }
+        }
         let mut s = summary(vid, vname, iid, r);
         if let Some(lu) = usage.get(iid) {
             s["last_used"] = json!(lu);
         }
-        if let Some(q) = &q {
-            let hay = format!(
-                "{} {} {}",
-                r.item.title,
-                s["subtitle"].as_str().unwrap_or(""),
-                r.item.url.as_deref().unwrap_or("")
-            )
-            .to_lowercase();
-            if !hay.contains(q.as_str()) {
-                continue;
+        if let Some(pq) = &parsed_q {
+            if !pq.terms.is_empty() {
+                let term = pq.terms.to_lowercase();
+                let hay = format!(
+                    "{} {} {}",
+                    r.item.title,
+                    s["subtitle"].as_str().unwrap_or(""),
+                    r.item.url.as_deref().unwrap_or("")
+                )
+                .to_lowercase();
+                if !hay.contains(term.as_str()) {
+                    continue;
+                }
             }
         }
         out.push(s);

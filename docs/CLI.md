@@ -15,6 +15,15 @@ id prefix, or a title substring; `get`, `copy`, `totp`, `find` and `list --query
 rank fuzzy matches on title/username/url. When a query is ambiguous, use the item id or
 `--pick <n>` where the command offers it.
 
+Queries accept structured operators (combined with free text, case-insensitive):
+- `tag:<name>` (e.g. `tag:work`, `tag:"side project"`)
+- `vault:<name>` (case-insensitive prefix match on vault name)
+- `type:<category>` (`login`, `card`, `note`, `api`, `ssh`, `identity`, `passkey`, `bank`, `wifi`, `server`, `document`)
+- `is:favorite`, `is:archived`
+- `has:otp`, `has:passkey`, `has:attachment`, `has:url`
+- `url:<host>` (matches against URL host)
+- Leading `-` negates any operator (e.g. `-tag:old`, `-is:archived`)
+
 ## Global options
 
 | Option | Meaning |
@@ -39,7 +48,7 @@ gitpass migrate                                    # migrate a format v1 vault, 
 ```
 
 `init` and `rotate-secret-key` read `GITPASS_PASSWORD`; `passwd` reads
-`GITPASS_NEW_PASSWORD`. Otherwise they prompt. `rotate-account-key` rewrites the keyset
+`GITPASS_NEW_PASSWORD`. Otherwise they prompt. Unlock attempts are throttled after 3 consecutive wrong master password failures per vault; subsequent attempts are refused with a delay doubling from 2 s up to a 5-minute cap (persisted in `.gitpass-throttle.json`), and a successful unlock resets the failure counter. `rotate-account-key` rewrites the keyset
 (and with `--with-vault-keys`, every vault key and item). Read the security notes in the
 README before relying on rotation.
 
@@ -224,21 +233,31 @@ diverged. See the README "GitHub sync" section.
 ```sh
 gitpass import Personal --from bitwarden-json export.json
 gitpass import Personal --from generic-csv export.csv --dry-run
+gitpass import Personal --format 1pif export.1pif
 gitpass import Personal --from gitpass-json backup.json --allow-duplicates
 gitpass export Personal --format gitpass-json --out backup.json --encrypted
 gitpass export Personal --format csv --out backup.csv --yes
 ```
 
-`--from` accepts every format and alias in `crates/gitpass-core/src/import.rs`
+`--from` (or `--format`) accepts every format and alias in `crates/gitpass-core/src/import.rs`
 (`ImportFormat`): `bitwarden-json`, `bitwarden-csv`, `generic-csv` (alias `1password-csv`),
-`1pux` (alias `1password-1pux`), `keepass-csv` (alias `keepassxc-csv`),
+`1pux` (alias `1password-1pux`), `1pif` (alias `onepif`), `keepass-csv` (alias `keepassxc-csv`),
 `chrome-csv`, `apple-passwords-csv` (aliases `apple-passwords`, `apple-csv`,
 `apple`, `safari-csv`, `safari`), `lastpass-csv` (alias `lastpass`),
 `protonpass-csv` (aliases `proton-pass-csv`, `protonpass`, `proton-pass`) and
 `gitpass-json`.
+If `--from` is omitted, the format is auto-detected from the file content.
 Duplicates (same title+username+url) are skipped unless `--allow-duplicates` is given;
 `--dry-run` writes nothing. An encrypted `gitpass-json` export prompts for the passphrase
 (or reads `GITPASS_EXPORT_PASSPHRASE`).
+
+A **password-protected Bitwarden JSON** export (Bitwarden → Export → `.json` → "Password
+protected") is decrypted in place: gitpass derives the key from the export password with the
+file's KDF settings (PBKDF2-SHA256 or Argon2id), verifies the file's key-validation blob and
+HMAC before decrypting, and prompts for the export password (or reads
+`GITPASS_IMPORT_PASSWORD`). Wrong passwords, MAC failures and out-of-range KDF parameters are
+reported without exposing the password or any key material. Bitwarden exports encrypted with
+your **account key** are not supported; re-export with "Password protected" or unencrypted.
 
 `export` writes **plaintext** unless `--encrypted` is given, warns, and requires a
 confirmation or `--yes`; the file is mode 0600. `--encrypted` is only valid with
@@ -353,6 +372,7 @@ alias. Setup details for each shell are in the README "Shell completions" sectio
 | `GITPASS_SECRET_KEY` | Secret Key, read before `<path>/secret.key` |
 | `GITPASS_SSH_PASSPHRASE` | Passphrase for `ssh import` |
 | `GITPASS_EXPORT_PASSPHRASE` | Passphrase for encrypted `import` / `export` |
+| `GITPASS_IMPORT_PASSWORD` | Export password for password-protected Bitwarden JSON imports |
 
 The password variables are meant for scripts and tests only: environment variables can
 leak. Interactive prompts are used when they are unset.
