@@ -857,5 +857,7 @@ export const my: Partial<Record<Key, string>> = {
   "related.searchPlaceholder": "ပစ္စည်းများရှာဖွေရန်…",
   "related.noMatches": "ကိုက်ညီသော ပစ္စည်းမရှိပါ",
   "related.toast.linked": "ဆက်စပ်ပစ္စည်းထည့်ပြီးပါပြီ",
+  "related.linkedFrom": "ချိတ်ဆက်ထားသော ပစ္စည်းများ",
+  "related.openToEdit": "လင့်ခ်ကို ပြင်ဆင်ရန် ဖွင့်ပါ",
   "related.toast.unlinked": "ဆက်စပ်ပစ္စည်းဖယ်ရှားပြီးပါပြီ",
 };

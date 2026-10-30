@@ -100,6 +100,8 @@ pub struct ItemDetail {
     pub related_items: Vec<RelatedItem>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub related_item_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub linked_from: Vec<RelatedItem>,
 }
 /// One item reference for bulk commands.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -470,6 +472,13 @@ pub struct App {
     favicon_cache_dir: Mutex<Option<PathBuf>>,
     /// SSH agent sign requests since unlock (metadata only); cleared by every lock path.
     pub(crate) ssh_activity: Arc<crate::ssh_activity::SshActivityLog>,
+    pub(crate) backlink_cache: Arc<Mutex<Option<BacklinkIndex>>>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(crate) struct BacklinkIndex {
+    pub stamp: u64,
+    pub by_target: HashMap<String, Vec<RelatedItem>>,
 }
 
 fn ts(secs_str: &str) -> String { secs_str.trim().parse::<i64>().map(iso8601).unwrap_or_else(|_| secs_str.to_string()) }
@@ -654,7 +663,36 @@ fn resolve_related_items(s: &Session, ids: &[String]) -> Vec<RelatedItem> {
     }).collect()
 }
 
-fn detail(s: &Session, vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>) -> ItemDetail {
+fn build_backlinks_from_records(records: &[(String, String, ItemRecord)]) -> HashMap<String, Vec<RelatedItem>> {
+    let mut by_target: HashMap<String, Vec<RelatedItem>> = HashMap::new();
+    for (vid, iid, r) in records {
+        if r.deleted_at.is_some() || r.related_item_ids.is_empty() {
+            continue;
+        }
+        let sub = subtitle(r);
+        let item_ref = RelatedItem {
+            id: iid.clone(),
+            vault_id: Some(vid.clone()),
+            category: Some(r.category),
+            title: r.item.title.clone(),
+            subtitle: if sub.is_empty() { None } else { Some(sub) },
+            available: true,
+        };
+        for tid in &r.related_item_ids {
+            let list = by_target.entry(tid.clone()).or_default();
+            if !list.iter().any(|x| x.id == *iid) {
+                list.push(item_ref.clone());
+            }
+        }
+    }
+    for list in by_target.values_mut() {
+        list.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()).then_with(|| a.id.cmp(&b.id)));
+    }
+    by_target
+}
+
+#[allow(clippy::too_many_arguments)]
+fn detail(s: &Session, vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>, linked_from: Vec<RelatedItem>) -> ItemDetail {
     let pw = r.view_sections().into_iter().flat_map(|s| s.fields).find(|f| f.kind == FieldKind::Concealed && f.value.is_some());
     ItemDetail {
         summary: summary(vid, iid, r, last_used), version, sections: to_dto_sections(r), notes: r.item.notes.clone(),
@@ -666,6 +704,7 @@ fn detail(s: &Session, vid: &str, iid: &str, version: u64, r: &ItemRecord, findi
         password_changed_at: r.password_changed_at().map(|t| iso8601(t as i64)),
         related_items: resolve_related_items(s, &r.related_item_ids),
         related_item_ids: r.related_item_ids.clone(),
+        linked_from,
     }
 }
 
@@ -759,10 +798,20 @@ fn git(dir: &Path, args: &[&str]) -> Option<String> {
 impl App {
     /// `settings_dir`: where `.gitpass-settings.json` lives (the desktop app uses the default vault dir).
     pub fn new(settings_dir: PathBuf, clipboard: Arc<dyn Clipboard>) -> Self {
+        let backlink_cache = Arc::new(Mutex::new(None));
         let app = App { state: GuiState::new(5), settings_dir, clipboard, clip_gen: Arc::new(AtomicU64::new(0)), last_copied: Arc::new(Mutex::new(None)), hibp: Box::new(UreqHibp),
             unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), fresh_secret: Mutex::new(None), biometric: Box::new(NoBiometrics), file_lock: Mutex::new(()),
-            favicon_cache_dir: Mutex::new(None), ssh_activity: Default::default() };
-        app.state.on_lock({ let log = app.ssh_activity.clone(); Arc::new(move || log.clear()) });
+            favicon_cache_dir: Mutex::new(None), ssh_activity: Default::default(), backlink_cache: backlink_cache.clone() };
+        app.state.on_lock({
+            let log = app.ssh_activity.clone();
+            let bl = backlink_cache;
+            Arc::new(move || {
+                log.clear();
+                if let Ok(mut g) = bl.lock() {
+                    *g = None;
+                }
+            })
+        });
         let s = app.get_settings();
         app.state.set_auto_lock_minutes(s.auto_lock_minutes);
         app
@@ -791,7 +840,46 @@ impl App {
     }
 
     fn with<T>(&self, f: impl FnOnce(&mut Unlocked) -> Result<T>) -> Result<T> { self.state.with(f) }
-    fn write<T>(&self, f: impl FnOnce(&mut Unlocked) -> Result<T>) -> Result<T> { self.state.with(|u| { GuiState::writable(u)?; f(u) }) }
+    fn write<T>(&self, f: impl FnOnce(&mut Unlocked) -> Result<T>) -> Result<T> {
+        let res = self.state.with(|u| { GuiState::writable(u)?; f(u) });
+        if res.is_ok() {
+            if let Ok(mut g) = self.backlink_cache.lock() {
+                *g = None;
+            }
+        }
+        res
+    }
+
+pub(crate) fn manifest_stamp(root: &Path) -> Option<u64> {
+    use std::hash::{Hash, Hasher};
+    let b = std::fs::read(root.join("manifest.enc")).ok()?;
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    b.hash(&mut h);
+    Some(h.finish())
+}
+
+    pub(crate) fn get_backlinks(&self, s: &Session, target_id: &str) -> Result<Vec<RelatedItem>> {
+        let stamp = Self::manifest_stamp(&s.root);
+        if let Some(st) = stamp {
+            if let Ok(g) = self.backlink_cache.lock() {
+                if let Some(idx) = &*g {
+                    if idx.stamp == st {
+                        return Ok(idx.by_target.get(target_id).cloned().unwrap_or_default());
+                    }
+                }
+            }
+        }
+
+        let records = Self::all_records(s)?;
+        let by_target = build_backlinks_from_records(&records);
+        let out = by_target.get(target_id).cloned().unwrap_or_default();
+        if let Some(st) = stamp {
+            if let Ok(mut g) = self.backlink_cache.lock() {
+                *g = Some(BacklinkIndex { stamp: st, by_target });
+            }
+        }
+        Ok(out)
+    }
     /// Manifest epoch (bumped once per commit); used by tests to assert a single commit.
     #[cfg(test)]
     pub(crate) fn session_epoch(&self) -> Result<u64> { self.with(|u| u.session.epoch()) }
@@ -963,6 +1051,16 @@ impl App {
     pub fn list_items(&self, filter: &Filter) -> Result<Vec<ItemSummary>> {
         self.with(|u| {
             let all = Self::all_records(&u.session)?;
+            let stamp = Self::manifest_stamp(&u.session.root);
+            if let Some(st) = stamp {
+                let needs_cache = self.backlink_cache.lock().ok().map(|g| g.as_ref().map(|x| x.stamp) != Some(st)).unwrap_or(false);
+                if needs_cache {
+                    let by_target = build_backlinks_from_records(&all);
+                    if let Ok(mut g) = self.backlink_cache.lock() {
+                        *g = Some(BacklinkIndex { stamp: st, by_target });
+                    }
+                }
+            }
             let q_str = filter.query.as_deref().unwrap_or("").trim();
             let parsed_q = (!q_str.is_empty()).then(|| gitpass_core::search::parse_query(q_str));
             let vnames: BTreeMap<String, String> = u.session.list_vaults()?.into_iter().map(|(id, m)| (id, m.name.clone())).collect();
@@ -1019,7 +1117,8 @@ impl App {
             let (v, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
-            Ok(detail(&u.session, vault_id, item_id, v, &r, findings, last_used))
+            let linked_from = self.get_backlinks(&u.session, item_id)?;
+            Ok(detail(&u.session, vault_id, item_id, v, &r, findings, last_used, linked_from))
         })
     }
     /// The ONLY call that returns a stored secret value.
@@ -1268,7 +1367,9 @@ impl App {
         self.with(|u| {
             let r = u.session.item_version(vault_id, item_id, version)?;
             let (_, cur) = u.session.read_record(vault_id, item_id)?;
-            let last_used = u.session.last_used(item_id); let mut d = detail(&u.session, vault_id, item_id, version, &r, Vec::new(), last_used);
+            let last_used = u.session.last_used(item_id);
+            let linked_from = self.get_backlinks(&u.session, item_id)?;
+            let mut d = detail(&u.session, vault_id, item_id, version, &r, Vec::new(), last_used, linked_from);
             d.history.clear();
             d.attachments.clear();
             if let Some(h) = cur.history.iter().find(|h| h.version == version) { d.summary.updated_at = ts(&h.updated_at); }
@@ -1282,7 +1383,8 @@ impl App {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
-            Ok(detail(&u.session, vault_id, item_id, new_v, &r, findings, last_used))
+            let linked_from = self.get_backlinks(&u.session, item_id)?;
+            Ok(detail(&u.session, vault_id, item_id, new_v, &r, findings, last_used, linked_from))
         })
     }
     pub fn add_attachment(&self, vault_id: &str, item_id: &str, path: &str) -> Result<Attachment> {

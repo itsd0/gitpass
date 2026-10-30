@@ -849,5 +849,7 @@ export const th: Partial<Record<Key, string>> = {
   "related.searchPlaceholder": "ค้นหารายการ…",
   "related.noMatches": "ไม่พบรายการที่ตรงกัน",
   "related.toast.linked": "เพิ่มรายการที่เกี่ยวข้องแล้ว",
+  "related.linkedFrom": "เชื่อมโยงมาจาก",
+  "related.openToEdit": "เปิดเพื่อแก้ไขลิงก์",
   "related.toast.unlinked": "ลบรายการที่เกี่ยวข้องแล้ว",
 };

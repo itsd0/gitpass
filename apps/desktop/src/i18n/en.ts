@@ -845,6 +845,8 @@ export const en = {
   "related.searchPlaceholder": "Search items…",
   "related.noMatches": "No matching items",
   "related.toast.linked": "Related item added",
+  "related.linkedFrom": "Linked from",
+  "related.openToEdit": "Open to edit link",
   "related.toast.unlinked": "Related item removed",
 } as const;
 export type Key = keyof typeof en;

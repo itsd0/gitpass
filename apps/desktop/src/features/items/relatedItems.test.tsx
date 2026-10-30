@@ -188,6 +188,108 @@ describe('Related items: ItemDetail view mode', () => {
       relatedId: 'item-missing',
     });
   });
+
+  it('renders Linked from backlinks group under Related items card', async () => {
+    vi.spyOn(api, 'getItem').mockResolvedValue({
+      ...mockDetailWithRelated,
+      linkedFrom: [
+        {
+          id: 'item-c',
+          vaultId: 'v1',
+          category: 'server',
+          title: 'Deploy Server',
+          subtitle: 'ubuntu@10.0.0.1',
+          available: true,
+        },
+      ],
+    });
+    render(
+      <TooltipProvider>
+        <ItemDetailPane />
+      </TooltipProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId('related-items-card')).toBeInTheDocument());
+    expect(screen.getByText('Related items')).toBeInTheDocument();
+    expect(screen.getByText('Linked from')).toBeInTheDocument();
+    expect(screen.getByText('Deploy Server')).toBeInTheDocument();
+    expect(screen.getByText('ubuntu@10.0.0.1')).toBeInTheDocument();
+    expect(screen.getByTestId('backlink-hint-item-c')).toHaveTextContent('Open to edit link');
+    expect(screen.queryByTestId('remove-unavailable-related-item-c')).toBeNull();
+  });
+
+  it('renders only Linked from when item has backlinks but no related items', async () => {
+    vi.spyOn(api, 'getItem').mockResolvedValue({
+      ...mockDetailWithRelated,
+      relatedItems: [],
+      relatedItemIds: [],
+      linkedFrom: [
+        {
+          id: 'item-c',
+          vaultId: 'v1',
+          category: 'server',
+          title: 'Deploy Server',
+          subtitle: 'ubuntu@10.0.0.1',
+          available: true,
+        },
+      ],
+    });
+    render(
+      <TooltipProvider>
+        <ItemDetailPane />
+      </TooltipProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId('related-items-card')).toBeInTheDocument());
+    expect(screen.queryByText('Related items')).toBeNull();
+    expect(screen.getByText('Linked from')).toBeInTheDocument();
+    expect(screen.getByText('Deploy Server')).toBeInTheDocument();
+  });
+
+  it('opens backlink item on click and Enter key', async () => {
+    const selectItemSpy = vi.spyOn(useApp.getState(), 'selectItem');
+    vi.spyOn(api, 'getItem').mockResolvedValue({
+      ...mockDetailWithRelated,
+      linkedFrom: [
+        {
+          id: 'item-c',
+          vaultId: 'v1',
+          category: 'server',
+          title: 'Deploy Server',
+          subtitle: 'ubuntu@10.0.0.1',
+          available: true,
+        },
+      ],
+    });
+    render(
+      <TooltipProvider>
+        <ItemDetailPane />
+      </TooltipProvider>
+    );
+    const row = await screen.findByTestId('linked-from-item-item-c');
+
+    // Click opens item
+    fireEvent.click(row);
+    expect(selectItemSpy).toHaveBeenCalledWith('item-c');
+
+    // Enter key opens item
+    fireEvent.keyDown(row, { key: 'Enter', code: 'Enter' });
+    expect(selectItemSpy).toHaveBeenCalledWith('item-c');
+  });
+
+  it('hides the card when both related items and backlinks are empty', async () => {
+    vi.spyOn(api, 'getItem').mockResolvedValue({
+      ...mockDetailWithRelated,
+      relatedItems: [],
+      relatedItemIds: [],
+      linkedFrom: [],
+    });
+    render(
+      <TooltipProvider>
+        <ItemDetailPane />
+      </TooltipProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId('crumb-item')).toBeInTheDocument());
+    expect(screen.queryByTestId('related-items-card')).toBeNull();
+  });
 });
 
 describe('Related items: ItemEditor and Picker', () => {

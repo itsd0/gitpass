@@ -2322,3 +2322,72 @@ fn related_items_lifecycle_linking_unlinking_missing_state_and_cross_vault() {
     assert_eq!(detail_a_updated.related_items.len(), 1);
     assert_eq!(detail_a_updated.related_items[0].id, item_v2.id);
 }
+
+#[test]
+fn backlinks_linked_from_lifecycle_and_deletion() {
+    let e = env();
+    let item_a = login(&e, "GitHub Login", "octocat", "correct horse");
+    let item_b = login(&e, "Google Login", "alice", "battery staple");
+
+    // Initially, neither has related items or backlinks
+    let detail_b = e.app.get_item(&e.vault, &item_b.id).unwrap();
+    assert!(detail_b.linked_from.is_empty());
+    let detail_a = e.app.get_item(&e.vault, &item_a.id).unwrap();
+    assert!(detail_a.linked_from.is_empty());
+
+    // A links to B
+    e.app.add_related_item(&e.vault, &item_a.id, &item_b.id).unwrap();
+
+    // B lists A under Linked from; A lists B under Related items
+    let detail_b = e.app.get_item(&e.vault, &item_b.id).unwrap();
+    assert_eq!(detail_b.linked_from.len(), 1);
+    let backlink_a = &detail_b.linked_from[0];
+    assert_eq!(backlink_a.id, item_a.id);
+    assert_eq!(backlink_a.title, "GitHub Login");
+    assert_eq!(backlink_a.subtitle.as_deref(), Some("octocat"));
+    assert_eq!(backlink_a.category, Some(Category::Login));
+    assert_eq!(backlink_a.vault_id.as_deref(), Some(e.vault.as_str()));
+    assert!(backlink_a.available);
+
+    let detail_a = e.app.get_item(&e.vault, &item_a.id).unwrap();
+    assert!(detail_a.linked_from.is_empty());
+    assert_eq!(detail_a.related_items.len(), 1);
+    assert_eq!(detail_a.related_items[0].id, item_b.id);
+
+    // Verify backlink cache is populated and hits on subsequent read
+    let stamp = e.app.state.change_stamp().unwrap();
+    assert!(e.app.backlink_cache.lock().unwrap().as_ref().is_some_and(|c| c.stamp == stamp));
+    let detail_b_cached = e.app.get_item(&e.vault, &item_b.id).unwrap();
+    assert_eq!(detail_b_cached.linked_from, detail_b.linked_from);
+
+    // Cross-vault linking: create a second vault and item C in it that also links to B
+    let v2 = e.app.create_vault("Work", None, None, None).unwrap();
+    let item_c = e.app.create_item(&ItemInput {
+        vault_id: v2.id.clone(),
+        category: Category::Server,
+        title: "Database Server".into(),
+        sections: vec![],
+        notes: None,
+        tags: None,
+        favorite: None,
+        url: None,
+        related_item_ids: Some(vec![item_b.id.clone()]),
+    }).unwrap();
+
+    let detail_b = e.app.get_item(&e.vault, &item_b.id).unwrap();
+    assert_eq!(detail_b.linked_from.len(), 2);
+    assert!(detail_b.linked_from.iter().any(|r| r.id == item_a.id));
+    assert!(detail_b.linked_from.iter().any(|r| r.id == item_c.id && r.vault_id.as_deref() == Some(v2.id.as_str())));
+
+    // Deleting A removes it from B linked from (Recently Deleted excluded)
+    e.app.delete_item(&e.vault, &item_a.id).unwrap();
+    let detail_b = e.app.get_item(&e.vault, &item_b.id).unwrap();
+    assert_eq!(detail_b.linked_from.len(), 1);
+    assert_eq!(detail_b.linked_from[0].id, item_c.id);
+
+    // Restoring A brings it back under Linked from
+    e.app.restore_item(&e.vault, &item_a.id).unwrap();
+    let detail_b = e.app.get_item(&e.vault, &item_b.id).unwrap();
+    assert_eq!(detail_b.linked_from.len(), 2);
+    assert!(detail_b.linked_from.iter().any(|r| r.id == item_a.id));
+}
