@@ -4,8 +4,10 @@
 * `.github/workflows/ci.yml` — on push/PR/manual: `cargo test --workspace`, desktop + extension `npm test`,
   and `cargo check` of the Tauri app on Linux, macOS and Windows.
 * `.github/workflows/release.yml` — on tag `v*`: builds the desktop app for macOS arm64 + x64 (app, dmg;
-  **ad-hoc signed**, not notarized), Linux x64 (AppImage, deb) and Windows x64 (msi, nsis), creates a **draft**
-  GitHub Release on the public repo **`itsd0/gitpass-releases`** (same tag name) with the installers, updater artifacts (`*.sig`) and `latest.json`. Also builds the CLI and
+  **ad-hoc signed**, not notarized), Linux x64 (AppImage, deb) and Windows x64 (msi, nsis), creates a GitHub
+  Release on **`itsd0/gitpass`** (this repo, same tag) with the installers, updater artifacts (`*.sig`) and `latest.json`;
+  the `publish` job then publishes it as Latest and mirrors the same files to `itsd0/gitpass-releases` (transition,
+  see below). Also builds the CLI and
   `gitpass-host` binaries as workflow artifacts. `workflow_dispatch` builds the same things as artifacts only.
 
 ## Platform support matrix
@@ -16,11 +18,13 @@
 | Native host install | `~/Library/Application Support/<browser>/NativeMessagingHosts` | `~/.config/{google-chrome,chromium,BraveSoftware/Brave-Browser}/NativeMessagingHosts`, `~/.mozilla/native-messaging-hosts` | manifest in `%LOCALAPPDATA%\gitpass\<browser>\`, registered under `HKCU\Software\{Google\Chrome,Chromium,BraveSoftware\Brave-Browser,Mozilla}\NativeMessagingHosts\com.gitpass.host` |
 
 ## Auto-update (tauri-plugin-updater)
-* Endpoint: `https://github.com/itsd0/gitpass-releases/releases/latest/download/latest.json`; public key in
+* Endpoints (tried in order): `https://github.com/itsd0/gitpass/releases/latest/download/latest.json`, then
+  `https://github.com/itsd0/gitpass-releases/releases/latest/download/latest.json`; public key in
   `apps/desktop/src-tauri/tauri.conf.json` (`plugins.updater.pubkey`).
-* `itsd0/gitpass` (source) is private, so installers + `latest.json` are published to the **public releases-only
-  repo** `https://github.com/itsd0/gitpass-releases` (no source code there). `latest.json` URLs point at that repo's
-  release assets.
+* Releases are hosted on `itsd0/gitpass` (#292). **Transition:** apps up to 0.6.7 only know the
+  `gitpass-releases` endpoint, so every release is also mirrored there (installers, `*.app.tar.gz` + `.sig`, and a
+  `latest.json` whose URLs point at the `gitpass-releases` copies). Keep the mirror until no supported install
+  predates the two-endpoint config; then drop the mirror step and the second endpoint.
 * Private signing key: only on the release Mac at `~/.gitpass-release/updater.key` (0600) and in the
   repo Actions secret `TAURI_SIGNING_PRIVATE_KEY`. Losing it means existing installs can't verify future updates.
 * **Password-protect the signing key.** New signing keys must be generated with a password (the Tauri
@@ -39,7 +43,8 @@
   anything signed with the new key — that is inherent to the updater's trust model, not a gitpass bug.
   After the transition release, retire and destroy the old private key.
 * Settings → About → "Check for updates".
-* Release drafts on `gitpass-releases` must be **published** (and not marked pre-release) for `releases/latest` to resolve.
+* Releases must be **published** (and not marked pre-release) for `releases/latest` to resolve; the `publish`
+  job does this in both repos after both macOS builds succeed.
 * Local `npm run tauri build` now also produces updater artifacts and therefore needs
   `TAURI_SIGNING_PRIVATE_KEY="$(cat ~/.gitpass-release/updater.key)"` and
   `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` set to the key's password (empty only for a legacy unprotected key).
@@ -47,14 +52,14 @@
   current shell only.
 
 ### Required secret: `RELEASES_REPO_TOKEN` (one-time, manual)
-`GITHUB_TOKEN` of `itsd0/gitpass` cannot write to another repo. Create a **fine-grained personal access token**
+Used only by the mirror step: `GITHUB_TOKEN` of `itsd0/gitpass` cannot write to another repo. Create a **fine-grained personal access token**
 (GitHub → Settings → Developer settings → Fine-grained tokens): Resource owner `itsd0`, Repository access
 *Only select repositories* → `itsd0/gitpass-releases`, Permissions → *Contents: Read and write* (Metadata: read is
 implied), with an expiry. Then store it on the source repo:
 
     gh secret set RELEASES_REPO_TOKEN -R itsd0/gitpass   # paste the token
 
-Without it the tag-triggered `build + publish` step fails; `workflow_dispatch` builds are unaffected.
+Without it the tag-triggered mirror step fails (the itsd0/gitpass release is still published); `workflow_dispatch` builds are unaffected.
 
 ### Cutting a release
 1. Bump the version in `apps/desktop/src-tauri/tauri.conf.json`, `apps/desktop/package.json`, the Cargo manifests.
@@ -62,7 +67,9 @@ Without it the tag-triggered `build + publish` step fails; `workflow_dispatch` b
    Required: the desktop test `has highlights for the app version being released` fails CI when the bumped
    version has no entry, so the release PR cannot merge without it.
 3. `git tag vX.Y.Z && git push origin vX.Y.Z` (on `itsd0/gitpass`).
-4. Review the draft on `itsd0/gitpass-releases`, then publish it (non-prerelease) so the updater sees it.
+4. Wait for `release.yml`: it publishes the release on `itsd0/gitpass` as Latest and mirrors it to
+   `itsd0/gitpass-releases`. Then set the polished notes on the `itsd0/gitpass` release (`gh release edit --notes-file`)
+   and check that both repos' `releases/latest/download/latest.json` show the new version.
 
 ### Writing release notes
 
@@ -78,10 +85,7 @@ The template is the contract for what a release page contains:
   with no entries; empty sections must not ship.
 - A **What's Changed** list: on the draft release page, click "Generate
   release notes" and paste the result there. Generation uses
-  `.github/release.yml` in the repo where the release is created — so while
-  drafts are created on `itsd0/gitpass-releases`, copy that file there (same
-  path) for its drafts to pick it up; once #292 moves release hosting to
-  `itsd0/gitpass`, the copy in this repo takes effect directly.
+  `.github/release.yml` in this repo, since releases are created on `itsd0/gitpass`.
 - **Install / Upgrade** notes: Apple Silicon (`aarch64` DMG) vs Intel (`x64`
   DMG), auto-update via Settings → About → Check for updates, any required
   user action (e.g. re-sharing, re-enabling Touch ID — omit the line when
