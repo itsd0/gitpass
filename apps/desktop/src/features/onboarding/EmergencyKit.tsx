@@ -1,10 +1,11 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import { KeyRound, Loader2, Printer, RefreshCw, X } from 'lucide-react';
+import { Check, ClipboardCopy, KeyRound, Loader2, Printer, RefreshCw, X } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import type { EmergencyKitData } from '../../api/types';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
+import { toast } from '../../ui';
 
 /** JSON payload encoded in the kit QR code. The Secret Key is only included when it is shown on the kit. */
 export function kitQrPayload(d: EmergencyKitData, includeSecret: boolean): string {
@@ -17,6 +18,12 @@ export function kitQrPayload(d: EmergencyKitData, includeSecret: boolean): strin
 export function formatKitDate(iso: string): string {
   const t = Date.parse(iso); if (Number.isNaN(t)) return iso;
   return new Date(t).toISOString().slice(0, 10);
+}
+
+/** Plain-text copy of the kit (fallback where the webview cannot print, e.g. macOS). */
+export function kitText(d: EmergencyKitData, t: ReturnType<typeof useT>): string {
+  return [t('kit.title'), '', `${t('kit.created')}: ${formatKitDate(d.createdAt)}`, `${t('kit.accountId')}: ${d.accountId}`,
+    `${t('kit.vaultFolder')}: ${d.vaultPath}`, `${t('kit.remote')}: ${d.remote ?? t('kit.noRemote')}`, `${t('kit.secretKey')}: ${d.secretKey ?? ''}`].join('\n');
 }
 
 /** The printable A4 kit sheet (always white; print CSS in styles.css hides everything else). */
@@ -86,7 +93,9 @@ export function EmergencyKitPage({ data, onClose, onPrinted, onReveal, onRotate,
   return (<div className="ek-root fixed inset-0 z-50 overflow-auto bg-[#f4f4f5] text-black" role="dialog" aria-label={t('kit.title')}>
     <div className="ek-no-print sticky top-0 z-10 flex items-center justify-end gap-2 border-b border-[#e5e5e5] bg-white/95 p-3">
       <span className="mr-auto pl-2 text-sm text-[#555]">{t('kit.toolbarHint')}</span>
-      <button type="button" className="ek-btn ek-btn-primary" onClick={() => { window.print(); onPrinted?.(); }}><Printer size={14} /> {t('kit.print')}</button>
+      <button type="button" className="ek-btn ek-btn-primary" onClick={() => { try { window.print(); } catch { /* some webviews cannot print */ } }}><Printer size={14} /> {t('kit.print')}</button>
+      {data.secretKey && <button type="button" className="ek-btn" onClick={() => { navigator.clipboard.writeText(kitText(data, t)).then(() => toast(t('common.copied')), () => {}); }}><ClipboardCopy size={14} /> {t('kit.copyText')}</button>}
+      {onPrinted && <button type="button" className="ek-btn" disabled={!data.secretKey} onClick={onPrinted}><Check size={14} /> {t('kit.markSaved')}</button>}
       <button type="button" className="ek-btn" onClick={onClose}><X size={14} /> {t('kit.close')}</button>
     </div>
     {children}

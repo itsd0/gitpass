@@ -147,6 +147,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['master password', 'credentials'],
   },
   {
+    id: 'setting-view-kit',
+    tab: 'security',
+    labelKey: 'settings.viewKit',
+    descriptionKey: 'settings.viewKitHelp',
+    keywords: ['emergency kit', 'secret key', 'print', 'pdf', 'recovery'],
+  },
+  {
     id: 'setting-rotate-key',
     tab: 'security',
     labelKey: 'settings.rotateKey',
