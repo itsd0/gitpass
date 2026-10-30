@@ -28,6 +28,7 @@
   const items = raw.map(([v, category, title, subtitle, url, favorite, has_totp], i) => ({
     id: v + ':i' + i, vault_id: v, vault_name: V.find((x) => x.id === v).name, category, title, subtitle,
     url: url || undefined, favicon_host: url ? new URL(url).hostname : undefined, has_totp, favorite, updated_at: now - i * 3600e3,
+    tags: i === 0 || i === 1 ? ['dev'] : i === 2 ? ['personal'] : i === 4 ? ['dev', 'cloud'] : i === 3 ? ['family'] : [],
   }));
   for (const v of V) v.item_count = items.filter((i) => i.vault_id === v.id).length;
   const trashed = new Set();

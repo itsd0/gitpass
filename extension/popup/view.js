@@ -57,11 +57,34 @@
     return f;
   }
 
+  /** Tags present on list items, de-duplicated case-insensitively (first-seen
+   *  spelling wins), sorted A-Z, with the number of items carrying each tag.
+   *  Tags come from the host's list summary, so no detail fetch is needed. */
+  function collectTags(items) {
+    const byKey = new Map();
+    for (const it of items || []) {
+      const seen = new Set();
+      for (const raw of (it && it.tags) || []) {
+        if (typeof raw !== 'string') continue;
+        const tag = raw.trim();
+        if (!tag) continue;
+        const key = tag.toLowerCase();
+        if (seen.has(key)) continue;
+        seen.add(key);
+        if (!byKey.has(key)) byKey.set(key, { tag, count: 0 });
+        byKey.get(key).count += 1;
+      }
+    }
+    return [...byKey.values()].sort((a, b) => a.tag.toLowerCase().localeCompare(b.tag.toLowerCase()) || a.tag.localeCompare(b.tag));
+  }
+
   /** Filter chips for the popup row: suggestions (only with a current site, or
    *  when already selected), all, favorites, one per category that actually
-   *  has items, and a single Vaults menu chip when there is more than one
-   *  vault (or a vault filter is already selected). The active filter is
-   *  always present so re-rendering never drops the selection. */
+   *  has items, a Tags menu chip when any item has tags (plus an active-tag
+   *  chip showing the selected tag, which clears the filter), and a single
+   *  Vaults menu chip when there is more than one vault (or a vault filter
+   *  is already selected). The active filter is always present so
+   *  re-rendering never drops the selection. */
   function buildFilterChips(items, vaults, opts = {}) {
     const present = new Set((items || []).map((i) => i.category));
     const current = opts.currentFilter || '';
@@ -73,6 +96,14 @@
     chips.push({ id: 'favorites', key: 'filterFavorites', label: 'Favorites' });
     for (const c of CATEGORIES) {
       if (present.has(c) || current === 'cat:' + c) chips.push({ id: 'cat:' + c, key: CAT_KEY[c], label: CAT_LABEL[c], category: c });
+    }
+    const tags = collectTags(items);
+    const currentTag = current.startsWith('tag:') ? current.slice(4) : '';
+    if (tags.length || currentTag) {
+      chips.push({ id: 'tags', kind: 'tags', key: 'filterTags', label: 'Tags', tags });
+    }
+    if (currentTag) {
+      chips.push({ id: current, kind: 'tag', label: currentTag });
     }
     const vs = vaults || [];
     if (vs.length > 1 || current.startsWith('vault:')) {
@@ -114,6 +145,10 @@
     else if (filter === 'favorites') base = all.filter((i) => i.favorite);
     else if (filter && filter.startsWith('cat:')) base = all.filter((i) => i.category === filter.slice(4));
     else if (filter && filter.startsWith('vault:')) base = all.filter((i) => i.vault_id === filter.slice(6));
+    else if (filter && filter.startsWith('tag:')) {
+      const want = filter.slice(4).trim().toLowerCase();
+      base = all.filter((i) => (i.tags || []).some((t) => String(t).trim().toLowerCase() === want));
+    }
     else base = all;
     // Searching from Suggestions searches everything, like other password managers.
     if (query && filter === 'suggested') base = all;
@@ -463,7 +498,7 @@
     return Boolean(res && Array.isArray(res.kinds));
   }
 
-  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, quickActions, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache };
+  const api = { mapLimit, cacheableFindings, CATEGORIES, CAT_LABEL, CAT_KEY, REQUEST_TIMEOUT_MS, SKELETON_DELAY_MS, UNLOCK_TIMEOUT_MS, timeoutForMessage, withTimeout, buildFilters, buildFilterChips, collectTags, chipNavIndex, filterItems, SORTS, emptyState, matchesQuery, virtualWindow, scrollToRow, moveSel, keyAction, ringOffset, formatValue, mask, fillKind, primarySecretField, quickActions, viewFor, hostOfUrl, isAllowedUrl, isHttpUrl: isAllowedUrl, itemUsername, highlightRanges, highlightSegments, rowSubtitle, findingSeverity, findingLabel, hasWatchtowerFindings, getRecentlyUsed, getMonogram, monogramIcon, createIconCache };
   root.GitpassView = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);

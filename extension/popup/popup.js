@@ -482,10 +482,19 @@ function closeVaultMenu() {
   const chip = document.querySelector('#filterChips [data-filter-id="vaults"]');
   if (chip) chip.setAttribute('aria-expanded', 'false');
 }
+let tagMenuOpen = false;
+function closeTagMenu() {
+  tagMenuOpen = false;
+  const m = $('tagMenu');
+  if (m) { m.classList.add('hidden'); m.textContent = ''; }
+  const chip = document.querySelector('#filterChips [data-filter-id="tags"]');
+  if (chip) chip.setAttribute('aria-expanded', 'false');
+}
 document.addEventListener('click', (e) => {
-  if (!vaultMenuOpen) return;
+  if (!vaultMenuOpen && !tagMenuOpen) return;
   if (e.target && e.target.closest && e.target.closest('.filter-chips-row')) return;
-  closeVaultMenu();
+  if (vaultMenuOpen) closeVaultMenu();
+  if (tagMenuOpen) closeTagMenu();
 });
 function renderFilter() {
   const wrap = $('filterChips'); if (!wrap) return;
@@ -494,12 +503,13 @@ function renderFilter() {
   const focusId = hadChipFocus ? prev.dataset.filterId : null;
   wrap.textContent = '';
   closeVaultMenu();
+  closeTagMenu();
   const chips = V.buildFilterChips(S.all, S.vaults, { origin: S.origin, currentFilter: S.filter });
   const setRoving = (focused) => {
     for (const c of wrap.querySelectorAll('.filter-chip')) c.tabIndex = c === focused ? 0 : -1;
   };
   for (const f of chips) {
-    const active = f.kind === 'vaults' ? S.filter.startsWith('vault:') : S.filter === f.id;
+    const active = f.kind === 'vaults' ? S.filter.startsWith('vault:') : f.kind === 'tags' ? S.filter.startsWith('tag:') : S.filter === f.id;
     const b = el('button', 'filter-chip'); b.type = 'button';
     b.dataset.filterId = f.id;
     b.setAttribute('role', 'tab');
@@ -514,6 +524,14 @@ function renderFilter() {
       b.textContent = t(f.key, f.label) + ' ▾';
       b.setAttribute('aria-haspopup', 'menu');
       b.setAttribute('aria-expanded', 'false');
+    } else if (f.kind === 'tags') {
+      b.textContent = t(f.key, f.label) + ' ▾';
+      b.setAttribute('aria-haspopup', 'menu');
+      b.setAttribute('aria-expanded', 'false');
+    } else if (f.kind === 'tag') {
+      b.textContent = f.label + ' ×';
+      b.title = t('clearTag', 'Clear tag filter');
+      b.setAttribute('aria-label', t('clearTag', 'Clear tag filter'));
     } else {
       b.textContent = f.key ? t(f.key, f.label) : f.label;
     }
@@ -535,6 +553,51 @@ function renderFilter() {
         } else { m.classList.add('hidden'); }
         return;
       }
+      if (f.kind === 'tags') {
+        tagMenuOpen = !tagMenuOpen;
+        b.setAttribute('aria-expanded', tagMenuOpen ? 'true' : 'false');
+        const m = $('tagMenu'); m.textContent = '';
+        if (tagMenuOpen) {
+          const input = el('input'); input.type = 'search'; input.className = 'tag-filter-input';
+          input.placeholder = t('filterTagsPh', 'Filter tags…');
+          input.setAttribute('aria-label', t('filterTagsPh', 'Filter tags…'));
+          const list = el('div', 'tag-list');
+          const renderTagList = () => {
+            list.textContent = '';
+            const q = input.value.trim().toLowerCase();
+            const shown = (f.tags || []).filter((tg) => !q || tg.tag.toLowerCase().includes(q));
+            if (!shown.length) { list.append(el('div', 'tag-empty', t('noItems', 'No items'))); return; }
+            for (const tg of shown) {
+              const item = el('button', null, tg.tag + ' (' + tg.count + ')'); item.type = 'button';
+              item.setAttribute('role', 'menuitem');
+              item.setAttribute('aria-selected', S.filter === 'tag:' + tg.tag ? 'true' : 'false');
+              item.onclick = (ev) => { ev.stopPropagation(); S.filter = 'tag:' + tg.tag; renderFilter(); applyFilter(true); const tc = document.querySelector('#filterChips [data-filter-id="tags"]'); if (tc) tc.focus(); };
+              item.onkeydown = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeTagMenu(); const tc = document.querySelector('#filterChips [data-filter-id="tags"]'); if (tc) tc.focus(); } };
+              list.append(item);
+            }
+          };
+          input.oninput = renderTagList;
+          input.onkeydown = (ev) => {
+            if (ev.key === 'Escape') { ev.stopPropagation(); closeTagMenu(); b.focus(); }
+            else if (ev.key === 'Enter') {
+              const first = list.querySelector('button');
+              if (first) { ev.preventDefault(); first.click(); }
+            } else if (ev.key === 'ArrowDown') {
+              const first = list.querySelector('button');
+              if (first) { ev.preventDefault(); first.focus(); }
+            }
+          };
+          renderTagList();
+          m.append(input, list);
+          m.classList.remove('hidden');
+          input.focus();
+        } else { m.classList.add('hidden'); }
+        return;
+      }
+      if (f.kind === 'tag') {
+        S.filter = 'all'; renderFilter(); applyFilter(true);
+        return;
+      }
       S.filter = f.id; renderFilter(); applyFilter(true);
     };
     b.onkeydown = (e) => {
@@ -543,8 +606,8 @@ function renderFilter() {
         const all = [...wrap.querySelectorAll('.filter-chip')];
         const next = all[V.chipNavIndex(all.indexOf(b), e.key, all.length)];
         if (next) { setRoving(next); next.focus(); }
-      } else if (e.key === 'Escape' && vaultMenuOpen) {
-        e.stopPropagation(); closeVaultMenu(); b.focus();
+      } else if (e.key === 'Escape' && (vaultMenuOpen || tagMenuOpen)) {
+        e.stopPropagation(); if (vaultMenuOpen) closeVaultMenu(); if (tagMenuOpen) closeTagMenu(); b.focus();
       }
     };
     wrap.append(b);
@@ -1145,7 +1208,17 @@ function renderDetail(d) {
   for (const f of d.fields || []) box.append(fieldRow(d, f));
   if (box.children.length) pane.append(box);
   if (d.notes) pane.append(el('div', 'notes', d.notes));
-  if (d.tags && d.tags.length) { const tg = el('div', 'tags'); for (const x of d.tags) tg.append(el('span', 'tag', x)); pane.append(tg); }
+  if (d.tags && d.tags.length) {
+    const tg = el('div', 'tags');
+    for (const x of d.tags) {
+      const pill = el('button', 'tag', x); pill.type = 'button';
+      pill.title = t('filterByTag', 'Show items with this tag');
+      pill.setAttribute('aria-label', t('filterByTag', 'Show items with this tag') + ': ' + x);
+      pill.onclick = () => { S.filter = 'tag:' + x; renderFilter(); applyFilter(true); };
+      tg.append(pill);
+    }
+    pane.append(tg);
+  }
   if (d.updated_at) pane.append(el('div', 'meta-line', t('lastEdited', 'Last edited') + ' ' + new Date(d.updated_at).toLocaleString()));
 }
 

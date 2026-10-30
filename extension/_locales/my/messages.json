@@ -188,6 +188,18 @@
   "vaults": {
     "message": "သော့ခတ်သေတ္တာများ"
   },
+  "filterTags": {
+    "message": "တက်ဂ်များ"
+  },
+  "filterTagsPh": {
+    "message": "တက်ဂ်များကို စစ်ထုတ်ပါ…"
+  },
+  "clearTag": {
+    "message": "တက်ဂ် စစ်ထုတ်မှုကို ရှင်းပါ"
+  },
+  "filterByTag": {
+    "message": "ဤတက်ဂ်ပါသော အရာများကို ပြပါ"
+  },
   "catLogin": {
     "message": "လော့ဂ်အင်များ"
   },
