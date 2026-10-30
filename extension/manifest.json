@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "gitpass",
-  "version": "0.6.5",
-  "version_name": "0.6.5",
+  "version": "0.6.6",
+  "version_name": "0.6.6",
   "description": "__MSG_extDesc__",
   "permissions": [
     "nativeMessaging",
