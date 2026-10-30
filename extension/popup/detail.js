@@ -47,7 +47,7 @@ async function select(idx) {
       : Promise.resolve({ kinds: [] });
 
     const [res, findingsRes] = await Promise.all([
-      send({ type: 'popup:get_item', item_id: it.id }),
+      send({ type: 'popup:get_item', item_id: it.id, include_deleted: Boolean(it.deleted_at) }),
       findingsPromise,
     ]);
     d = res.item;
@@ -80,6 +80,20 @@ function renderDetail(d) {
   const g = el('div', 'grow'); g.append(el('h2', null, d.title), el('div', 'sub', d.vault_name + ' · ' + t(V.CAT_KEY[d.category], V.CAT_LABEL[d.category])));
   head.append(ic, g, moreMenu(d));
   pane.append(head);
+
+  if (d.deleted_at) {
+    const banner = el('div', 'trash-banner');
+    const bannerMsg = el('div', null, t('inTrash', 'This item is in Recently Deleted.'));
+    const trashSub = V.formatTrashSubtitle(d.deleted_at, Date.now(), t);
+    const bannerSub = el('div', 'trash-sub' + (trashSub && trashSub.danger ? ' danger' : ''), trashSub ? trashSub.text : '');
+    banner.append(bannerMsg, bannerSub);
+    pane.append(banner);
+  } else if (d.archived) {
+    const banner = el('div', 'trash-banner');
+    const bannerMsg = el('div', null, t('inArchive', 'This item is archived.'));
+    banner.append(bannerMsg);
+    pane.append(banner);
+  }
 
   if (d.category === 'login' && V.hasWatchtowerFindings(d.findings)) {
     const strip = el('div', 'warning-strip');
@@ -134,7 +148,19 @@ function renderDetail(d) {
     pane.append(strip);
   }
   const acts = el('div', 'd-actions');
-  if (V.fillKind(d.category)) {
+  if (d.deleted_at) {
+    const restoreBtn = el('button', 'btn btn-primary', t('restore', 'Restore'));
+    restoreBtn.type = 'button';
+    restoreBtn.onclick = () => restoreItem(d);
+    acts.append(restoreBtn);
+  } else {
+    if (d.archived) {
+      const unarchiveBtn = el('button', 'btn btn-primary', t('unarchive', 'Unarchive'));
+      unarchiveBtn.type = 'button';
+      unarchiveBtn.onclick = () => unarchiveItem(d);
+      acts.append(unarchiveBtn);
+    }
+    if (V.fillKind(d.category)) {
     const fillLabel = d.category === 'login' && d.url ? t('openFill', 'Open & Fill') : t('fill', 'Fill');
     const b = el('button', 'btn btn-primary', fillLabel);
     b.onclick = async () => {
@@ -161,11 +187,22 @@ function renderDetail(d) {
     edit.onclick = () => startEdit();
     acts.append(edit);
   }
+  }
   if (acts.children.length) pane.append(acts);
   const box = el('div', 'fields');
   for (const f of d.fields || []) box.append(fieldRow(d, f));
   if (box.children.length) pane.append(box);
   if (d.notes) pane.append(el('div', 'notes', d.notes));
-  if (d.tags && d.tags.length) { const tg = el('div', 'tags'); for (const x of d.tags) tg.append(el('span', 'tag', x)); pane.append(tg); }
+  if (d.tags && d.tags.length) {
+    const tg = el('div', 'tags');
+    for (const x of d.tags) {
+      const pill = el('button', 'tag', x); pill.type = 'button';
+      pill.title = t('filterByTag', 'Show items with this tag');
+      pill.setAttribute('aria-label', t('filterByTag', 'Show items with this tag') + ': ' + x);
+      pill.onclick = () => { S.filter = 'tag:' + x; renderFilter(); applyFilter(true); };
+      tg.append(pill);
+    }
+    pane.append(tg);
+  }
   if (d.updated_at) pane.append(el('div', 'meta-line', t('lastEdited', 'Last edited') + ' ' + new Date(d.updated_at).toLocaleString()));
 }

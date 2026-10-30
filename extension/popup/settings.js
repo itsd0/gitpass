@@ -6,4 +6,3 @@ function popupSettings() {
     catch (_) { res({ autofill: true, savePrompts: true, autolockFollowsApp: true }); }
   });
 }
-

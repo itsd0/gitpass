@@ -51,6 +51,7 @@ function openShortcuts() {
     { keys: [`${cmd}${alt}L`], label: t('shortcutLargeType', 'Show in large type') },
     { keys: [`${cmd}${shift}C`], label: t('shortcutCopyTotp', 'Copy one-time code (TOTP)') },
     { keys: [`${cmd}${shift}U`], label: t('shortcutCopyUser', 'Copy username') },
+    { keys: [`${cmd}${alt}R`], label: t('shortcutRestore', 'Restore item') },
     { keys: [`${cmd}O`], label: t('shortcutOpenUrl', 'Open website') },
     { keys: [`${cmd}E`], label: t('shortcutEdit', 'Edit login') },
     { keys: [`${cmd}${shift}G`], label: t('shortcutGen', 'Password generator') },
@@ -81,6 +82,8 @@ async function generate(len, digits, symbols, extra) {
   const msg = { type: 'popup:generate', len, digits, symbols };
   if (extra && extra.words) msg.words = true;
   if (extra && extra.pin) msg.pin = true;
+  if (extra && extra.separator != null) msg.separator = extra.separator;
+  if (extra && extra.capitalize != null) msg.capitalize = !!extra.capitalize;
   return (await send(msg)).password;
 }
 
@@ -142,6 +145,34 @@ async function openGenerator(opts) {
   const togSymbols = mkTog('genIncludeSymbols', 'Include symbols');
   p.append(rowTog);
 
+  const rowSep = el('div', 'gen-row gen-sep-row');
+  const sepLab = el('span', 'gen-sep-lab', t('genSeparator', 'Separator'));
+  const sepGroup = el('div', 'gen-seps');
+  sepGroup.setAttribute('role', 'radiogroup');
+  sepGroup.setAttribute('aria-label', t('genSeparator', 'Separator'));
+  const sepBtns = {};
+  for (const sep of WORD_SEPARATORS) {
+    const b = el('button', 'gen-sep', sep === ' ' ? '␣' : sep);
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('data-sep', sep);
+    b.setAttribute('aria-label', sep === ' ' ? t('genSeparatorSpace', 'Space') : sep);
+    b.onclick = () => setSeparator(sep);
+    b.onkeydown = onSepKeyDown;
+    sepGroup.append(b);
+    sepBtns[sep] = b;
+  }
+  sepGroup.onkeydown = onSepKeyDown;
+  rowSep.append(sepLab, sepGroup);
+  p.append(rowSep);
+
+  const rowCap = el('div', 'gen-row gen-toggles gen-cap-row');
+  const lCap = el('label', 'tog');
+  const togCap = Object.assign(el('input'), { type: 'checkbox' });
+  lCap.append(togCap, el('span', null, t('genCapitalize', 'Capitalize')));
+  rowCap.append(lCap);
+  p.append(rowCap);
+
   const acts = el('div', 'gen-acts');
   const fillBtn = el('button', 'btn hidden', t('fillTitle', 'Fill on this page')); fillBtn.type = 'button';
   const saveBtn = el('button', 'btn btn-link', t('genSaveAsLogin', 'Save as new Login…')); saveBtn.type = 'button';
@@ -195,6 +226,33 @@ async function openGenerator(opts) {
     lenLab.textContent = label();
     rowTog.classList.toggle('hidden', st.mode === 'pin');
     togDigits.checked = st.digits; togSymbols.checked = st.symbols;
+    const isMem = st.mode === 'memorable';
+    rowSep.classList.toggle('hidden', !isMem);
+    rowCap.classList.toggle('hidden', !isMem);
+    for (const sep of WORD_SEPARATORS) {
+      const on = sep === st.separator;
+      const b = sepBtns[sep];
+      b.classList.toggle('sel', on);
+      b.setAttribute('aria-checked', String(on));
+      b.tabIndex = on ? 0 : -1;
+    }
+    togCap.checked = !!st.capitalize;
+  }
+  function onSepKeyDown(e) {
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft' && e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+    e.preventDefault();
+    const dir = e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1;
+    const idx = WORD_SEPARATORS.indexOf(st.separator);
+    const next = WORD_SEPARATORS[(idx + dir + WORD_SEPARATORS.length) % WORD_SEPARATORS.length];
+    setSeparator(next);
+    if (sepBtns[next] && typeof sepBtns[next].focus === 'function') sepBtns[next].focus();
+  }
+  function setSeparator(sep) {
+    if (!WORD_SEPARATORS.includes(sep)) return;
+    st.separator = sep;
+    syncControls();
+    persist();
+    void run();
   }
   function setMode(m) {
     st.mode = genMode(m);
@@ -224,7 +282,19 @@ async function openGenerator(opts) {
     errEl.textContent = '';
     code.textContent = '…';
     try {
-      const r = await send({ type: 'popup:generate', len: st.length, digits: st.mode === 'pin' ? false : st.digits, symbols: st.mode === 'pin' ? false : st.symbols, words: st.mode === 'memorable', pin: st.mode === 'pin' });
+      const msg = {
+        type: 'popup:generate',
+        len: st.length,
+        digits: st.mode === 'pin' ? false : st.digits,
+        symbols: st.mode === 'pin' ? false : st.symbols,
+        words: st.mode === 'memorable',
+        pin: st.mode === 'pin',
+      };
+      if (st.mode === 'memorable') {
+        msg.separator = st.separator;
+        msg.capitalize = !!st.capitalize;
+      }
+      const r = await send(msg);
       if (seq !== genSeq || S.panel !== 'gen') return;
       pw = String((r && r.password) || '');
       paintCode(); paintStrength();
@@ -241,6 +311,7 @@ async function openGenerator(opts) {
   num.onchange = () => setLength(num.value);
   togDigits.onchange = () => { st.digits = togDigits.checked; persist(); void run(); };
   togSymbols.onchange = () => { st.symbols = togSymbols.checked; persist(); void run(); };
+  togCap.onchange = () => { st.capitalize = togCap.checked; persist(); void run(); };
   copyBtn.onclick = async () => {
     if (copyBtn.disabled) return;
     copyBtn.disabled = true;

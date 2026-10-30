@@ -1,6 +1,6 @@
 /* global chrome, GitpassI18n, GitpassPopupIcons, GitpassView, GitpassNewItem */
 'use strict';
-// gitpass popup v0.6: 1Password-style 2-pane UI. All host calls go through background.js as `popup:*` messages.
+// gitpass popup v0.6: 2-pane UI. All host calls go through background.js as `popup:*` messages.
 const $ = (id) => document.getElementById(id);
 const t = (k, f, subs) => GitpassI18n.t(k, f, subs);
 const V = typeof GitpassView !== 'undefined' ? GitpassView : (typeof require !== 'undefined' ? require('./view.js') : null);
@@ -11,6 +11,7 @@ const ROW_H = 52;
 const G = typeof GitpassGenerator !== 'undefined' ? GitpassGenerator : (typeof require !== 'undefined' ? require('./generator.js') : null);
 const GEN_MODES = G.MODES;
 const GEN_DEFAULTS = G.DEFAULTS;
+const WORD_SEPARATORS = G.WORD_SEPARATORS;
 const genMode = G.mode;
 const clampGenLength = G.clampLength;
 const safeGenSettings = G.safeSettings;
@@ -266,6 +267,7 @@ $('touchBtn').onclick = async () => {
 };
 $('usePw').onclick = () => { $('primaryBox').classList.add('hidden'); $('unlockForm').classList.remove('hidden'); $('pw').focus(); };
 $('backTouch').onclick = () => { $('unlockForm').classList.add('hidden'); $('primaryBox').classList.remove('hidden'); };
+if (typeof GitpassCapsLock !== 'undefined') GitpassCapsLock.attachCapsLockHint($('pw'), $('capsHint'));
 $('unlockForm').onsubmit = async (e) => {
   e.preventDefault();
   const btn = $('unlockBtn'); if (btn.disabled) return;
@@ -306,16 +308,22 @@ async function loadData() {
   let vaults = { vaults: [] };
   let all = null;
   let match = { items: [], origin: null };
+  let archivedRes = { items: [] };
+  let deletedRes = { items: [] };
 
   try {
     const results = await Promise.all([
       send({ type: 'popup:list_vaults' }).catch(() => ({ vaults: [] })),
       listAllItems(),
       send({ type: 'popup:match_active' }).catch(() => ({ items: [], origin: null })),
+      send({ type: 'popup:list_archived' }).catch(() => ({ items: [] })),
+      send({ type: 'popup:list_deleted' }).catch(() => ({ items: [] })),
     ]);
     vaults = results[0];
     all = results[1];
     match = results[2];
+    archivedRes = results[3];
+    deletedRes = results[4];
   } catch (err) {
     listError = err;
   } finally {
@@ -342,6 +350,8 @@ async function loadData() {
   S.all = (all && all.items) || [];
   S.suggested = (match && match.items) || [];
   S.origin = (match && match.origin) || null;
+  S.archived = (archivedRes && archivedRes.items) || [];
+  S.deleted = (deletedRes && deletedRes.items) || [];
   await refreshNeverSave();
   await loadSort();
   renderSort();
@@ -367,10 +377,19 @@ function closeVaultMenu() {
   const chip = document.querySelector('#filterChips [data-filter-id="vaults"]');
   if (chip) chip.setAttribute('aria-expanded', 'false');
 }
+let tagMenuOpen = false;
+function closeTagMenu() {
+  tagMenuOpen = false;
+  const m = $('tagMenu');
+  if (m) { m.classList.add('hidden'); m.textContent = ''; }
+  const chip = document.querySelector('#filterChips [data-filter-id="tags"]');
+  if (chip) chip.setAttribute('aria-expanded', 'false');
+}
 document.addEventListener('click', (e) => {
-  if (!vaultMenuOpen) return;
+  if (!vaultMenuOpen && !tagMenuOpen) return;
   if (e.target && e.target.closest && e.target.closest('.filter-chips-row')) return;
-  closeVaultMenu();
+  if (vaultMenuOpen) closeVaultMenu();
+  if (tagMenuOpen) closeTagMenu();
 });
 function renderFilter() {
   const wrap = $('filterChips'); if (!wrap) return;
@@ -379,12 +398,20 @@ function renderFilter() {
   const focusId = hadChipFocus ? prev.dataset.filterId : null;
   wrap.textContent = '';
   closeVaultMenu();
-  const chips = V.buildFilterChips(S.all, S.vaults, { origin: S.origin, currentFilter: S.filter });
+  closeTagMenu();
+  const chips = V.buildFilterChips(S.all, S.vaults, {
+    origin: S.origin,
+    currentFilter: S.filter,
+    archived: S.archived,
+    deleted: S.deleted,
+    archiveCount: (S.archived || []).length,
+    deletedCount: (S.deleted || []).length,
+  });
   const setRoving = (focused) => {
     for (const c of wrap.querySelectorAll('.filter-chip')) c.tabIndex = c === focused ? 0 : -1;
   };
   for (const f of chips) {
-    const active = f.kind === 'vaults' ? S.filter.startsWith('vault:') : S.filter === f.id;
+    const active = f.kind === 'vaults' ? S.filter.startsWith('vault:') : f.kind === 'tags' ? S.filter.startsWith('tag:') : S.filter === f.id;
     const b = el('button', 'filter-chip'); b.type = 'button';
     b.dataset.filterId = f.id;
     b.setAttribute('role', 'tab');
@@ -399,8 +426,20 @@ function renderFilter() {
       b.textContent = t(f.key, f.label) + ' ▾';
       b.setAttribute('aria-haspopup', 'menu');
       b.setAttribute('aria-expanded', 'false');
+    } else if (f.kind === 'tags') {
+      b.textContent = t(f.key, f.label) + ' ▾';
+      b.setAttribute('aria-haspopup', 'menu');
+      b.setAttribute('aria-expanded', 'false');
+    } else if (f.kind === 'tag') {
+      b.textContent = f.label + ' ×';
+      b.title = t('clearTag', 'Clear tag filter');
+      b.setAttribute('aria-label', t('clearTag', 'Clear tag filter'));
     } else {
-      b.textContent = f.key ? t(f.key, f.label) : f.label;
+      let label = f.key ? t(f.key, f.label) : f.label;
+      if (typeof f.count === 'number' && (f.id === 'archive' || f.id === 'deleted')) {
+        label += ' (' + f.count + ')';
+      }
+      b.textContent = label;
     }
     b.onclick = () => {
       if (f.kind === 'vaults') {
@@ -420,6 +459,51 @@ function renderFilter() {
         } else { m.classList.add('hidden'); }
         return;
       }
+      if (f.kind === 'tags') {
+        tagMenuOpen = !tagMenuOpen;
+        b.setAttribute('aria-expanded', tagMenuOpen ? 'true' : 'false');
+        const m = $('tagMenu'); m.textContent = '';
+        if (tagMenuOpen) {
+          const input = el('input'); input.type = 'search'; input.className = 'tag-filter-input';
+          input.placeholder = t('filterTagsPh', 'Filter tags…');
+          input.setAttribute('aria-label', t('filterTagsPh', 'Filter tags…'));
+          const list = el('div', 'tag-list');
+          const renderTagList = () => {
+            list.textContent = '';
+            const q = input.value.trim().toLowerCase();
+            const shown = (f.tags || []).filter((tg) => !q || tg.tag.toLowerCase().includes(q));
+            if (!shown.length) { list.append(el('div', 'tag-empty', t('noItems', 'No items'))); return; }
+            for (const tg of shown) {
+              const item = el('button', null, tg.tag + ' (' + tg.count + ')'); item.type = 'button';
+              item.setAttribute('role', 'menuitem');
+              item.setAttribute('aria-selected', S.filter === 'tag:' + tg.tag ? 'true' : 'false');
+              item.onclick = (ev) => { ev.stopPropagation(); S.filter = 'tag:' + tg.tag; renderFilter(); applyFilter(true); const tc = document.querySelector('#filterChips [data-filter-id="tags"]'); if (tc) tc.focus(); };
+              item.onkeydown = (ev) => { if (ev.key === 'Escape') { ev.stopPropagation(); closeTagMenu(); const tc = document.querySelector('#filterChips [data-filter-id="tags"]'); if (tc) tc.focus(); } };
+              list.append(item);
+            }
+          };
+          input.oninput = renderTagList;
+          input.onkeydown = (ev) => {
+            if (ev.key === 'Escape') { ev.stopPropagation(); closeTagMenu(); b.focus(); }
+            else if (ev.key === 'Enter') {
+              const first = list.querySelector('button');
+              if (first) { ev.preventDefault(); first.click(); }
+            } else if (ev.key === 'ArrowDown') {
+              const first = list.querySelector('button');
+              if (first) { ev.preventDefault(); first.focus(); }
+            }
+          };
+          renderTagList();
+          m.append(input, list);
+          m.classList.remove('hidden');
+          input.focus();
+        } else { m.classList.add('hidden'); }
+        return;
+      }
+      if (f.kind === 'tag') {
+        S.filter = 'all'; renderFilter(); applyFilter(true);
+        return;
+      }
       S.filter = f.id; renderFilter(); applyFilter(true);
     };
     b.onkeydown = (e) => {
@@ -428,8 +512,8 @@ function renderFilter() {
         const all = [...wrap.querySelectorAll('.filter-chip')];
         const next = all[V.chipNavIndex(all.indexOf(b), e.key, all.length)];
         if (next) { setRoving(next); next.focus(); }
-      } else if (e.key === 'Escape' && vaultMenuOpen) {
-        e.stopPropagation(); closeVaultMenu(); b.focus();
+      } else if (e.key === 'Escape' && (vaultMenuOpen || tagMenuOpen)) {
+        e.stopPropagation(); if (vaultMenuOpen) closeVaultMenu(); if (tagMenuOpen) closeTagMenu(); b.focus();
       }
     };
     wrap.append(b);
@@ -552,7 +636,7 @@ function renderRowIcon(container, it, size = 20) {
 
 function applyFilter(selectFirst) {
   const prevId = S.rows[S.sel] && S.rows[S.sel].id;
-  S.rows = V.filterItems(S.all, S.suggested, S.filter, S.query, S.sort);
+  S.rows = V.filterItems(S.all, S.suggested, S.filter, S.query, S.sort, { archived: S.archived, deleted: S.deleted });
   let idx = prevId ? S.rows.findIndex((r) => r.id === prevId) : -1;
   if (idx < 0 && (selectFirst || prevId)) idx = S.rows.length ? 0 : -1;
   $('list').scrollTop = 0;
@@ -634,9 +718,19 @@ function renderList() {
     if (S.query) tDiv.append(renderHighlight(it.title, S.query));
     else tDiv.textContent = it.title;
     const uDiv = el('div', 'u');
-    const uText = V.rowSubtitle(it, S.query);
-    if (S.query && uText && uText !== '—') uDiv.append(renderHighlight(uText, S.query));
-    else uDiv.textContent = uText || '—';
+    if (it.deleted_at) {
+      const trashSub = V.formatTrashSubtitle(it.deleted_at, Date.now(), t);
+      if (trashSub) {
+        uDiv.textContent = trashSub.text;
+        if (trashSub.danger) uDiv.classList.add('text-danger');
+      } else {
+        uDiv.textContent = '—';
+      }
+    } else {
+      const uText = V.rowSubtitle(it, S.query);
+      if (S.query && uText && uText !== '—') uDiv.append(renderHighlight(uText, S.query));
+      else uDiv.textContent = uText || '—';
+    }
     meta.append(tDiv, uDiv);
     row.append(ic, meta);
     if (it.favorite) { const f = el('span', 'fav'); f.innerHTML = UI.star; row.append(f); }
@@ -667,13 +761,15 @@ function renderList() {
 function renderEmpty(inner) {
   const st = V.emptyState({ query: S.query, filter: S.filter, origin: S.origin, count: S.all.length, excepted: isSiteExcepted() });
   const box = el('div', 'empty');
-  const ic = st.kind === 'search' ? UI.search : st.kind === 'site' ? categoryIcon('login', 36) : st.kind === 'nofill' ? UI.external : st.kind === 'vault' ? UI.plus : null;
+  const ic = st.kind === 'search' ? UI.search : st.kind === 'site' ? categoryIcon('login', 36) : st.kind === 'nofill' ? UI.external : st.kind === 'vault' ? UI.plus : st.kind === 'archive' ? UI.archive : st.kind === 'deleted' ? UI.trash : null;
   if (ic) { const w = el('span', 'empty-ic'); w.innerHTML = ic; box.append(w); }
   const msg = {
     search: () => t('noResults', 'No items found'),
     site: () => t('noMatches', 'No saved logins for this site'),
     nofill: () => t('notFillable', 'Open an https page to fill'),
     vault: () => t('emptyVaultTitle', 'Your vault is empty'),
+    archive: () => t('emptyArchiveTitle', 'Nothing archived'),
+    deleted: () => t('emptyTrashTitle', 'Recently Deleted is empty'),
     none: () => t('noItems', 'No items'),
   }[st.kind]();
   box.append(el('p', null, msg));
@@ -696,6 +792,8 @@ function renderEmpty(inner) {
     }
   }
   if (st.kind === 'vault') box.append(el('p', 'empty-sub', t('emptyVaultBody', 'Items you add will appear here.')));
+  if (st.kind === 'archive') box.append(el('p', 'empty-sub', t('emptyArchiveBody', 'Items you archive will appear here.')));
+  if (st.kind === 'deleted') box.append(el('p', 'empty-sub', t('emptyTrashBody', 'Items you delete stay here for 30 days.')));
   const acts = el('div', 'empty-actions');
   const btn = (cls, label, fn) => { const b = el('button', cls, label); b.type = 'button'; b.onclick = fn; acts.append(b); };
   if (st.kind === 'search') btn('btn btn-primary', t('emptyCreateNamed', 'Create item named “$1”', [st.query]), () => openNewItem('login', { title: st.query }));
@@ -811,6 +909,12 @@ document.addEventListener('keydown', (e) => {
   else if (act === 'copyUsername') copyUsername().catch(showErr);
   else if (act === 'largeType') openLargeTypeForSelected();
   else if (act === 'openWebsite') openWebsite();
+  else if (act === 'restore') {
+    if (selected) {
+      if (selected.deleted_at) restoreItem(selected).catch(showErr);
+      else if (selected.archived) unarchiveItem(selected).catch(showErr);
+    }
+  }
   else if (act === 'generator') { if (S.panel === 'gen') closePanel(); else openGenerator(); }
 });
 
@@ -860,6 +964,12 @@ if (typeof document !== 'undefined') {
 
 if (typeof window !== 'undefined' && window.__gitpassMock) {
   window.__gitpassPopup = {
+  restoreItem,
+  archiveItem,
+  unarchiveItem,
+  trashItem,
+  renderFilter,
+  renderEmpty,
   copy,
   clearClipboardIfOurs,
   renderListSkeletons,
@@ -877,6 +987,12 @@ if (typeof window !== 'undefined' && window.__gitpassMock) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    restoreItem,
+    archiveItem,
+    unarchiveItem,
+    trashItem,
+    renderFilter,
+    renderEmpty,
     copy,
     clearClipboardIfOurs,
     renderListSkeletons,

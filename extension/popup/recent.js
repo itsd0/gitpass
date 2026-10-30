@@ -47,7 +47,7 @@ function renderRecent() {
       const idx = S.rows.findIndex((r) => r.id === it.id);
       if (idx >= 0) select(idx);
     };
-    row.ondblclick = () => openAndFill();
+    row.ondblclick = () => { if (!it.deleted_at) openAndFill(); };
     rList.append(row);
   }
 }

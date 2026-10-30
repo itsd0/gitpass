@@ -16,6 +16,13 @@ afterEach(() => {
 const defaults = { autoLockMinutes: 10, clipboardClearSecs: 30, theme: 'dark' as const, language: 'en' as const, biometricUnlock: false, quickAccessHotkey: 'CmdOrCtrl+Shift+Space', hibpCheck: false };
 beforeEach(() => { vi.spyOn(api, 'getSettings').mockResolvedValue({ ...defaults }); });
 describe('settings', () => {
+  it('Security tab sits in its own scroll container so its bottom rows are reachable', async () => {
+    render(<SettingsPage initialTab="security" />);
+    const sc = await screen.findByTestId('settings-scroll');
+    expect(sc.className).toContain('h-full');
+    expect(sc.className).toContain('overflow-y-auto');
+    expect(sc.querySelector('[role="tabpanel"]')).toBeTruthy();
+  });
   it('saves theme via api.setSettings with full settings object and applies it', async () => {
     const spy = vi.spyOn(api, 'setSettings'); const u = userEvent.setup();
     render(<SettingsPage initialTab="general" />);

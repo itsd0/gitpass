@@ -93,6 +93,70 @@ function openLargeTypeForSelected() {
   return openLargeType(d, f, trigger);
 }
 
+
+async function restoreItem(d) {
+  const idx = Math.max(0, S.sel);
+  await send({ type: 'popup:restore_item', item_id: d.id });
+  delete S.findingsCache[d.id];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  await loadData();
+  if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('itemRestored', 'Item restored'), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:trash_item', item_id: d.id });
+    toast(t('movedToTrash', 'Moved to Recently Deleted'));
+    S.findingsCache = {};
+    await loadData();
+    const i = S.rows.findIndex((r) => r.id === d.id);
+    if (i >= 0) await select(i);
+  });
+}
+
+async function archiveItem(d) {
+  const idx = Math.max(0, S.sel);
+  await send({ type: 'popup:archive_item', item_id: d.id, archived: true });
+  delete S.findingsCache[d.id];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  await loadData();
+  if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('itemArchived', 'Item archived'), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:unarchive_item', item_id: d.id });
+    toast(t('itemUnarchived', 'Item unarchived'));
+    S.findingsCache = {};
+    await loadData();
+    const i = S.rows.findIndex((r) => r.id === d.id);
+    if (i >= 0) await select(i);
+  });
+}
+
+async function unarchiveItem(d) {
+  const idx = Math.max(0, S.sel);
+  await send({ type: 'popup:unarchive_item', item_id: d.id });
+  delete S.findingsCache[d.id];
+  S.detail = null;
+  S.revealed = {};
+  stopTotp();
+  S.sel = -1;
+  await loadData();
+  if (S.rows.length) await select(Math.min(idx, S.rows.length - 1));
+  else await select(-1);
+  toastAction(t('itemUnarchived', 'Item unarchived'), t('undo', 'Undo'), async () => {
+    await send({ type: 'popup:archive_item', item_id: d.id, archived: true });
+    toast(t('itemArchived', 'Item archived'));
+    S.findingsCache = {};
+    await loadData();
+    const i = S.rows.findIndex((r) => r.id === d.id);
+    if (i >= 0) await select(i);
+  });
+}
+
 async function trashItem(d) {
   const idx = Math.max(0, S.sel);
   await send({ type: 'popup:trash_item', item_id: d.id });
@@ -150,7 +214,16 @@ function moreMenu(d) {
   const sep = el('div', 'menu-sep');
   sep.setAttribute('role', 'separator');
   m.append(sep);
-  item(UI.trash, t('moveToTrash', 'Move to Recently Deleted'), () => trashItem(d), { danger: true });
+  if (d.deleted_at) {
+    item(UI.restore, t('restore', 'Restore'), () => restoreItem(d));
+  } else {
+    if (d.archived) {
+      item(UI.archive, t('unarchive', 'Unarchive'), () => unarchiveItem(d));
+    } else {
+      item(UI.archive, t('archive', 'Archive'), () => archiveItem(d));
+    }
+    item(UI.trash, t('moveToTrash', 'Move to Recently Deleted'), () => trashItem(d), { danger: true });
+  }
   const trigger = iconBtn(UI.more, t('more', 'More'), () => (m.classList.contains('hidden') ? openMenu() : closeMenu()));
   trigger.setAttribute('aria-haspopup', 'menu');
   trigger.setAttribute('aria-expanded', 'false');
@@ -171,13 +244,13 @@ function moreMenu(d) {
 }
 
 async function openAndFill() {
-  const d = S.detail; if (!d) return;
+  const d = S.detail; if (!d || d.deleted_at) return;
   const kind = V.fillKind(d.category); if (!kind) return;
   await send({ type: 'popup:open_fill', item_id: d.id, kind, url: d.url || null }).then(() => window.close(), showErr);
 }
 
 async function copyPrimary() {
-  const d = S.detail; const f = V.primarySecretField(d); if (!f) return;
+  const d = S.detail; if (!d || d.deleted_at) return; const f = V.primarySecretField(d); if (!f) return;
   await copy(await secretValue(d, f), f.kind === 'password' ? t('passwordCopied', 'Password copied') : t('copied', 'Copied'));
 }
 

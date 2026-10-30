@@ -213,7 +213,7 @@ function fieldRow(d, f) {
     lt.setAttribute('aria-label', label);
     acts.append(lt);
   }
-  acts.append(iconBtn(UI.copy, t('copy', 'Copy'), async (b) => {
+  const copyBtn = iconBtn(UI.copy, t('copy', 'Copy'), async (b) => {
     if (b.disabled) return;
     b.disabled = true;
     const prevHtml = b.innerHTML;
@@ -227,7 +227,12 @@ function fieldRow(d, f) {
       b.innerHTML = prevHtml;
       b.disabled = false;
     }
-  }));
+  });
+  if (d.deleted_at) {
+    copyBtn.disabled = true;
+    copyBtn.title = t('inTrash', 'This item is in Recently Deleted.');
+  }
+  acts.append(copyBtn);
   return row;
 }
 
