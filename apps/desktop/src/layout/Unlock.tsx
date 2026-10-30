@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { ChevronRight, Copy, Fingerprint, KeyRound, Loader2, PlusCircle, Printer } from 'lucide-react';
 import { api } from '../api/client';
 import { useApp } from '../lib/store';
@@ -29,6 +29,25 @@ export function Unlock() {
   const capsPw = useCapsLockHint();
   const capsNp = useCapsLockHint();
   const capsNp2 = useCapsLockHint();
+  const passwordRef = useRef<HTMLInputElement>(null);
+
+  // Auto-lock swaps the main window onto this screen while the user is in
+  // another app. Focusing the field then makes the window key. Only move
+  // focus once this window is already visible and focused.
+  useEffect(() => {
+    const focusPassword = () => {
+      if (document.visibilityState !== 'visible' || !document.hasFocus()) return;
+      const el = passwordRef.current;
+      if (el && document.activeElement !== el) el.focus();
+    };
+    focusPassword();
+    window.addEventListener('focus', focusPassword);
+    document.addEventListener('visibilitychange', focusPassword);
+    return () => {
+      window.removeEventListener('focus', focusPassword);
+      document.removeEventListener('visibilitychange', focusPassword);
+    };
+  }, []);
 
   useEffect(() => {
     api.status().then((s) => {
@@ -125,7 +144,7 @@ export function Unlock() {
         <div className="mb-6 flex flex-col items-center gap-3"><Logo size={56} /><h1 className="text-xl font-semibold">{t('unlock.title')}</h1><p className="text-center text-xs text-muted">{vaultPath || '…'}</p></div>
         <label className="mb-1 block text-xs text-muted" htmlFor="pw">{t('unlock.masterPassword')}</label>
         <div className="relative">
-          <Input id="pw" type="password" autoFocus autoComplete="off" className="h-10 pr-10" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={t('unlock.masterPasswordPlaceholder')} {...capsPw.fieldProps} />
+          <Input ref={passwordRef} id="pw" type="password" autoComplete="off" className="h-10 pr-10" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={t('unlock.masterPasswordPlaceholder')} {...capsPw.fieldProps} />
           <button type="submit" disabled={busy || !pw || throttleLeft > 0} aria-label={t('unlock.submit')} className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md bg-accent text-white disabled:opacity-40">{busy ? <Loader2 size={15} className="animate-spin" /> : <ChevronRight size={16} />}</button>
         </div>
         <CapsLockHint id={capsPw.hintId} show={capsPw.show} />

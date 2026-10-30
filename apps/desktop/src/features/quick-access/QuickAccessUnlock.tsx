@@ -1,9 +1,17 @@
-import React, { FormEvent, useEffect, useState } from 'react';
+import React, { FormEvent, useEffect, useRef, useState } from 'react';
 import { Fingerprint, Loader2, LogIn } from 'lucide-react';
 import { api } from '../../api/client';
 import { useApp } from '../../lib/store';
 import { Button, Input, Logo } from '../../ui';
 import { useT } from '../../i18n';
+
+/** True only when this webview's window is already on screen and focused.
+ * The quick-access window is created hidden and its React tree stays mounted,
+ * including across auto-lock. Touch ID and element.focus() from that hidden
+ * tree activate the app (the system auth sheet, and macOS making the window key). */
+function isForegroundWindow(): boolean {
+  return document.visibilityState === 'visible' && document.hasFocus();
+}
 
 export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
   const t = useT();
@@ -14,9 +22,22 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
   const [vaultPath, setVaultPath] = useState('');
   const [bioAvailable, setBioAvailable] = useState(false);
   const [throttleLeft, setThrottleLeft] = useState<number>(0);
+  const passwordRef = useRef<HTMLInputElement>(null);
+  const bioInFlight = useRef(false);
+  // One automatic Touch ID prompt per time the window is actually shown.
+  // A blur while a prompt is in flight is the system sheet, not the user hiding
+  // the window, so it must not arm another prompt when focus returns.
+  const autoPromptArmed = useRef(true);
+  const tryPromptRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     let active = true;
+    const onFocus = () => tryPromptRef.current();
+    const onBlur = () => {
+      if (!bioInFlight.current) autoPromptArmed.current = true;
+    };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('blur', onBlur);
     Promise.all([api.status(), api.getSettings()]).then(([st, sett]) => {
       if (!active) return;
       setVaultPath(st.vaultPath);
@@ -25,13 +46,22 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
       if (st.throttledSecs && st.throttledSecs > 0) {
         setThrottleLeft(st.throttledSecs);
       }
-      if (canBio && !st.unlocked) {
-        // Auto-prompt Touch ID on show if enabled
+      const tryPrompt = () => {
+        if (!active || !isForegroundWindow()) return;
+        const field = passwordRef.current;
+        if (field && document.activeElement !== field) field.focus();
+        if (!canBio || st.unlocked || !autoPromptArmed.current || bioInFlight.current) return;
+        autoPromptArmed.current = false;
         void touchId(st.vaultPath);
-      }
+      };
+      tryPromptRef.current = tryPrompt;
+      tryPrompt();
     }).catch(() => {});
     return () => {
       active = false;
+      tryPromptRef.current = () => {};
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('blur', onBlur);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -44,6 +74,9 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
   }, [throttleLeft]);
 
   async function touchId(vp?: string) {
+    if (bioInFlight.current) return;
+    bioInFlight.current = true;
+    autoPromptArmed.current = false;
     setBusy(true);
     setErr('');
     try {
@@ -60,6 +93,7 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
         setErr(msg);
       }
     } finally {
+      bioInFlight.current = false;
       setBusy(false);
     }
   }
@@ -109,8 +143,8 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
 
       <form onSubmit={submit} className="w-full max-w-xs space-y-3">
         <Input
+          ref={passwordRef}
           type="password"
-          autoFocus
           autoComplete="off"
           value={pw}
           onChange={(e) => setPw(e.target.value)}

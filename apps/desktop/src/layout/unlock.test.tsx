@@ -342,3 +342,78 @@ describe("Unlock localization (en, my, th)", () => {
     vi.useRealTimers();
   });
 });
+
+describe("Unlock focus while another app is in front", () => {
+  const shown = { visibility: "hidden" as DocumentVisibilityState, focused: false };
+
+  beforeEach(() => {
+    shown.visibility = "hidden";
+    shown.focused = false;
+    useI18n.getState().setLang("en");
+    useApp.setState({ locked: true, account: null });
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => shown.visibility,
+    });
+    vi.spyOn(document, "hasFocus").mockImplementation(() => shown.focused);
+    vi.spyOn(api, "status").mockResolvedValue({
+      unlocked: false,
+      vaultPath: "/tmp/fake-vault",
+      account: null,
+      vaultExists: true,
+      biometricAvailable: true,
+    });
+    vi.spyOn(api, "getSettings").mockResolvedValue({
+      autoLockMinutes: 5,
+      clipboardClearSecs: 90,
+      theme: "dark",
+      language: "en",
+      biometricUnlock: true,
+      quickAccessHotkey: "CommandOrControl+Shift+Space",
+      hibpCheck: false,
+      sshApproveEachUse: false,
+      lockOnSleep: true,
+      lockOnScreenLock: true,
+      lockOnUserSwitch: true,
+    });
+    vi.spyOn(api, "unlockBiometric").mockResolvedValue({
+      unlocked: true,
+      vaultPath: "/tmp/fake-vault",
+      account: "Test User",
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    Reflect.deleteProperty(document, "visibilityState");
+    useI18n.getState().setLang("en");
+  });
+
+  it("does not focus the password field or start Touch ID while hidden or unfocused", async () => {
+    render(<Unlock />);
+    const input = await screen.findByPlaceholderText("Enter your password");
+    expect(document.activeElement).not.toBe(input);
+    expect(api.unlockBiometric).not.toHaveBeenCalled();
+
+    shown.visibility = "visible";
+    await act(async () => {
+      document.dispatchEvent(new Event("visibilitychange"));
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(document.activeElement).not.toBe(input);
+    expect(api.unlockBiometric).not.toHaveBeenCalled();
+  });
+
+  it("focuses the password field once the window is shown, without starting Touch ID", async () => {
+    shown.visibility = "visible";
+    render(<Unlock />);
+    const input = await screen.findByPlaceholderText("Enter your password");
+    expect(document.activeElement).not.toBe(input);
+
+    shown.focused = true;
+    await act(async () => { window.dispatchEvent(new Event("focus")); });
+    expect(document.activeElement).toBe(input);
+    expect(api.unlockBiometric).not.toHaveBeenCalled();
+  });
+});
