@@ -15,6 +15,15 @@ id prefix, or a title substring; `get`, `copy`, `totp`, `find` and `list --query
 rank fuzzy matches on title/username/url. When a query is ambiguous, use the item id or
 `--pick <n>` where the command offers it.
 
+Queries accept structured operators (combined with free text, case-insensitive):
+- `tag:<name>` (e.g. `tag:work`, `tag:"side project"`)
+- `vault:<name>` (case-insensitive prefix match on vault name)
+- `type:<category>` (`login`, `card`, `note`, `api`, `ssh`, `identity`, `passkey`, `bank`, `wifi`, `server`, `document`)
+- `is:favorite`, `is:archived`
+- `has:otp`, `has:passkey`, `has:attachment`, `has:url`
+- `url:<host>` (matches against URL host)
+- Leading `-` negates any operator (e.g. `-tag:old`, `-is:archived`)
+
 ## Global options
 
 | Option | Meaning |

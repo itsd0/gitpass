@@ -295,7 +295,9 @@ impl Agent {
             }
             "list_items" => {
                 let cat = match s("category") { Some(c) if !c.is_empty() => Some(c.parse::<Category>().map_err(|e| err("bad_request", e.to_string()))?), _ => None };
-                let query = s("query").unwrap_or_default().trim().to_lowercase();
+                let query = s("query").unwrap_or_default();
+                let q_trim = query.trim();
+                let parsed_q = (!q_trim.is_empty()).then(|| gitpass_core::search::parse_query(q_trim));
                 let vault = s("vault_id").filter(|v| !v.is_empty());
                 let limit = q.get("limit").and_then(|l| l.as_u64()).map(|l| l as usize).unwrap_or(usize::MAX);
                 // Paging like gitpass-host: the popup asks for pages of 500 and follows `next_offset`.
@@ -309,13 +311,29 @@ impl Agent {
                     self.records()?
                 };
                 let mut items: Vec<(Value, String)> = recs.into_iter()
-                    .filter(|(vid, _, _, r)| vault.as_ref().is_none_or(|v| v == vid) && cat.is_none_or(|c| c == r.category))
+                    .filter(|(vid, vname, _, r)| {
+                        if vault.as_ref().is_some_and(|v| v != vid) { return false; }
+                        if cat.is_some_and(|c| c != r.category) { return false; }
+                        if let Some(pq) = &parsed_q {
+                            let cand = gitpass_core::search::CandidateInfo::from_record(r, Some(vname.as_str()));
+                            if !pq.matches(&cand) { return false; }
+                        }
+                        true
+                    })
                     .map(|(vid, vname, iid, r)| {
                         let mut s = summary(&vid, &vname, &iid, &r);
                         if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
                         (s, r.item.title.to_lowercase())
                     })
-                    .filter(|(v, _)| query.is_empty() || ["title", "subtitle", "url"].iter().any(|k| v[*k].as_str().unwrap_or("").to_lowercase().contains(&query)))
+                    .filter(|(v, _)| {
+                        if let Some(pq) = &parsed_q {
+                            if pq.terms.is_empty() { return true; }
+                            let term = pq.terms.to_lowercase();
+                            ["title", "subtitle", "url"].iter().any(|k| v[*k].as_str().unwrap_or("").to_lowercase().contains(&term))
+                        } else {
+                            true
+                        }
+                    })
                     .collect();
                 items.sort_by(|a, b| a.1.cmp(&b.1));
                 let total = items.len();

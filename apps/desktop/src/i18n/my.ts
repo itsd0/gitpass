@@ -676,6 +676,17 @@ export const my: Partial<Record<Key, string>> = {
   "toolbar.search": "ရှာဖွေရန်",
   "toolbar.searchPlaceholder": "gitpass တွင် ရှာဖွေရန်",
   "toolbar.help": "အကူအညီ",
+  "search.hint.tag": "တဂ်ဖြင့် စစ်ထုတ်ရန်",
+  "search.hint.type": "အမျိုးအစားဖြင့် စစ်ထုတ်ရန်",
+  "search.hint.is": "အခြေအနေဖြင့် စစ်ထုတ်ရန်",
+  "search.hint.has": "ပါဝင်သောအရာဖြင့် စစ်ထုတ်ရန်",
+  "search.hint.vault": "သော့ခတ်သေတ္တာဖြင့် စစ်ထုတ်ရန်",
+  "search.val.favorite": "အကြိုက်ဆုံး အရာများ",
+  "search.val.archived": "မှတ်တမ်းသိမ်းထားသော အရာများ",
+  "search.val.otp": "တစ်ခါသုံး စကားဝှက် (TOTP)",
+  "search.val.passkey": "Passkey အထောက်အထားများ",
+  "search.val.attachment": "ဖိုင်များနှင့် ပူးတွဲဖိုင်များ",
+  "search.val.url": "ဝဘ်ဆိုဒ် လိပ်စာ",
 
   // import wizard
   "import.title": "ဒေတာများကို gitpass သို့ ပြောင်းရွှေ့ရန်",
