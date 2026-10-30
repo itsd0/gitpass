@@ -53,8 +53,6 @@ jobs:
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}  # empty for the current unencrypted key
-      APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-      APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -70,10 +68,19 @@ jobs:
           workspaces: apps/desktop/src-tauri
           key: ${{ matrix.name }}
       - name: preflight (updater key + macOS signing identity)
+        # The certificate env vars are only exported when set: Tauri tries to import APPLE_CERTIFICATE
+        # whenever the variable exists, even if empty.
+        env:
+          CERT: ${{ secrets.APPLE_CERTIFICATE }}
+          CERT_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
         run: |
           [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || { echo "::error::TAURI_SIGNING_PRIVATE_KEY is not set"; exit 1; }
-          if [ -n "$APPLE_CERTIFICATE" ]; then
-            echo "APPLE_SIGNING_IDENTITY=gitpass Local Signing" >> "$GITHUB_ENV"
+          if [ -n "$CERT" ]; then
+            {
+              echo "APPLE_CERTIFICATE=$CERT"
+              echo "APPLE_CERTIFICATE_PASSWORD=$CERT_PASSWORD"
+              echo "APPLE_SIGNING_IDENTITY=gitpass Local Signing"
+            } >> "$GITHUB_ENV"
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
             echo "::error::APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD are not set; refusing to ship a release with a different signing identity (see docs/RELEASE.md)"
             exit 1
