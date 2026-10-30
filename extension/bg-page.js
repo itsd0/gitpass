@@ -161,32 +161,83 @@
   }
 
   /** Decide save vs update for a captured login. Returns the banner descriptor or null. */
-  async function decide(host, origin, cap) {
+  async function decide(host, origin, cap, tabId) {
     let items;
     try { items = await matchItems(host, origin); } catch (e) { return { prompt: 'save', items: null, error: e.code || e.message }; }
     const logins = items.filter((i) => !i.category || i.category === 'login');
-    const same = logins.filter((i) => (i.subtitle || '').trim().toLowerCase() === (cap.username || '').trim().toLowerCase());
-    for (const it of same) {
-      try {
-        const c = await host('fill', { item_id: it.id, origin });
-        if (c && c.password === cap.password && (!cap.username || c.username === cap.username)) return null; // already saved, nothing to do
-        return { prompt: 'update', item_id: it.id, title: it.title, hasUser: !!(it.subtitle || '').trim() };
-      } catch (_) { /* fall through to next */ }
+    const capUser = ((cap && cap.username) || '').trim();
+
+    if (capUser) {
+      const same = logins.filter((i) => (i.subtitle || '').trim().toLowerCase() === capUser.toLowerCase());
+      for (const it of same) {
+        try {
+          const c = await host('fill', { item_id: it.id, origin });
+          if (c && c.password === cap.password && (!cap.username || c.username === cap.username)) return null; // already saved, nothing to do
+          return { prompt: 'update', item_id: it.id, title: it.title, hasUser: !!(it.subtitle || '').trim() };
+        } catch (_) { /* fall through to next */ }
+      }
+      const blank = logins.filter((i) => !(i.subtitle || '').trim());
+      if (blank.length === 1) {
+        const existing = blank[0];
+        try {
+          const c = await host('fill', { item_id: existing.id, origin });
+          if (c && c.password === cap.password && (!cap.username || c.username === cap.username)) return null;
+          return { prompt: 'update', item_id: existing.id, title: existing.title, hasUser: !!(existing.subtitle || '').trim() };
+        } catch (_) {}
+      }
+      return { prompt: 'save' };
     }
-    // Offer "Update existing" only when that cannot overwrite a different account: the captured
-    // username is empty, or the single existing login has no username yet. Otherwise save new.
-    const capUser = (cap.username || '').trim();
-    const blank = logins.filter((i) => !(i.subtitle || '').trim());
-    const target = !capUser ? (logins.length === 1 ? logins[0] : null) : (blank.length === 1 ? blank[0] : null);
-    if (target) {
-      const existing = target;
+
+    // Empty captured username:
+    if (!logins.length) return { prompt: 'save' };
+
+    if (logins.length === 1) {
+      const existing = logins[0];
       try {
         const c = await host('fill', { item_id: existing.id, origin });
-        if (c && c.password === cap.password && (!cap.username || c.username === cap.username)) return null;
-        return { prompt: 'update', item_id: existing.id, title: existing.title, hasUser: !!(existing.subtitle || '').trim() };
+        if (c && c.password === cap.password) return null;
       } catch (_) {}
+      return { prompt: 'update', item_id: existing.id, title: existing.title, hasUser: !!(existing.subtitle || '').trim() };
     }
-    return { prompt: 'save' };
+
+    // 2+ logins match and captured username is empty:
+    // Preselect most recently filled login on this tab (lastFilled), otherwise most recently used.
+    const tid = typeof tabId === 'number' ? tabId : (cap && typeof cap.tabId === 'number' ? cap.tabId : null);
+    let lf = tid != null ? fresh(lastFilled, tid, origin, true) : null;
+    if (!lf && tid != null && lastFilled.has(tid)) {
+      const raw = lastFilled.get(tid);
+      if (raw && raw.item_id && (!raw.origin || GitpassPolicy.sameSite(raw.origin, origin))) {
+        lf = raw;
+      }
+    }
+    let chosen = null;
+    if (lf && lf.item_id) {
+      chosen = logins.find((i) => i.id === lf.item_id) || null;
+    }
+    const sorted = logins.slice().sort((a, b) => (b.last_used || 0) - (a.last_used || 0));
+    if (!chosen) {
+      chosen = sorted[0];
+    }
+
+    // If the captured password already matches the chosen login, show no banner.
+    try {
+      const c = await host('fill', { item_id: chosen.id, origin });
+      if (c && c.password === cap.password) return null;
+    } catch (_) {}
+
+    const accounts = sorted.map((i) => ({
+      id: i.id,
+      title: i.title || '',
+      username: i.subtitle || '',
+    }));
+
+    return {
+      prompt: 'update',
+      item_id: chosen.id,
+      title: chosen.title,
+      hasUser: !!(chosen.subtitle || '').trim(),
+      accounts,
+    };
   }
 
   /**
@@ -479,10 +530,14 @@
         if (!user) { const lu = fresh(lastUsername, tabId, origin, true); if (lu && lu.username) user = lu.username; }
         else { lastUsername.set(tabId, { origin, username: user, ts: Date.now() }); }
         const cap = { origin, kind, username: user, password: a.password, ts: Date.now() };
-        const d = await decide(host, origin, cap);
+        const d = await decide(host, origin, cap, tabId);
         if (!d) { pendingSaves.delete(tabId); return { prompt: null }; }
         pendingSaves.set(tabId, { ...cap, ...d });
-        return { prompt: d.prompt, username: user, title: d.title || null, vaults: await vaultChoices(host) };
+        const chosenUser = (d.accounts && d.accounts.find((x) => x.id === d.item_id)?.username) || user;
+        const res = { prompt: d.prompt, username: chosenUser, title: d.title || null, vaults: await vaultChoices(host) };
+        if (d.accounts) res.accounts = d.accounts;
+        if (d.item_id) res.item_id = d.item_id;
+        return res;
       }
       case 'page:pending': {
         await waitInflight(tabId); // a redirect during Saving… still gets the success/failure outcome
@@ -491,7 +546,19 @@
           return { prompt: null };
         }
         const p = fresh(pendingSaves, tabId, origin, true);
-        return p ? { prompt: p.prompt, username: p.username, title: p.title || null, masked: p.masked || null, brand: p.brand || null, vaults: await vaultChoices(host) } : { prompt: null };
+        if (!p) return { prompt: null };
+        const chosenUser = (p.accounts && p.accounts.find((x) => x.id === p.item_id)?.username) || p.username;
+        const res = {
+          prompt: p.prompt,
+          username: chosenUser,
+          title: p.title || null,
+          masked: p.masked || null,
+          brand: p.brand || null,
+          vaults: await vaultChoices(host),
+        };
+        if (p.accounts) res.accounts = p.accounts;
+        if (p.item_id) res.item_id = p.item_id;
+        return res;
       }
       case 'page:save_decision': {
         const p = fresh(pendingSaves, tabId, origin, true);
@@ -512,12 +579,22 @@
           const user = p.username || '';
           if (a.action === 'update') {
             if (p.prompt !== 'update') throw err('bad_request', 'action');
-            const upArgs = { item_id: p.item_id, password: p.password }; // never an item id from the content side
-            if (user && !p.hasUser) upArgs.username = user;
+            let targetId = p.item_id;
+            if (p.accounts && p.accounts.length > 1 && a.item_id != null) {
+              if (typeof a.item_id !== 'string' || !a.item_id) throw err('bad_request', 'item_id');
+              const matched = await matchItems(host, origin);
+              const isMatch = matched.some((i) => i.id === a.item_id && (!i.category || i.category === 'login'));
+              if (!isMatch) throw err('origin_mismatch', 'item does not match this origin');
+              targetId = a.item_id;
+            }
+            const chosenAcc = (p.accounts || []).find((acc) => acc.id === targetId);
+            const hasUser = chosenAcc ? !!(chosenAcc.username || '').trim() : p.hasUser;
+            const upArgs = { item_id: targetId, password: p.password };
+            if (user && !hasUser) upArgs.username = user;
             await host('update_password', upArgs);
             if (pendingSaves.get(tabId) === p) pendingSaves.delete(tabId); // never drop a newer capture
-            rememberSaved(tabId, origin, p.item_id);
-            return { done: true, action: 'update' };
+            rememberSaved(tabId, origin, targetId);
+            return { done: true, action: 'update', item_id: targetId };
           }
           // save_card (#196): a card capture becomes a credit_card item through the
           // host's generic create_item path — the same ItemInput shape the popup's
@@ -665,6 +742,8 @@
 
   const api = {
     handle,
+    decide,
+    _decide: decide,
     forgetTab,
     rememberFilled,
     fillPaymentFrames,
