@@ -3,7 +3,7 @@ import { feature as home } from './home';
 import { feature as items } from './items';
 import { feature as newItem } from './new-item';
 import { feature as onboarding } from './onboarding';
-import { feature as watchtower } from './watchtower';
+import { feature as watchtower, checkupFeature } from './watchtower';
 import { feature as people } from './people';
 import { feature as settings } from './settings';
 import { feature as palette } from './palette';
@@ -30,7 +30,7 @@ export interface FeatureDef {
   commands?: PaletteCommand[];
 }
 
-export const features: FeatureDef[] = [home, items, newItem, onboarding, watchtower, people, settings, palette, quickAccess, generator, largeType, moveToVaultFeature, addTagFeature, whatsNewFeature, emergencyKitFeature] as FeatureDef[];
+export const features: FeatureDef[] = [home, items, newItem, onboarding, watchtower, checkupFeature, people, settings, palette, quickAccess, generator, largeType, moveToVaultFeature, addTagFeature, whatsNewFeature, emergencyKitFeature] as FeatureDef[];
 export const featureById = (id: string) => features.find((f) => f.id === id);
 export const featureForRoute = (route: string) => features.find((f) => f.route === route && f.Page);
 /** Modals are opened via useApp().openModal(featureId). */

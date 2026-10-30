@@ -9,6 +9,7 @@ import { th } from './th';
 const DYNAMIC_PREFIXES = [
   'bulk.toast.',
   'category.',
+  'checkup.explain.',
   'generator.mode.',
   'itemKeys.',
   'rowFinding.',
