@@ -857,6 +857,7 @@ let qt = null;
 $('q').oninput = () => { clearTimeout(qt); qt = setTimeout(() => { S.query = $('q').value.trim(); applyFilter(true); }, 80); };
 
 $('genBtn').innerHTML = UI.key; $('genBtn').onclick = () => (S.panel === 'gen' ? closePanel() : openGenerator());
+  if ($('watchtowerBtn')) { $('watchtowerBtn').innerHTML = UI.shield; $('watchtowerBtn').onclick = () => (S.panel === 'watchtower' ? closePanel() : openWatchtower()); }
   $('siteSettingsBtn').innerHTML = UI.gear; $('siteSettingsBtn').onclick = () => (S.panel === 'site-settings' ? closePanel() : openSiteSettings(S.origin));
 $('newBtn').innerHTML = UI.plus; $('newBtn').onclick = () => (S.panel === 'new' ? closePanel() : openNewItem());
 $('lock').innerHTML = UI.lock; $('searchIc').innerHTML = UI.search;
@@ -941,7 +942,13 @@ document.addEventListener('keydown', (e) => {
   if (!act) return;
   e.preventDefault();
   if (act === 'close') window.close();
-  else if (act === 'closePanel') closePanel();
+  else if (act === 'closePanel') {
+    if (S.panel === 'watchtower' && typeof wtDrillKind !== 'undefined' && wtDrillKind && typeof wtData !== 'undefined' && wtData) {
+      renderWatchtowerOverview($('panel'), wtData);
+    } else {
+      closePanel();
+    }
+  }
   else if (act === 'toggleShortcuts' || act === 'shortcuts') {
     if (S.panel === 'shortcuts') closePanel(); else openShortcuts();
   }

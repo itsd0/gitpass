@@ -101,6 +101,18 @@
         }
         return ok({ kinds: [] });
       }
+      case 'audit_summary': {
+        const item0 = liveItem('v1:i0');
+        const items = item0 ? [{ id: item0.id, title: item0.title, username: item0.username || 'octocat', url: item0.url || 'https://github.com', category: item0.category || 'login' }] : [];
+        return ok({
+          score: items.length > 0 ? 85 : 100,
+          items_checked: 2,
+          findings: items.length > 0 ? [
+            { kind: 'weak', count: 1, items },
+            { kind: 'reused', count: 1, items },
+          ] : [],
+        });
+      }
       case 'reveal': {
         const it = liveItem(msg.item_id);
         if (!it) return err('not_found');

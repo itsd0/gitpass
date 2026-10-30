@@ -612,6 +612,19 @@ fn item_findings_agent_contract_and_security() {
 }
 
 #[test]
+fn audit_summary_agent_contract_and_security() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+
+    let sum = c.ok("audit_summary", json!({}));
+    assert!(sum["score"].is_number(), "{sum}");
+    assert!(sum["findings"].is_array(), "{sum}");
+
+    e.app.lock();
+    assert_eq!(c.err("audit_summary", json!({})), "locked");
+}
+
+#[test]
 fn generator_history_command_is_read_only_gated_by_lock_and_setting() {
     let e = env();
     let (mut c, _) = Client::connect(&e);

@@ -1250,5 +1250,37 @@
   },
   "watchtowerRotationSoon": {
     "message": "ใกล้ถึงเวลาเปลี่ยนรหัสผ่าน"
+  },
+  "watchtower": {
+    "message": "Watchtower"
+  },
+  "watchtowerNothingNeedsAttention": {
+    "message": "ไม่มีสิ่งที่ต้องดำเนินการ"
+  },
+  "watchtowerScore": {
+    "message": "คะแนนความปลอดภัย: $1 จาก 100",
+    "placeholders": {
+      "score": {
+        "content": "$1"
+      }
+    }
+  },
+  "watchtowerScoreExcellent": {
+    "message": "ยอดเยี่ยม"
+  },
+  "watchtowerScoreGood": {
+    "message": "ดี"
+  },
+  "watchtowerScoreFair": {
+    "message": "พอใช้"
+  },
+  "watchtowerScorePoor": {
+    "message": "แย่"
+  },
+  "loadingWatchtower": {
+    "message": "กำลังโหลด Watchtower…"
+  },
+  "errWatchtowerLoad": {
+    "message": "ไม่สามารถโหลด Watchtower ได้"
   }
 }
