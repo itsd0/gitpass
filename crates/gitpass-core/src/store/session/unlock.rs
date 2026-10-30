@@ -22,6 +22,29 @@ impl Session {
     pub fn unlock_device_biometric(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>) -> Result<Self> {
         Self::unlock_device_inner(root, password, secret, opts, device_name, true, true)
     }
+    /// Read-only unlock for `gitpass doctor`: opens the keyset and loads the Account Key without touching the
+    /// device registry, resealing the manifest, finishing a pending rewrap or upgrading the KDF. The only file
+    /// it may write is the unlock throttle state (`.gitpass-throttle.json`): failures are still counted so
+    /// brute-force throttling applies, and a success resets the counter.
+    pub fn unlock_readonly(root: &Path, password: &str, secret: &SecretKey) -> Result<Self> {
+        crate::unlock_throttle::check_throttle(root)?;
+        let fmt = read_format(root)?;
+        if fmt.version < MIN_READ_FORMAT { bail!("vault is format v{}; run `gitpass migrate` to upgrade to v{FORMAT_VERSION}", fmt.version); }
+        let (auk, account_key) = match open_keyset_auk(root, &fmt, &root.join("keyset.enc"), password, secret) {
+            Ok(k) => {
+                let _ = crate::unlock_throttle::record_success(root);
+                k
+            }
+            Err(e) => {
+                let _ = crate::unlock_throttle::record_failure(root);
+                return Err(e);
+            }
+        };
+        let device_kek = device_kek(&auk, &fmt.account_id);
+        drop(auk);
+        let device_id = crate::device::local_device_id(root).unwrap_or_default();
+        Ok(Session { root: root.to_path_buf(), fmt, account_key, kdf_upgraded: false, accepted_problems: vec![], device_id, device_revoked: false, device_kek })
+    }
     /// Verify-only re-unlock used after a sync pull: same integrity/rollback checks, but never touches the
     /// device registry or upgrades the KDF, so the working tree stays exactly as committed/pulled.
     pub fn reopen_verify(root: &Path, password: &str, secret: &SecretKey, accept_rollback: bool) -> Result<Self> {

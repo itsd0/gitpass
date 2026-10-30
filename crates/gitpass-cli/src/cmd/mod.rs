@@ -1,3 +1,4 @@
+pub(crate) mod doctor;
 pub(crate) mod attach;
 pub(crate) mod audit;
 pub(crate) mod common;

@@ -30,6 +30,7 @@ fn run() -> Result<()> {
         Cmd::Device { .. } => cmd::device::run(&cli, &root, &cli.cmd),
         Cmd::Import { .. } | Cmd::Export { .. } => cmd::import_export::run(&cli, &root, &cli.cmd),
         Cmd::Audit { .. } => cmd::audit::run(&cli, &root, &cli.cmd),
+        Cmd::Doctor { .. } => cmd::doctor::run(&cli, &root, &cli.cmd),
         Cmd::Completions { .. } => unreachable!(),
     }
 }

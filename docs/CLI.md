@@ -359,6 +359,27 @@ Been Pwned k-anonymity checks (only five hex characters of a SHA-1 leave the mac
 `--max-age-days` defaults to 365 and `--expiring-days` to 30. The scoring and checks are
 documented in [WATCHTOWER.md](WATCHTOWER.md).
 
+## Health check (`gitpass doctor`)
+
+```sh
+gitpass doctor
+gitpass doctor --json
+gitpass doctor --no-unlock
+gitpass doctor --online
+```
+
+`doctor` runs read-only health checks across five areas and reports status with one-line fix hints. The only file it may write is the unlock throttle state (`.gitpass-throttle.json`): a wrong master password is still counted toward brute-force throttling and a successful unlock resets the counter. Every other vault file and the git working tree are left unchanged:
+- **Vault files**: verifies every item and the manifest decrypt cleanly, with valid AEAD authentication and padding. Reports item counts and failing item IDs without exposing any secrets.
+- **Permissions**: ensures the vault directory (`0700`) and key files (`0600`) are not group/world readable, and warns if the vault is placed inside a cloud-synced folder (e.g. Dropbox, iCloud Drive).
+- **Git repository**: checks for uncommitted changes or merge conflicts, verifies remote configuration, and reports ahead/behind commit counts (network fetch only with `--online`).
+- **Browser integration**: checks installed Chromium browsers (Google Chrome, Chromium, Brave) for native messaging host manifests and verifies they point to an existing `gitpass-host` binary.
+- **Local state**: verifies unlock throttle state (`.gitpass-throttle.json`) and checks that routine backups (`.gitpass-backup-*`) are sane and pruning.
+
+Exit codes:
+- `0`: all checks passed
+- `1`: one or more checks failed
+- `2`: warnings only (no failures)
+
 ## Shell completions
 
 ```sh

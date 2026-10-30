@@ -680,6 +680,18 @@ EXAMPLES:
         /// Show findings that were ignored by the user
         #[arg(long)] include_ignored: bool,
     },
+    /// Health check for vault integrity, permissions, git state, native host, and local state
+    Doctor {
+        /// Print output as JSON
+        #[arg(long)]
+        json: bool,
+        /// Skip checks that require an unlocked session (does not decrypt vault items)
+        #[arg(long)]
+        no_unlock: bool,
+        /// Fetch git remote to check ahead/behind status
+        #[arg(long)]
+        online: bool,
+    },
     /// Generate shell completion scripts for zsh, bash, or fish
     #[command(hide = true, alias = "completion")]
     Completions {
