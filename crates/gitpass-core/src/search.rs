@@ -218,30 +218,6 @@ impl SearchCandidate for &ItemRecord {
     }
 }
 
-impl SearchCandidate for (&ItemRecord, Option<&str>) {
-    fn to_candidate_info(&self) -> CandidateInfo<'_> {
-        CandidateInfo::from_record(self.0, self.1)
-    }
-}
-
-impl SearchCandidate for (&ItemRecord, &str) {
-    fn to_candidate_info(&self) -> CandidateInfo<'_> {
-        CandidateInfo::from_record(self.0, Some(self.1))
-    }
-}
-
-impl SearchCandidate for (ItemRecord, Option<&str>) {
-    fn to_candidate_info(&self) -> CandidateInfo<'_> {
-        CandidateInfo::from_record(&self.0, self.1)
-    }
-}
-
-impl SearchCandidate for (ItemRecord, &str) {
-    fn to_candidate_info(&self) -> CandidateInfo<'_> {
-        CandidateInfo::from_record(&self.0, Some(self.1))
-    }
-}
-
 impl<'a> SearchCandidate for CandidateInfo<'a> {
     fn to_candidate_info(&self) -> CandidateInfo<'_> {
         self.clone()
@@ -272,7 +248,6 @@ impl Filter {
                         h == target_host
                             || h.strip_suffix(&target_host)
                                 .is_some_and(|p| p.ends_with('.'))
-                            || h.contains(&target_host)
                     } else {
                         false
                     }
@@ -287,9 +262,23 @@ impl Filter {
     }
 }
 
+impl Filter {
+    /// Whether this filter can be evaluated from a bare `Item` (no category, tags, vault or flags).
+    pub fn evaluable_on_item(&self) -> bool {
+        matches!(self.op, FilterOp::HasOtp | FilterOp::HasUrl | FilterOp::Url(_))
+    }
+}
+
 impl Query {
     pub fn matches(&self, candidate: &impl SearchCandidate) -> bool {
         self.filters.iter().all(|f| f.matches(candidate))
+    }
+
+    /// Like `matches`, for bare `Item` candidates: operators that need record data
+    /// (`type:`, `tag:`, `vault:`, `is:`, `has:passkey`, `has:attachment`) are ignored
+    /// instead of being evaluated against hard-coded defaults.
+    pub fn matches_item(&self, item: &Item) -> bool {
+        self.filters.iter().filter(|f| f.evaluable_on_item()).all(|f| f.matches(item))
     }
 }
 
@@ -337,7 +326,7 @@ pub fn rank_by<T>(
     let parsed = parse_query(q);
     let mut v: Vec<_> = items
         .into_iter()
-        .filter(|(_, t)| parsed.matches(item(t)))
+        .filter(|(_, t)| parsed.matches_item(item(t)))
         .filter_map(|(id, it)| score_item(&parsed.terms, &id, item(&it)).map(|s| (s, id, it)))
         .collect();
     v.sort_by(|a, b| {
@@ -543,7 +532,7 @@ mod tests {
         r.archived = false;
         r.item.totp = Some("otpauth://...".into());
 
-        let cand = (&r, Some("Work Vault"));
+        let cand = CandidateInfo::from_record(&r, Some("Work Vault"));
 
         assert!(parse_query("tag:work").matches(&cand));
         assert!(parse_query("tag:dev").matches(&cand));
@@ -595,5 +584,31 @@ mod tests {
 
         let res_free = rank_by_candidate("github", items, |r| CandidateInfo::from_record(r, Some("Personal")));
         assert_eq!(res_free.len(), 2);
+    }
+
+    #[test]
+    fn url_operator_matches_exact_host_or_dotted_subdomain_only() {
+        let q = parse_query("url:github.com");
+        assert!(q.matches(&test_item("a", None, Some("https://github.com/login"))));
+        assert!(q.matches(&test_item("b", None, Some("https://gist.github.com"))));
+        assert!(!q.matches(&test_item("c", None, Some("https://github.com.evil.io"))));
+        assert!(!q.matches(&test_item("d", None, Some("https://notgithub.com"))));
+        assert!(!parse_query("url:hub.com").matches(&test_item("e", None, Some("https://notgithub.com.evil.io"))));
+    }
+
+    #[test]
+    fn item_only_rank_ignores_record_operators() {
+        let items = vec![
+            ("1".to_string(), test_item("GitHub", Some("me"), Some("https://github.com"))),
+            ("2".to_string(), test_item("Gmail", Some("me"), None)),
+        ];
+        // Record-only operators must neither match everything nor nothing on bare items.
+        for q in ["type:login git", "-type:login git", "tag:x git", "vault:x git", "is:favorite git"] {
+            let r = rank(q, items.clone());
+            assert_eq!(r.iter().map(|x| x.1.as_str()).collect::<Vec<_>>(), vec!["1"], "query {q}");
+        }
+        // Item-evaluable operators still apply.
+        assert_eq!(rank("has:url", items.clone()).iter().map(|x| x.1.as_str()).collect::<Vec<_>>(), vec!["1"]);
+        assert_eq!(rank("-has:url g", items.clone()).iter().map(|x| x.1.as_str()).collect::<Vec<_>>(), vec!["2"]);
     }
 }
