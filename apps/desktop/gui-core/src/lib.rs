@@ -13,7 +13,7 @@ use gitpass_core::store::{Item, Session, UnlockOpts};
 use gitpass_core::{search, totp};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 use zeroize::Zeroizing;
 
@@ -62,7 +62,9 @@ pub(crate) struct Unlocked {
     opts_accept_rollback: bool,
 }
 
-pub(crate) struct Inner { unlocked: Option<Unlocked>, last_activity: Instant, last_activity_wall: SystemTime, auto_lock: Duration }
+pub(crate) struct Inner { unlocked: Option<Unlocked>, last_activity: Instant, last_activity_wall: SystemTime, auto_lock: Duration,
+    /// Run when the session is dropped (manual lock, idle auto-lock, sleep/screen-lock hooks).
+    lock_hooks: Vec<Arc<dyn Fn() + Send + Sync>> }
 
 /// Shared app state (wrap in Tauri `State`).
 pub struct GuiState { pub(crate) inner: Mutex<Inner> }
@@ -87,7 +89,7 @@ fn nonempty(o: Option<String>) -> Option<String> { o.map(|s| s.trim().to_string(
 
 impl GuiState {
     pub fn new(auto_lock_minutes: u64) -> Self {
-        GuiState { inner: Mutex::new(Inner { unlocked: None, last_activity: Instant::now(), last_activity_wall: SystemTime::now(), auto_lock: Duration::from_secs(auto_lock_minutes * 60) }) }
+        GuiState { inner: Mutex::new(Inner { unlocked: None, last_activity: Instant::now(), last_activity_wall: SystemTime::now(), auto_lock: Duration::from_secs(auto_lock_minutes * 60), lock_hooks: Vec::new() }) }
     }
 
     pub(crate) fn with<T>(&self, f: impl FnOnce(&mut Unlocked) -> Result<T>) -> Result<T> {
@@ -109,7 +111,11 @@ impl GuiState {
     fn expire(g: &mut Inner) -> bool {
         let idle_by_instant = !g.auto_lock.is_zero() && g.last_activity.elapsed() >= g.auto_lock;
         let idle_by_wall = !g.auto_lock.is_zero() && SystemTime::now().duration_since(g.last_activity_wall).map(|d| d >= g.auto_lock).unwrap_or(false);
-        if g.unlocked.is_some() && (idle_by_instant || idle_by_wall) { g.unlocked = None; return true; }
+        if g.unlocked.is_some() && (idle_by_instant || idle_by_wall) {
+            g.unlocked = None;
+            for h in &g.lock_hooks { h(); }
+            return true;
+        }
         false
     }
     pub(crate) fn writable(u: &Unlocked) -> Result<()> { if u.session.device_revoked { bail!("this device is revoked; edits are refused") } Ok(()) }
@@ -144,7 +150,15 @@ impl GuiState {
     }
 
     /// Drop the session; password, Secret Key and account key are zeroized on drop.
-    pub fn lock(&self) { if let Ok(mut g) = self.inner.lock() { g.unlocked = None; } }
+    pub fn lock(&self) {
+        if let Ok(mut g) = self.inner.lock() {
+            if g.unlocked.take().is_some() { for h in &g.lock_hooks { h(); } }
+        }
+    }
+    /// Register a callback that runs whenever the session is dropped.
+    pub(crate) fn on_lock(&self, h: Arc<dyn Fn() + Send + Sync>) {
+        if let Ok(mut g) = self.inner.lock() { g.lock_hooks.push(h); }
+    }
     /// Cheap change stamp for live sync: a hash of the sealed manifest, which every write (GUI, extension
     /// via the agent, CLI, git sync) re-seals with a bumped epoch. `None` while locked. Not user activity.
     pub fn change_stamp(&self) -> Option<u64> {
@@ -321,6 +335,7 @@ pub fn gen_password(len: usize) -> String { generate_password(len.clamp(8, 128))
 
 pub mod api;
 pub mod favicon;
+pub mod qr;
 /// UNIX-socket agent (macOS / Linux).
 #[cfg(unix)]
 pub mod agent;
@@ -329,6 +344,8 @@ pub mod agent;
 #[path = "agent_windows.rs"]
 pub mod agent;
 pub mod ssh_agent;
+/// In-memory log of SSH agent sign requests (Settings → SSH Agent).
+pub mod ssh_activity;
 
 #[cfg(test)]
 mod tests;

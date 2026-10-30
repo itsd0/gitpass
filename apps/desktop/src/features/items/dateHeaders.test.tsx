@@ -208,22 +208,23 @@ describe("Desktop ItemList date section headers", () => {
     expect(useApp.getState().selectedItemId).toBe("1");
   });
 
-  it("hides empty groups when search filtering is active", async () => {
+  it("shows search results without section headers, in ranked order", async () => {
     const items = [
-      makeItem("1", "GitHub Login", todayIso),
-      makeItem("2", "Google Cloud", yesterdayIso),
+      makeItem("1", "Google Cloud", yesterdayIso),
+      makeItem("2", "GitHub Login", todayIso),
     ];
-    // Filtering by "GitHub": only item 1 matches
-    useItemsUI.setState({ items: [items[0]], loading: false, sort: "updated", query: "GitHub" });
-    vi.spyOn(api, "listItems").mockResolvedValue([items[0]]);
+    useItemsUI.setState({ items, loading: false, sort: "updated", query: "G" });
+    vi.spyOn(api, "listItems").mockResolvedValue(items);
 
     render(<ItemList />);
 
-    const headers = screen.getAllByTestId("group-header");
-    const headerLabels = headers.map((h) => h.textContent?.trim());
-
-    expect(headerLabels).toEqual(["Today"]);
-    expect(headerLabels).not.toContain("Yesterday");
+    expect(screen.queryAllByTestId("group-header")).toHaveLength(0);
+    expect(screen.queryAllByRole("group")).toHaveLength(0);
+    const options = screen.getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual([
+      expect.stringContaining("Google Cloud"),
+      expect.stringContaining("GitHub Login"),
+    ]);
   });
 
   it("localizes section headers in Burmese (my) and Thai (th)", async () => {
