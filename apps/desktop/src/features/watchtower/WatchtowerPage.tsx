@@ -22,6 +22,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import type { ItemSummary, WatchtowerReport } from "../../api/types";
+import { useBreachedIds } from "../items/rowFindings";
 import { api } from "../../api/client";
 import { SiteIcon } from "../../components/SiteIcon";
 import { useT, useI18n, type Key as TranslationKey } from "../../i18n";
@@ -167,6 +168,7 @@ export function WatchtowerPage() {
         api.listItems({ filter: { kind: "all" } }),
       ]);
       setReport(r);
+      useBreachedIds.getState().remember(r);
       setHistory(recordReport(r));
       setTitles(Object.fromEntries(items.map((i) => [i.id, i])));
     } catch (e) {
