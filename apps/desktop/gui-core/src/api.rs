@@ -272,7 +272,8 @@ pub struct UnlockState { pub unlocked: bool, pub vault_path: String, pub account
     /// true when `vault_path` already holds a gitpass vault (format.json); false => offer "create".
     #[serde(default)] pub vault_exists: bool,
     /// true when biometric unlock is enabled and supported on this machine.
-    #[serde(default)] pub biometric_available: bool }
+    #[serde(default)] pub biometric_available: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")] pub throttled_secs: Option<u64> }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateAccountResult { pub vault_path: String, pub secret_key: String }
@@ -710,25 +711,42 @@ impl App {
         let g = self.state.inner.lock().map_err(|_| anyhow!("state poisoned"))?;
         Ok(match &g.unlocked {
             Some(u) => UnlockState { unlocked: true, vault_path: u.session.root.display().to_string(), account: Some(u.session.fmt.account_id.clone()), vault_exists: true,
-                biometric_available: false },
+                biometric_available: false, throttled_secs: None },
             None => {
                 let vp = self.read_local().last_vault_path.unwrap_or_else(|| crate::default_vault_dir().display().to_string());
-                let exists = PathBuf::from(&vp).join("format.json").exists();
+                let p = PathBuf::from(&vp);
+                let exists = p.join("format.json").exists();
                 let bio = exists && self.biometric.supported() && self.get_settings().biometric_unlock;
-                UnlockState { unlocked: false, vault_path: vp, account: None, vault_exists: exists, biometric_available: bio }
+                let throttled_secs = if exists {
+                    gitpass_core::unlock_throttle::seconds_remaining(&p)
+                } else {
+                    None
+                };
+                UnlockState { unlocked: false, vault_path: vp, account: None, vault_exists: exists, biometric_available: bio, throttled_secs }
             }
         })
     }
     pub fn unlock(&self, vault_path: &str, password: &str, secret_key: Option<&str>) -> Result<UnlockState> {
+        self.unlock_internal(vault_path, password, secret_key, false)
+    }
+
+    fn unlock_internal(&self, vault_path: &str, password: &str, secret_key: Option<&str>, is_biometric: bool) -> Result<UnlockState> {
         let dir = PathBuf::from(if vault_path.trim().is_empty() { crate::default_vault_dir().display().to_string() } else { vault_path.trim().to_string() });
         if password.is_empty() { bail!("master password is empty"); }
         if !dir.join("format.json").exists() { bail!("{} is not a gitpass vault (no format.json)", dir.display()); }
+        if !is_biometric {
+            gitpass_core::unlock_throttle::check_throttle(&dir)?;
+        }
         let sk = match secret_key.filter(|k| !k.trim().is_empty()) {
             Some(k) => crate::parse_secret_key(k)?,
             None => crate::read_secret_key_file(&dir.join("secret.key"))?,
         };
         let opts = { let o = self.unlock_opts.lock().map_err(|_| anyhow!("poisoned"))?; UnlockOpts { accept_rollback: o.accept_rollback, target_kdf: o.target_kdf.clone() } };
-        self.state.unlock_with_opts(&dir, password, sk, None, &opts)?;
+        if is_biometric {
+            self.state.unlock_biometric_with_opts(&dir, password, sk, None, &opts)?;
+        } else {
+            self.state.unlock_with_opts(&dir, password, sk, None, &opts)?;
+        }
         let _ = self.update_local(|l| l.last_vault_path = Some(dir.display().to_string()));
         self.ensure_default_vault();
         self.status()
@@ -760,7 +778,7 @@ impl App {
         if !self.get_settings().biometric_unlock { bail!("biometric unlock is not enabled"); }
         let vp = if vault_path.trim().is_empty() { self.status()?.vault_path } else { vault_path.trim().to_string() };
         let (pw, sk) = self.biometric.load(&vp, "unlock gitpass")?;
-        self.unlock(&vp, &pw, Some(&sk))
+        self.unlock_internal(&vp, &pw, Some(&sk), true)
     }
     pub fn lock(&self) {
         self.clear_clipboard_if_ours();

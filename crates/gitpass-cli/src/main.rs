@@ -924,6 +924,7 @@ fn do_migrate(root: &Path, pw: &str, sk: &SecretKey) -> Result<()> {
 }
 
 fn unlock_full(cli: &Cli, root: &Path) -> Result<(Session, Zeroizing<String>, SecretKey)> {
+    gitpass_core::unlock_throttle::check_throttle(root)?;
     let pw = prompt_secret("GITPASS_PASSWORD", "Master password: ")?;
     let sk = load_secret_key(root)?;
     if store::read_format(root)?.version < store::MIN_READ_FORMAT {

@@ -402,6 +402,39 @@ fn test_last_used_tracking_and_no_git_changes() {
     assert!(!out.contains(".gitpass-state.json"));
 }
 
+#[test]
+fn test_unlock_throttling_failures_and_biometric_reset() {
+    gitpass_core::unlock_throttle::reset_memory();
+    let (d, sk, _vid, _iid) = setup();
+    let root = d.path();
+
+    // 1st wrong password attempt -> wrong master password error
+    let err1 = Session::unlock_with(root, "wrong-1", &sk, &opts()).unwrap_err();
+    assert!(err1.to_string().contains("wrong master password"));
+
+    // 2nd wrong password attempt -> wrong master password error
+    let err2 = Session::unlock_with(root, "wrong-2", &sk, &opts()).unwrap_err();
+    assert!(err2.to_string().contains("wrong master password"));
+
+    // 3rd wrong password attempt -> wrong master password error
+    let err3 = Session::unlock_with(root, "wrong-3", &sk, &opts()).unwrap_err();
+    assert!(err3.to_string().contains("wrong master password"));
+
+    // 4th attempt -> refused immediately with throttled error, without running KDF
+    let err4 = Session::unlock_with(root, PW, &sk, &opts()).unwrap_err();
+    assert!(err4.to_string().starts_with("throttled: try again in "));
+    let th = err4.downcast_ref::<gitpass_core::unlock_throttle::ThrottledError>().unwrap();
+    assert!(th.seconds_remaining >= 1 && th.seconds_remaining <= 2);
+
+    // Biometric unlock is NOT throttled by password failures and succeeds
+    let bio_s = Session::unlock_device_biometric(root, PW, &sk, &opts(), None).unwrap();
+    assert_eq!(bio_s.root, root);
+
+    // After successful biometric unlock, password throttle is reset and normal unlock succeeds
+    let s = Session::unlock_with(root, PW, &sk, &opts()).unwrap();
+    assert_eq!(s.root, root);
+}
+
 // ---------------- proptest ----------------
 mod prop {
     use super::*;

@@ -614,6 +614,7 @@ export const en = {
 
   // unlock & create vault
   "unlock.title": "Unlock gitpass",
+  "unlock.throttled": "Too many attempts. Try again in {n} s",
   "unlock.masterPassword": "Master password",
   "unlock.masterPasswordPlaceholder": "Enter your password",
   "unlock.submit": "Unlock",

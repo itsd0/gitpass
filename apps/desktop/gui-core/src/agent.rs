@@ -271,6 +271,7 @@ impl Agent {
                 let st = self.app.status()?;
                 let mut v = json!({"unlocked": st.unlocked, "app_running": true, "idle_timeout_secs": self.app.get_settings().auto_lock_minutes * 60});
                 if let Some(a) = self.account() { v["account"] = a; }
+                if let Some(secs) = st.throttled_secs { v["throttled_secs"] = json!(secs); }
                 Ok(v)
             }
             "request_unlock" => {
