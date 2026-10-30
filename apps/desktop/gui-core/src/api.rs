@@ -179,6 +179,11 @@ pub enum Theme { Dark, Light, System }
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Language { En, My, Th }
+/// Item-list row density. Serializes as "comfortable" / "compact" (JSON key
+/// `listDensity` via the struct's camelCase rename).
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[serde(rename_all = "lowercase")]
+pub enum ListDensity { #[default] Comfortable, Compact }
 fn default_true() -> bool { true }
 fn default_quick_access_hotkey() -> String { "CommandOrControl+Shift+Space".into() }
 
@@ -219,6 +224,9 @@ pub struct Settings {
     #[serde(default)] pub show_website_icons: bool,
     /// Display: render notes and secure notes as safe Markdown (default on).
     #[serde(default = "default_true")] pub render_notes_markdown: bool,
+    /// Item-list density (default comfortable; older settings files without
+    /// the field deserialize to comfortable).
+    #[serde(default)] pub list_density: ListDensity,
     /// Menu bar: Show gitpass in the macOS menu bar (default on).
     #[serde(default = "default_true")] pub show_menu_bar_icon: bool,
     /// Remember generated passwords in an encrypted vault history (default on).
@@ -237,7 +245,7 @@ impl Default for Settings {
             hide_from_screen_recording: true,
             generator_mode: None, generator_length: None, generator_digits: None, generator_symbols: None,
             generator_separator: None, generator_capitalize: None,
-            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, remember_generated_passwords: true,
+            show_website_icons: false, render_notes_markdown: true, show_menu_bar_icon: true, list_density: ListDensity::Comfortable, remember_generated_passwords: true,
             watchtower_unused_months: 12, last_seen_version: None }
     }
 }

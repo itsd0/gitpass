@@ -6,6 +6,7 @@ import { ArrowDownUp, Check, ChevronDown, LayoutGrid, Star } from "lucide-react"
 import { api } from "../../api/client";
 import type { Filter } from "../../api/types";
 import { useApp } from "../../lib/store";
+import { useSettings } from "../settings/useSettings";
 import { cn } from "../../lib/utils";
 import {
   Badge,
@@ -43,8 +44,11 @@ import { trashHint } from "./trash";
 
 /** Every row has a fixed, explicit height (the DOM enforces it), so virtual offsets are exact: no overlap, no stray gaps. */
 export const HEADER_H = 32,
-  ITEM_H = 54;
-export const rowHeight = (r: Row) => (r.type === "header" ? HEADER_H : ITEM_H);
+  ITEM_H = 54,
+  ITEM_H_COMPACT = 32;
+export type ListDensity = "comfortable" | "compact";
+export const rowHeight = (r: Row, density: ListDensity = "comfortable") =>
+  r.type === "header" ? HEADER_H : density === "compact" ? ITEM_H_COMPACT : ITEM_H;
 const SORTS: {
   id: NonNullable<Filter["sort"]>;
   labelKey: "items.sortUpdated" | "items.sortCreated" | "items.sortTitle" | "items.sortRecent";
@@ -63,6 +67,8 @@ export function ItemList() {
   const multiIds = useApp((s) => s.multiIds);
   const multiSet = useMemo(() => new Set(multiIds), [multiIds]);
   const dragged = useDragStore((s) => s.dragged);
+  const density: ListDensity = useSettings((s) => s.settings?.listDensity ?? "comfortable");
+  const compact = density === "compact";
   const multiOn = multiIds.length > 1;
   const t = useT();
   const {
@@ -134,7 +140,7 @@ export function ItemList() {
   const virt = useVirtualizer({
     count: rows.length,
     getScrollElement: () => parentRef.current,
-    estimateSize: (i) => rowHeight(rows[i]),
+    estimateSize: (i) => rowHeight(rows[i], density),
     getItemKey: (i) => rows[i].key,
     overscan: 8,
     initialRect: { width: 320, height: 700 },
@@ -287,7 +293,7 @@ export function ItemList() {
   }
 
   return (
-    <div className="flex h-full flex-col bg-panel" data-testid="item-list">
+    <div className="flex h-full flex-col bg-panel" data-testid="item-list" data-list-density={density}>
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-border px-2">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -419,7 +425,7 @@ export function ItemList() {
                         onMouseDown={(e) => {
                           if (e.shiftKey) e.preventDefault();
                         }}
-                        style={{ height: ITEM_H - 2 }}
+                        style={{ height: (compact ? ITEM_H_COMPACT : ITEM_H) - 2 }}
                         className={cn(
                           "group mx-1.5 my-px box-border flex cursor-default items-center gap-2.5 overflow-hidden rounded-md px-2.5 transition-colors",
                           isSelected
@@ -462,7 +468,18 @@ export function ItemList() {
                             )}
                           </span>
                         </button>
-                      <ItemIcon item={r.item} />
+                      <ItemIcon item={r.item} size={compact ? 20 : 24} />
+                      {compact ? (
+                        <div className="min-w-0 flex-1 truncate text-[14px] font-medium leading-5" data-testid="item-row-compact-line">
+                          <SearchHighlight text={r.item.title} query={searchQuery} />
+                          {base.kind === "deleted" ? (() => {
+                            const hint = trashHint(r.item.deletedAt, Date.now(), t);
+                            return hint ? <span data-testid="trash-days" className={cn("font-normal", hint.danger ? "text-danger" : "text-muted")}> · {hint.text}</span> : null;
+                          })() : r.item.subtitle ? (
+                            <span className="font-normal text-muted"> · <SearchHighlight text={r.item.subtitle} query={searchQuery} /></span>
+                          ) : null}
+                        </div>
+                      ) : (
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-[14px] font-medium leading-5">
                           <SearchHighlight text={r.item.title} query={searchQuery} />
@@ -476,9 +493,28 @@ export function ItemList() {
                           </div>
                         ) : null}
                       </div>
+                      )}
                       {(() => {
                         const expiry = getItemExpiry(r.item, undefined, t);
                         if (!expiry) return null;
+                        const label = t(
+                          expiry.status === "expired"
+                            ? "expiry.expired"
+                            : "expiry.expiresSoon"
+                        );
+                        // Compact rows shrink pills to a dot that keeps the
+                        // accessible name and a tooltip with the full label.
+                        if (compact) return (
+                          <span
+                            data-testid="expiry-dot"
+                            aria-label={label}
+                            title={label}
+                            className={cn(
+                              "h-2 w-2 shrink-0 rounded-full",
+                              expiry.status === "expired" ? "bg-danger" : "bg-warn"
+                            )}
+                          />
+                        );
                         return (
                           <Badge
                             tone={
@@ -486,17 +522,9 @@ export function ItemList() {
                             }
                             className="shrink-0 text-[11px] px-1.5 py-0"
                             data-testid="expiry-pill"
-                            aria-label={t(
-                              expiry.status === "expired"
-                                ? "expiry.expired"
-                                : "expiry.expiresSoon"
-                            )}
+                            aria-label={label}
                           >
-                            {t(
-                              expiry.status === "expired"
-                                ? "expiry.expired"
-                                : "expiry.expiresSoon"
-                            )}
+                            {label}
                           </Badge>
                         );
                       })()}

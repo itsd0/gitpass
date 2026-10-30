@@ -118,6 +118,22 @@ export function GeneralTab({ highlightedId }: { highlightedId?: string | null })
         </button>
       </SettingsRow>
       <SettingsRow
+        id="setting-list-density"
+        highlighted={highlightedId === 'setting-list-density'}
+        label={t('settings.listDensity')}
+        description={t('settings.listDensityHelp')}
+      >
+        <Seg<'comfortable' | 'compact'>
+          label={t('settings.listDensity')}
+          value={settings.listDensity ?? 'comfortable'}
+          onChange={(listDensity) => s({ listDensity })}
+          options={(['comfortable', 'compact'] as const).map((v) => ({
+            v,
+            l: t(`settings.listDensity.${v}`),
+          }))}
+        />
+      </SettingsRow>
+      <SettingsRow
         id="setting-show-menu-bar-icon"
         highlighted={highlightedId === 'setting-show-menu-bar-icon'}
         label={t('settings.showMenuBarIcon')}

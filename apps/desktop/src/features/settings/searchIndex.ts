@@ -48,6 +48,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['notes', 'markdown', 'formatting', 'preview', 'rich text', 'code block', 'checklist'],
   },
   {
+    id: 'setting-list-density',
+    tab: 'general',
+    labelKey: 'settings.listDensity',
+    descriptionKey: 'settings.listDensityHelp',
+    keywords: ['density', 'compact', 'comfortable', 'list', 'rows', 'spacing'],
+  },
+  {
     id: 'setting-show-menu-bar-icon',
     tab: 'general',
     labelKey: 'settings.showMenuBarIcon',
