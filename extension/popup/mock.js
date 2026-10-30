@@ -67,6 +67,7 @@
   const ok = (r) => new Promise((res) => setTimeout(() => res(r), 20));
   const err = (code) => Promise.reject(Object.assign(new Error(code), { code }));
   root.__gitpassMockParams = P;
+  if (P.get('density') === 'compact') root.__gitpassMockDensity = 'compact';
   root.__gitpassMock = function (msg) {
     const t = msg.type.replace(/^popup:/, '');
     if (P.get('view') === 'nohost') return err('Specified native messaging host not found.');

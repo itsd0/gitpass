@@ -6,6 +6,13 @@ const t = (k, f, subs) => GitpassI18n.t(k, f, subs);
 const V = typeof GitpassView !== 'undefined' ? GitpassView : (typeof require !== 'undefined' ? require('./view.js') : null);
 const { UI, categoryIcon } = typeof GitpassPopupIcons !== 'undefined' ? GitpassPopupIcons : (typeof require !== 'undefined' ? require('./icons.js') : { UI: {} });
 const ROW_H = 52;
+const ROW_H_COMPACT = 36;
+// Row height is density-aware (#397): the virtualized list's spacer padding and
+// scroll-into-view math must match the real CSS row height.
+function rowHeight() {
+  const list = $('list');
+  return (list && list.classList.contains('compact')) ? ROW_H_COMPACT : ROW_H;
+}
 
 // ---------- password generator (issue #68) ----------
 const G = typeof GitpassGenerator !== 'undefined' ? GitpassGenerator : (typeof require !== 'undefined' ? require('./generator.js') : null);
@@ -252,6 +259,31 @@ function clearWatchtowerBadge() {
   btn.title = t('watchtower', 'Watchtower');
 }
 
+// List density (#397): 'comfortable' (default) or 'compact', stored in the shared
+// extension settings. Applied as a class on the list container; storage changes
+// apply instantly without reopening the popup.
+function applyDensity(d) {
+  const list = $('list');
+  if (!list) return;
+  const compact = d === 'compact';
+  if (list.classList.contains('compact') === compact) return;
+  list.classList.toggle('compact', compact);
+  // Row height changed: re-render so the virtualized window and spacer padding
+  // are recomputed in the new units.
+  if (S.rows.length) renderList();
+}
+function loadDensity() {
+  if (typeof window !== 'undefined' && window.__gitpassMockDensity) { applyDensity(window.__gitpassMockDensity); return Promise.resolve(); }
+  return popupSettings().then((st) => applyDensity(st && st.density)).catch(() => {});
+}
+if (globalThis.chrome && chrome.storage && chrome.storage.onChanged) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes.settings) return;
+    const d = changes.settings.newValue && changes.settings.newValue.density;
+    applyDensity(d);
+  });
+}
+
 async function refresh() {
   let st = null, err = null;
   try { st = await send({ type: 'popup:status' }); } catch (e) { err = e; }
@@ -265,6 +297,7 @@ async function refresh() {
     $('acctName').textContent = (!nm || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(nm)) ? 'gitpass' : nm;
     $('acct').title = st.account.email || '';
   }
+  loadDensity();
   await loadData();
   refreshWatchtowerBadge();
   if (!document.querySelector('.inline-err')) $('q').focus();
@@ -785,7 +818,7 @@ function renderList() {
   inner.style.paddingTop = '0px'; inner.style.paddingBottom = '0px';
   updateSearchHints();
   if (!S.rows.length) { stopListTotp(); renderEmpty(inner); return; }
-  const w = V.virtualWindow(list.scrollTop, list.clientHeight || 380, ROW_H, S.rows.length);
+  const w = V.virtualWindow(list.scrollTop, list.clientHeight || 380, rowHeight(), S.rows.length);
   inner.style.paddingTop = w.padTop + 'px'; inner.style.paddingBottom = w.padBottom + 'px';
   for (let i = w.start; i < w.end; i++) {
     const it = S.rows[i];

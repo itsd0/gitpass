@@ -390,3 +390,27 @@ test('options DOM: never-auto-submit list add (normalized) and remove (#231)', a
   assert.strictEqual(getStoredNeverAutoSubmit().join(','), 'beta.org');
   w.close();
 });
+
+test('options DOM: list density select defaults to Comfortable and saves Compact (#397)', async () => {
+  const { w, getStoredSettings } = bootOptions({ settings: { autolockFollowsApp: true } });
+  await new Promise((r) => setTimeout(r, 80));
+
+  const sel = w.document.getElementById('density');
+  assert.ok(sel, 'density select exists');
+  assert.strictEqual(sel.value, 'comfortable', 'defaults to comfortable');
+  const labels = [...sel.options].map((o) => o.value);
+  assert.deepStrictEqual(labels, ['comfortable', 'compact']);
+
+  sel.value = 'compact';
+  sel.dispatchEvent(new w.Event('change', { bubbles: true }));
+  await new Promise((r) => setTimeout(r, 30));
+  assert.strictEqual(getStoredSettings().density, 'compact', 'compact persisted to settings');
+  w.close();
+});
+
+test('options DOM: list density select reflects a stored Compact choice (#397)', async () => {
+  const { w } = bootOptions({ settings: { density: 'compact' } });
+  await new Promise((r) => setTimeout(r, 80));
+  assert.strictEqual(w.document.getElementById('density').value, 'compact');
+  w.close();
+});
