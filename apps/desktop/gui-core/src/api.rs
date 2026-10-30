@@ -58,6 +58,20 @@ pub struct FindingInfo { pub kind: String, pub description: String }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct HistoryRef { pub version: u64, pub updated_at: String }
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct RelatedItem {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub vault_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub category: Option<Category>,
+    pub title: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub subtitle: Option<String>,
+    pub available: bool,
+}
+
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ItemDetail {
@@ -72,6 +86,10 @@ pub struct ItemDetail {
     pub findings: Vec<FindingInfo>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub password_changed_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_items: Vec<RelatedItem>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_item_ids: Vec<String>,
 }
 /// One item reference for bulk commands.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -111,6 +129,7 @@ pub struct ItemInput {
     pub vault_id: String, pub category: Category, pub title: String, pub sections: Vec<Section>,
     #[serde(default)] pub notes: Option<String>, #[serde(default)] pub tags: Option<Vec<String>>,
     #[serde(default)] pub favorite: Option<bool>, #[serde(default)] pub url: Option<String>,
+    #[serde(default)] pub related_item_ids: Option<Vec<String>>,
 }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -575,7 +594,33 @@ fn summary(vid: &str, iid: &str, r: &ItemRecord, last_used: Option<u64>) -> Item
 
 fn has_totp(r: &ItemRecord) -> bool { r.view_sections().iter().flat_map(|s| s.fields.iter()).any(|f| f.kind == FieldKind::Totp && f.value.is_some()) }
 
-fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>) -> ItemDetail {
+fn resolve_related_items(s: &Session, ids: &[String]) -> Vec<RelatedItem> {
+    ids.iter().map(|rid| {
+        match s.get_record_by_id(rid) {
+            Ok(Some((vid, _, r))) if r.deleted_at.is_none() => {
+                let sub = subtitle(&r);
+                RelatedItem {
+                    id: rid.clone(),
+                    vault_id: Some(vid),
+                    category: Some(r.category),
+                    title: r.item.title.clone(),
+                    subtitle: if sub.is_empty() { None } else { Some(sub) },
+                    available: true,
+                }
+            }
+            _ => RelatedItem {
+                id: rid.clone(),
+                vault_id: None,
+                category: None,
+                title: "Item not available".to_string(),
+                subtitle: None,
+                available: false,
+            },
+        }
+    }).collect()
+}
+
+fn detail(s: &Session, vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<FindingInfo>, last_used: Option<u64>) -> ItemDetail {
     let pw = r.view_sections().into_iter().flat_map(|s| s.fields).find(|f| f.kind == FieldKind::Concealed && f.value.is_some());
     ItemDetail {
         summary: summary(vid, iid, r, last_used), version, sections: to_dto_sections(r), notes: r.item.notes.clone(),
@@ -585,6 +630,8 @@ fn detail(vid: &str, iid: &str, version: u64, r: &ItemRecord, findings: Vec<Find
         has_totp: has_totp(r),
         findings,
         password_changed_at: r.password_changed_at().map(|t| iso8601(t as i64)),
+        related_items: resolve_related_items(s, &r.related_item_ids),
+        related_item_ids: r.related_item_ids.clone(),
     }
 }
 
@@ -938,7 +985,7 @@ impl App {
             let (v, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
-            Ok(detail(vault_id, item_id, v, &r, findings, last_used))
+            Ok(detail(&u.session, vault_id, item_id, v, &r, findings, last_used))
         })
     }
     /// The ONLY call that returns a stored secret value.
@@ -1062,6 +1109,11 @@ impl App {
         r.item.url = nonempty(input.url.clone());
         if let Some(t) = &input.tags { let mut t: Vec<String> = t.iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect(); t.dedup(); r.tags = t; }
         if let Some(f) = input.favorite { r.favorite = f; }
+        if let Some(rids) = &input.related_item_ids {
+            let mut ids: Vec<String> = rids.iter().map(|x| x.trim().to_string()).filter(|x| !x.is_empty()).collect();
+            ids.dedup();
+            r.related_item_ids = ids;
+        }
         let secs: Vec<item::Section> = input.sections.iter().map(|s| item::Section { id: s.id.clone(), title: s.title.clone(), fields: s.fields.iter().map(|f| {
             let value = match &f.value { None if f.kind.is_secret() => old.find_field(&f.id).and_then(|o| o.value), v => v.clone() };
             item::Field { id: f.id.clone(), label: f.label.clone(), kind: f.kind, value, removed: false }
@@ -1097,6 +1149,15 @@ impl App {
     pub fn purge_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.purge_item(vault_id, item_id)) }
     pub fn ignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.ignore_finding(vault_id, item_id, kind)) }
     pub fn unignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.unignore_finding(vault_id, item_id, kind)) }
+    pub fn add_related_item(&self, vault_id: &str, item_id: &str, related_id: &str) -> Result<()> {
+        if item_id == related_id {
+            anyhow::bail!("cannot link an item to itself");
+        }
+        self.write(|u| u.session.add_related_item(vault_id, item_id, related_id))
+    }
+    pub fn remove_related_item(&self, vault_id: &str, item_id: &str, related_id: &str) -> Result<()> {
+        self.write(|u| u.session.remove_related_item(vault_id, item_id, related_id))
+    }
     /// Permanently delete every item in Recently Deleted (all vaults) in one commit.
     /// Returns how many items were purged; an empty trash is a no-op.
     pub fn empty_trash(&self) -> Result<usize> {
@@ -1171,7 +1232,7 @@ impl App {
         self.with(|u| {
             let r = u.session.item_version(vault_id, item_id, version)?;
             let (_, cur) = u.session.read_record(vault_id, item_id)?;
-            let last_used = u.session.last_used(item_id); let mut d = detail(vault_id, item_id, version, &r, Vec::new(), last_used);
+            let last_used = u.session.last_used(item_id); let mut d = detail(&u.session, vault_id, item_id, version, &r, Vec::new(), last_used);
             d.history.clear();
             d.attachments.clear();
             if let Some(h) = cur.history.iter().find(|h| h.version == version) { d.summary.updated_at = ts(&h.updated_at); }
@@ -1185,7 +1246,7 @@ impl App {
             let (_, r) = u.session.read_record(vault_id, item_id)?;
             let findings = item_findings(&u.session, &self.get_settings(), vault_id, item_id)?;
             let last_used = u.session.last_used(item_id);
-            Ok(detail(vault_id, item_id, new_v, &r, findings, last_used))
+            Ok(detail(&u.session, vault_id, item_id, new_v, &r, findings, last_used))
         })
     }
     pub fn add_attachment(&self, vault_id: &str, item_id: &str, path: &str) -> Result<Attachment> {

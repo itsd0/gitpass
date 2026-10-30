@@ -76,6 +76,8 @@ pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>)
 #[tauri::command] pub fn purge_item(s: State<App>, vault_id: String, item_id: String) -> R<()> { s.purge_item(&vault_id, &item_id).map_err(e) }
 #[tauri::command] pub fn ignore_finding(s: State<App>, vault_id: String, item_id: String, kind: String) -> R<()> { s.ignore_finding(&vault_id, &item_id, &kind).map_err(e) }
 #[tauri::command] pub fn unignore_finding(s: State<App>, vault_id: String, item_id: String, kind: String) -> R<()> { s.unignore_finding(&vault_id, &item_id, &kind).map_err(e) }
+#[tauri::command] pub fn add_related_item(s: State<App>, vault_id: String, item_id: String, related_id: String) -> R<()> { s.add_related_item(&vault_id, &item_id, &related_id).map_err(e) }
+#[tauri::command] pub fn remove_related_item(s: State<App>, vault_id: String, item_id: String, related_id: String) -> R<()> { s.remove_related_item(&vault_id, &item_id, &related_id).map_err(e) }
 #[tauri::command] pub fn empty_trash(s: State<App>) -> R<usize> { s.empty_trash().map_err(e) }
 #[tauri::command] pub fn bulk_items(s: State<App>, req: a::BulkRequest) -> R<a::BulkResult> { s.bulk_items(&req).map_err(e) }
 #[tauri::command] pub fn move_item(s: State<App>, vault_id: String, item_id: String, to_vault_id: String) -> R<a::ItemSummary> { s.move_item(&vault_id, &item_id, &to_vault_id).map_err(e) }

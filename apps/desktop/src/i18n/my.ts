@@ -836,4 +836,13 @@ export const my: Partial<Record<Key, string>> = {
   "ctx.trashN": "{n} ခုကို မကြာသေးမီက ဖျက်ထားသည်များသို့ ရွှေ့ရန်",
   "ctx.restoreN": "{n} ခု မူလအတိုင်း ပြန်ယူရန်",
   "ctx.purgeN": "{n} ခုကို အပြီးတိုင် ဖျက်ရန်…",
+  "related.title": "ဆက်စပ်ပစ္စည်းများ",
+  "related.add": "ဆက်စပ်ပစ္စည်းထည့်ရန်",
+  "related.notAvailable": "ပစ္စည်းမရနိုင်ပါ",
+  "related.removeLink": "ဆက်စပ်ပစ္စည်းဖယ်ရှားရန်",
+  "related.pickerTitle": "ဆက်စပ်ပစ္စည်းရွေးချယ်ပါ",
+  "related.searchPlaceholder": "ပစ္စည်းများရှာဖွေရန်…",
+  "related.noMatches": "ကိုက်ညီသော ပစ္စည်းမရှိပါ",
+  "related.toast.linked": "ဆက်စပ်ပစ္စည်းထည့်ပြီးပါပြီ",
+  "related.toast.unlinked": "ဆက်စပ်ပစ္စည်းဖယ်ရှားပြီးပါပြီ",
 };

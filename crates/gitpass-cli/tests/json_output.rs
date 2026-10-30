@@ -390,3 +390,35 @@ fn list_sort_recent_and_last_used_tracking() {
     let status_str = String::from_utf8_lossy(&status.stdout);
     assert!(!status_str.contains(".gitpass-state.json"));
 }
+
+#[test]
+fn get_shows_related_item_titles_and_json_includes_ids() {
+    let v = setup_vault();
+
+    // Link id_login to id_card via edit --link
+    let edit_out = gp(&v.root, &["edit", "Personal", "Personal GitHub", "--link", "Bank of Example Card"], None);
+    assert!(edit_out.status.success(), "edit --link failed: {}", String::from_utf8_lossy(&edit_out.stderr));
+
+    // 1. gitpass get shows related item titles
+    let get_out = gp(&v.root, &["get", "Personal", "Personal GitHub"], None);
+    assert!(get_out.status.success());
+    let get_text = String::from_utf8_lossy(&get_out.stdout);
+    assert!(get_text.contains("related:  Bank of Example Card"), "get output should show related item title: {get_text}");
+
+    // 2. gitpass get --json includes related_item_ids
+    let get_json_out = gp(&v.root, &["get", "Personal", "Personal GitHub", "--json"], None);
+    assert!(get_json_out.status.success());
+    let detail: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&get_json_out.stdout)).unwrap();
+    let rel_ids = detail["related_item_ids"].as_array().expect("related_item_ids array in json");
+    assert_eq!(rel_ids.len(), 1);
+    assert_eq!(rel_ids[0].as_str().unwrap(), v.id_card);
+
+    // 3. Unlink via edit --unlink
+    let unlink_out = gp(&v.root, &["edit", "Personal", "Personal GitHub", "--unlink", &v.id_card], None);
+    assert!(unlink_out.status.success());
+
+    let get_unlinked = gp(&v.root, &["get", "Personal", "Personal GitHub"], None);
+    assert!(get_unlinked.status.success());
+    let text = String::from_utf8_lossy(&get_unlinked.stdout);
+    assert!(!text.contains("related:"), "unlinked item should not have related: header: {text}");
+}

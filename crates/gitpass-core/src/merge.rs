@@ -82,6 +82,9 @@ pub struct ItemRecord {
     /// (whose blob is gone). Omitted when empty, so older payloads stay byte-compatible.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub removed_attachments: Vec<String>,
+    /// Item ids of related items (one-way references within the same account).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub related_item_ids: Vec<String>,
 }
 fn is_login(c: &Category) -> bool { *c == Category::Login }
 fn is_false(b: &bool) -> bool { !*b }
@@ -118,10 +121,10 @@ impl ItemRecord {
 
     /// Content snapshot (for history).
     pub fn snapshot(&self) -> Snapshot {
-        Snapshot { item: self.item.clone(), category: self.category, sections: self.sections.clone(), tags: self.tags.clone() }
+        Snapshot { item: self.item.clone(), category: self.category, sections: self.sections.clone(), tags: self.tags.clone(), related_item_ids: self.related_item_ids.clone() }
     }
     pub fn from_snapshot(s: &Snapshot) -> Self {
-        let mut r = ItemRecord::new(s.item.clone()); r.category = s.category; r.sections = s.sections.clone(); r.tags = s.tags.clone(); r
+        let mut r = ItemRecord::new(s.item.clone()); r.category = s.category; r.sections = s.sections.clone(); r.tags = s.tags.clone(); r.related_item_ids = s.related_item_ids.clone(); r
     }
 
     /// Sections as shown to a user: for login items a synthesized `login` section (username, password,
@@ -253,10 +256,11 @@ fn parse_ts(s: &str) -> Option<u64> {
 fn field_map(r: &ItemRecord) -> BTreeMap<String, (String, Field)> {
     r.sections.iter().flat_map(|s| s.fields.iter().map(move |f| (f.id.clone(), (s.id.clone(), f.clone())))).collect()
 }
-fn meta_values(r: &ItemRecord) -> [(&'static str, String); 6] {
+fn meta_values(r: &ItemRecord) -> [(&'static str, String); 7] {
     [("m:category", r.category.as_str().into()), ("m:tags", r.tags.join("\u{1}")), ("m:favorite", r.favorite.to_string()),
      ("m:archived", r.archived.to_string()), ("m:deleted", r.deleted_at.map(|d| d.to_string()).unwrap_or_default()),
-     ("m:ignored", r.ignored_findings.join("\u{1}"))]
+     ("m:ignored", r.ignored_findings.join("\u{1}")),
+     ("m:related", r.related_item_ids.join("\u{1}"))]
 }
 fn section_titles(r: &ItemRecord) -> BTreeMap<String, Option<String>> { r.sections.iter().map(|s| (s.id.clone(), s.title.clone())).collect() }
 
@@ -330,6 +334,7 @@ fn merge_ext(local: &ItemRecord, remote: &ItemRecord, out: &mut ItemRecord) -> (
                     "m:favorite" => out.favorite = remote.favorite,
                     "m:archived" => out.archived = remote.archived,
                     "m:ignored" => out.ignored_findings = remote.ignored_findings.clone(),
+                    "m:related" => out.related_item_ids = remote.related_item_ids.clone(),
                     _ => out.deleted_at = remote.deleted_at,
                 }
                 from_r.push(k.to_string());
