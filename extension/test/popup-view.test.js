@@ -193,7 +193,11 @@ test('viewFor chooses locked / appdown / nohost / unlocked', () => {
 });
 
 test('popup routes all use the popup: prefix and in-page routes are untouched', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'popup', 'popup.js'), 'utf8');
+  // popup.js was split (issue #318): routes now live across popup/*.js, so scan them all.
+  const src = require('fs').readdirSync(require('path').join(__dirname, '..', 'popup'))
+    .filter((f) => f.endsWith('.js'))
+    .map((f) => require('fs').readFileSync(require('path').join(__dirname, '..', 'popup', f), 'utf8'))
+    .join('\n');
   const types = [...src.matchAll(/send\(\{ type: '([^']+)'/g)].map((m) => m[1]);
   assert.ok(types.length > 10);
   for (const ty of types) assert.ok(ty.startsWith('popup:'), ty);

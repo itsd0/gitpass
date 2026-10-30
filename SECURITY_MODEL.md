@@ -44,7 +44,7 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 - Supply chain (npm/crates dependencies, GitHub Actions).
 
 ## Existing controls
-Argon2id (256 MiB, t=3, p=4) + Secret Key two-secret KDF; XChaCha20-Poly1305 everywhere with structured AAD; padding buckets; Zeroize types; manifest hash/epoch checks; atomic writes + lock file; origin matching rules in `crates/gitpass-host/src/origin.rs`; native-host `allowed_origins`; agent socket permissions + UID + token; secrets never written by the extension; concealed pasteboard + auto-clear; favicon SSRF guards; low-order point rejection in sealbox; signed shares; `cargo deny`/`cargo audit` in CI; actions pinned by SHA.
+Argon2id (256 MiB, t=3, p=4) + Secret Key two-secret KDF; XChaCha20-Poly1305 everywhere with structured AAD; padding buckets; Zeroize types; manifest hash/epoch checks; atomic writes + lock file; origin matching rules in `crates/gitpass-host/src/origin.rs`; native-host `allowed_origins`; agent socket permissions + UID + token; secrets never written by the extension; concealed pasteboard + auto-clear; favicon SSRF guards; low-order point rejection in sealbox; signed shares; `cargo deny`/`cargo audit` in CI; actions pinned by SHA; unlock failure throttling (after 3 consecutive failed master password attempts per vault, further attempts are refused with exponential backoff doubling from 2 s up to a 5 min cap; state persists in `.gitpass-throttle.json` with clock rollback protection and monotonic timer).
 
 ## Open questions
 - Should same-user local malware be treated as fully trusted (the agent token is readable by the user)? Currently in scope.

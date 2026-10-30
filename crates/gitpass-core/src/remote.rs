@@ -16,7 +16,7 @@ use std::process::Command;
 
 /// Lines that must be present in the vault `.gitignore` (local-only files; secrets or per-device state).
 pub const REQUIRED_IGNORES: &[&str] = &[
-    "secret.key", "*.tmp", ".gitpass.lock", ".gitpass-state.json", ".gitpass-device.json", ".gitpass-device-key.json",
+    "secret.key", "*.tmp", ".gitpass.lock", ".gitpass-state.json", ".gitpass-throttle.json", ".gitpass-device.json", ".gitpass-device-key.json",
     ".gitpass-revoke-pending.json", ".gitpass-backup-*/", ".gitpass-migrate-tmp/", ".gitpass-migrating",
     ".gitpass-settings.json", "*.new", ".DS_Store",
 ];
@@ -380,7 +380,7 @@ mod tests {
         for p in [".gitignore", "format.json", "identity.pub", "keyset.enc", "manifest.enc", "devices.enc", "identity.enc", "vaults/abc/meta.enc", "vaults/a/items/b.enc", "vaults/a/files/c.enc", "vaults/a/items/.keep"] {
             assert!(is_allowed_path(p), "{p}");
         }
-        for p in ["secret.key", ".gitpass-device-key.json", ".gitpass-device.json", ".gitpass-state.json", ".gitpass.lock", ".gitpass-settings.json",
+        for p in ["secret.key", ".gitpass-device-key.json", ".gitpass-device.json", ".gitpass-state.json", ".gitpass-throttle.json", ".gitpass.lock", ".gitpass-settings.json",
                   ".gitpass-backup-1/keyset.enc", "notes.txt", "export.csv", "vaults/a/items/b.json", "x.enc.tmp", ".hidden.enc", ".keep", "x/.keep"] {
             assert!(!is_allowed_path(p), "{p}");
         }
