@@ -11,8 +11,8 @@ name = "gitpass"
 path = "src/main.rs"
 
 [dependencies]
-gitpass-core = { path = "../gitpass-core", version = "0.6.6" }
-gitpass-pasteboard = { path = "../gitpass-pasteboard", version = "0.6.6" }
+gitpass-core = { path = "../gitpass-core", version = "0.6.7" }
+gitpass-pasteboard = { path = "../gitpass-pasteboard", version = "0.6.7" }
 anyhow = "1"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
