@@ -93,6 +93,21 @@ jobs:
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz*
           if-no-files-found: error
+      - name: clean built app from runner (avoid duplicate Launchpad icons)
+        if: always()
+        run: |
+          LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+          if [ -d apps/desktop/src-tauri/target ]; then
+            find apps/desktop/src-tauri/target -type d -name "*.app" -prune | while IFS= read -r app; do
+              if [ -n "$app" ] && [ -d "$app" ]; then
+                if [ -x "$LSREGISTER" ]; then
+                  "$LSREGISTER" -u "$app" 2>/dev/null || true
+                fi
+                rm -rf "$app"
+              fi
+            done
+          fi
+          touch .metadata_never_index ../.metadata_never_index 2>/dev/null || true
 
   other-os:
     name: desktop (${{ matrix.name }}, hosted)
