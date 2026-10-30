@@ -24,7 +24,7 @@ fn run() -> Result<()> {
         Cmd::Ssh { cmd } => cmd::ssh::ssh_cmd(&cli, &root, cmd),
         Cmd::Identity { .. } => cmd::identity::run(&cli, &root, &cli.cmd),
         Cmd::Attach { .. } => cmd::attach::run(&cli, &root, &cli.cmd),
-        Cmd::Add { .. } | Cmd::Get { .. } | Cmd::Show { .. } | Cmd::Copy { .. } | Cmd::Totp { .. } | Cmd::Find { .. } | Cmd::List { .. } | Cmd::Edit { .. } | Cmd::Archive { .. } | Cmd::Unarchive { .. } | Cmd::Undelete { .. } | Cmd::Mv { .. } | Cmd::Rm { .. } | Cmd::History { .. } | Cmd::Restore { .. } | Cmd::Ref { .. } => cmd::item::run(&cli, &root, &cli.cmd),
+        Cmd::Add { .. } | Cmd::Get { .. } | Cmd::Show { .. } | Cmd::Copy { .. } | Cmd::Totp { .. } | Cmd::Find { .. } | Cmd::List { .. } | Cmd::Edit { .. } | Cmd::Archive { .. } | Cmd::Unarchive { .. } | Cmd::Undelete { .. } | Cmd::Merge { .. } | Cmd::Mv { .. } | Cmd::Rm { .. } | Cmd::History { .. } | Cmd::Restore { .. } | Cmd::Ref { .. } => cmd::item::run(&cli, &root, &cli.cmd),
         Cmd::Gen { .. } | Cmd::Run { .. } | Cmd::Inject { .. } => cmd::tools::run(&cli, &root, &cli.cmd),
         Cmd::Remote { .. } | Cmd::Sync { .. } => cmd::remote::run(&cli, &root, &cli.cmd),
         Cmd::Device { .. } => cmd::device::run(&cli, &root, &cli.cmd),

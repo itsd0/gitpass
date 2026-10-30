@@ -318,3 +318,51 @@ fn pick_flag_resolves_ambiguous_targets() {
     assert!(tags2.contains(&"first".to_string()) || tags2.contains(&"second".to_string()));
     assert_ne!(tags1, tags2);
 }
+
+#[test]
+fn merge_duplicate_logins_workflow() {
+    let (_dir, root) = setup_two_vaults();
+    let sk = SecretKey::parse(&std::fs::read_to_string(root.join("secret.key")).unwrap()).unwrap();
+    let s = Session::unlock(&root, "fake-master-pw-123", &sk).unwrap();
+    let vid = s.resolve_vault("Personal").unwrap();
+
+    let mut it = Item::default();
+    it.title = "Example Login".into();
+    it.username = Some("alice@example.invalid".into());
+    it.password = Some(SECRET_PW.into());
+    let mut r = ItemRecord::new(it);
+    r.category = Category::Login;
+    r.tags = vec!["work".into()];
+    let keep_id = s.add_record(&vid, r).unwrap();
+
+    let mut it2 = Item::default();
+    it2.title = "Example Login".into();
+    it2.username = Some("alice@example.invalid".into());
+    it2.password = Some(SECRET_PW.into());
+    it2.url = Some("https://other.example.invalid".into());
+    let mut r2 = ItemRecord::new(it2);
+    r2.category = Category::Login;
+    r2.tags = vec!["personal".into()];
+    let other_id = s.add_record(&vid, r2).unwrap();
+
+    // Without --yes and without a tty answer, the prompt reads EOF (not "y") and aborts.
+    let out_abort = gp(&root, &["merge", &keep_id, &other_id, "--vault", "Personal"], Some(""));
+    assert!(!out_abort.status.success());
+
+    let out = gp(&root, &["merge", &keep_id, &other_id, "--vault", "Personal", "--yes", "--json"], None);
+    assert!(out.status.success(), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    let d: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert_eq!(d["kept_id"], keep_id);
+    assert_eq!(d["discarded_id"], other_id);
+    assert!(!d["report"]["password_from_other"].as_bool().unwrap());
+
+    // Kept item absorbed the tag; discarded item is in Recently Deleted.
+    let (_, merged) = s.read_record(&vid, &keep_id).unwrap();
+    assert_eq!(merged.tags, vec!["work", "personal"]);
+    let (_, trashed) = s.read_record(&vid, &other_id).unwrap();
+    assert!(trashed.deleted_at.is_some());
+
+    // Merging an item with itself is a clear error.
+    let out_self = gp(&root, &["merge", &keep_id, &keep_id, "--vault", "Personal", "--yes"], None);
+    assert!(!out_self.status.success());
+}

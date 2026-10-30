@@ -267,6 +267,98 @@ impl Session {
     /// Soft delete: the item stays (encrypted) with `deleted_at` set and is purged after 30 days.
     pub fn soft_delete(&self, vid: &str, iid: &str) -> Result<()> { let t = now_secs(); self.mutate_record(vid, iid, |r| r.deleted_at = Some(t)) }
     pub fn restore(&self, vid: &str, iid: &str) -> Result<()> { self.mutate_record(vid, iid, |r| r.deleted_at = None) }
+
+    /// Merge two duplicate login items in the same vault (issue #396): the
+    /// kept item absorbs the discarded item (see
+    /// [`crate::item_merge::merge_duplicate_records`]), and the discarded
+    /// item moves to Recently Deleted (restorable via [`Self::restore`]).
+    /// Both record writes land in ONE manifest commit; the discarded item's
+    /// attachments are copied (re-sealed under the kept item, new file ids)
+    /// in that same commit, so they survive the discarded item's later purge.
+    /// Attachments the kept item already has (same name, MIME and size) are
+    /// not duplicated. Undo: restore the discarded item, then restore the
+    /// kept item to `keep_version_before` via [`Self::restore_version`].
+    pub fn merge_duplicate_items(&self, vid: &str, keep_id: &str, other_id: &str) -> Result<crate::item_merge::DuplicateMergeOutcome> {
+        self.ensure_not_revoked()?;
+        if keep_id == other_id {
+            bail!("cannot merge an item with itself");
+        }
+        let (v_keep, keep_rec) = self.read_record(vid, keep_id)
+            .with_context(|| format!("kept item '{keep_id}' not found in this vault"))?;
+        let (_, other_rec) = self.read_record(vid, other_id)
+            .with_context(|| format!("discarded item '{other_id}' not found in this vault"))?;
+        if keep_rec.category != crate::item::Category::Login || other_rec.category != crate::item::Category::Login {
+            bail!("only login items can be merged");
+        }
+        if keep_rec.deleted_at.is_some() || other_rec.deleted_at.is_some() {
+            bail!("cannot merge a deleted item (restore it first)");
+        }
+        // Copy the discarded item's attachments under the kept item's id
+        // (blobs are AAD-bound to the owning item, so the bytes must be
+        // re-sealed; the discarded item keeps its own blobs, so restoring
+        // it from Recently Deleted still recovers its attachments).
+        let vk = self.vault_key(vid)?;
+        let mut copies: Vec<(crate::item::AttachmentMeta, FileBlob, String)> = vec![];
+        for a in &other_rec.attachments {
+            if keep_rec.attachments.iter().any(|k| k.id == a.id) {
+                continue;
+            }
+            if keep_rec.attachments.iter().any(|k| k.name == a.name && k.mime == a.mime && k.size == a.size) {
+                continue;
+            }
+            let bytes = self.read_attachment(vid, other_id, &a.id)?;
+            let new_fid = uuid::Uuid::new_v4().to_string();
+            let mut padded = pad(&bytes);
+            let env = seal(&vk, &padded, &file_aad(vid, keep_id, &new_fid))?;
+            padded.zeroize();
+            copies.push((
+                crate::item::AttachmentMeta { id: new_fid.clone(), name: a.name.clone(), size: a.size, mime: a.mime.clone() },
+                FileBlob { format: 5, item_id: keep_id.into(), envelope: env },
+                new_fid,
+            ));
+        }
+        // The pure merge must only see the remapped (copied) attachment
+        // metas: the discarded item's original file ids belong to blobs
+        // bound to the discarded item and must never land on the kept item.
+        let mut other_mapped = other_rec.clone();
+        other_mapped.attachments = copies.iter().map(|(m, _, _)| m.clone()).collect();
+        let (merged_pure, mut report) = crate::item_merge::merge_duplicate_records(&keep_rec, &other_mapped)?;
+        report.attachments_added = copies.len();
+        let mut merged_pure = merged_pure;
+        merged_pure.related_item_ids.retain(|id| id != keep_id && id != other_id);
+        // prepare_update stamps clocks/history and (when the password
+        // changed) pushes the kept item's old password onto its history
+        // with today's date; the pure merge's history (with the losing
+        // password's original date) supersedes that entry, so restore it.
+        let (v_keep_new, mut merged_prepared) = self.prepare_update(vid, keep_id, merged_pure.clone())?;
+        merged_prepared.password_history = merged_pure.password_history.clone();
+        let mut other_deleted = other_rec.clone();
+        other_deleted.deleted_at = Some(now_secs());
+        let (v_other_new, other_prepared) = self.prepare_update(vid, other_id, other_deleted)?;
+        let d = self.vdir(vid);
+        fs::create_dir_all(d.join(FILES_DIR))?;
+        let vid_s = vid.to_string();
+        let keep_s = keep_id.to_string();
+        let other_s = other_id.to_string();
+        self.commit(|m| {
+            let ve = m.vaults.get_mut(&vid_s).ok_or_else(|| anyhow!("vault {vid_s} not in manifest"))?;
+            let hash = Self::write_item_in(&d, &vk, &vid_s, &keep_s, v_keep_new, &merged_prepared)?;
+            ve.items.insert(keep_s.clone(), ItemEntry { version: v_keep_new, hash });
+            let hash = Self::write_item_in(&d, &vk, &vid_s, &other_s, v_other_new, &other_prepared)?;
+            ve.items.insert(other_s.clone(), ItemEntry { version: v_other_new, hash });
+            for (_, blob, fid) in &copies {
+                let fh = write_json(&d.join(FILES_DIR).join(format!("{fid}.enc")), blob)?;
+                ve.files.insert(fid.clone(), fh);
+            }
+            Ok(())
+        })?;
+        Ok(crate::item_merge::DuplicateMergeOutcome {
+            report,
+            keep_version_before: v_keep,
+            keep_version: v_keep_new,
+            other_version: v_other_new,
+        })
+    }
     /// Permanently remove an item and its attachment files.
     pub fn purge_item(&self, vid: &str, iid: &str) -> Result<()> { self.remove_item(vid, iid) }
 
