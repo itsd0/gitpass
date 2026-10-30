@@ -7,6 +7,7 @@ import { api } from './api/client';
 import { QuickAccessPage, isQuickAccessWindow } from './features/quick-access';
 import { QuickAccessUnlock } from './features/quick-access/QuickAccessUnlock';
 import { useAgentEvents } from './lib/agentEvents';
+import { useTextSizeShortcuts } from './features/settings/textSize';
 
 /** Dedicated quick-access window (`#/quick-access` or `?window=quick-access`).
  * When locked, displays QuickAccessUnlock with Touch ID if enabled; never shows item data before unlock. */
@@ -38,6 +39,7 @@ export default function App() {
   const locked = useApp((s) => s.locked);
   const theme = useApp((s) => s.theme);
   useAgentEvents();
+  useTextSizeShortcuts();
   useEffect(() => { document.documentElement.classList.toggle('dark', theme === 'dark'); }, [theme]);
   return (
     <TooltipProvider>

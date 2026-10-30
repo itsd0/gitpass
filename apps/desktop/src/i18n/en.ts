@@ -777,5 +777,16 @@ export const en = {
   "editor.type.month_year": "Month/Year",
   "editor.type.totp": "One-time password",
   "editor.type.multiline": "Multi-line text",
+  "settings.textSize": "Text size",
+  "settings.textSizeHelp": "Make everything larger or smaller on this device (⌘+ / ⌘− / ⌘0)",
+  "settings.textSize.smaller": "Smaller",
+  "settings.textSize.default": "Default",
+  "settings.textSize.larger": "Larger",
+  "settings.textSize.large": "Large",
+  "settings.textSize.largest": "Largest",
+  "settings.textSizePreview": "The quick brown fox jumps over the lazy dog",
+  "cmd.textLarger": "Increase text size",
+  "cmd.textSmaller": "Decrease text size",
+  "cmd.textReset": "Reset text size",
 } as const;
 export type Key = keyof typeof en;
