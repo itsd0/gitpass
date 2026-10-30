@@ -1,10 +1,7 @@
 name: Release
 # Tag push v* -> GitHub Release on itsd0/gitpass (this repo) with installers + updater artifacts + latest.json,
 # published as Latest by the `publish` job once both macOS builds succeed (#292).
-# Transition: installed apps up to 0.6.7 only check itsd0/gitpass-releases, so `publish` also mirrors the
-# installers, updater artifacts and latest.json (URLs rewritten to gitpass-releases) to a release there.
-# Requires secret RELEASES_REPO_TOKEN (mirror only): fine-grained PAT, repo itsd0/gitpass-releases only,
-# Contents: read & write.
+# Releases are no longer mirrored to itsd0/gitpass-releases; apps older than 0.6.7 must update manually.
 # workflow_dispatch -> DRY RUN: same builds incl. updater signing (.sig), uploaded as workflow artifacts only;
 # nothing is published and no tag is created.
 #
@@ -143,7 +140,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: publish release (+ mirror to gitpass-releases)
+    name: publish release
     needs: macos
     if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
@@ -175,20 +172,6 @@ jobs:
             gh release edit "$TAG" -R itsd0/gitpass --draft=false --prerelease
           else
             gh release edit "$TAG" -R itsd0/gitpass --draft=false --prerelease=false --latest
-          fi
-      - name: mirror to itsd0/gitpass-releases (updater endpoint of installed apps)
-        env:
-          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
-        run: |
-          cd dist
-          sed -i 's#https://github.com/itsd0/gitpass/releases/download/#https://github.com/itsd0/gitpass-releases/releases/download/#g' latest.json
-          flags="--latest"; [ "$PRERELEASE" = true ] && flags="--prerelease"
-          if gh release view "$TAG" -R itsd0/gitpass-releases >/dev/null 2>&1; then
-            gh release upload "$TAG" -R itsd0/gitpass-releases --clobber ./*
-            gh release edit "$TAG" -R itsd0/gitpass-releases --draft=false $flags
-          else
-            gh release create "$TAG" -R itsd0/gitpass-releases --target main --title "gitpass $TAG" $flags \
-              --notes "Mirror for auto-update. Release notes: https://github.com/itsd0/gitpass/releases/tag/$TAG" ./*
           fi
 
   other-os:
