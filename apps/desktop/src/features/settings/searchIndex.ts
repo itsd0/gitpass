@@ -147,6 +147,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['master password', 'credentials'],
   },
   {
+    id: 'setting-view-kit',
+    tab: 'security',
+    labelKey: 'settings.viewKit',
+    descriptionKey: 'settings.viewKitHelp',
+    keywords: ['emergency kit', 'secret key', 'print', 'pdf', 'recovery'],
+  },
+  {
     id: 'setting-rotate-key',
     tab: 'security',
     labelKey: 'settings.rotateKey',
@@ -255,6 +262,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     labelKey: 'settings.colorPasswords',
     descriptionKey: 'settings.colorPasswordsHelp',
     keywords: ['color', 'colour', 'digits', 'symbols', 'accessibility', 'reveal'],
+  },
+  {
+    id: 'setting-row-warnings',
+    tab: 'general',
+    labelKey: 'settings.rowWarnings',
+    descriptionKey: 'settings.rowWarningsHelp',
+    keywords: ['watchtower', 'warning', 'icon', 'weak', 'reused', 'breached', 'list', 'security'],
   },
 ];
 

@@ -480,3 +480,29 @@ describe('watchtower score', () => {
     }
   });
 });
+
+describe('watchtower page score history', () => {
+  it('shows the empty state on first run, then records one point per day', async () => {
+    localStorage.clear();
+    render(<WatchtowerPage />);
+    expect((await screen.findByTestId('score')).textContent).toBe('71');
+    expect(screen.getByTestId('score-history-empty')).toBeTruthy();
+    const stored = JSON.parse(localStorage.getItem('gitpass.watchtowerHistory') ?? '[]');
+    expect(stored).toHaveLength(1);
+    expect(stored[0].score).toBe(71);
+    expect(JSON.stringify(stored)).not.toContain('i3');
+    fireEvent.click(screen.getByRole('button', { name: 'Re-check' }));
+    await waitFor(() => expect((screen.getByRole('button', { name: 'Re-check' }) as HTMLButtonElement).disabled).toBe(false));
+    expect(JSON.parse(localStorage.getItem('gitpass.watchtowerHistory') ?? '[]')).toHaveLength(1);
+  });
+
+  it('renders the chart and weekly delta from earlier days', async () => {
+    const d = (ago: number) => { const x = new Date(); x.setDate(x.getDate() - ago); const p = (n: number) => String(n).padStart(2, '0'); return `${x.getFullYear()}-${p(x.getMonth() + 1)}-${p(x.getDate())}`; };
+    localStorage.setItem('gitpass.watchtowerHistory', JSON.stringify([{ date: d(10), score: 65, counts: {} }, { date: d(8), score: 66, counts: {} }, { date: d(3), score: 69, counts: {} }]));
+    render(<WatchtowerPage />);
+    expect((await screen.findByTestId('score')).textContent).toBe('71');
+    expect(screen.getByTestId('score-history-delta').textContent).toBe('+5 since last week');
+    expect(screen.getByTestId('score-history-chart')).toBeTruthy();
+    localStorage.clear();
+  });
+});

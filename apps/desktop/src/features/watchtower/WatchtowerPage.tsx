@@ -22,6 +22,7 @@ import {
   Smartphone,
 } from "lucide-react";
 import type { ItemSummary, WatchtowerReport } from "../../api/types";
+import { useBreachedIds } from "../items/rowFindings";
 import { api } from "../../api/client";
 import { SiteIcon } from "../../components/SiteIcon";
 import { useT, useI18n, type Key as TranslationKey } from "../../i18n";
@@ -36,6 +37,8 @@ import {
 } from "../../ui";
 import { useApp } from "../../lib/store";
 import { useSettings } from "../settings/useSettings";
+import { loadHistory, recordReport, type ScorePoint } from "./history";
+import { ScoreHistory } from "./ScoreHistory";
 import { gaugeDash, issueIds, scoreBand, type IssueKey } from "./score";
 import { cn } from "../../lib/utils";
 
@@ -150,6 +153,7 @@ export function WatchtowerPage() {
   };
 
   const [report, setReport] = useState<WatchtowerReport | null>(null);
+  const [history, setHistory] = useState<ScorePoint[]>(() => loadHistory());
   const [titles, setTitles] = useState<Record<string, ItemSummary>>({});
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -164,6 +168,8 @@ export function WatchtowerPage() {
         api.listItems({ filter: { kind: "all" } }),
       ]);
       setReport(r);
+      useBreachedIds.getState().remember(r);
+      setHistory(recordReport(r));
       setTitles(Object.fromEntries(items.map((i) => [i.id, i])));
     } catch (e) {
       setErr(String(e));
@@ -369,6 +375,9 @@ export function WatchtowerPage() {
             <p className="mt-1 text-xs text-muted">{t("watchtower.unusedHint")}</p>
           </div>
         </div>
+      </div>
+      <div className="rounded-xl border border-border bg-panel p-4">
+        <ScoreHistory points={history} />
       </div>
       <div className="grid gap-4 md:grid-cols-2">
         {cards.map(({ key, title, desc, Icon }) => {

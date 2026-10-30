@@ -433,3 +433,215 @@ button.tag:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--accent
 .site-settings-list { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
 .site-settings-row { cursor: pointer; }
 .site-settings-hint { font-size: 11px; margin-top: 12px; }
+
+/* Watchtower panel (issue #376) */
+.watchtower-btn { width: 26px; height: 26px; flex: none; align-self: center; }
+.watchtower-btn svg.ui { width: 15px; height: 15px; }
+.panel.wt-panel { overflow-y: auto; gap: 14px; }
+
+/* Score card */
+.wt-score-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: rgb(var(--card));
+  border: 1px solid rgb(var(--border));
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.wt-score-gauge {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wt-gauge-svg {
+  width: 56px;
+  height: 56px;
+  transform: rotate(135deg);
+}
+.wt-gauge-bg {
+  stroke: rgb(var(--border));
+  opacity: 0.6;
+}
+.wt-gauge-text {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wt-gauge-num {
+  font-size: 17px;
+  font-weight: 700;
+  color: rgb(var(--fg));
+}
+.wt-score-info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.wt-score-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+.wt-score-sub {
+  font-size: 12px;
+}
+
+/* Findings list */
+.wt-findings-list, .wt-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.wt-finding-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgb(var(--card));
+  border: 1px solid rgb(var(--border));
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.wt-finding-row:hover {
+  background: rgb(var(--hover));
+}
+.wt-finding-row:focus-visible, .wt-item-row:focus-visible, .wt-back-btn:focus-visible {
+  outline: none;
+  border-color: rgb(var(--accent));
+  box-shadow: 0 0 0 3px rgb(var(--accent) / .25);
+}
+.wt-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: none;
+}
+.wt-dot.danger {
+  background: rgb(var(--danger));
+}
+.wt-dot.warn {
+  background: rgb(var(--warn));
+}
+.wt-finding-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--fg));
+}
+.wt-chev {
+  width: 14px;
+  height: 14px;
+  color: rgb(var(--muted));
+  display: grid;
+  place-items: center;
+  transform: rotate(-90deg);
+}
+.wt-chev svg.ui {
+  width: 14px;
+  height: 14px;
+}
+
+/* Drill-down header */
+.wt-drill-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+}
+.wt-drill-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  flex: 1;
+}
+.wt-back-btn {
+  width: 28px;
+  height: 28px;
+  transform: rotate(90deg);
+}
+
+/* Items list rows */
+.wt-item-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: rgb(var(--card));
+  border: 1px solid rgb(var(--border));
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+.wt-item-row:hover {
+  background: rgb(var(--hover));
+}
+.wt-item-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+.wt-item-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.wt-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgb(var(--fg));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wt-item-sub {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Empty state */
+.wt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px 16px;
+  text-align: center;
+}
+.wt-empty-icon {
+  color: rgb(var(--accent));
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+}
+.wt-empty-icon svg.ui {
+  width: 44px;
+  height: 44px;
+}
+.wt-empty-msg {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgb(var(--fg));
+  margin: 0;
+}
+
+/* Watchtower shield severity dot (issue #390): absolute so the topbar never shifts. */
+.watchtower-btn { position: relative; }
+.watchtower-btn::after { content: ''; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: transparent; pointer-events: none; }
+.watchtower-btn.wt-dot-warn::after { background: rgb(var(--warn)); box-shadow: 0 0 0 1.5px rgb(var(--panel)); }
+.watchtower-btn.wt-dot-danger::after { background: rgb(var(--danger)); box-shadow: 0 0 0 1.5px rgb(var(--panel)); }

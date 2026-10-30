@@ -678,7 +678,7 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
                     let _ = s.touch_item_used(&id);
                 }
                 let last_used_at = s.last_used(&id).map(|t| gitpass_core::device::iso8601(t as i64));
-                let detail = item_detail(&id, &rec, *reveal, last_used_at);
+                let detail = item_detail(&id, &rec, *reveal, last_used_at, resolve_related_items(&s, &rec));
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else if *copy {
                 let _ = s.touch_item_used(&id);
@@ -735,7 +735,7 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
                     let _ = s.touch_item_used(&iid);
                 }
                 let last_used_at = s.last_used(&iid).map(|t| gitpass_core::device::iso8601(t as i64));
-                let detail = item_detail(&iid, &rec, *reveal, last_used_at);
+                let detail = item_detail(&iid, &rec, *reveal, last_used_at, resolve_related_items(&s, &rec));
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 let related_titles: Vec<String> = rec.related_item_ids.iter().map(|rid| {
@@ -925,14 +925,25 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             }
             for u in unlink {
                 let u_trim = u.trim();
-                rec.related_item_ids.retain(|id| id != u_trim);
+                if u_trim.is_empty() { continue; }
+                // Resolve titles the same way --link does, so --unlink accepts
+                // a title or an ID. An unresolvable value keeps the previous
+                // silent no-op (retain against the raw value).
+                let target_id = if s.find_item_vault(u_trim)?.is_some() {
+                    u_trim.to_string()
+                } else {
+                    pick_record(&s, &vid, u_trim, *pick, false)
+                        .map(|(id, _)| id)
+                        .unwrap_or_else(|_| u_trim.to_string())
+                };
+                rec.related_item_ids.retain(|id| *id != target_id);
             }
             rec.item.updated_at = store::now();
             s.update_record(&vid, &iid, rec)?;
 
             if *json {
                 let (_, updated) = s.read_record(&vid, &iid)?;
-                let detail = item_detail(&iid, &updated, false, None);
+                let detail = item_detail(&iid, &updated, false, None, resolve_related_items(&s, &updated));
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 println!("updated {iid}");
@@ -944,7 +955,7 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             s.set_archived(&vid, &iid, true)?;
             if *json {
                 let (_, updated) = s.read_record(&vid, &iid)?;
-                let detail = item_detail(&iid, &updated, false, None);
+                let detail = item_detail(&iid, &updated, false, None, resolve_related_items(&s, &updated));
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 println!("archived {iid}");
@@ -959,7 +970,7 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             s.set_archived(&vid, &iid, false)?;
             if *json {
                 let (_, updated) = s.read_record(&vid, &iid)?;
-                let detail = item_detail(&iid, &updated, false, None);
+                let detail = item_detail(&iid, &updated, false, None, resolve_related_items(&s, &updated));
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 println!("unarchived {iid}");
@@ -971,7 +982,7 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             s.restore(&vid, &iid)?;
             if *json {
                 let (_, updated) = s.read_record(&vid, &iid)?;
-                let detail = item_detail(&iid, &updated, false, None);
+                let detail = item_detail(&iid, &updated, false, None, resolve_related_items(&s, &updated));
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 println!("restored {iid}");
@@ -987,7 +998,7 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
             let new_id = s.move_item(&from_vid, &iid, &to_vid)?;
             if *json {
                 let (_, updated) = s.read_record(&to_vid, &new_id)?;
-                let detail = item_detail(&new_id, &updated, false, None);
+                let detail = item_detail(&new_id, &updated, false, None, resolve_related_items(&s, &updated));
                 println!("{}", serde_json::to_string_pretty(&detail)?);
             } else {
                 println!("moved {iid} to {to} (now {new_id})");

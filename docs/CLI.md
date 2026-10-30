@@ -98,6 +98,8 @@ gitpass find Personal "git hub"
 gitpass edit Personal github --notes "2FA enabled"
 gitpass edit github --tag work --favorite
 gitpass edit github --untag old-tag --unfavorite
+gitpass edit github --link "Recovery codes" --link 01J...   # related items, by title or ID, repeatable
+gitpass edit github --unlink "Recovery codes"                  # remove a related item, by title or ID
 gitpass edit bank --rotate-every 90d
 gitpass archive github
 gitpass unarchive github
@@ -130,6 +132,12 @@ gitpass restore github --version 3
   `--password` / `--generate [N]` set a new password, `--tag` / `--untag` add or remove tags (repeatable),
   and `--favorite` / `--unfavorite` toggle favorite status. `--rotate-every 30d|90d|180d|365d|none`
   sets or clears a "change this password every N days" reminder (shown by `get` and flagged by `audit`).
+- Related items: `edit --link <title|id>` (alias `--related`, repeatable) links another item,
+  `edit --unlink <title|id>` (alias `--unrelated`, repeatable) removes the link, and linking an
+  item to itself is rejected. `get` prints a `related:` line with the linked titles (a missing or
+  deleted target shows as `Item not available`); `get --json` emits `related_item_ids` (the IDs)
+  plus `related_items`, an array of `{"id", "title", "available"}` objects where `title` is `null`
+  and `available` is `false` for a missing or deleted target. Titles only, never secrets.
 - `archive` and `unarchive` mark or unmark an item as archived.
 - `undelete` restores an item from Recently Deleted (searches deleted items only; clear error if the item is not deleted).
 - `mv <item> --to <vault>` moves an item to another vault, keeping its version history, attachments, tags and metadata.
@@ -360,7 +368,7 @@ gitpass doctor --no-unlock
 gitpass doctor --online
 ```
 
-`doctor` runs read-only health checks across five areas and reports status with one-line fix hints:
+`doctor` runs read-only health checks across five areas and reports status with one-line fix hints. The only file it may write is the unlock throttle state (`.gitpass-throttle.json`): a wrong master password is still counted toward brute-force throttling and a successful unlock resets the counter. Every other vault file and the git working tree are left unchanged:
 - **Vault files**: verifies every item and the manifest decrypt cleanly, with valid AEAD authentication and padding. Reports item counts and failing item IDs without exposing any secrets.
 - **Permissions**: ensures the vault directory (`0700`) and key files (`0600`) are not group/world readable, and warns if the vault is placed inside a cloud-synced folder (e.g. Dropbox, iCloud Drive).
 - **Git repository**: checks for uncommitted changes or merge conflicts, verifies remote configuration, and reports ahead/behind commit counts (network fetch only with `--online`).

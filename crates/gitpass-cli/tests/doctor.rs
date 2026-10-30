@@ -342,3 +342,39 @@ exit 0
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("[✓] Browser integration:"), "{stdout}");
 }
+
+fn snapshot_except_throttle(root: &Path) -> std::collections::BTreeMap<PathBuf, Vec<u8>> {
+    fn walk(base: &Path, dir: &Path, out: &mut std::collections::BTreeMap<PathBuf, Vec<u8>>) {
+        for e in fs::read_dir(dir).unwrap() {
+            let p = e.unwrap().path();
+            let rel = p.strip_prefix(base).unwrap().to_path_buf();
+            if rel == Path::new(".gitpass-throttle.json") { continue; }
+            if p.is_dir() { walk(base, &p, out); } else { out.insert(rel, fs::read(&p).unwrap()); }
+        }
+    }
+    let mut out = std::collections::BTreeMap::new();
+    walk(root, root, &mut out);
+    out
+}
+
+#[test]
+fn test_doctor_only_writes_throttle_file() {
+    let tv = setup_vault();
+    let home = tv._dir.path();
+    let _remote = setup_git_repo_with_remote(&tv.root, home);
+    let git_status = || {
+        let o = Command::new("git").arg("-C").arg(&tv.root).args(["status", "--porcelain", "--untracked-files=all"]).output().unwrap();
+        String::from_utf8_lossy(&o.stdout).into_owned()
+    };
+    let before = snapshot_except_throttle(&tv.root);
+    let status_before = git_status();
+
+    let out = gp(&tv.root, home, &["doctor"], None, &[]);
+    assert_eq!(out.status.code(), Some(0), "stderr: {}", String::from_utf8_lossy(&out.stderr));
+    // A wrong password must still be counted (throttle file), but nothing else may change.
+    let out = gp(&tv.root, home, &["doctor", "--json"], None, &[("GITPASS_PASSWORD", "FAKE-wrong-pw")]);
+    assert_ne!(out.status.code(), Some(0));
+
+    assert_eq!(snapshot_except_throttle(&tv.root), before, "doctor changed vault files other than .gitpass-throttle.json");
+    assert_eq!(git_status(), status_before, "doctor changed the git working tree");
+}
