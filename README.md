@@ -118,7 +118,7 @@ gitpass edit personal <id|query> --notes "..." [--password | --generate 20]
 gitpass edit personal <id|query> --link "Recovery codes" [--unlink <title|id>]   # related items; get shows a related: line
 gitpass rm personal <id|query>
 gitpass gen 32               # random password (default 24; --no-symbols, --no-digits)
-gitpass gen --words 5 [--separator .] [--capitalize]   # memorable passphrase (128-word list)
+gitpass gen --words 5 [--separator .] [--capitalize]   # memorable passphrase (EFF large wordlist, 7,776 words)
 gitpass gen --pin 6          # digits-only PIN
 gitpass gen --copy 32 [--clear-secs 30]   # copy as concealed/transient; never printed
 gitpass sync                 # lock, commit, backup, pull --rebase, push, then verify the manifest
@@ -376,6 +376,13 @@ to a k-anonymity breach check (only 5 hex characters of a SHA-1 leave the machin
 Watchtower shows the same findings plus a 0–100 score.
 
 How the entropy estimate, reuse detection and score weighting work: [docs/WATCHTOWER.md](docs/WATCHTOWER.md).
+
+## Third-party notices
+
+Passphrases use the [EFF large wordlist](https://www.eff.org/dice) (7,776 words),
+licensed under [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+The words are checked in at `crates/gitpass-core/src/eff_large_wordlist.txt`
+(dice numbers removed). Each word contributes log2(7776) ≈ 12.9 bits of entropy.
 
 ## Contributing
 

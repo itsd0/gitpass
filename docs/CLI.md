@@ -185,7 +185,7 @@ gitpass gen --copy 32 --clear-secs 30
 ```
 
 `gen` defaults to a 24-character random password (8-128 characters). `--words N` makes a
-passphrase from the 128-word list (3-20 words, joined with `-`, or `.` with `--no-symbols`),
+passphrase from the EFF large wordlist (7,776 words, ~12.9 bits per word; 3-20 words, joined with `-`, or `.` with `--no-symbols`),
 `--pin N` a digits-only PIN (4-16 digits); `--no-symbols` and `--no-digits` apply to random
 passwords. A length outside these ranges is an error (the desktop app and the browser host
 use the same limits and defaults). `--clear-secs` requires `--copy`.

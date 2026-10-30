@@ -31,15 +31,28 @@
     };
   }
 
-  /** Rough 0-100 meter score for display only. */
-  function strengthScore(pw) {
+  /** EFF large wordlist size. Per-word entropy is log2(7776) ≈ 12.9 bits. */
+  const EFF_WORDLIST_SIZE = 7776;
+
+  /**
+   * Rough 0-100 meter score for display only.
+   * `words` (memorable mode) scores n * log2(7776), matching the desktop generator.
+   * Character-pool entropy would overstate a passphrase. Omit `words` for random and PIN.
+   */
+  function strengthScore(pw, words) {
     if (!pw) return 0;
-    let pool = 0;
-    if (/[a-z]/.test(pw)) pool += 26;
-    if (/[A-Z]/.test(pw)) pool += 26;
-    if (/[0-9]/.test(pw)) pool += 10;
-    if (/[^a-zA-Z0-9]/.test(pw)) pool += 33;
-    let score = Math.min(100, Math.round((pw.length * Math.log2(Math.max(pool, 2))) / 128 * 100));
+    const n = Number(words);
+    let score;
+    if (Number.isInteger(n) && n >= 3 && n <= 20) {
+      score = Math.min(100, Math.round((n * Math.log2(EFF_WORDLIST_SIZE) * 100) / 128));
+    } else {
+      let pool = 0;
+      if (/[a-z]/.test(pw)) pool += 26;
+      if (/[A-Z]/.test(pw)) pool += 26;
+      if (/[0-9]/.test(pw)) pool += 10;
+      if (/[^a-zA-Z0-9]/.test(pw)) pool += 33;
+      score = Math.min(100, Math.round((pw.length * Math.log2(Math.max(pool, 2))) / 128 * 100));
+    }
     if (new Set(pw).size <= 2) score = Math.min(score, 10);
     return score;
   }
