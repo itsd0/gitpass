@@ -353,3 +353,54 @@ fn test_get_shows_password_changed_at_and_audit_old_passwords() {
     let pw_changed = val_after_pw["password_changed_at"].as_str().unwrap();
     assert_ne!(pw_changed, "2020-09-13T12:26:40Z");
 }
+
+#[test]
+fn audit_flags_unused_logins_and_turns_off_on_request() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Personal"], None).status.success());
+
+    let sk = gitpass_core::crypto::SecretKey::parse(&std::fs::read_to_string(root.join("secret.key")).unwrap()).unwrap();
+    let s = Session::unlock(&root, "fake-master-pw-123", &sk).unwrap();
+    let vid = s.resolve_vault("Personal").unwrap();
+
+    // Last edited in 2020 and never used on this device: older than the 12-month default.
+    let old_epoch = 1_600_000_000u64;
+    let mut it = Item::default();
+    it.title = "Forgotten Forum".into();
+    it.username = Some("fake@example.invalid".into());
+    it.password = Some("Xq7#vR2!mK9@pL4$wZ".into());
+    it.updated_at = old_epoch.to_string();
+    let mut rec = ItemRecord::new(it);
+    rec.created_at = Some(old_epoch);
+    let id = s.add_record(&vid, rec).unwrap();
+
+    // Text output counts the finding and lists the item.
+    let out = gp(&root, &["audit"], None);
+    assert!(out.status.success());
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(text.contains("unused (>12mo): 1"), "summary missing unused count:\n{text}");
+    assert!(text.contains("Forgotten Forum") && text.contains("not used in"), "findings missing:\n{text}");
+
+    // JSON has the count and the finding with its kind.
+    let out_json = gp(&root, &["audit", "--json"], None);
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_json.stdout)).unwrap();
+    assert_eq!(v["unused"], 1);
+    let unused = v["per_item"].as_array().unwrap().iter()
+        .flat_map(|i| i["findings"].as_array().unwrap())
+        .find(|f| f.get("unused").is_some())
+        .expect("unused finding");
+    assert!(unused["unused"]["days"].as_u64().unwrap() > 365);
+
+    // 0 months turns the check off.
+    let off = gp(&root, &["audit", "--unused-months", "0", "--json"], None);
+    let v_off: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&off.stdout)).unwrap();
+    assert_eq!(v_off["unused"], 0);
+
+    // Using the item now clears the finding even though the edit time is old.
+    s.touch_item_used(&id).unwrap();
+    let used = gp(&root, &["audit", "--json"], None);
+    let v_used: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&used.stdout)).unwrap();
+    assert_eq!(v_used["unused"], 0);
+}
