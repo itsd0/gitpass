@@ -639,3 +639,9 @@ button.tag:focus-visible { outline: none; box-shadow: 0 0 0 2px rgb(var(--accent
   color: rgb(var(--fg));
   margin: 0;
 }
+
+/* Watchtower shield severity dot (issue #390): absolute so the topbar never shifts. */
+.watchtower-btn { position: relative; }
+.watchtower-btn::after { content: ''; position: absolute; top: 5px; right: 5px; width: 7px; height: 7px; border-radius: 50%; background: transparent; pointer-events: none; }
+.watchtower-btn.wt-dot-warn::after { background: rgb(var(--warn)); box-shadow: 0 0 0 1.5px rgb(var(--panel)); }
+.watchtower-btn.wt-dot-danger::after { background: rgb(var(--danger)); box-shadow: 0 0 0 1.5px rgb(var(--panel)); }

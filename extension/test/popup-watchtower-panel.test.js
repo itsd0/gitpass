@@ -98,7 +98,7 @@ test('Watchtower button exists in filter row and opens the overview panel', asyn
 
   const wtBtn = w.document.getElementById('watchtowerBtn');
   assert.ok(wtBtn, 'watchtowerBtn must exist in popup');
-  assert.strictEqual(wtBtn.getAttribute('aria-label'), 'Watchtower');
+  assert.ok((wtBtn.getAttribute('aria-label') || '').startsWith('Watchtower'), 'shield keeps an accessible Watchtower name (with count when items need attention, #390)');
 
   wtBtn.click();
   await settle();

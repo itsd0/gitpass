@@ -21,6 +21,7 @@ function closePanel() {
   }
   prevFocus = null;
   if (livePending) { livePending = false; liveReload(); }
+  else if (wasWatchtower && typeof refreshWatchtowerBadge === 'function') refreshWatchtowerBadge();
 }
 
 function panelHead(title) { const h = el('h3', null, title); h.append(iconBtn(UI.close, t('close', 'Close'), closePanel)); return h; }

@@ -1282,5 +1282,8 @@
   },
   "errWatchtowerLoad": {
     "message": "ไม่สามารถโหลด Watchtower ได้"
+  },
+  "watchtowerAttention": {
+    "message": "Watchtower: มี $1 รายการที่ต้องตรวจสอบ"
   }
 }

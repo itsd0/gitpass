@@ -1203,5 +1203,8 @@
   },
   "errWatchtowerLoad": {
     "message": "Couldn't load Watchtower"
+  },
+  "watchtowerAttention": {
+    "message": "Watchtower: $1 items need attention"
   }
 }

@@ -1282,5 +1282,8 @@
   },
   "errWatchtowerLoad": {
     "message": "Watchtower ကို ရယူ၍ မရပါ"
+  },
+  "watchtowerAttention": {
+    "message": "Watchtower: ပစ္စည်း $1 ခုကို ဆိုင်းငံ့စစ်ဆေးရန် လိုအပ်သည်"
   }
 }
