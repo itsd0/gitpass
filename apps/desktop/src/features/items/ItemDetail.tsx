@@ -206,7 +206,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
 
   const renderNotesMarkdown = useSettings((s) => s.settings?.renderNotesMarkdown ?? true);
   const findings = detail.findings ?? [];
-  const canChangePassword = !!detail.changePasswordUrl && findings.some((f) => ['weak', 'reused', 'pwned', 'insecure_url'].includes(f.kind));
+  const canChangePassword = !!detail.changePasswordUrl && findings.some((f) => ['weak', 'reused', 'reused_old_password', 'pwned', 'insecure_url'].includes(f.kind));
   const changePassword = () => api.openChangePassword({ vaultId: detail.vaultId, itemId: detail.id }).catch((e) => toast(errText(e), 'danger'));
 
   return (

@@ -357,6 +357,8 @@ export const my: Partial<Record<Key, string>> = {
   "watchtower.weakPasswordsDesc": "ခန့်မှန်းရလွယ်သည်။ ခိုင်မာသော စကားဝှက်အသစ် ဖန်တီးပါ။",
   "watchtower.reusedPasswords": "ထပ်သုံးထားသော စကားဝှက်များ",
   "watchtower.reusedPasswordsDesc": "ဆိုက်များစွာတွင် စကားဝှက်တူ သုံးထားသည်။",
+  "watchtower.reusedOldPasswords": "စကားဝှက်ဟောင်းကို ပြန်သုံးထားသည်",
+  "watchtower.reusedOldPasswordsDesc": "လက်ရှိစကားဝှက်သည် ဤအရာ သို့မဟုတ် အခြားအရာတစ်ခု ယခင်သုံးခဲ့သော စကားဝှက်နှင့် တူသည်။",
   "watchtower.oldPasswords": "ဟောင်းနွမ်းသော စကားဝှက်များ",
   "watchtower.oldPasswordsDesc": "အချိန်ကြာမြင့်စွာ မပြောင်းထားပါ။",
   "watchtower.breachedPasswords": "ပေါက်ကြားခဲ့သော စကားဝှက်များ",

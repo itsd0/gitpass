@@ -24,6 +24,7 @@ gitpass audit --json               # machine-readable report (counts + per-item 
 |---|---|---|---|
 | `weak` | items with a password | Weak | yes (`bad`) |
 | `reused` | items with a password | Reused | yes (`bad`) |
+| `reused_old_password` | items whose current password matches a retired entry in any login's password history | Reused an old password | yes, at half the `reused` weight (see below) |
 | `pwned` (opt-in HIBP) | items with a password | Breached | yes (`bad`) |
 | `old` | items with a password | Old | yes |
 | `missing_totp` | items with a URL and no TOTP secret | Missing 2FA | yes |
@@ -107,6 +108,29 @@ This is not zxcvbn: there is no dictionary attack, keyboard-pattern or l33t anal
 - Matching is exact: `Summer2025!` and `Summer2025?` are different passwords, and similar-looking values
   are not compared. Changing one occurrence of a reused password leaves the others flagged until each
   item is updated.
+
+## Reused old passwords
+
+Login password history (`ItemRecord.password_history`, newest first, capped at
+`PASSWORD_HISTORY_LIMIT`) is also compared, in memory only, against every audited item's current
+password:
+
+- A login whose current password equals an entry in **another** login's history gets
+  `ReusedOldPassword { other_title, retired_on, same_item: false }`, where `other_title` is that
+  other login's title and `retired_on` is the entry's `replaced_at` date.
+- A login whose current password equals an entry in **its own** history gets the same finding with
+  `same_item: true` and its own title. (Its own history is *not* a `reused` finding — reuse only
+  counts passwords currently shared between items.)
+- Blank or whitespace-only history entries are skipped. One finding per item: a cross-item match
+  wins over a same-item match.
+- The retired password value itself never appears in the report, the CLI output, the desktop or
+  extension UI, or logs — only the source title and the retirement date. Like every other kind, it
+  can be ignored per item (`reused_old_password` in `ignored_findings`).
+- Score: the shared core `audit::score()` (used by the desktop and the extension host) counts a
+  `reused_old_password` item at half the weight of a `reused` item (`SCORE_WEIGHT_REUSED_OLD_PASSWORD`
+  = 40 instead of 80), and only when the item is not already counted as weak, breached or reused. A retired password is weaker
+  evidence than a live shared password — it may have been exposed in a past breach, but it is no
+  longer the other login's current secret.
 
 ## Old passwords
 
@@ -267,7 +291,8 @@ bad          = number of distinct items flagged Weak, Reused or Pwned   (union: 
 with_pw      = items with a non-empty password
 items        = all audited items (every non-passkey item, including password-less ones)
 missing_totp = items flagged MissingTotp or TotpAvailable (2FA not set up; each item counts once)
-penalty      = 80 × bad / with_pw  +  10 × old / with_pw  +  10 × missing_totp / items
+reused_old   = items flagged ReusedOldPassword that are not already in `bad`
+penalty      = 80 × bad / with_pw  +  40 × reused_old / with_pw  +  10 × old / with_pw  +  10 × missing_totp / items
 score        = round(100 − penalty), clamped to 0…100
 ```
 

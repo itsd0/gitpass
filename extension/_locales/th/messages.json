@@ -861,6 +861,9 @@
       }
     }
   },
+  "watchtowerReusedOldPassword": {
+    "message": "ใช้รหัสผ่านเก่าซ้ำ"
+  },
   "watchtowerPwned": {
     "message": "พบในข้อมูลรั่วไหล"
   },

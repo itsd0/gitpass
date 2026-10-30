@@ -660,7 +660,7 @@ EXAMPLES:
     Ssh { #[command(subcommand)] cmd: SshCmd },
     /// Security audit: weak / reused / old / pwned passwords, duplicates, expired or expiring items, insecure URLs, missing TOTP, offline 2FA/passkey availability, unused logins
     ///
-    /// Finding kinds: weak (incl. passwords containing the username or site name), reused, old,
+    /// Finding kinds: weak (incl. passwords containing the username or site name), reused, reused_old_password, old,
     /// pwned (only with --hibp), duplicate, expired, expiring_soon, insecure_url, missing_totp,
     /// totp_available, passkey_available, weak_ssh_key, unused, rotation_due, rotation_soon. Findings you ignored in the app are counted but only
     /// listed with --include-ignored. See docs/WATCHTOWER.md.

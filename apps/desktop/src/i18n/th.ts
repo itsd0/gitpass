@@ -349,6 +349,8 @@ export const th: Partial<Record<Key, string>> = {
   "watchtower.weakPasswordsDesc": "คาดเดาได้ง่าย สร้างรหัสผ่านใหม่ที่แข็งแรง",
   "watchtower.reusedPasswords": "รหัสผ่านที่ใช้ซ้ำ",
   "watchtower.reusedPasswordsDesc": "ใช้รหัสผ่านเดียวกันในหลายเว็บไซต์",
+  "watchtower.reusedOldPasswords": "นำรหัสผ่านเก่ากลับมาใช้",
+  "watchtower.reusedOldPasswordsDesc": "รหัสผ่านปัจจุบันตรงกับรหัสผ่านที่รายการนี้หรือรายการอื่นเคยใช้มาก่อน",
   "watchtower.oldPasswords": "รหัสผ่านเก่า",
   "watchtower.oldPasswordsDesc": "ไม่ได้เปลี่ยนมาเป็นเวลานาน",
   "watchtower.breachedPasswords": "รหัสผ่านที่รั่วไหล",

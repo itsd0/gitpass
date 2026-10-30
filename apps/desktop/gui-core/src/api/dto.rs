@@ -172,6 +172,17 @@ pub struct RotationItem {
     pub days: u64,
 }
 
+/// One `reused_old_password` finding: the item's id plus the source title and retirement
+/// date from the core finding. The retired password value itself is never carried here.
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReusedOldPasswordItem {
+    pub item_id: String,
+    pub other_title: String,
+    pub retired_on: String,
+    pub same_item: bool,
+}
+
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UnusedItem {
@@ -191,6 +202,8 @@ pub struct WatchtowerReport {
     pub insecure_urls: Vec<String>,
     pub duplicates: Vec<Vec<String>>,
     pub weak_ssh_keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reused_old_password: Vec<ReusedOldPasswordItem>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unused: Vec<UnusedItem>,
     /// Logins past their own "change password every N days" reminder.

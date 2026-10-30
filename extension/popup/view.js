@@ -471,6 +471,8 @@ if (filter === "suggested") base = (suggested || []).filter((i) => !i.archived &
         return meta && meta.reused_count
           ? t('watchtowerReusedN', 'Reused on $1 items', [meta.reused_count])
           : t('watchtowerReused', 'Reused password');
+      case 'reused_old_password':
+        return t('watchtowerReusedOldPassword', 'Reused an old password');
       case 'pwned':
         return t('watchtowerPwned', 'In a data breach');
       case 'old':

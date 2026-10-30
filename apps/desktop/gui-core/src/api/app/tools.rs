@@ -102,6 +102,7 @@ impl App {
                 insecure_urls: vec![],
                 duplicates: vec![],
                 weak_ssh_keys: vec![],
+                reused_old_password: vec![],
                 unused: vec![],
                 rotation_due: vec![],
                 rotation_soon: vec![],
@@ -128,6 +129,9 @@ impl App {
                         Finding::InsecureUrl { .. } => out.insecure_urls.push(f.id.clone()),
                         Finding::Duplicate { group } => dup_groups.entry(group.clone()).or_default().push(f.id.clone()),
                         Finding::WeakSshKey { .. } => out.weak_ssh_keys.push(f.id.clone()),
+                        Finding::ReusedOldPassword { other_title, retired_on, same_item } => out.reused_old_password.push(ReusedOldPasswordItem {
+                            item_id: f.id.clone(), other_title: other_title.clone(), retired_on: retired_on.clone(), same_item: *same_item,
+                        }),
                         Finding::Unused { days } => out.unused.push(UnusedItem {
                             item_id: f.id.clone(), days: *days, last_used: last_used.contains_key(&f.id),
                         }),

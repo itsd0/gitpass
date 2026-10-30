@@ -92,6 +92,7 @@ export function ScoreGauge({ score }: { score: number }) {
 const CARDS: { key: IssueKey; titleKey: TranslationKey; descKey: TranslationKey; Icon: typeof AlertTriangle }[] = [
   { key: "weak", titleKey: "watchtower.weakPasswords", descKey: "watchtower.weakPasswordsDesc", Icon: AlertTriangle },
   { key: "reused", titleKey: "watchtower.reusedPasswords", descKey: "watchtower.reusedPasswordsDesc", Icon: Copy },
+  { key: "reusedOldPassword", titleKey: "watchtower.reusedOldPasswords", descKey: "watchtower.reusedOldPasswordsDesc", Icon: History },
   { key: "old", titleKey: "watchtower.oldPasswords", descKey: "watchtower.oldPasswordsDesc", Icon: Clock },
   { key: "breached", titleKey: "watchtower.breachedPasswords", descKey: "watchtower.breachedPasswordsDesc", Icon: ShieldAlert },
   { key: "missingTotp", titleKey: "watchtower.missingTotp", descKey: "watchtower.missingTotpDesc", Icon: Smartphone },
@@ -100,6 +101,7 @@ const CARDS: { key: IssueKey; titleKey: TranslationKey; descKey: TranslationKey;
 const ISSUE_TO_KIND: Record<IssueKey, string> = {
   weak: "weak",
   reused: "reused",
+  reusedOldPassword: "reused_old_password",
   old: "old",
   breached: "pwned",
   missingTotp: "missing_totp",
@@ -406,7 +408,7 @@ export function WatchtowerPage() {
               : null;
           const kind = ISSUE_TO_KIND[key];
           // Change password is offered for password-related findings only (issue #92).
-          const canChangePassword = key === "weak" || key === "reused" || key === "breached" || key === "rotationDue" || key === "rotationSoon";
+          const canChangePassword = key === "weak" || key === "reused" || key === "reusedOldPassword" || key === "breached" || key === "rotationDue" || key === "rotationSoon";
           const rotationDays = new Map((key === "rotationDue" ? report?.rotationDue : key === "rotationSoon" ? report?.rotationSoon : undefined)?.map((r) => [r.itemId, r.days]));
           return (
             <section key={key} aria-label={title} className="rounded-xl border border-border bg-panel p-4">

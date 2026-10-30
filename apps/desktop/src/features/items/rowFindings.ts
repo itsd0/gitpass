@@ -5,7 +5,7 @@ import { issueIds, type IssueKey } from '../watchtower/score';
 /** Findings that can drive the item-list status icon, with the severity each carries. Rotation, unused and "available" suggestions are not security warnings here. */
 export const ROW_FINDING_KINDS = [
   ['breached', 'danger'], ['reused', 'danger'], ['expired', 'danger'],
-  ['weak', 'warn'], ['old', 'warn'], ['insecureUrls', 'warn'], ['expiringSoon', 'warn'], ['missingTotp', 'warn'], ['duplicates', 'warn'], ['weakSshKey', 'warn'],
+  ['weak', 'warn'], ['old', 'warn'], ['insecureUrls', 'warn'], ['expiringSoon', 'warn'], ['missingTotp', 'warn'], ['duplicates', 'warn'], ['weakSshKey', 'warn'], ['reusedOldPassword', 'warn'],
 ] as const satisfies readonly (readonly [IssueKey, 'danger' | 'warn'])[];
 export type RowFindingKind = (typeof ROW_FINDING_KINDS)[number][0];
 export type RowSeverity = 'danger' | 'warn';
