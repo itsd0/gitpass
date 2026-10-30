@@ -32,7 +32,9 @@ browser mock.
 - Toggle: `commands::toggle_quick_access` (`src-tauri/src/commands.rs`) hides
   the window when it is visible and focused, and otherwise shows it and
   focuses it. Pressing the hotkey while the vault is locked shows the unlock
-  screen in the quick-access window.
+  screen in the quick-access window. Touch ID starts only after that show:
+  the hidden webview stays mounted across auto-lock, and prompting from the
+  background activates the app.
 - Hide after copy: `QuickAccessPage` hides its window via
   `getCurrentWindow().hide()` once a copy completes, and
   `QuickAccessUnlock` hides it after a successful unlock.
