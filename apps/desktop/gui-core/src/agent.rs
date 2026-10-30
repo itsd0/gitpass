@@ -497,6 +497,21 @@ impl Agent {
                 self.poll_state();
                 Ok(json!({"ok": true, "archived": archived}))
             }
+            // Same move as the standalone host's `move_item`: popup only, and the
+            // desktop app answers when it is running (bridge, not the fallback host).
+            "move_item" => {
+                if source != "popup" { return Err(err("denied", "move_item is allowed only from the popup")); }
+                let (vid, iid) = split_id(&req("item_id")?)?;
+                let to = req("to_vault_id")?;
+                if vid == to { return Err(err("bad_request", "item is already in that vault")); }
+                if !self.app.list_vaults().map_err(host_err)?.iter().any(|v| v.id == to) {
+                    return Err(err("bad_request", "unknown vault"));
+                }
+                self.record(&vid, &iid)?; // live items only; deleted ones are not_found
+                let sum = self.app.move_item(&vid, &iid, &to).map_err(host_err)?;
+                self.poll_state();
+                Ok(json!({"ok": true, "item_id": format!("{}:{}", sum.vault_id, sum.id), "vault_id": sum.vault_id, "title": sum.title}))
+            }
             "generate" => gitpass_host::protocol::generate(q).map_err(host_err),
             "record_generated_password" => {
                 let pw = q.get("password").and_then(|v| v.as_str()).ok_or_else(|| err("bad_request", "password is required"))?;

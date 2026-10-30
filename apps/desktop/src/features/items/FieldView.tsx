@@ -12,6 +12,7 @@ import { PasswordHistory } from './PasswordHistory';
 import { cn } from '../../lib/utils';
 import { Badge, Button, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Tooltip, toast } from '../../ui';
 import { errText } from './actions';
+import { toastFieldCopied } from '../../lib/concealedCopy';
 import { groupCardNumber } from '../../lib/cardMask';
 import { SafeMarkdown } from './SafeMarkdown';
 import { useSettings } from '../settings/useSettings';
@@ -140,7 +141,7 @@ export function FieldRow({
               data-testid="ctx-menu-copy"
               onSelect={() => {
                 void api.copyField({ ...ctx, fieldId: field.id }).then(
-                  () => toast(`Copied ${field.label}`),
+                  () => toastFieldCopied(field, category),
                   (e) => toast(errText(e), 'danger')
                 );
               }}
@@ -193,10 +194,11 @@ export function FieldRow({
   );
 }
 
-function CopyBtn({ ctx, fieldId, label }: { ctx: Ctx; fieldId: string; label: string }) {
+function CopyBtn({ ctx, field, category }: { ctx: Ctx; field: Field; category?: ItemCategory }) {
+  const copyName = field.kind === 'totp' ? 'one-time password' : field.label;
   return (
     <Tooltip content="Copy">
-      <Button variant="ghost" size="iconSm" aria-label={`Copy ${label}`} onClick={() => api.copyField({ ...ctx, fieldId }).then(() => toast(`Copied ${label}`), (e) => toast(errText(e), 'danger'))}><Copy size={13} /></Button>
+      <Button variant="ghost" size="iconSm" aria-label={`Copy ${copyName}`} onClick={() => api.copyField({ ...ctx, fieldId: field.id }).then(() => toastFieldCopied(field, category), (e) => toast(errText(e), 'danger'))}><Copy size={13} /></Button>
     </Tooltip>
   );
 }
@@ -222,6 +224,7 @@ function RefBtn({ field, target }: { field: Field; target?: RefTarget | null }) 
 function FieldActionMenu({
   field,
   ctx,
+  category,
   refTarget,
   isQrSupported,
   onShowLargeType,
@@ -229,6 +232,7 @@ function FieldActionMenu({
 }: {
   field: Field;
   ctx: Ctx;
+  category?: ItemCategory;
   refTarget?: RefTarget | null;
   isQrSupported: boolean;
   onShowLargeType?: () => void;
@@ -252,7 +256,7 @@ function FieldActionMenu({
           data-testid="menu-copy-field"
           onSelect={() => {
             void api.copyField({ ...ctx, fieldId: field.id }).then(
-              () => toast(`Copied ${field.label}`),
+              () => toastFieldCopied(field, category),
               (e) => toast(errText(e), 'danger')
             );
           }}
@@ -363,12 +367,13 @@ function PlainValue({
             </Button>
           </Tooltip>
         )}
-        {v && <CopyBtn ctx={ctx} fieldId={field.id} label={field.label} />}
+        {v && <CopyBtn ctx={ctx} field={field} category={category} />}
         {v && <RefBtn field={field} target={refTarget} />}
         {v && (
           <FieldActionMenu
             field={field}
             ctx={ctx}
+            category={category}
             refTarget={refTarget}
             isQrSupported={Boolean(isQrSupported && v)}
             onShowQr={() => onOpenQr?.(qrBtnRef?.current)}
@@ -498,11 +503,12 @@ export function ConcealedValue({
           <Tooltip content={revealed === null ? 'Reveal' : 'Conceal'}>
             <Button variant="ghost" size="iconSm" aria-label={revealed === null ? `Reveal ${field.label}` : `Conceal ${field.label}`} onClick={toggle}>{revealed === null ? <Eye size={13} /> : <EyeOff size={13} />}</Button>
           </Tooltip>
-          <CopyBtn ctx={ctx} fieldId={field.id} label={field.label} />
+          <CopyBtn ctx={ctx} field={field} category={category} />
           <RefBtn field={field} target={refTarget} />
           <FieldActionMenu
             field={field}
             ctx={ctx}
+            category={category}
             refTarget={refTarget}
             isQrSupported={Boolean(isQrSupported)}
             onShowLargeType={openLargeType}
@@ -569,7 +575,6 @@ function TotpValue({
   isQrSupported?: boolean;
   onOpenQr?: (trigger?: HTMLElement | null) => void;
 }) {
-  const fieldId = field.id;
   const t = useT();
   const qrBtnRef = useRef<HTMLButtonElement>(null);
   const [state, setState] = useState<{ code: string; remaining: number; period: number } | null>(null);
@@ -600,7 +605,7 @@ function TotpValue({
             </Button>
           </Tooltip>
         )}
-        <CopyBtn ctx={ctx} fieldId={fieldId} label="one-time password" />
+        <CopyBtn ctx={ctx} field={field} />
         <RefBtn field={field} target={refTarget} />
         <FieldActionMenu
           field={field}

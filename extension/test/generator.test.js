@@ -85,6 +85,25 @@ test('strength meter bands', () => {
   assert.ok(GEN.strengthScore('FAKE-Abc-123-Symbols!') > 70);
 });
 
+test('memorable strength uses EFF per-word entropy', () => {
+  const phrase = 'abacus-abdomen-abdominal-abide-ability';
+  const bits = 5 * Math.log2(7776);
+  const expect = Math.min(100, Math.round((bits * 100) / 128));
+  assert.strictEqual(expect, 50);
+  assert.strictEqual(GEN.strengthScore(phrase, 5), 50);
+  // The same string scored as random characters is near the top of the meter.
+  assert.ok(GEN.strengthScore(phrase) > 90);
+  assert.strictEqual(GEN.strengthKey(50), 'fair');
+});
+
+test('memorable mode meter shows per-word entropy', async () => {
+  const { w } = popup({ stored: { mode: 'memorable', length: 5, separator: '-', digits: false, symbols: true } });
+  await settle();
+  await openGen(w);
+  assert.strictEqual(q(w, '#panel .gen-mode.sel').textContent, 'Memorable');
+  assert.strictEqual(q(w, '#panel .gen-strength').getAttribute('aria-valuenow'), '50');
+});
+
 test('opens in random mode, shows strength and copies the generated value', async () => {
   const { w, sent } = popup();
   await settle();

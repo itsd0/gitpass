@@ -300,6 +300,40 @@ fn trash_and_restore_via_agent_use_the_shared_vault() {
 }
 
 #[test]
+fn move_item_via_agent_moves_between_vaults_and_back() {
+    let e = env();
+    let id = add_login(&e, "GitHub", "https://github.com", "octo", "pw-gh");
+    let (vid, _iid) = id.split_once(':').unwrap();
+    let work = e.app.create_vault("Work", None, None, None).unwrap().id;
+    let (mut c, _) = Client::connect(&e);
+
+    // Popup-only, same rule as trash_item; same vault and unknown vault are bad_request.
+    assert_eq!(c.err("move_item", json!({"item_id": id, "to_vault_id": work})), "denied");
+    assert_eq!(c.err("move_item", json!({"item_id": id, "to_vault_id": work, "source": "page"})), "denied");
+    assert_eq!(c.err("move_item", json!({"item_id": id, "to_vault_id": vid, "source": "popup"})), "bad_request");
+    assert_eq!(c.err("move_item", json!({"item_id": id, "to_vault_id": "nope", "source": "popup"})), "bad_request");
+    assert_eq!(c.err("move_item", json!({"item_id": "nocolon", "to_vault_id": work, "source": "popup"})), "bad_request");
+
+    let res = c.ok("move_item", json!({"item_id": id, "to_vault_id": work, "source": "popup"}));
+    assert_eq!(res["ok"], json!(true));
+    let new_id = res["item_id"].as_str().unwrap().to_string();
+    assert!(new_id.starts_with(&format!("{work}:")));
+    assert_eq!(c.err("get_item", json!({"item_id": id})), "not_found");
+    let (_, niid) = new_id.split_once(':').unwrap();
+    assert_eq!(e.app.reveal_field(&work, niid, "password").unwrap().as_str(), "pw-gh");
+
+    // Undo is a move back to the original vault.
+    let back = c.ok("move_item", json!({"item_id": new_id, "to_vault_id": vid, "source": "popup"}));
+    let back_id = back["item_id"].as_str().unwrap().to_string();
+    assert!(back_id.starts_with(&format!("{vid}:")));
+    let (_, biid) = back_id.split_once(':').unwrap();
+    assert_eq!(e.app.get_item(vid, biid).unwrap().summary.title, "GitHub");
+
+    e.app.lock();
+    assert_eq!(c.err("move_item", json!({"item_id": back_id, "to_vault_id": work, "source": "popup"})), "locked");
+}
+
+#[test]
 fn list_archived_and_deleted_and_archive_unarchive_via_agent() {
     let e = env();
     let id = add_login(&e, "Agent Octo", "https://github.com", "octo", "agent-secret-pw-999");

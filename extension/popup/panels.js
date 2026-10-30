@@ -602,7 +602,7 @@ async function openGenerator(opts) {
     for (const ch of pw) code.append(el('span', /[0-9]/.test(ch) ? 'num' : /[^a-zA-Z0-9]/.test(ch) ? 'sym' : null, ch));
   }
   function paintStrength() {
-    const score = strengthScore(pw);
+    const score = strengthScore(pw, st.mode === 'memorable' ? st.length : undefined);
     const key = strengthKey(score);
     meterFill.className = 'gen-strength-fill ' + key;
     meterFill.style.width = score + '%';
@@ -654,7 +654,7 @@ async function openGenerator(opts) {
     const prevHtml = copyBtn.innerHTML;
     copyBtn.innerHTML = '<span class="spinner"></span> <span>' + t('copy', 'Copy') + '</span>';
     try {
-      await copy(code.textContent, t('passwordCopied', 'Password copied'));
+      await copy(code.textContent, t('passwordCopied', 'Password copied'), 30, { concealed: true });
       void send({ type: 'popup:record_generated', password: code.textContent }).catch(() => {});
     } catch (err) {
       toast(errText(err));
@@ -715,7 +715,7 @@ function recentSection() {
       eyeB.setAttribute('aria-pressed', String(shown));
       eyeB.title = shown ? t('genRecentHide', 'Hide') : t('reveal', 'Reveal');
     };
-    const doCopy = () => copy(e.value, t('passwordCopied', 'Password copied'));
+    const doCopy = () => copy(e.value, t('passwordCopied', 'Password copied'), 30, { concealed: true });
     const copyB = iconBtn(UI.copy, t('copy', 'Copy'), doCopy);
     const eyeB = iconBtn(UI.eye, t('reveal', 'Reveal'), toggle); eyeB.setAttribute('aria-pressed', 'false');
     const acts = el('div', 'gen-recent-acts'); acts.append(copyB, eyeB);

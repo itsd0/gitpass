@@ -95,6 +95,18 @@
   "copied": {
     "message": "คัดลอกแล้ว"
   },
+  "clearsIn": {
+    "message": "ล้างใน $1 วินาที"
+  },
+  "clearNow": {
+    "message": "ล้างตอนนี้"
+  },
+  "cleared": {
+    "message": "ล้างแล้ว"
+  },
+  "wontClear": {
+    "message": "จะไม่ล้างอัตโนมัติ"
+  },
   "fill": {
     "message": "กรอก"
   },
@@ -1115,6 +1127,12 @@
   },
   "movedToTrash": {
     "message": "ย้ายไปที่รายการที่เพิ่งลบแล้ว"
+  },
+  "moveToVault": {
+    "message": "ย้ายไปยัง Vault…"
+  },
+  "movedToVault": {
+    "message": "ย้ายไปยัง $1 แล้ว"
   },
   "itemRestored": {
     "message": "กู้คืนรายการแล้ว"

@@ -549,7 +549,7 @@ EXAMPLES:
         no_history: bool,
         /// Length of the random password (default 24)
         len: Option<usize>,
-        /// Memorable passphrase of N words (3-20) from a 128-word list
+        /// Memorable passphrase of N words (3-20) from the EFF large wordlist (7,776 words, ~12.9 bits each)
         #[arg(long, value_name = "N")]
         words: Option<usize>,
         /// Digits-only PIN of N digits (4-16)

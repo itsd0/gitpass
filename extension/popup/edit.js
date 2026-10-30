@@ -232,7 +232,9 @@ function fieldRow(d, f) {
     b.innerHTML = '<span class="spinner"></span>';
     try {
       const v = await secretValue(d, f);
-      await copy(v, t('copied', 'Copied'));
+      const secret = fieldIsSecret(f);
+      const copiedLabel = secret && (f.kind === 'password' || f.name === 'password') ? t('passwordCopied', 'Password copied') : t('copied', 'Copied');
+      await copy(v, copiedLabel, 30, { concealed: secret });
     } catch (err) {
       toast(errText(err));
     } finally {
@@ -324,7 +326,7 @@ function passwordHistoryDisclosure(d) {
           const res = await send({ type: 'popup:reveal', item_id: d.id, field: historyKey });
           val = res.value;
         }
-        await copy(val, t('copied', 'Copied'));
+        await copy(val, t('passwordCopied', 'Password copied'), 30, { concealed: true });
       } catch (err) {
         toast(errText(err));
       } finally {

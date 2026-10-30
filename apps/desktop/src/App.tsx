@@ -10,7 +10,9 @@ import { useAgentEvents } from './lib/agentEvents';
 import { useTextSizeShortcuts } from './features/settings/textSize';
 
 /** Dedicated quick-access window (`#/quick-access` or `?window=quick-access`).
- * When locked, displays QuickAccessUnlock with Touch ID if enabled; never shows item data before unlock. */
+ * When locked, displays QuickAccessUnlock. Touch ID runs only once that window is
+ * visible and focused — the webview stays mounted while hidden, and a background
+ * prompt would activate the app. Never shows item data before unlock. */
 function QuickAccessWindow() {
   const locked = useApp((s) => s.locked);
   const [init, setInit] = useState(false);

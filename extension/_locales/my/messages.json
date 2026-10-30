@@ -95,6 +95,18 @@
   "copied": {
     "message": "ကူးယူပြီးပါပြီ"
   },
+  "clearsIn": {
+    "message": "$1 စက္ကန့်အတွင်း ရှင်းမည်"
+  },
+  "clearNow": {
+    "message": "ယခု ရှင်းရန်"
+  },
+  "cleared": {
+    "message": "ရှင်းပြီးပါပြီ"
+  },
+  "wontClear": {
+    "message": "အလိုအလျောက် ရှင်းမည်မဟုတ်ပါ"
+  },
   "fill": {
     "message": "ဖြည့်ရန်"
   },
@@ -1115,6 +1127,12 @@
   },
   "movedToTrash": {
     "message": "မကြာသေးမီက ဖျက်လိုက်သည်များသို့ ရွှေ့ပြီးပါပြီ"
+  },
+  "moveToVault": {
+    "message": "Vault သို့ ရွှေ့ရန်…"
+  },
+  "movedToVault": {
+    "message": "$1 သို့ ရွှေ့ပြီးပါပြီ"
   },
   "itemRestored": {
     "message": "မူလအတိုင်း ပြန်လည်ရယူပြီးပါပြီ"

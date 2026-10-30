@@ -72,7 +72,7 @@ async function copyTotp(id) {
   let c = S.totpCache[id];
   if (!c || c.error || totpRemaining(c) <= 0) c = await fetchTotp(id);
   for (const chip of chipsFor(id)) paintTotpChip(chip, c);
-  await copy(c.code, t('copied', 'Copied'));
+  await copy(c.code, t('copied', 'Copied'), 30, { concealed: true });
 }
 
 function startListTotp() { if (!S.listTotpTimer) { S.listTotpTimer = setInterval(tickListTotp, 1000); tickListTotp(); } }

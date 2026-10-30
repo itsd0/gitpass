@@ -102,6 +102,19 @@ fn totp_now_and_totp_field_copy() {
 }
 
 #[test]
+fn clear_clipboard_if_ours_only_clears_our_value() {
+    let e = env();
+    let l = login(&e, "Delta", "d", "pw-FAKE-clear-now");
+    e.app.copy_field(&e.vault, &l.id, "password").unwrap();
+    assert!(e.app.clear_clipboard_if_ours());
+    assert_eq!(e.clip.get_text().as_deref(), Some(""));
+    e.app.copy_field(&e.vault, &l.id, "password").unwrap();
+    e.clip.set_text("user typed something else").unwrap();
+    assert!(!e.app.clear_clipboard_if_ours());
+    assert_eq!(e.clip.get_text().as_deref(), Some("user typed something else"));
+}
+
+#[test]
 fn copy_password_clears_clipboard_only_if_unchanged() {
     let e = env();
     let mut s = e.app.get_settings();
