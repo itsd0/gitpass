@@ -308,3 +308,90 @@ fn cli_import_password_protected_bitwarden_json() {
     assert!(!o.status.success());
     assert!(String::from_utf8_lossy(&o.stderr).contains("wrong export password"));
 }
+
+#[test]
+fn cli_import_onepif() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Personal"], None).status.success());
+
+    // 1. Test directory containing data.1pif
+    let pif_dir = d.path().join("export.1pif");
+    std::fs::create_dir_all(&pif_dir).unwrap();
+    let data_file = pif_dir.join("data.1pif");
+    std::fs::write(
+        &data_file,
+        "***UUID-1***\n\
+         {\"typeName\":\"webforms.WebForm\",\"title\":\"Login From 1pif\",\"location\":\"https://service.example.invalid\",\"secureContents\":{\"fields\":[{\"designation\":\"username\",\"value\":\"user_1pif\"},{\"designation\":\"password\",\"value\":\"FAKE-pw-1pif\"},{\"value\":\"otpauth://totp/Service:user_1pif?secret=JBSWY3DPEHPK3PXP\"}]}}\n\
+         ***UUID-2***\n\
+         {\"typeName\":\"secureNotes.SecureNote\",\"title\":\"Note From 1pif\",\"secureContents\":{\"notesPlain\":\"Private content\"}}\n\
+         ***UUID-3***\n\
+         {\"typeName\":\"system.folder\",\"title\":\"System Folder\"}\n\
+         ***UUID-4***\n\
+         {\"typeName\":\"webforms.WebForm\",\"title\":\"Trashed Item\",\"trashed\":true,\"secureContents\":{\"fields\":[]}}\n\
+         ***END***\n",
+    )
+    .unwrap();
+
+    // Dry run with auto-detection on directory path
+    let o = gp(
+        &root,
+        &[
+            "import",
+            "Personal",
+            pif_dir.to_str().unwrap(),
+            "--dry-run",
+        ],
+        None,
+    );
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("[dry run] parsed 2, would add 2, 0 duplicate(s) skipped"));
+
+    // Real import using --format 1pif on data_file directly
+    let o = gp(
+        &root,
+        &[
+            "import",
+            "Personal",
+            "--format",
+            "1pif",
+            data_file.to_str().unwrap(),
+        ],
+        None,
+    );
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("parsed 2, added 2, 0 duplicate(s) skipped"));
+
+    // Verify imported login
+    let o = gp(&root, &["get", "Personal", "Login From 1pif", "--reveal"], None);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let get_out = String::from_utf8_lossy(&o.stdout);
+    assert!(get_out.contains("user_1pif"));
+    assert!(get_out.contains("FAKE-pw-1pif"));
+    assert!(get_out.contains("https://service.example.invalid"));
+
+    // Verify imported note
+    let o = gp(&root, &["get", "Personal", "Note From 1pif", "--reveal"], None);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    let get_out = String::from_utf8_lossy(&o.stdout);
+    assert!(get_out.contains("Private content"));
+
+    // Re-import with alias "onepif" on directory skips duplicates
+    let o = gp(
+        &root,
+        &[
+            "import",
+            "Personal",
+            "--from",
+            "onepif",
+            pif_dir.to_str().unwrap(),
+        ],
+        None,
+    );
+    assert!(o.status.success());
+    let out = String::from_utf8_lossy(&o.stdout);
+    assert!(out.contains("parsed 2, added 0, 2 duplicate(s) skipped"));
+}

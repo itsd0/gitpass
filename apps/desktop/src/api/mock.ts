@@ -2,7 +2,7 @@
 // Concealed values are kept in a private map and only returned by reveal_field,
 // mirroring the Rust security model (detail payloads carry value: null).
 import type * as T from './types';
-import { cardDigits, cardLabel, cardMask } from '../lib/cardMask';
+import { cardDigits, cardLabel, cardMask, secretHint } from '../lib/cardMask';
 
 const delay = <R>(v: R, ms = 60): Promise<R> => new Promise((r) => setTimeout(() => r(structuredClone(v)), ms));
 let seq = 1000;
@@ -195,6 +195,11 @@ const subtitleFor = (input: T.ItemInput): string => {
     if (u && h) return `${u}@${h}`;
     return u || h || '';
   }
+  if (input.category === 'api_credential') {
+    const cred = flds.find((x) => x.kind === 'concealed' && (x.id === 'credential' || x.id === 'key' || x.id === 'api_key' || x.id === 'secret'))
+      || flds.find((x) => x.kind === 'concealed' && x.value);
+    if (cred?.value) return secretHint(cred.value);
+  }
   const u = flds.find((x) => x.kind === 'text' || x.kind === 'email');
   return u?.value ?? '';
 };
@@ -204,7 +209,12 @@ function applyInput(r: Rec, input: T.ItemInput) {
     const id = x.id || uid('f'); const hidden = x.kind === 'concealed' || x.kind === 'totp';
     // null concealed value on update = "unchanged"
     if (hidden) { const v = x.value ?? r.secrets[id]; if (v != null) secrets[id] = v; }
-    return { ...x, id, value: hidden ? null : x.value };
+    const masked = input.category === 'credit_card' && hidden && (x.id === 'number' || x.label === 'number') && cardDigits(x.value ?? r.secrets[id]).length >= 8
+      ? cardMask(x.value ?? r.secrets[id])
+      : input.category === 'api_credential' && hidden && (x.value ?? r.secrets[id])
+      ? secretHint(x.value ?? r.secrets[id])
+      : undefined;
+    return { ...x, id, value: hidden ? null : x.value, ...(masked ? { masked } : {}) };
   }) }));
   r.secrets = secrets;
   Object.assign(r.detail, { vaultId: input.vaultId, category: input.category, title: input.title, sections, notes: input.notes ?? null,
@@ -328,7 +338,92 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
         if (filter.kind === 'tag') xs = xs.filter((x) => x.tags.includes(filter.tag ?? ''));
     }
     if (filter.category) xs = xs.filter((x) => x.category === filter.category);
-    if (filter.query) { const q = filter.query.toLowerCase(); xs = xs.filter((x) => `${x.title} ${x.subtitle} ${x.url ?? ''} ${x.tags.join(' ')}`.toLowerCase().includes(q)); }
+    if (filter.query) {
+      const tokens = filter.query.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? [];
+      const terms: string[] = [];
+      for (const tok of tokens) {
+        const negated = tok.startsWith('-');
+        const body = negated ? tok.slice(1) : tok;
+        const idx = body.indexOf(':');
+        if (idx !== -1) {
+          const op = body.slice(0, idx).toLowerCase();
+          let val = body.slice(idx + 1);
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          val = val.trim();
+          if (op === 'tag' && val) {
+            xs = xs.filter((x) => {
+              const m = x.tags.some((t) => t.toLowerCase() === val.toLowerCase());
+              return negated ? !m : m;
+            });
+            continue;
+          }
+          if (op === 'vault' && val) {
+            const vname = (id: string) => vaults.find((v) => v.id === id)?.name.toLowerCase() ?? '';
+            xs = xs.filter((x) => {
+              const m = vname(x.vaultId).startsWith(val.toLowerCase());
+              return negated ? !m : m;
+            });
+            continue;
+          }
+          if (op === 'type' && val) {
+            const catMap: Record<string, string> = { card: 'credit_card', note: 'secure_note', api: 'api_credential', ssh: 'ssh_key', bank: 'bank_account' };
+            const wantCat = catMap[val.toLowerCase()] ?? val.toLowerCase();
+            xs = xs.filter((x) => {
+              const m = x.category.toLowerCase() === wantCat;
+              return negated ? !m : m;
+            });
+            continue;
+          }
+          if (op === 'is') {
+            const vLow = val.toLowerCase();
+            if (vLow === 'favorite' || vLow === 'fav') {
+              xs = xs.filter((x) => (negated ? !x.favorite : x.favorite));
+              continue;
+            }
+            if (vLow === 'archived') {
+              xs = xs.filter((x) => (negated ? !x.archived : x.archived));
+              continue;
+            }
+          }
+          if (op === 'has') {
+            const vLow = val.toLowerCase();
+            if (vLow === 'otp' || vLow === 'totp') {
+              xs = xs.filter((x) => (negated ? !x.hasTotp : x.hasTotp));
+              continue;
+            }
+            if (vLow === 'passkey') {
+              xs = xs.filter((x) => (negated ? x.category !== 'passkey' : x.category === 'passkey'));
+              continue;
+            }
+            if (vLow === 'attachment' || vLow === 'attachments' || vLow === 'file' || vLow === 'files') {
+              xs = xs.filter((x) => (negated ? x.attachments.length === 0 : x.attachments.length > 0));
+              continue;
+            }
+            if (vLow === 'url' || vLow === 'website') {
+              xs = xs.filter((x) => (negated ? !x.url : Boolean(x.url)));
+              continue;
+            }
+          }
+          if (op === 'url' && val) {
+            xs = xs.filter((x) => {
+              const u = (x.url ?? '').toLowerCase();
+              const host = u.replace(/^[a-z]+:\/\//, '').split(/[/?#]/)[0].replace(/^www\./, '');
+              const target = val.toLowerCase().replace(/^[a-z]+:\/\//, '').split(/[/?#]/)[0].replace(/^www\./, '');
+              const m = host === target || host.endsWith(`.${target}`) || host.includes(target);
+              return negated ? !m : m;
+            });
+            continue;
+          }
+        }
+        terms.push(tok);
+      }
+      if (terms.length > 0) {
+        const q = terms.join(' ').toLowerCase();
+        xs = xs.filter((x) => `${x.title} ${x.subtitle} ${x.url ?? ''} ${x.tags.join(' ')}`.toLowerCase().includes(q));
+      }
+    }
     const sort = filter.sort ?? 'updated';
     xs.sort((a, b) => sort === 'title' ? a.title.localeCompare(b.title) : sort === 'created' ? b.createdAt.localeCompare(a.createdAt) : sort === 'recent' ? (b.lastUsed ?? 0) - (a.lastUsed ?? 0) || a.title.localeCompare(b.title) : b.updatedAt.localeCompare(a.updatedAt));
     return delay(xs.map(summary));
@@ -762,6 +857,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     : (syncState = { remote: a.url, lastSync: new Date().toISOString(), ahead: 0, behind: 0, dirty: false }, onboarding = { ...onboarding, repoConnected: true }, delay<T.SyncStatus>({ ...syncState }, 400))),
   remote_disconnect: () => { syncState = { remote: null, lastSync: syncState.lastSync, ahead: 0, behind: 0, dirty: false }; onboarding = { ...onboarding, repoConnected: false }; return delay<T.SyncStatus>({ ...syncState }); },
   open_new_repo_page: () => { if (typeof window !== 'undefined') window.open('https://github.com/new', '_blank', 'noopener'); return delay(undefined); },
+  open_github_ssh_keys_page: () => { if (typeof window !== 'undefined') window.open('https://github.com/settings/ssh/new', '_blank', 'noopener'); return delay(undefined); },
   open_change_password: (a: { itemId: string }) => {
     const url = summary(get(a.itemId).detail).changePasswordUrl;
     if (!url) return Promise.reject(new Error('this item has no change-password URL'));

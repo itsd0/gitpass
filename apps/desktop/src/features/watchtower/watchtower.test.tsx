@@ -74,6 +74,14 @@ describe('watchtower score', () => {
     expect(useApp.getState().selectedItemId).toBe('i3');
     expect(useApp.getState().route).toEqual({ name: 'items', filter: { kind: 'vault', vaultId: 'v-private' } });
   });
+  it('page is its own scroll container (like Home) so lower cards are reachable', async () => {
+    render(<WatchtowerPage />);
+    await screen.findByTestId('score');
+    const sc = screen.getByTestId('watchtower-scroll');
+    expect(sc.className).toContain('h-full');
+    expect(sc.className).toContain('overflow-y-auto');
+    expect(sc.contains(screen.getByTestId('score'))).toBe(true);
+  });
   it('links 2FA/passkey items from their cards', async () => {
     render(<WatchtowerPage />);
     await screen.findByTestId('score');

@@ -1,4 +1,5 @@
-//! Integration tests for `gitpass add --category` (login, api-credential, secure-note, credit-card).
+//! Integration tests for `gitpass add --category` (login, api-credential, secure-note, credit-card,
+//! bank-account, server, identity, wifi, ssh-key).
 //! Validates hidden prompts, stdin flags, secrecy masks in `get` / `get --json`, `list --json`,
 //! and rejection of incompatible flags or invalid dates.
 //! All test data is FAKE.
@@ -80,7 +81,7 @@ fn add_api_credential_hidden_prompt_and_secrecy() {
     let add_msg = String::from_utf8_lossy(&out_add.stdout);
     assert!(add_msg.contains("added "), "expected added message: {add_msg}");
 
-    // 2. gitpass list --json reports right category and username
+    // 2. gitpass list --json reports right category and username, plus hint/subtitle
     let out_list = gp(&v.root, &["list", "Personal", "--json"], None);
     assert!(out_list.status.success());
     let list_json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_list.stdout)).unwrap();
@@ -88,7 +89,16 @@ fn add_api_credential_hidden_prompt_and_secrecy() {
     assert_eq!(item["category"], "api_credential");
     assert_eq!(item["username"], "org-acme");
     assert_eq!(item["url"], "https://api.openai.com");
+    assert_eq!(item["hint"], "FAKE••••••••7654");
+    assert_eq!(item["subtitle"], "FAKE••••••••7654");
     assert!(!String::from_utf8_lossy(&out_list.stdout).contains(SECRET_KEY));
+
+    // 2b. gitpass list (text) shows the masked hint in column 3
+    let out_list_text = gp(&v.root, &["list", "Personal"], None);
+    assert!(out_list_text.status.success());
+    let list_text = String::from_utf8_lossy(&out_list_text.stdout);
+    assert!(list_text.contains("OpenAI API  FAKE••••••••7654"), "list text:\n{list_text}");
+    assert!(!list_text.contains(SECRET_KEY));
 
     // 3. gitpass get shows it with secret masked unless --reveal
     let out_get_masked = gp(&v.root, &["get", "Personal", "OpenAI API"], None);
@@ -116,6 +126,8 @@ fn add_api_credential_hidden_prompt_and_secrecy() {
     let cred_field = fields.iter().find(|f| f["label"] == "credential").expect("credential field");
     assert_eq!(cred_field["kind"], "concealed");
     assert_eq!(cred_field["value"], serde_json::Value::Null);
+    assert_eq!(cred_field["masked"], "FAKE••••••••7654");
+    assert!(!json_masked.to_string().contains("api-key-xyz"), "secret leaked in JSON: {json_masked}");
 
     let out_json_revealed = gp(&v.root, &["get", "Personal", "OpenAI API", "--json", "--reveal"], None);
     assert!(out_json_revealed.status.success());
@@ -518,4 +530,413 @@ fn add_server_prompts_stdin_generate_and_get() {
     assert!(out_gen.status.success());
     let out_gen_get = gp(&v.root, &["get", "Personal", "Generated Node", "--password-only"], None);
     assert_eq!(String::from_utf8_lossy(&out_gen_get.stdout).trim().len(), 32);
+}
+
+#[test]
+fn add_identity_all_fields_and_minimal() {
+    let v = setup_vault();
+
+    // 1. Add identity with all fields
+    let out_add = gp(
+        &v.root,
+        &[
+            "add",
+            "Personal",
+            "--category",
+            "identity",
+            "--title",
+            "Alice Personal",
+            "--first-name",
+            "Alice",
+            "--last-name",
+            "Doe",
+            "--email",
+            "alice@example.com",
+            "--phone",
+            "+1-555-0100",
+            "--address",
+            "123 Main St, Springfield",
+            "--notes",
+            "Primary personal contact card",
+        ],
+        None,
+    );
+    assert!(out_add.status.success(), "add identity failed: {}", String::from_utf8_lossy(&out_add.stderr));
+    let add_msg = String::from_utf8_lossy(&out_add.stdout);
+    assert!(add_msg.contains("added "), "expected added msg: {add_msg}");
+
+    // 2. list --category identity --json
+    let out_list = gp(&v.root, &["list", "Personal", "--category", "identity", "--json"], None);
+    assert!(out_list.status.success());
+    let list_json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_list.stdout)).unwrap();
+    let id_item = list_json.as_array().unwrap().iter().find(|i| i["title"] == "Alice Personal").expect("identity found");
+    assert_eq!(id_item["category"], "identity");
+
+    // 3. get shows sections and fields
+    let out_get = gp(&v.root, &["get", "Personal", "Alice Personal"], None);
+    assert!(out_get.status.success());
+    let text = String::from_utf8_lossy(&out_get.stdout);
+    assert!(text.contains("category: identity"), "stdout:\n{text}");
+    assert!(text.contains("[Identification]"), "stdout:\n{text}");
+    assert!(text.contains("first name: Alice"), "stdout:\n{text}");
+    assert!(text.contains("last name: Doe"), "stdout:\n{text}");
+    assert!(text.contains("[Address]"), "stdout:\n{text}");
+    assert!(text.contains("address: 123 Main St, Springfield"), "stdout:\n{text}");
+    assert!(text.contains("[Contact]"), "stdout:\n{text}");
+    assert!(text.contains("email: alice@example.com"), "stdout:\n{text}");
+    assert!(text.contains("phone: +1-555-0100"), "stdout:\n{text}");
+    assert!(text.contains("notes:    Primary personal contact card"), "stdout:\n{text}");
+
+    // 4. get --json verifies fields and types
+    let out_get_json = gp(&v.root, &["get", "Personal", "Alice Personal", "--json"], None);
+    assert!(out_get_json.status.success());
+    let detail_json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_get_json.stdout)).unwrap();
+    assert_eq!(detail_json["category"], "identity");
+    let fields = detail_json["fields"].as_array().unwrap();
+    assert!(fields.iter().any(|f| f["label"] == "first name" && f["value"] == "Alice" && f["kind"] == "text"));
+    assert!(fields.iter().any(|f| f["label"] == "last name" && f["value"] == "Doe" && f["kind"] == "text"));
+    assert!(fields.iter().any(|f| f["label"] == "address" && f["value"] == "123 Main St, Springfield" && f["kind"] == "multiline"));
+    assert!(fields.iter().any(|f| f["label"] == "email" && f["value"] == "alice@example.com" && f["kind"] == "email"));
+    assert!(fields.iter().any(|f| f["label"] == "phone" && f["value"] == "+1-555-0100" && f["kind"] == "phone"));
+
+    // 5. Add minimal identity with title only (all optional fields omitted)
+    let out_min = gp(
+        &v.root,
+        &["add", "Personal", "--category", "identity", "--title", "Minimal ID"],
+        None,
+    );
+    assert!(out_min.status.success(), "min identity failed: {}", String::from_utf8_lossy(&out_min.stderr));
+    let out_min_get = gp(&v.root, &["get", "Personal", "Minimal ID"], None);
+    assert!(out_min_get.status.success());
+    assert!(String::from_utf8_lossy(&out_min_get.stdout).contains("category: identity"));
+}
+
+#[test]
+fn add_wifi_hidden_prompt_stdin_and_secrecy() {
+    let v = setup_vault();
+    const WIFI_PASS: &str = "FAKE-wifi-secret-password-xyz!";
+
+    // 1. Add wifi via hidden prompt / env var (never in argv)
+    let out_add = gp_env(
+        &v.root,
+        &[
+            "add",
+            "Personal",
+            "--category",
+            "wifi",
+            "--title",
+            "Office Wi-Fi",
+            "--ssid",
+            "Corp-Guest",
+            "--security",
+            "WPA3",
+            "--notes",
+            "Guest office access",
+        ],
+        None,
+        &[("GITPASS_WIFI_PASSWORD", WIFI_PASS)],
+    );
+    assert!(out_add.status.success(), "add wifi failed: {}", String::from_utf8_lossy(&out_add.stderr));
+    let add_msg = String::from_utf8_lossy(&out_add.stdout);
+    assert!(add_msg.contains("added "), "expected added msg: {add_msg}");
+    assert!(!add_msg.contains(WIFI_PASS), "secret leaked in add stdout");
+    assert!(!String::from_utf8_lossy(&out_add.stderr).contains(WIFI_PASS), "secret leaked in add stderr");
+
+    // 2. list --category wifi --json
+    let out_list = gp(&v.root, &["list", "Personal", "--category", "wifi", "--json"], None);
+    assert!(out_list.status.success());
+    let list_json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_list.stdout)).unwrap();
+    let wifi_item = list_json.as_array().unwrap().iter().find(|i| i["title"] == "Office Wi-Fi").expect("wifi found");
+    assert_eq!(wifi_item["category"], "wifi");
+    assert!(!String::from_utf8_lossy(&out_list.stdout).contains(WIFI_PASS), "secret leaked in list --json");
+
+    // 3. get masks wireless password unless --reveal
+    let out_get = gp(&v.root, &["get", "Personal", "Office Wi-Fi"], None);
+    assert!(out_get.status.success());
+    let text = String::from_utf8_lossy(&out_get.stdout);
+    assert!(text.contains("category: wifi"));
+    assert!(text.contains("network name: Corp-Guest"));
+    assert!(text.contains("wireless password: ••••••••"));
+    assert!(text.contains("security: WPA3"));
+    assert!(text.contains("notes:    Guest office access"));
+    assert!(!text.contains(WIFI_PASS), "secret leaked without --reveal");
+
+    // 4. get --reveal reveals wireless password
+    let out_reveal = gp(&v.root, &["get", "Personal", "Office Wi-Fi", "--reveal"], None);
+    assert!(out_reveal.status.success());
+    let text_reveal = String::from_utf8_lossy(&out_reveal.stdout);
+    assert!(text_reveal.contains(&format!("wireless password: {WIFI_PASS}")));
+
+    // 5. get --password-only prints only wireless password
+    let out_pw_only = gp(&v.root, &["get", "Personal", "Office Wi-Fi", "--password-only"], None);
+    assert!(out_pw_only.status.success());
+    assert_eq!(String::from_utf8_lossy(&out_pw_only.stdout).trim(), WIFI_PASS);
+
+    // 6. Add wifi with --password-stdin
+    let out_stdin = gp(
+        &v.root,
+        &["add", "Personal", "--category", "wifi", "--title", "Lab Wi-Fi", "--ssid", "LabNet", "--password-stdin"],
+        Some("LabSecret123"),
+    );
+    assert!(out_stdin.status.success());
+    let out_stdin_get = gp(&v.root, &["get", "Personal", "Lab Wi-Fi", "--password-only"], None);
+    assert_eq!(String::from_utf8_lossy(&out_stdin_get.stdout).trim(), "LabSecret123");
+
+    // 7. Error on missing required field --ssid
+    let out_no_ssid = gp(
+        &v.root,
+        &["add", "Personal", "--category", "wifi", "--title", "No SSID"],
+        None,
+    );
+    assert!(!out_no_ssid.status.success());
+    assert!(String::from_utf8_lossy(&out_no_ssid.stderr).contains("--ssid is required for wifi items"));
+
+    // 8. Error on invalid security protocol
+    let out_bad_sec = gp(
+        &v.root,
+        &["add", "Personal", "--category", "wifi", "--title", "Bad Sec", "--ssid", "SomeNet", "--security", "INVALID_SEC"],
+        None,
+    );
+    assert!(!out_bad_sec.status.success());
+    assert!(String::from_utf8_lossy(&out_bad_sec.stderr).contains("invalid wifi security 'INVALID_SEC'"));
+}
+
+#[test]
+fn add_ssh_key_generate_and_secrecy() {
+    let v = setup_vault();
+
+    // 1. Add ssh-key with --generate ed25519
+    let out_add = gp(
+        &v.root,
+        &[
+            "add",
+            "Personal",
+            "--category",
+            "ssh-key",
+            "--title",
+            "Work Laptop",
+            "--generate",
+            "ed25519",
+            "--notes",
+            "Primary SSH key for git commits",
+        ],
+        None,
+    );
+    assert!(out_add.status.success(), "add ssh-key failed: {}", String::from_utf8_lossy(&out_add.stderr));
+    let add_stdout = String::from_utf8_lossy(&out_add.stdout);
+    let add_stderr = String::from_utf8_lossy(&out_add.stderr);
+    assert!(add_stdout.contains("added "), "expected added msg: {add_stdout}");
+    // Private key must NEVER appear in stdout or stderr
+    assert!(!add_stdout.contains("OPENSSH PRIVATE KEY"), "private key leaked in add stdout");
+    assert!(!add_stderr.contains("OPENSSH PRIVATE KEY"), "private key leaked in add stderr");
+
+    // 2. list --category ssh-key --json
+    let out_list = gp(&v.root, &["list", "Personal", "--category", "ssh-key", "--json"], None);
+    assert!(out_list.status.success());
+    let list_json: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&out_list.stdout)).unwrap();
+    let key_item = list_json.as_array().unwrap().iter().find(|i| i["title"] == "Work Laptop").expect("ssh-key found");
+    assert_eq!(key_item["category"], "ssh_key");
+    assert!(!String::from_utf8_lossy(&out_list.stdout).contains("OPENSSH PRIVATE KEY"));
+
+    // 3. get masks private key unless --reveal
+    let out_get = gp(&v.root, &["get", "Personal", "Work Laptop"], None);
+    assert!(out_get.status.success());
+    let text = String::from_utf8_lossy(&out_get.stdout);
+    assert!(text.contains("category: ssh_key"), "stdout:\n{text}");
+    assert!(text.contains("private key: ••••••••"), "stdout:\n{text}");
+    assert!(text.contains("public key: ssh-ed25519 "), "stdout:\n{text}");
+    assert!(text.contains("fingerprint: SHA256:"), "stdout:\n{text}");
+    assert!(text.contains("key type: ssh-ed25519"), "stdout:\n{text}");
+    assert!(text.contains("notes:    Primary SSH key for git commits"), "stdout:\n{text}");
+    assert!(!text.contains("OPENSSH PRIVATE KEY"), "private key leaked without --reveal");
+
+    // 4. get --password-only prints the private key
+    let out_pw_only = gp(&v.root, &["get", "Personal", "Work Laptop", "--password-only"], None);
+    assert!(out_pw_only.status.success());
+    let priv_key_text = String::from_utf8_lossy(&out_pw_only.stdout);
+    assert!(priv_key_text.contains("-----BEGIN OPENSSH PRIVATE KEY-----"));
+    assert!(priv_key_text.contains("-----END OPENSSH PRIVATE KEY-----"));
+}
+
+#[test]
+fn add_ssh_key_import_and_errors() {
+    let v = setup_vault();
+    let td = tempfile::tempdir().unwrap();
+
+    // 1. Generate an unencrypted OpenSSH key to test import
+    let imp_key = gitpass_core::ssh::SshKey::generate_ed25519("alice@example.invalid").unwrap();
+    let imp_file = td.path().join("id_ed25519");
+    std::fs::write(&imp_file, imp_key.private_pem().unwrap().as_str()).unwrap();
+
+    let out_add = gp(
+        &v.root,
+        &[
+            "add",
+            "Personal",
+            "--category",
+            "ssh-key",
+            "--title",
+            "Imported Deploy Key",
+            "--private-key-file",
+            imp_file.to_str().unwrap(),
+        ],
+        None,
+    );
+    assert!(out_add.status.success(), "import failed: {}", String::from_utf8_lossy(&out_add.stderr));
+    let add_stdout = String::from_utf8_lossy(&out_add.stdout);
+    let add_stderr = String::from_utf8_lossy(&out_add.stderr);
+    assert!(add_stdout.contains("added "));
+    assert!(!add_stdout.contains("OPENSSH PRIVATE KEY"));
+    assert!(!add_stderr.contains("OPENSSH PRIVATE KEY"));
+
+    // Check public key and fingerprint match the imported key
+    let out_get = gp(&v.root, &["get", "Personal", "Imported Deploy Key"], None);
+    assert!(out_get.status.success());
+    let text = String::from_utf8_lossy(&out_get.stdout);
+    assert!(text.contains(&imp_key.info.public_key));
+    assert!(text.contains(&imp_key.info.fingerprint));
+
+    // 2. Error when neither --generate nor --private-key-file is provided
+    let out_none = gp(
+        &v.root,
+        &["add", "Personal", "--category", "ssh-key", "--title", "No Key Provided"],
+        None,
+    );
+    assert!(!out_none.status.success());
+    assert!(String::from_utf8_lossy(&out_none.stderr).contains("specify either --generate ed25519 or --private-key-file <PATH>"));
+
+    // 3. Error when combining --generate and --private-key-file
+    let out_conflict = gp(
+        &v.root,
+        &[
+            "add",
+            "Personal",
+            "--category",
+            "ssh-key",
+            "--title",
+            "Both Options",
+            "--generate",
+            "ed25519",
+            "--private-key-file",
+            imp_file.to_str().unwrap(),
+        ],
+        None,
+    );
+    assert!(!out_conflict.status.success());
+    assert!(String::from_utf8_lossy(&out_conflict.stderr).contains("cannot combine --generate and --private-key-file"));
+
+    // 4. Error on unsupported key type for --generate
+    let out_bad_type = gp(
+        &v.root,
+        &[
+            "add",
+            "Personal",
+            "--category",
+            "ssh-key",
+            "--title",
+            "Bad Key Type",
+            "--generate",
+            "rsa",
+        ],
+        None,
+    );
+    assert!(!out_bad_type.status.success());
+    assert!(String::from_utf8_lossy(&out_bad_type.stderr).contains("unsupported key type 'rsa' for --generate"));
+
+    // 5. Error on nonexistent key file
+    let out_missing_file = gp(
+        &v.root,
+        &[
+            "add",
+            "Personal",
+            "--category",
+            "ssh-key",
+            "--title",
+            "Missing File Key",
+            "--private-key-file",
+            "/path/to/nonexistent/key/file",
+        ],
+        None,
+    );
+    assert!(!out_missing_file.status.success());
+    assert!(String::from_utf8_lossy(&out_missing_file.stderr).contains("read key file /path/to/nonexistent/key/file"));
+
+    // 6. Error on invalid/corrupted key file
+    let bad_file = td.path().join("bad_key");
+    std::fs::write(&bad_file, "this is definitely not a valid openssh key\n").unwrap();
+    let out_bad_file = gp(
+        &v.root,
+        &[
+            "add",
+            "Personal",
+            "--category",
+            "ssh-key",
+            "--title",
+            "Bad File Key",
+            "--private-key-file",
+            bad_file.to_str().unwrap(),
+        ],
+        None,
+    );
+    assert!(!out_bad_file.status.success());
+    assert!(String::from_utf8_lossy(&out_bad_file.stderr).contains("not an OpenSSH private key"));
+}
+
+#[test]
+fn add_flags_incompatible_rejection_new_categories() {
+    let v = setup_vault();
+
+    // 1. Identity flags on login
+    let out1 = gp(
+        &v.root,
+        &["add", "Personal", "--category", "login", "--title", "X", "--first-name", "Alice"],
+        None,
+    );
+    assert!(!out1.status.success());
+    assert!(String::from_utf8_lossy(&out1.stderr).contains("identity flags are only valid for identity items"));
+
+    // 2. Wifi flags on login
+    let out2 = gp(
+        &v.root,
+        &["add", "Personal", "--category", "login", "--title", "X", "--ssid", "HomeNet"],
+        None,
+    );
+    assert!(!out2.status.success());
+    assert!(String::from_utf8_lossy(&out2.stderr).contains("wifi flags are only valid for wifi items"));
+
+    // 3. Ssh flags on login
+    let out3 = gp(
+        &v.root,
+        &["add", "Personal", "--category", "login", "--title", "X", "--private-key-file", "/some/path"],
+        None,
+    );
+    assert!(!out3.status.success());
+    assert!(String::from_utf8_lossy(&out3.stderr).contains("--private-key-file is only valid for ssh-key items"));
+
+    // 4. Incompatible flags on identity
+    let out4 = gp(
+        &v.root,
+        &["add", "Personal", "--category", "identity", "--title", "X", "--username", "alice"],
+        None,
+    );
+    assert!(!out4.status.success());
+    assert!(String::from_utf8_lossy(&out4.stderr).contains("--username is not supported for identity items"));
+
+    // 5. Incompatible flags on wifi
+    let out5 = gp(
+        &v.root,
+        &["add", "Personal", "--category", "wifi", "--title", "X", "--ssid", "Net", "--username", "alice"],
+        None,
+    );
+    assert!(!out5.status.success());
+    assert!(String::from_utf8_lossy(&out5.stderr).contains("--username is not supported for wifi items"));
+
+    // 6. Incompatible flags on ssh-key
+    let out6 = gp(
+        &v.root,
+        &["add", "Personal", "--category", "ssh-key", "--title", "X", "--generate", "ed25519", "--password-stdin"],
+        None,
+    );
+    assert!(!out6.status.success());
+    assert!(String::from_utf8_lossy(&out6.stderr).contains("--password-stdin is not supported for ssh-key items"));
 }

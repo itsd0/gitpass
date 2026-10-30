@@ -6,7 +6,8 @@
     memorable: { min: 3, max: 15, def: 5 },
     pin: { min: 4, max: 12, def: 6 },
   };
-  const DEFAULTS = { mode: 'random', length: 20, digits: true, symbols: true };
+  const WORD_SEPARATORS = ['-', '.', '_', ' '];
+  const DEFAULTS = { mode: 'random', length: 20, digits: true, symbols: true, separator: '-', capitalize: false };
 
   function mode(m) { return Object.prototype.hasOwnProperty.call(MODES, m) ? m : 'random'; }
 
@@ -16,10 +17,18 @@
     return Number.isFinite(v) ? Math.min(lim.max, Math.max(lim.min, v)) : lim.def;
   }
 
-  /** Stored settings only: mode/length/toggles. The generated value is never part of this shape. */
+  /** Stored settings only: mode/length/toggles/separator/capitalize. The generated value is never part of this shape. */
   function safeSettings(s) {
     const m = mode(s && s.mode);
-    return { mode: m, length: clampLength(m, s && s.length), digits: !s || s.digits !== false, symbols: !s || s.symbols !== false };
+    const sep = s && WORD_SEPARATORS.includes(s.separator) ? s.separator : '-';
+    return {
+      mode: m,
+      length: clampLength(m, s && s.length),
+      digits: !s || s.digits !== false,
+      symbols: !s || s.symbols !== false,
+      separator: sep,
+      capitalize: Boolean(s && s.capitalize),
+    };
   }
 
   /** Rough 0-100 meter score for display only. */
@@ -70,7 +79,7 @@
     return { enabled, entries: enabled ? list.slice(0, limit || 10) : [] };
   }
 
-  const api = { MODES, DEFAULTS, mode, clampLength, safeSettings, strengthScore, strengthKey, maskValue, ageParts, hostMatches, cleanHistory };
+  const api = { MODES, DEFAULTS, WORD_SEPARATORS, mode, clampLength, safeSettings, strengthScore, strengthKey, maskValue, ageParts, hostMatches, cleanHistory };
   root.GitpassGenerator = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
