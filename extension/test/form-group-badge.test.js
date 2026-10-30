@@ -5,6 +5,9 @@ const assert = require('node:assert');
 const fs = require('fs'), path = require('path');
 const { JSDOM } = require('jsdom');
 const root = path.join(__dirname, '..');
+// content.js + content/*.js in manifest order, evaluated as ONE script: a browser shares
+// top-level let/const across content scripts, but jsdom w.eval calls do not share them.
+const CONTENT_SRC = ['content.js', 'content/messaging.js', 'content/settings.js', 'content/detection.js', 'content/totp.js', 'content/dropdown.js', 'content/username.js', 'content/banner.js', 'content/command.js', 'content/prompts.js', 'content/wiring.js'].map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
 
 function page(html, url = 'https://shop.example/checkout') {
   const dom = new JSDOM(html, { url, runScripts: 'outside-only', pretendToBeVisual: true });
@@ -17,7 +20,7 @@ function page(html, url = 'https://shop.example/checkout') {
   return w;
 }
 const load = (w, files) => { for (const f of files) w.eval(fs.readFileSync(path.join(root, f), 'utf8')); };
-const CONTENT = ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js', 'content.js'];
+const CONTENT = ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js'];
 const decorated = (w) => [...w.document.querySelectorAll('[data-gitpass-decorated]')].map((e) => e.id);
 
 const STRIPE_CHECKOUT = `<!doctype html><html><body><form id="pay">
@@ -31,7 +34,7 @@ const STRIPE_CHECKOUT = `<!doctype html><html><body><form id="pay">
   <button>Pay</button></form></body></html>`;
 
 test('Stripe Checkout card form: exactly one icon, on the card number', async () => {
-  const w = page(STRIPE_CHECKOUT); load(w, CONTENT);
+  const w = page(STRIPE_CHECKOUT); load(w, CONTENT); w.eval(CONTENT_SRC);
   await new Promise((r) => setTimeout(r, 50));
   assert.deepStrictEqual(decorated(w), ['cardNumber']);
   assert.strictEqual(w.document.querySelectorAll('gitpass-ui').length, 1);
@@ -42,7 +45,7 @@ test('one icon per group: login -> username, identity -> first field, two forms 
   const w = page(`<!doctype html><body>
     <form id="login"><input id="u" autocomplete="username"><input id="p" type="password"><button>Sign in</button></form>
     <form id="addr"><input id="fn" autocomplete="given-name"><input id="ln" autocomplete="family-name"><input id="st" autocomplete="street-address"><input id="ph" autocomplete="tel"></form>`);
-  load(w, CONTENT);
+  load(w, CONTENT); w.eval(CONTENT_SRC);
   await new Promise((r) => setTimeout(r, 50));
   assert.deepStrictEqual(decorated(w).sort(), ['fn', 'u']);
   w.close();
