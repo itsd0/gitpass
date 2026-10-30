@@ -46,6 +46,12 @@ export interface ExportRequest { vaultId?: string; items?: ItemRef[]; format: 'g
 export interface ExportResult { path: string; items: number; format: string; encrypted: boolean; }
 export interface SshKeyCreated { item: ItemSummary; publicKey: string; fingerprint: string; keyType: string; }
 export interface SshAgentInfo { socketPath: string; configLine: string; running: boolean; approveEachUse: boolean; }
+export type SshActivityResult = 'signed' | 'denied' | 'refused';
+/** One SSH agent sign request (metadata only; never the signed data). */
+export interface SshActivityEntry {
+  time: string; keyTitle: string; fingerprint: string; keyType: string; algorithm: string;
+  result: SshActivityResult; client?: string; pid?: number;
+}
 export interface GitSigningConfig { keyType: string; publicKey: string; signingKey: string; socketPath: string; exportAuthSock: string; allowedSignersFile: string; allowedSignersLine: string; configLines: string; email: string; authSockActive: boolean; }
 
 export interface ItemRef { vaultId: string; itemId: string }
