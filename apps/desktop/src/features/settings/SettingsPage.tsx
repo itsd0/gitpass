@@ -19,7 +19,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import { api } from '../../api/client';
-import type { DeviceInfo, SshAgentInfo, VaultInfo } from '../../api/types';
+import type { DeviceInfo, SshActivityEntry, SshAgentInfo, VaultInfo } from '../../api/types';
 import { cn } from '../../lib/utils';
 import { Badge, Button, Modal, Input, Skeleton, toast } from '../../ui';
 import { languages, useT, type Lang } from '../../i18n';
@@ -844,17 +844,56 @@ function Devices({ highlightedId }: { highlightedId?: string | null }) {
 
 const Sync = SyncPanel;
 
+const SSH_RESULT_KEY = { signed: 'ssh.resultSigned', denied: 'ssh.resultDenied', refused: 'ssh.resultRefused' } as const;
+const SSH_RESULT_TONE = { signed: 'accent', denied: 'danger', refused: 'default' } as const;
+
+function sshRelativeTime(iso: string, t: ReturnType<typeof useT>): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return iso;
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (s < 60) return t('ssh.timeNow');
+  const m = Math.floor(s / 60);
+  if (m < 60) return t('ssh.timeMin', { n: m });
+  const h = Math.floor(m / 60);
+  if (h < 24) return t('ssh.timeHour', { n: h });
+  return t('ssh.timeDay', { n: Math.floor(h / 24) });
+}
+
+function sshClientLabel(a: SshActivityEntry, t: ReturnType<typeof useT>): string {
+  if (!a.client) return a.pid ? `${t('ssh.activityUnknownClient')} (${a.pid})` : t('ssh.activityUnknownClient');
+  return a.pid ? `${a.client} (${a.pid})` : a.client;
+}
+
 function SshAgent({ highlightedId }: { highlightedId?: string | null }) {
   const t = useT();
   const { settings, save } = useSettings();
   const [info, setInfo] = useState<SshAgentInfo | null>(null);
   const [err, setErr] = useState('');
+  const [activity, setActivity] = useState<SshActivityEntry[] | null>(null);
+  const [actErr, setActErr] = useState('');
   useEffect(() => {
     api
       .sshAgentInfo()
       .then(setInfo)
       .catch((e) => setErr(errMsg(e)));
   }, []);
+  useEffect(() => {
+    api
+      .sshAgentActivity()
+      .then(setActivity)
+      .catch((e) => {
+        setActivity([]);
+        setActErr(errMsg(e));
+      });
+  }, []);
+  const clearActivity = () =>
+    api
+      .clearSshAgentActivity()
+      .then(() => {
+        setActivity([]);
+        toast(t('ssh.activityCleared'));
+      })
+      .catch((e) => toast(t('common.error', { msg: errMsg(e) }), 'danger'));
   if (!settings) return <Skeleton className="h-24" />;
   const on = !!settings.sshApproveEachUse;
   return (
@@ -943,6 +982,65 @@ function SshAgent({ highlightedId }: { highlightedId?: string | null }) {
         >
           <code className="font-mono text-xs">gitpass ssh config</code>
         </SettingsRow>
+      </SettingsSection>
+      <SettingsSection
+        id="setting-ssh-activity"
+        title={t('ssh.activity')}
+        className={cn(highlightedId === 'setting-ssh-activity' && 'rounded-lg bg-accent/15 ring-2 ring-accent')}
+      >
+        <div className="flex items-start justify-between gap-4 py-3.5">
+          <p className="min-w-0 text-xs leading-relaxed text-muted">{t('ssh.activityHelp')}</p>
+          <Button
+            size="sm"
+            variant="ghost"
+            data-testid="ssh-activity-clear"
+            disabled={!activity?.length}
+            onClick={clearActivity}
+          >
+            {t('ssh.activityClear')}
+          </Button>
+        </div>
+        {actErr && (
+          <p role="alert" className="pb-3 text-sm text-danger">
+            {t('common.error', { msg: actErr })}
+          </p>
+        )}
+        {activity === null ? (
+          <Skeleton className="my-3 h-12" />
+        ) : activity.length === 0 ? (
+          <p data-testid="ssh-activity-empty" className="py-4 text-sm text-muted">
+            {t('ssh.activityEmpty')}
+          </p>
+        ) : (
+          <ul
+            tabIndex={0}
+            aria-label={t('ssh.activity')}
+            data-testid="ssh-activity-list"
+            className="max-h-64 divide-y divide-border overflow-y-auto rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+          >
+            {activity.map((a, i) => (
+              <li
+                key={`${a.time}-${i}`}
+                data-testid="ssh-activity-row"
+                className="flex items-start justify-between gap-4 py-2.5"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-fg">
+                    {a.keyTitle || t('ssh.activityUnknownKey')}
+                  </div>
+                  <div className="mt-0.5 truncate font-mono text-xs text-muted">
+                    {a.algorithm}
+                    {a.fingerprint ? ` · ${a.fingerprint}` : ''}
+                  </div>
+                  <div className="mt-0.5 truncate text-xs text-muted">
+                    {sshClientLabel(a, t)} · {sshRelativeTime(a.time, t)}
+                  </div>
+                </div>
+                <Badge tone={SSH_RESULT_TONE[a.result]}>{t(SSH_RESULT_KEY[a.result])}</Badge>
+              </li>
+            ))}
+          </ul>
+        )}
       </SettingsSection>
     </>
   );

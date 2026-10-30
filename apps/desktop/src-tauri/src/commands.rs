@@ -378,6 +378,12 @@ pub fn setup_menu(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>
     let path = running.as_ref().map(|a| a.socket_path.clone()).unwrap_or_else(|| gitpass_gui_core::agent::default_dir().join(gitpass_gui_core::ssh_agent::SOCKET_NAME));
     s.ssh_agent_info(&path, running.is_some())
 }
+#[tauri::command] pub fn ssh_agent_activity(s: State<App>) -> Vec<gitpass_gui_core::ssh_activity::SshActivityEntry> {
+    s.ssh_agent_activity()
+}
+#[tauri::command] pub fn clear_ssh_agent_activity(s: State<App>) {
+    s.clear_ssh_agent_activity()
+}
 #[tauri::command] pub fn ssh_git_signing_config(h: AppHandle, s: State<App>, vault_id: String, item_id: String, email: Option<String>) -> R<gitpass_core::ssh::GitSigningConfig> {
     let running = h.try_state::<std::sync::Arc<gitpass_gui_core::ssh_agent::SshAgent>>();
     let path = running.as_ref().map(|a| a.socket_path.clone()).unwrap_or_else(|| gitpass_gui_core::agent::default_dir().join(gitpass_gui_core::ssh_agent::SOCKET_NAME));

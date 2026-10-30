@@ -199,6 +199,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     descriptionKey: 'ssh.cliHelp',
     keywords: ['command line', 'terminal', 'gitpass ssh'],
   },
+  {
+    id: 'setting-ssh-activity',
+    tab: 'ssh',
+    labelKey: 'ssh.activity',
+    descriptionKey: 'ssh.activityHelp',
+    keywords: ['activity', 'history', 'log', 'sign', 'denied', 'refused', 'client app'],
+  },
   // About
   {
     id: 'setting-about-version',
