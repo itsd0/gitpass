@@ -9,6 +9,7 @@ import { cn, fmtBytes, fmtDateLong } from '../../lib/utils';
 import { Badge, Button, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, Skeleton, Tooltip, toast } from '../../ui';
 import { ItemIcon } from './categories';
 import { FieldRow } from './FieldView';
+import { SshKeyDetail, SSH_DETAIL_FIELD_IDS } from './SshKeyDetail';
 import { groupCardNumber } from '../../lib/cardMask';
 import { PasskeyDetail, isPasskeyDetailField } from './PasskeyDetail';
 import { ItemEditor } from './ItemEditor';
@@ -388,6 +389,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
                 <Star size={18} className={cn(detail.favorite ? 'fill-warn text-warn' : 'text-muted')} />
               </Button></Tooltip>}
           </div>
+          {detail.category === 'ssh_key' && <SshKeyDetail detail={detail} ctx={ctx} />}
           {detail.category === 'passkey' && <PasskeyDetail detail={detail} ctx={ctx} />}
           {deleted && <div className="mb-4 rounded-lg border border-danger/40 bg-danger/10 px-4 py-2 text-sm">{t('detail.inTrash')}</div>}
           {findings.length > 0 && (
@@ -444,7 +446,9 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
             </div>
           )}
 
-          {detail.sections.map((s) => detail.category === 'passkey'
+          {detail.sections.map((s) => detail.category === 'ssh_key'
+            ? { ...s, fields: s.fields.filter((f) => !(SSH_DETAIL_FIELD_IDS as readonly string[]).includes(f.id)) }
+            : detail.category === 'passkey'
             ? { ...s, fields: s.fields.filter((f) => !isPasskeyDetailField(f)) }
             : s).filter((s) => s.fields.length).map((s) => (
             <div key={s.id} className="mb-4">

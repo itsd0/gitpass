@@ -772,6 +772,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     : (syncState = { remote: a.url, lastSync: new Date().toISOString(), ahead: 0, behind: 0, dirty: false }, onboarding = { ...onboarding, repoConnected: true }, delay<T.SyncStatus>({ ...syncState }, 400))),
   remote_disconnect: () => { syncState = { remote: null, lastSync: syncState.lastSync, ahead: 0, behind: 0, dirty: false }; onboarding = { ...onboarding, repoConnected: false }; return delay<T.SyncStatus>({ ...syncState }); },
   open_new_repo_page: () => { if (typeof window !== 'undefined') window.open('https://github.com/new', '_blank', 'noopener'); return delay(undefined); },
+  open_github_ssh_keys_page: () => { if (typeof window !== 'undefined') window.open('https://github.com/settings/ssh/new', '_blank', 'noopener'); return delay(undefined); },
   open_change_password: (a: { itemId: string }) => {
     const url = summary(get(a.itemId).detail).changePasswordUrl;
     if (!url) return Promise.reject(new Error('this item has no change-password URL'));
