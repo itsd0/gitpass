@@ -189,6 +189,9 @@ Reference a field as `gp://<vault>/<item>/<field>`. `<item>` is an item id, an e
 `title`, `totp` (current code) or the label/id of a custom field. Percent-encode `/` (`%2F`), spaces
 (`%20`) and `%` (`%25`) inside a segment.
 
+Don't type references by hand: `gitpass ref <vault> <query> [field]` prints (or `--copy`s) the exact
+reference for an item field, and the desktop app has a "Copy secret reference" action on each field.
+
 ```sh
 # Inherited environment variables
 export GITHUB_TOKEN=gp://Personal/GitHub/token

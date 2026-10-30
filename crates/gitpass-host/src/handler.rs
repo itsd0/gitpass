@@ -129,13 +129,6 @@ fn kind_str(cat: Category, f: &Field) -> &'static str {
 }
 fn is_card_number(f: &Field) -> bool { matches!(f.id.as_str(), "number" | "ccnum" | "card_number") }
 
-/// Preview of a long API secret: first 4 and last 4 characters (`abcd••••wxyz`). Secrets shorter than
-/// 12 characters get no preview, so a short token is never mostly revealed.
-fn secret_preview(v: &str) -> Option<String> {
-    let c: Vec<char> = v.chars().collect();
-    (c.len() >= 12).then(|| format!("{}••••{}", c[..4].iter().collect::<String>(), c[c.len() - 4..].iter().collect::<String>()))
-}
-
 fn fields_of(r: &ItemRecord) -> Vec<Field> { r.view_sections().into_iter().flat_map(|s| s.fields).collect() }
 
 fn field_val(r: &ItemRecord, ids: &[&str]) -> Option<String> {
@@ -180,6 +173,10 @@ fn subtitle(r: &ItemRecord) -> String {
                 _ => String::new(),
             }
         }
+        Category::ApiCredential => gitpass_core::mask::api_credential_secret(r)
+            .map(gitpass_core::mask::secret_hint)
+            .or_else(|| fields_of(r).into_iter().find(|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())).and_then(|f| f.value))
+            .unwrap_or_default(),
         _ => fields_of(r).into_iter().find(|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty()))
             .and_then(|f| f.value).map(|v| v.lines().next().unwrap_or("").chars().take(80).collect()).unwrap_or_default(),
     }
@@ -212,7 +209,7 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         let mut o = json!({"name": f.id, "label": f.label, "concealed": secret, "kind": kind_str(r.category, &f)});
         if !secret { o["value"] = json!(f.value); }
         else if r.category == Category::ApiCredential {
-            if let Some(m) = f.value.as_deref().and_then(secret_preview) { o["masked"] = json!(m); }
+            if let Some(m) = f.value.as_deref().map(gitpass_core::mask::secret_hint) { o["masked"] = json!(m); }
         }
         else if r.category == Category::BankAccount && (f.id == "account_number" || f.id == "account_no") {
             if let Some(v) = &f.value {

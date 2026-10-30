@@ -413,6 +413,8 @@ pub struct App {
     biometric: Box<dyn BiometricStore>,
     file_lock: Mutex<()>,
     favicon_cache_dir: Mutex<Option<PathBuf>>,
+    /// SSH agent sign requests since unlock (metadata only); cleared by every lock path.
+    pub(crate) ssh_activity: Arc<crate::ssh_activity::SshActivityLog>,
 }
 
 fn ts(secs_str: &str) -> String { secs_str.trim().parse::<i64>().map(iso8601).unwrap_or_else(|_| secs_str.to_string()) }
@@ -496,6 +498,10 @@ pub fn subtitle(r: &ItemRecord) -> String {
                 _ => String::new(),
             }
         }
+        Category::ApiCredential => gitpass_core::mask::api_credential_secret(r)
+            .map(gitpass_core::mask::secret_hint)
+            .or_else(|| find(&|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())))
+            .unwrap_or_default(),
         _ => find(&|f| !f.kind.is_secret() && f.value.as_deref().is_some_and(|v| !v.is_empty())).unwrap_or_default(),
     }
 }
@@ -507,6 +513,8 @@ fn to_dto_sections(r: &ItemRecord) -> Vec<Section> {
                 f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_digit()).collect::<String>()).filter(|d| d.len() >= 8).map(|d| card_mask(&d))
             } else if r.category == Category::BankAccount && (f.id == "account_number" || f.id == "account_no" || f.label.to_lowercase().contains("account number")) {
                 f.value.as_deref().map(|n| n.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>()).filter(|d| d.len() >= 4).map(|d| format!("•••• •••• •••• {}", &d[d.len() - 4..]))
+            } else if r.category == Category::ApiCredential {
+                f.value.as_deref().map(gitpass_core::mask::secret_hint)
             } else {
                 None
             }
@@ -661,7 +669,8 @@ impl App {
     pub fn new(settings_dir: PathBuf, clipboard: Arc<dyn Clipboard>) -> Self {
         let app = App { state: GuiState::new(5), settings_dir, clipboard, clip_gen: Arc::new(AtomicU64::new(0)), last_copied: Arc::new(Mutex::new(None)), hibp: Box::new(UreqHibp),
             unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), fresh_secret: Mutex::new(None), biometric: Box::new(NoBiometrics), file_lock: Mutex::new(()),
-            favicon_cache_dir: Mutex::new(None) };
+            favicon_cache_dir: Mutex::new(None), ssh_activity: Default::default() };
+        app.state.on_lock({ let log = app.ssh_activity.clone(); Arc::new(move || log.clear()) });
         let s = app.get_settings();
         app.state.set_auto_lock_minutes(s.auto_lock_minutes);
         app
@@ -756,6 +765,7 @@ impl App {
     pub fn lock(&self) {
         self.clear_clipboard_if_ours();
         self.state.lock();
+        self.ssh_activity.clear();
         if let Ok(mut k) = self.fresh_kit.lock() { *k = None; }
         if let Ok(mut k) = self.fresh_secret.lock() { *k = None; }
     }
@@ -857,7 +867,9 @@ impl App {
                     FilterKind::Tag => live && !r.archived && filter.tag.as_ref().is_some_and(|t| r.tags.contains(t)),
                     FilterKind::Category => live && !r.archived && Some(r.category) == filter.category,
                 };
-                keep
+                // The item-type picker narrows every view (Recently deleted, Archive,
+                // Favorites, a vault, a tag), not only the Category sidebar entry.
+                keep && filter.category.is_none_or(|c| r.category == c)
             }).map(|(vid, iid, r)| (summary(vid, iid, r, usage.get(iid).copied()), r.created_at.unwrap_or(0)))
               .filter(|(s, _)| q.is_empty() || [s.title.as_str(), s.subtitle.as_str(), s.url.as_deref().unwrap_or("")].iter().any(|x| x.to_lowercase().contains(&q))
                     || s.tags.iter().any(|t| t.to_lowercase().contains(&q)))
@@ -1658,6 +1670,13 @@ impl App {
     }
     pub fn ssh_agent_info(&self, socket: &std::path::Path, running: bool) -> SshAgentInfo {
         SshAgentInfo { socket_path: socket.display().to_string(), config_line: gitpass_core::ssh::identity_agent_line(socket), running, approve_each_use: self.get_settings().ssh_approve_each_use }
+    }
+    /// Sign requests handled by the SSH agent since unlock, newest first (metadata only, max 50).
+    pub fn ssh_agent_activity(&self) -> Vec<crate::ssh_activity::SshActivityEntry> {
+        self.ssh_activity.entries()
+    }
+    pub fn clear_ssh_agent_activity(&self) {
+        self.ssh_activity.clear();
     }
 
     pub fn scan_totp_screen(&self) -> Result<crate::qr::ScannedTotp> {

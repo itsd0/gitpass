@@ -298,6 +298,8 @@ impl Agent {
                 let query = s("query").unwrap_or_default().trim().to_lowercase();
                 let vault = s("vault_id").filter(|v| !v.is_empty());
                 let limit = q.get("limit").and_then(|l| l.as_u64()).map(|l| l as usize).unwrap_or(usize::MAX);
+                // Paging like gitpass-host: the popup asks for pages of 500 and follows `next_offset`.
+                let offset = q.get("offset").and_then(|o| o.as_u64()).unwrap_or(0) as usize;
                 let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
                 let mut items: Vec<(Value, String)> = self.records()?.into_iter()
                     .filter(|(vid, _, _, r)| vault.as_ref().is_none_or(|v| v == vid) && cat.is_none_or(|c| c == r.category))
@@ -309,7 +311,11 @@ impl Agent {
                     .filter(|(v, _)| query.is_empty() || ["title", "subtitle", "url"].iter().any(|k| v[*k].as_str().unwrap_or("").to_lowercase().contains(&query)))
                     .collect();
                 items.sort_by(|a, b| a.1.cmp(&b.1));
-                Ok(json!({"items": items.into_iter().take(limit).map(|x| x.0).collect::<Vec<_>>()}))
+                let total = items.len();
+                let page: Vec<Value> = items.into_iter().skip(offset).take(limit).map(|x| x.0).collect();
+                let end = offset.saturating_add(page.len());
+                let next_offset = (end < total).then_some(end);
+                Ok(json!({"items": page, "total": total, "next_offset": next_offset}))
             }
             "match" => {
                 let origin = req("origin")?;
@@ -720,6 +726,7 @@ fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
                 }
             }
         }
+        else if r.category == Category::ApiCredential { if let Some(val) = &f.value { x["masked"] = json!(gitpass_core::mask::secret_hint(val)); } }
         fields.push(x);
     }
     v["fields"] = json!(fields);

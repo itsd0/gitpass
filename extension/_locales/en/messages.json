@@ -188,6 +188,18 @@
   "vaults": {
     "message": "Vaults"
   },
+  "filterTags": {
+    "message": "Tags"
+  },
+  "filterTagsPh": {
+    "message": "Filter tags…"
+  },
+  "clearTag": {
+    "message": "Clear tag filter"
+  },
+  "filterByTag": {
+    "message": "Show items with this tag"
+  },
   "catLogin": {
     "message": "Logins"
   },
@@ -911,6 +923,9 @@
   },
   "catServer": {
     "message": "Servers"
+  },
+  "catOther": {
+    "message": "Other"
   },
   "genRecent": {
     "message": "Recent"

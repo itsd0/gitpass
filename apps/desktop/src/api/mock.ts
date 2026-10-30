@@ -2,7 +2,7 @@
 // Concealed values are kept in a private map and only returned by reveal_field,
 // mirroring the Rust security model (detail payloads carry value: null).
 import type * as T from './types';
-import { cardDigits, cardLabel, cardMask } from '../lib/cardMask';
+import { cardDigits, cardLabel, cardMask, secretHint } from '../lib/cardMask';
 
 const delay = <R>(v: R, ms = 60): Promise<R> => new Promise((r) => setTimeout(() => r(structuredClone(v)), ms));
 let seq = 1000;
@@ -117,6 +117,11 @@ let mockGeneratorHistory: T.GeneratorHistoryEntry[] = [
   { id: "gh-1", value: "FAKE-mock-pw-1", createdAt: Math.floor(Date.now() / 1000) - 300, source: "desktop", host: null },
   { id: "gh-2", value: "FAKE-mock-pw-2", createdAt: Math.floor(Date.now() / 1000) - 7200, source: "extension", host: "github.com" },
 ];
+let mockSshActivity: T.SshActivityEntry[] = [
+  { time: new Date(Date.now() - 45_000).toISOString(), keyTitle: 'Deploy key (demo server)', fingerprint: 'SHA256:FAKE0', keyType: 'ssh-ed25519', algorithm: 'ed25519', result: 'signed', client: 'git-upload-pack', pid: 4242 },
+  { time: new Date(Date.now() - 8 * 60_000).toISOString(), keyTitle: 'Personal laptop key', fingerprint: 'SHA256:FAKE1', keyType: 'ssh-rsa', algorithm: 'rsa-sha2-256', result: 'signed', client: 'ssh', pid: 4177 },
+  { time: new Date(Date.now() - 42 * 60_000).toISOString(), keyTitle: 'Personal laptop key', fingerprint: 'SHA256:FAKE1', keyType: 'ssh-rsa', algorithm: 'ssh-rsa', result: 'refused', client: 'ssh', pid: 4102 },
+];
 let onboarding: T.Onboarding = { extensionInstalled: false, emergencyKitSaved: false, repoConnected: true, imported: false, dismissed: false };
 let unlocked = false;
 const devices: T.DeviceInfo[] = [
@@ -190,6 +195,11 @@ const subtitleFor = (input: T.ItemInput): string => {
     if (u && h) return `${u}@${h}`;
     return u || h || '';
   }
+  if (input.category === 'api_credential') {
+    const cred = flds.find((x) => x.kind === 'concealed' && (x.id === 'credential' || x.id === 'key' || x.id === 'api_key' || x.id === 'secret'))
+      || flds.find((x) => x.kind === 'concealed' && x.value);
+    if (cred?.value) return secretHint(cred.value);
+  }
   const u = flds.find((x) => x.kind === 'text' || x.kind === 'email');
   return u?.value ?? '';
 };
@@ -199,7 +209,12 @@ function applyInput(r: Rec, input: T.ItemInput) {
     const id = x.id || uid('f'); const hidden = x.kind === 'concealed' || x.kind === 'totp';
     // null concealed value on update = "unchanged"
     if (hidden) { const v = x.value ?? r.secrets[id]; if (v != null) secrets[id] = v; }
-    return { ...x, id, value: hidden ? null : x.value };
+    const masked = input.category === 'credit_card' && hidden && (x.id === 'number' || x.label === 'number') && cardDigits(x.value ?? r.secrets[id]).length >= 8
+      ? cardMask(x.value ?? r.secrets[id])
+      : input.category === 'api_credential' && hidden && (x.value ?? r.secrets[id])
+      ? secretHint(x.value ?? r.secrets[id])
+      : undefined;
+    return { ...x, id, value: hidden ? null : x.value, ...(masked ? { masked } : {}) };
   }) }));
   r.secrets = secrets;
   Object.assign(r.detail, { vaultId: input.vaultId, category: input.category, title: input.title, sections, notes: input.notes ?? null,
@@ -699,6 +714,8 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     return mock.ssh_generate({ vaultId: a.vaultId, title: a.title || 'Imported key', comment: 'imported' });
   },
   ssh_agent_info: () => delay<T.SshAgentInfo>({ socketPath: '/Users/demo/Library/Application Support/gitpass/ssh-agent.sock', configLine: 'Host *\n  IdentityAgent "~/Library/Application Support/gitpass/ssh-agent.sock"', running: true, approveEachUse: !!settings.sshApproveEachUse }),
+  ssh_agent_activity: () => delay<T.SshActivityEntry[]>(mockSshActivity),
+  clear_ssh_agent_activity: () => { mockSshActivity = []; return delay<void>(undefined); },
   ssh_git_signing_config: (a: { vaultId: string; itemId: string; email?: string | null }) => {
     const rec = db.get(a.itemId);
     if (!rec) return Promise.reject(new Error('item not found'));

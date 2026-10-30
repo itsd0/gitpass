@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Archive, ArchiveRestore, ChevronRight, Copy, Download, ExternalLink, Eye, EyeOff, FolderInput, GitBranch, MoreVertical, Paperclip, Pencil, Plus, QrCode, RotateCcw, Share2, ShieldAlert, Star, Trash2, Users } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Archive, ArchiveRestore, ChevronRight, Copy, Download, ExternalLink, Eye, EyeOff, FolderInput, GitBranch, Link2, MoreVertical, Paperclip, Pencil, Plus, QrCode, RotateCcw, Share2, ShieldAlert, Star, Trash2, Users } from 'lucide-react';
 import { api } from '../../api/client';
 import type { ItemDetail as Detail, VaultInfo } from '../../api/types';
 import { useApp } from '../../lib/store';
@@ -10,6 +10,7 @@ import { Badge, Button, Dialog, DialogContent, DropdownMenu, DropdownMenuContent
 import { ItemIcon } from './categories';
 import { FieldRow } from './FieldView';
 import { SshKeyDetail, SSH_DETAIL_FIELD_IDS } from './SshKeyDetail';
+import { groupCardNumber } from '../../lib/cardMask';
 import { PasskeyDetail, isPasskeyDetailField } from './PasskeyDetail';
 import { ItemEditor } from './ItemEditor';
 import { SafeMarkdown } from './SafeMarkdown';
@@ -21,6 +22,7 @@ import { errText } from './actions';
 import { EmptyIllustration } from './EmptyIllustration';
 import { useItemsUI } from './state';
 import { useT } from '../../i18n';
+import { refTarget as buildRefTarget, secretRef } from '../../lib/secretRef';
 
 export function ItemDetailPane() {
   const id = useApp((s) => s.selectedItemId);
@@ -84,6 +86,16 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
   const t = useT();
   const { setEditing, refreshItems, selectItem } = useApp();
   const ctx = { vaultId: detail.vaultId, itemId: detail.id };
+  const siblings = useItemsUI((s) => s.items);
+  const refTarget = useMemo(
+    () => buildRefTarget(vault, vaults, detail, siblings.filter((i) => i.vaultId === detail.vaultId), detail.sections.flatMap((s) => s.fields)),
+    [vault, vaults, detail, siblings],
+  );
+  const copyPasswordRef = () => {
+    const f = detail.sections.flatMap((s) => s.fields).find((x) => x.id === 'password');
+    if (!refTarget || !f || !navigator.clipboard) { toast(t('ref.failed'), 'danger'); return; }
+    navigator.clipboard.writeText(secretRef(refTarget, f)).then(() => toast(t('ref.copied')), () => toast(t('ref.failed'), 'danger'));
+  };
   const deleted = !!detail.deletedAt;
   const run = (p: Promise<unknown>, msg: string, deselect = false) => p.then(() => { toast(msg); if (deselect) selectItem(null); refreshItems(); }, (e) => toast(errText(e), 'danger'));
   const [confirmPurge, setConfirmPurge] = useState(false);
@@ -312,6 +324,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
                   {vaults.filter((v) => v.id !== detail.vaultId).map((v) => <DropdownMenuItem key={v.id} onSelect={() => run(api.moveItem({ ...ctx, toVaultId: v.id }), t('detail.toast.movedToVault', { vault: v.name }))}><span className="h-2.5 w-2.5 rounded-full" style={{ background: v.color ?? '#888' }} />{v.name}</DropdownMenuItem>)}
                 </DropdownMenuSubContent>
               </DropdownMenuSub>
+              {detail.sections.some((s) => s.fields.some((f) => f.id === 'password')) && <DropdownMenuItem onSelect={copyPasswordRef} data-testid="copy-password-ref"><Link2 size={14} />{t('ref.copyPassword')}</DropdownMenuItem>}
               <DropdownMenuItem onSelect={() => api.duplicateItem(ctx).then((s) => { toast(t('detail.toast.duplicated')); refreshItems(); selectItem(s.id); }, (e) => toast(errText(e), 'danger'))}><Copy size={14} />{t('detail.duplicate')}</DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => run(api.archiveItem({ ...ctx, archived: !detail.archived }), detail.archived ? t('detail.toast.unarchived') : t('detail.toast.archived'), true)}>{detail.archived ? <ArchiveRestore size={14} /> : <Archive size={14} />}{detail.archived ? t('detail.unarchive') : t('detail.archive')}</DropdownMenuItem>
@@ -441,7 +454,7 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
             <div key={s.id} className="mb-4">
               {s.title && <div className="mb-1.5 px-1 text-xs font-semibold uppercase tracking-wider text-muted">{s.title}</div>}
               <div className="overflow-hidden rounded-lg border border-border bg-card">
-                {s.fields.map((f) => <FieldRow key={f.id} field={f} ctx={ctx} category={detail.category} strength={detail.passwordStrength} passwordChangedAt={/password/i.test(f.label) ? detail.passwordChangedAt : undefined} />)}
+                {s.fields.map((f) => <FieldRow key={f.id} field={f} ctx={ctx} category={detail.category} strength={detail.passwordStrength} passwordChangedAt={/password/i.test(f.label) ? detail.passwordChangedAt : undefined} refTarget={refTarget} />)}
               </div>
             </div>
           ))}
@@ -712,8 +725,10 @@ function History({ detail }: { detail: Detail }) {
                 {view.sections.flatMap((s) => s.fields).map((f) => {
                   const isConcealed = f.kind === 'concealed' || f.kind === 'totp';
                   const isRevealed = revealed[f.id] !== undefined;
+                  const isApi = view.category === 'api_credential';
+                  const shouldGroup = !isApi && Boolean(f.masked);
                   const displayValue = isConcealed
-                    ? (isRevealed ? revealed[f.id] : (f.masked || '••••••••••'))
+                    ? (isRevealed ? (shouldGroup ? groupCardNumber(revealed[f.id]) : revealed[f.id]) : (f.masked || '••••••••••'))
                     : (f.value ?? '');
                   return (
                     <div key={f.id} className="flex items-center justify-between border-b border-border px-3 py-2 last:border-0">

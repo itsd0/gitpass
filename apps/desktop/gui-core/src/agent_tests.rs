@@ -189,6 +189,18 @@ fn match_fill_reveal_origin_rules_and_categories() {
     assert!(!cd.to_string().contains("4111 1111"));
     assert_eq!(c.ok("list_items", json!({"query": "exam", "limit": 5}))["items"].as_array().unwrap().len(), 2);
     assert_eq!(c.ok("list_items", json!({"limit": 1}))["items"].as_array().unwrap().len(), 1);
+    // Paging (the popup fetches pages of 500 and follows next_offset): every item comes back exactly once.
+    let total = all.as_array().unwrap().len();
+    let p1 = c.ok("list_items", json!({"limit": 1}));
+    assert_eq!(p1["total"], json!(total)); assert_eq!(p1["next_offset"], json!(1));
+    let mut seen = vec![]; let mut off = 0u64;
+    loop {
+        let p = c.ok("list_items", json!({"limit": 1, "offset": off}));
+        for i in p["items"].as_array().unwrap() { seen.push(i["id"].clone()); }
+        match p["next_offset"].as_u64() { Some(n) => off = n, None => break }
+    }
+    assert_eq!(seen.len(), total);
+    assert_eq!(seen, all.as_array().unwrap().iter().map(|i| i["id"].clone()).collect::<Vec<_>>());
 
     // fill_card: popup or in-page click only
     assert_eq!(c.err("fill_card", json!({"item_id": card})), "denied");
@@ -332,6 +344,47 @@ fn create_item_any_category_via_agent() {
     assert_eq!(c.err("create_item", json!({})), "bad_request");
     e.app.lock();
     assert_eq!(c.err("create_item", json!({"item": {"category": "secure_note", "title": "x"}})), "locked");
+}
+
+#[test]
+fn agent_api_credential_masked_hint_in_summary_and_detail() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+    const LONG_KEY: &str = "sk-live-0123456789abcdefgh";
+    let api = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::ApiCredential,
+        title: "Agent API Item".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                fld("username", FieldKind::Text, "svc"),
+                fld("credential", FieldKind::Concealed, LONG_KEY),
+            ],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+
+    let list = c.ok("list_items", json!({"category": "api_credential"}));
+    let items = list["items"].as_array().unwrap();
+    let item = items.iter().find(|i| i["title"] == "Agent API Item").unwrap();
+    assert_eq!(item["subtitle"], "sk-l••••••••efgh");
+
+    let detail = c.ok("get_item", json!({"item_id": format!("{}:{}", e.vault, api.id)}))["item"].clone();
+    let cred = detail["fields"].as_array().unwrap().iter().find(|f| f["name"] == "credential").unwrap();
+    assert_eq!(cred["concealed"], true);
+    assert_eq!(cred["masked"], "sk-l••••••••efgh");
+    assert!(cred.get("value").is_none());
+
+    // Assert full secret never appears in serialized JSON
+    let list_str = list.to_string();
+    assert!(!list_str.contains("0123456789abcd"));
+    let detail_str = detail.to_string();
+    assert!(!detail_str.contains("0123456789abcd"));
 }
 
 #[test]

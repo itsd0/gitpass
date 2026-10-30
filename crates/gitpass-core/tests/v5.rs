@@ -270,11 +270,27 @@ fn move_and_duplicate_with_attachments() {
     assert_eq!(s.vault_meta(&v2).unwrap().color.as_deref(), Some("#ff0000"));
     let id = s.add_record(&v, rec(Category::SshKey, "ssh", sample(Category::SshKey))).unwrap();
     let at = s.add_attachment(&v, &id, "id.pub", "text/plain", b"ssh-ed25519 fake").unwrap();
+    let (_, mut r_orig) = s.read_record(&v, &id).unwrap();
+    let orig_created = r_orig.created_at;
+    r_orig.tags = vec!["prod".into()];
+    s.update_record(&v, &id, r_orig).unwrap();
+    let (_, r_updated) = s.read_record(&v, &id).unwrap();
+    assert_eq!(r_updated.history.len(), 2);
+
     let dup = s.copy_item_to(&v, &id, &v).unwrap();
     assert_eq!(s.list_records(&v).unwrap().len(), 2);
+    let (_, r_dup) = s.read_record(&v, &dup).unwrap();
+    assert!(r_dup.history.is_empty(), "duplicate item must start with empty history");
+
+    let cp = s.copy_items_to(&[(v.clone(), id.clone())], &v2).unwrap();
+    let (_, r_cp) = s.read_record(&v2, &cp[0]).unwrap();
+    assert!(r_cp.history.is_empty(), "copied items must start with empty history");
+
     let nid = s.move_item(&v, &id, &v2).unwrap();
     assert!(s.read_record(&v, &id).is_err());
     let (_, r) = s.read_record(&v2, &nid).unwrap();
+    assert_eq!(r.history.len(), 2, "moved item must retain history");
+    assert_eq!(r.created_at, orig_created, "moved item must retain created_at");
     assert_eq!(r.find_field("private").unwrap().value.as_deref(), Some("-----FAKE KEY-----"));
     assert_eq!(s.read_attachment(&v2, &nid, &r.attachments[0].id).unwrap(), b"ssh-ed25519 fake");
     assert_ne!(r.attachments[0].id, at.id);
