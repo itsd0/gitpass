@@ -98,6 +98,7 @@ gitpass find Personal "git hub"
 gitpass edit Personal github --notes "2FA enabled"
 gitpass edit github --tag work --favorite
 gitpass edit github --untag old-tag --unfavorite
+gitpass edit bank --rotate-every 90d
 gitpass archive github
 gitpass unarchive github
 gitpass undelete github
@@ -123,7 +124,8 @@ gitpass restore github --version 3
 - `--field` takes `password`, `username`, `url`, `totp`, `notes` or `title`.
 - `edit` and `rm` take an item query; `edit` replaces only the fields you pass,
   `--password` / `--generate [N]` set a new password, `--tag` / `--untag` add or remove tags (repeatable),
-  and `--favorite` / `--unfavorite` toggle favorite status.
+  and `--favorite` / `--unfavorite` toggle favorite status. `--rotate-every 30d|90d|180d|365d|none`
+  sets or clears a "change this password every N days" reminder (shown by `get` and flagged by `audit`).
 - `archive` and `unarchive` mark or unmark an item as archived.
 - `undelete` restores an item from Recently Deleted (searches deleted items only; clear error if the item is not deleted).
 - `mv <item> --to <vault>` moves an item to another vault, keeping its version history, attachments, tags and metadata.
@@ -339,7 +341,8 @@ gitpass audit --include-ignored
 and duplicates on login items, plus expired or expiring credentials on cards and API
 credentials; it also reports offline 2FA/passkey availability. `--unused-months` (default
 12, `0` disables) flags logins not used on this device for that long, falling back to the
-last edit/creation time when the item was never used. `--hibp` opts in to Have I
+last edit/creation time when the item was never used. Logins with a `--rotate-every`
+reminder are reported as `rotation_due` or `rotation_soon` (within 14 days). `--hibp` opts in to Have I
 Been Pwned k-anonymity checks (only five hex characters of a SHA-1 leave the machine).
 `--max-age-days` defaults to 365 and `--expiring-days` to 30. The scoring and checks are
 documented in [WATCHTOWER.md](WATCHTOWER.md).

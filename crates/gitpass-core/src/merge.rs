@@ -75,6 +75,10 @@ pub struct ItemRecord {
     /// Findings ignored by the user in Watchtower (e.g. `["reused", "insecure_url"]`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ignored_findings: Vec<String>,
+    /// Per-login rotation reminder: change the password every N days (30, 90, 180 or 365; see
+    /// [`ROTATION_DAYS`]). Absent by default, so existing vaults need no migration.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rotate_every_days: Option<u32>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attachments: Vec<AttachmentMeta>,
     /// Tombstones: ids of attachments removed from this item. Merged as a union and applied after the
@@ -87,6 +91,18 @@ pub struct ItemRecord {
     pub related_item_ids: Vec<String>,
 }
 fn is_login(c: &Category) -> bool { *c == Category::Login }
+/// Where a login stands against its own rotation reminder (see [`ItemRecord::rotation_status`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RotationStatus {
+    /// The password is `days` days old, past its `every_days` reminder.
+    Due { every_days: u32, days: u64 },
+    /// The reminder falls due in `in_days` days.
+    Soon { every_days: u32, in_days: u64 },
+}
+/// Allowed `rotate_every_days` values.
+pub const ROTATION_DAYS: [u32; 4] = [30, 90, 180, 365];
+/// Days before a rotation deadline at which `rotation_soon` is reported.
+pub const ROTATION_SOON_DAYS: u64 = 14;
 fn is_false(b: &bool) -> bool { !*b }
 
 /// Synthesize clocks for a legacy (v2) item: every field gets `updated_at` (seconds) * 1000.
@@ -117,6 +133,23 @@ impl ItemRecord {
             k != kind && !(kind == "missing_totp" && k == "totp_available") && !(kind == "totp_available" && k == "missing_totp") && !(kind == "pwned" && k == "breached") && !(kind == "breached" && k == "pwned")
         });
         self.ignored_findings.len() < len_before
+    }
+
+    /// State of the per-login rotation reminder at `now_secs` (unix seconds), measured from the
+    /// last password change ([`Self::password_changed_at`]), not the last edit. `None` when no
+    /// reminder is set, the item is not a live Login with a password, or it is not due within
+    /// [`ROTATION_SOON_DAYS`].
+    pub fn rotation_status(&self, now_secs: u64) -> Option<RotationStatus> {
+        let every = self.rotate_every_days.filter(|d| *d > 0)?;
+        if self.category != Category::Login || self.archived || self.deleted_at.is_some() { return None; }
+        let changed = self.password_changed_at()?;
+        let every_secs = u64::from(every) * 86400;
+        let age_secs = now_secs.saturating_sub(changed);
+        if age_secs >= every_secs {
+            return Some(RotationStatus::Due { every_days: every, days: age_secs / 86400 });
+        }
+        let left = (every_secs - age_secs).div_ceil(86400);
+        (left <= ROTATION_SOON_DAYS).then_some(RotationStatus::Soon { every_days: every, in_days: left })
     }
 
     /// Content snapshot (for history).
@@ -256,11 +289,12 @@ fn parse_ts(s: &str) -> Option<u64> {
 fn field_map(r: &ItemRecord) -> BTreeMap<String, (String, Field)> {
     r.sections.iter().flat_map(|s| s.fields.iter().map(move |f| (f.id.clone(), (s.id.clone(), f.clone())))).collect()
 }
-fn meta_values(r: &ItemRecord) -> [(&'static str, String); 7] {
+fn meta_values(r: &ItemRecord) -> [(&'static str, String); 8] {
     [("m:category", r.category.as_str().into()), ("m:tags", r.tags.join("\u{1}")), ("m:favorite", r.favorite.to_string()),
      ("m:archived", r.archived.to_string()), ("m:deleted", r.deleted_at.map(|d| d.to_string()).unwrap_or_default()),
      ("m:ignored", r.ignored_findings.join("\u{1}")),
-     ("m:related", r.related_item_ids.join("\u{1}"))]
+     ("m:related", r.related_item_ids.join("\u{1}")),
+     ("m:rotate", r.rotate_every_days.map(|d| d.to_string()).unwrap_or_default())]
 }
 fn section_titles(r: &ItemRecord) -> BTreeMap<String, Option<String>> { r.sections.iter().map(|s| (s.id.clone(), s.title.clone())).collect() }
 
@@ -334,6 +368,7 @@ fn merge_ext(local: &ItemRecord, remote: &ItemRecord, out: &mut ItemRecord) -> (
                     "m:favorite" => out.favorite = remote.favorite,
                     "m:archived" => out.archived = remote.archived,
                     "m:ignored" => out.ignored_findings = remote.ignored_findings.clone(),
+                    "m:rotate" => out.rotate_every_days = remote.rotate_every_days,
                     "m:related" => out.related_item_ids = remote.related_item_ids.clone(),
                     _ => out.deleted_at = remote.deleted_at,
                 }

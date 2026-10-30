@@ -410,6 +410,9 @@ EXAMPLES:
         /// Unmark item as favorite
         #[arg(long, conflicts_with = "favorite")]
         unfavorite: bool,
+        /// Remind me to change this login's password every 30d, 90d, 180d or 365d (or `none` to clear)
+        #[arg(long = "rotate-every", value_name = "30d|90d|180d|365d|none")]
+        rotate_every: Option<String>,
         /// Add a related item link (by title or ID, repeatable)
         #[arg(long = "link", alias = "related", action = clap::ArgAction::Append)]
         link: Vec<String>,
@@ -640,7 +643,7 @@ EXAMPLES:
     ///
     /// Finding kinds: weak (incl. passwords containing the username or site name), reused, old,
     /// pwned (only with --hibp), duplicate, expired, expiring_soon, insecure_url, missing_totp,
-    /// totp_available, passkey_available, weak_ssh_key, unused. Findings you ignored in the app are counted but only
+    /// totp_available, passkey_available, weak_ssh_key, unused, rotation_due, rotation_soon. Findings you ignored in the app are counted but only
     /// listed with --include-ignored. See docs/WATCHTOWER.md.
     Audit {
         /// Vault (default: all vaults)
@@ -1453,6 +1456,7 @@ fn print_item(id: &str, r: &ItemRecord, reveal: bool, related: &[String]) {
             if let Some(t) = r.password_changed_at() {
                 println!("password changed: {}", gitpass_core::device::iso8601(t as i64));
             }
+            if let Some(d) = r.rotate_every_days { println!("rotate every: {d} days"); }
         }
         if let Some(v) = &it.url { println!("url:      {v}"); }
         if let Some(v) = &it.totp {
@@ -1561,6 +1565,8 @@ struct CliItemDetail {
     #[serde(skip_serializing_if = "Option::is_none")]
     password_changed_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    rotate_every_days: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     last_used_at: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     notes: Option<String>,
@@ -1635,6 +1641,17 @@ fn resolve_item_across_vaults(s: &Session, vault: Option<&str>, item: &str) -> R
         0 => bail!("no item matches '{item}'"),
         1 => Ok((matches[0].0.clone(), matches[0].1.clone())),
         _ => bail!("multiple items match '{item}'; specify --vault or <vault>/<item>"),
+    }
+}
+
+/// Parse `--rotate-every`: `30d`, `90d`, `180d`, `365d` (the `d` is optional) or `none`.
+fn parse_rotation(v: &str) -> Result<Option<u32>> {
+    let t = v.trim().to_lowercase();
+    if t == "none" || t == "off" { return Ok(None); }
+    let days = t.strip_suffix('d').unwrap_or(&t).parse::<u32>().ok().filter(|d| gitpass_core::merge::ROTATION_DAYS.contains(d));
+    match days {
+        Some(d) => Ok(Some(d)),
+        None => bail!("--rotate-every must be 30d, 90d, 180d, 365d or none (got '{v}')"),
     }
 }
 
@@ -1723,6 +1740,7 @@ fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<Stri
         created_at: r.created_at.map(|c| gitpass_core::device::iso8601(c as i64)),
         updated_at: ts(&r.item.updated_at),
         password_changed_at: r.password_changed_at().map(|t| gitpass_core::device::iso8601(t as i64)),
+        rotate_every_days: r.rotate_every_days,
         last_used_at,
         notes: r.item.notes.clone().filter(|n| !n.trim().is_empty()),
         fields,
@@ -2934,13 +2952,16 @@ fn run() -> Result<()> {
             untag,
             favorite,
             unfavorite,
+            rotate_every,
             link,
             unlink,
             pick,
             json,
         } => {
+            let rotation = rotate_every.as_deref().map(parse_rotation).transpose()?;
             let s = unlock(&cli, &root)?;
             let (vid, iid, mut rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, false)?;
+            if let Some(r) = rotation { rec.rotate_every_days = r; }
             if let Some(v) = title { rec.item.title = v.clone(); }
             if let Some(v) = username { rec.item.username = Some(v.clone()); }
             if let Some(v) = url { rec.item.url = Some(v.clone()); }
@@ -3394,11 +3415,13 @@ fn run() -> Result<()> {
             }
             println!("audited {} item(s) in {} vault(s){}", r.items_checked, vids.len(), if *hibp { " (with HIBP)" } else { "" });
             let unused_label = if *unused_months > 0 { format!(">{unused_months}mo") } else { "off".to_string() };
-            println!("  weak: {}  reused: {} ({} group(s))  duplicates: {}  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}  weak SSH keys: {}  unused ({unused_label}): {}  ignored: {}",
+            println!("  weak: {}  reused: {} ({} group(s))  duplicates: {}  old (>{max_age_days}d): {}  expired: {}  expiring soon (<={expiring_days}d): {}  insecure URLs: {}  missing TOTP: {}  2FA available: {}  passkeys available: {}{}  weak SSH keys: {}  unused ({unused_label}): {}  rotation due: {}  rotation soon: {}  ignored: {}",
                 r.weak, r.reused, r.reused_groups, r.duplicates, r.old, r.expired, r.expiring_soon, r.insecure_urls, r.missing_totp, r.totp_available, r.passkey_available,
                 if *hibp { format!("  pwned: {}", r.pwned) } else { String::new() },
                 r.weak_ssh_keys,
                 r.unused,
+                r.rotation_due,
+                r.rotation_soon,
                 r.ignored);
             for f in &r.per_item {
                 println!("\n[{}] {} ({})", f.vault, f.title, &f.id[..f.id.len().min(8)]);

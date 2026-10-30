@@ -48,10 +48,15 @@ pub enum Finding {
     /// A live Login whose last use on this device (or last edit/creation when it was never used)
     /// is older than the unused threshold. Housekeeping advice: it does not affect the score.
     Unused { days: u64 },
+    /// The login's own "change password every `every_days` days" reminder is due: the password is
+    /// `days` days old (measured from [`ItemRecord::password_changed_at`], not the last edit).
+    RotationDue { every_days: u32, days: u64 },
+    /// The rotation deadline is `in_days` days away (within [`crate::merge::ROTATION_SOON_DAYS`]).
+    RotationSoon { every_days: u32, in_days: u64 },
 }
 
 /// Every [`Finding::kind`] string, in declaration order (docs and `gitpass audit --help` list these).
-pub const FINDING_KINDS: &[&str] = &["weak", "reused", "old", "missing_totp", "totp_available", "passkey_available", "pwned", "expired", "expiring_soon", "insecure_url", "duplicate", "weak_ssh_key", "unused"];
+pub const FINDING_KINDS: &[&str] = &["weak", "reused", "old", "missing_totp", "totp_available", "passkey_available", "pwned", "expired", "expiring_soon", "insecure_url", "duplicate", "weak_ssh_key", "unused", "rotation_due", "rotation_soon"];
 
 impl Finding {
     pub fn kind(&self) -> &'static str {
@@ -69,6 +74,8 @@ impl Finding {
             Finding::Duplicate { .. } => "duplicate",
             Finding::WeakSshKey { .. } => "weak_ssh_key",
             Finding::Unused { .. } => "unused",
+            Finding::RotationDue { .. } => "rotation_due",
+            Finding::RotationSoon { .. } => "rotation_soon",
         }
     }
 }
@@ -111,6 +118,10 @@ pub struct AuditReport {
     pub insecure_urls: usize,
     pub weak_ssh_keys: usize,
     pub unused: usize,
+    #[serde(default)]
+    pub rotation_due: usize,
+    #[serde(default)]
+    pub rotation_soon: usize,
     pub ignored: usize,
     pub per_item: Vec<ItemFindings>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -245,6 +256,11 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
             if let Some(t) = rec.password_changed_at() {
                 let days = o.now_secs.saturating_sub(t) / 86400;
                 if days > o.max_age_days { record_finding(Finding::Old { days }, &mut r.old); }
+                match rec.rotation_status(o.now_secs) {
+                    Some(crate::merge::RotationStatus::Due { every_days, days }) => record_finding(Finding::RotationDue { every_days, days }, &mut r.rotation_due),
+                    Some(crate::merge::RotationStatus::Soon { every_days, in_days }) => record_finding(Finding::RotationSoon { every_days, in_days }, &mut r.rotation_soon),
+                    None => {}
+                }
             }
         }
         let no_totp = it.totp.as_deref().is_none_or(|t| t.trim().is_empty());
@@ -380,6 +396,8 @@ impl std::fmt::Display for Finding {
             Finding::Duplicate { group } => write!(f, "duplicate login for {group}"),
             Finding::WeakSshKey { bits } => write!(f, "weak SSH key: {bits}-bit RSA (recommend 3072+ bits or Ed25519)"),
             Finding::Unused { days } => write!(f, "not used in {days} days"),
+            Finding::RotationDue { every_days, days } => write!(f, "due for rotation: password is {days} days old (reminder every {every_days} days)"),
+            Finding::RotationSoon { every_days, in_days } => write!(f, "rotate in {in_days} days (reminder every {every_days} days)"),
         }
     }
 }
@@ -578,7 +596,7 @@ mod tests {
             Finding::MissingTotp, Finding::TotpAvailable { site: String::new() }, Finding::PasskeyAvailable { site: String::new() },
             Finding::Pwned { count: 1 }, Finding::Expired { on: String::new() }, Finding::ExpiringSoon { on: String::new(), days: 1 },
             Finding::InsecureUrl { url_host: String::new() }, Finding::Duplicate { group: String::new() }, Finding::WeakSshKey { bits: 2048 },
-            Finding::Unused { days: 400 },
+            Finding::Unused { days: 400 }, Finding::RotationDue { every_days: 90, days: 100 }, Finding::RotationSoon { every_days: 90, in_days: 5 },
         ];
         let kinds: Vec<&str> = all.iter().map(Finding::kind).collect();
         assert_eq!(kinds, FINDING_KINDS);
@@ -924,6 +942,75 @@ mod tests {
         // 5. Item without password: returns None
         rec.item.password = None;
         assert_eq!(rec.password_changed_at(), None);
+    }
+
+    #[test]
+    fn test_rotation_reminder_due_soon_not_due_and_unset() {
+        let now_secs = 2_000_000_000u64;
+        let day = 86400u64;
+        let mk = |changed_days_ago: u64, every: Option<u32>| {
+            let mut it = Item::default();
+            it.title = "Bank".into();
+            it.password = Some("FAKE-Rotation-Pass-123!".into());
+            let t = now_secs - changed_days_ago * day;
+            it.updated_at = t.to_string();
+            let mut rec = ItemRecord::new(it);
+            rec.created_at = Some(t);
+            rec.rotate_every_days = every;
+            rec
+        };
+        let opts = AuditOpts { now_secs, max_age_days: 3650, ..Default::default() };
+        let run = |rec: ItemRecord| audit(&[("v".into(), "i".into(), rec)], &opts, None).unwrap();
+
+        // due: 95 days old with a 90-day reminder, and exactly on the deadline
+        let r = run(mk(95, Some(90)));
+        assert_eq!((r.rotation_due, r.rotation_soon), (1, 0));
+        assert!(r.per_item[0].findings.contains(&Finding::RotationDue { every_days: 90, days: 95 }));
+        assert_eq!(run(mk(90, Some(90))).rotation_due, 1);
+
+        // soon: 80 days old => 10 days left; the 14-day window edge is included, 15 days is not
+        let r = run(mk(80, Some(90)));
+        assert_eq!((r.rotation_due, r.rotation_soon), (0, 1));
+        assert!(r.per_item[0].findings.contains(&Finding::RotationSoon { every_days: 90, in_days: 10 }));
+        assert_eq!(run(mk(76, Some(90))).rotation_soon, 1);
+        assert_eq!(run(mk(75, Some(90))).rotation_soon, 0);
+
+        // not due, and unset (the default): no rotation findings
+        let r = run(mk(10, Some(365)));
+        assert_eq!((r.rotation_due, r.rotation_soon), (0, 0));
+        let r = run(mk(500, None));
+        assert_eq!((r.rotation_due, r.rotation_soon), (0, 0));
+
+        // archived logins are skipped; ignoring the finding moves it to the ignored list
+        let mut archived = mk(95, Some(90));
+        archived.archived = true;
+        assert_eq!(run(archived).rotation_due, 0);
+        let mut ignored = mk(95, Some(90));
+        ignored.ignore_finding("rotation_due");
+        let r = run(ignored);
+        assert_eq!((r.rotation_due, r.ignored), (0, 1));
+
+        // measured from the password change, not the last edit: a note edit today keeps it due
+        let mut edited = mk(95, Some(90));
+        edited.history.push(crate::item::HistoryEntry {
+            version: 1,
+            updated_at: edited.item.updated_at.clone(),
+            snapshot: crate::item::Snapshot { item: edited.item.clone(), category: edited.category, sections: vec![], tags: vec![], related_item_ids: vec![] },
+        });
+        edited.item.notes = Some("edited today".into());
+        edited.item.updated_at = now_secs.to_string();
+        assert_eq!(run(edited).rotation_due, 1);
+    }
+
+    #[test]
+    fn test_rotation_field_roundtrip_and_backward_compat() {
+        let legacy: ItemRecord = serde_json::from_str(r#"{"title":"Old Item","updated_at":"1600000000"}"#).unwrap();
+        assert_eq!(legacy.rotate_every_days, None);
+        assert!(!serde_json::to_string(&legacy).unwrap().contains("rotate_every_days"));
+        let mut rec = legacy.clone();
+        rec.rotate_every_days = Some(90);
+        let back: ItemRecord = serde_json::from_str(&serde_json::to_string(&rec).unwrap()).unwrap();
+        assert_eq!(back.rotate_every_days, Some(90));
     }
 
     #[test]

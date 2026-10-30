@@ -35,6 +35,7 @@ export const api = {
   createItem: (a:{input:T.ItemInput}) => call<T.ItemSummary>('create_item', a),
   updateItem: (a:{itemId:string; input:T.ItemInput}) => call<T.ItemSummary>('update_item', a),
   setFavorite: (a:{vaultId:string; itemId:string; favorite:boolean}) => call<void>('set_favorite', a),
+  setRotation: (a:{vaultId:string; itemId:string; days:number|null}) => call<void>('set_rotation', a),
   archiveItem: (a:{vaultId:string; itemId:string; archived:boolean}) => call<void>('archive_item', a),
   deleteItem: (a:{vaultId:string; itemId:string}) => call<void>('delete_item', a),       // soft delete
   restoreItem: (a:{vaultId:string; itemId:string}) => call<void>('restore_item', a),

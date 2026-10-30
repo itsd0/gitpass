@@ -4,6 +4,7 @@ import { api } from '../../api/client';
 import type { ItemDetail as Detail, VaultInfo } from '../../api/types';
 import { useApp } from '../../lib/store';
 import { formatRelativeLastUsed } from './lastUsedAge';
+import { rotationLabel } from './rotation';
 import { useVaultsAndTags } from '../../lib/data';
 import { cn, fmtBytes, fmtDateLong } from '../../lib/utils';
 import { Badge, Button, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger, Skeleton, Tooltip, toast } from '../../ui';
@@ -383,6 +384,12 @@ function DetailView({ detail, vault, vaults }: { detail: Detail; vault?: VaultIn
                   {formatRelativeLastUsed(detail.lastUsed, undefined, t)}
                 </div>
               ) : null}
+              {(() => {
+                const label = rotationLabel(detail.rotation, t);
+                return label ? (
+                  <Badge tone="accent" className="mt-1" data-testid="rotation-pill" aria-label={label}>{label}</Badge>
+                ) : null;
+              })()}
             </div>
             {!deleted && <Tooltip content={detail.favorite ? t('detail.unfavorite') : t('detail.favorite')}>
               <Button variant="ghost" size="icon" aria-label={t('detail.toggleFavorite')} onClick={() => run(api.setFavorite({ ...ctx, favorite: !detail.favorite }), detail.favorite ? t('bulk.toast.unfavorite') : t('bulk.toast.favorite'))}>

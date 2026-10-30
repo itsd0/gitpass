@@ -618,6 +618,66 @@ fn bank_account_and_server_roundtrip_merge_and_compat() {
 }
 
 #[test]
+fn rotation_reminder_survives_edit_restore_copy_merge_and_export() {
+    use gitpass_core::merge::{merge_records, RotationStatus, ROTATION_DAYS};
+    let (_d, _sk, s, v) = vault();
+    let mut r = rec(Category::Login, "FAKE Bank", sample(Category::Login));
+    r.created_at = Some(1_000_000);
+    let id = s.add_record(&v, r).unwrap();
+    // only the documented intervals are accepted
+    assert!(s.set_rotation(&v, &id, Some(45)).is_err());
+    assert_eq!(ROTATION_DAYS, [30, 90, 180, 365]);
+    s.set_rotation(&v, &id, Some(90)).unwrap();
+    assert_eq!(s.read_record(&v, &id).unwrap().1.rotate_every_days, Some(90));
+
+    // a normal edit keeps it; so does restoring an older version
+    let (_, mut cur) = s.read_record(&v, &id).unwrap();
+    cur.item.notes = Some("edited".into());
+    s.update_record(&v, &id, cur).unwrap();
+    assert_eq!(s.read_record(&v, &id).unwrap().1.rotate_every_days, Some(90));
+    let (_, cur) = s.read_record(&v, &id).unwrap();
+    let ver = cur.history.last().unwrap().version;
+    s.restore_version(&v, &id, ver).unwrap();
+    assert_eq!(s.read_record(&v, &id).unwrap().1.rotate_every_days, Some(90));
+
+    // copying to another vault keeps it
+    let v2 = s.create_vault("other").unwrap();
+    let copied = s.copy_items_to(&[(v.clone(), id.clone())], &v2).unwrap();
+    assert_eq!(s.read_record(&v2, &copied[0]).unwrap().1.rotate_every_days, Some(90));
+
+    // a newer clock on the remote side wins the merge, in both directions (set and clear)
+    let (_, base) = s.read_record(&v, &id).unwrap();
+    let mut remote = base.clone();
+    remote.rotate_every_days = Some(30);
+    gitpass_core::merge::stamp_ext(Some(&base), &mut remote, 9_000_000_000_000);
+    let (merged, _) = merge_records(&base, &remote);
+    assert_eq!(merged.rotate_every_days, Some(30));
+    let mut cleared = remote.clone();
+    cleared.rotate_every_days = None;
+    gitpass_core::merge::stamp_ext(Some(&remote), &mut cleared, 9_000_000_000_001);
+    let (merged, _) = merge_records(&remote, &cleared);
+    assert_eq!(merged.rotate_every_days, None);
+
+    // clearing through the session API
+    s.set_rotation(&v, &id, None).unwrap();
+    assert_eq!(s.read_record(&v, &id).unwrap().1.rotate_every_days, None);
+
+    // gitpass-json export / import keeps it, and rotation_status reads it
+    let mut e = rec(Category::Login, "FAKE Mail", sample(Category::Login));
+    e.rotate_every_days = Some(180);
+    e.created_at = Some(1_000_000);
+    e.item.updated_at = "1000000".into();
+    let json = gitpass_core::import::export_records_json(&[e]).unwrap();
+    assert!(json.contains("\"rotate_every_days\": 180"), "{json}");
+    let parsed = gitpass_core::import::parse_bytes(gitpass_core::import::ImportFormat::GitpassJson, json.as_bytes(), None).unwrap();
+    let back = &parsed.items[0];
+    assert_eq!(back.rotate_every_days, Some(180));
+    assert!(matches!(back.rotation_status(1_000_000 + 200 * 86400), Some(RotationStatus::Due { every_days: 180, days: 200 })));
+    assert!(matches!(back.rotation_status(1_000_000 + 170 * 86400), Some(RotationStatus::Soon { every_days: 180, in_days: 10 })));
+    assert_eq!(back.rotation_status(1_000_000 + 100 * 86400), None);
+}
+
+#[test]
 fn old_item_without_related_items_loads_and_saves_unchanged() {
     let old_json = r#"{
         "title": "Legacy Item",
