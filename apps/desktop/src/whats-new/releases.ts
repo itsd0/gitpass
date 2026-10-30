@@ -1,8 +1,125 @@
-import { FileText, Globe, PanelLeftClose, ShieldAlert, ShieldCheck } from 'lucide-react';
-import type { ReleaseHighlights } from './types';
+import {
+  FileText,
+  Globe,
+  KeyRound,
+  LayoutList,
+  PanelLeftClose,
+  Puzzle,
+  QrCode,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  Terminal,
+} from 'lucide-react';
+import type { ReleaseHighlights, WhatsNewHighlight } from './types';
 import { compareSemver } from './semver';
 
+/**
+ * 0.6.6 highlights. 0.6.6 shipped before these were added (it fell back to the 0.6.5 sheet),
+ * so 0.6.7 re-uses them: it is the first build that actually shows them.
+ */
+const HIGHLIGHTS_0_6_6: WhatsNewHighlight[] = [
+  {
+    id: 'search-operators',
+    icon: Search,
+    title: {
+      en: 'Search Operators Everywhere',
+      my: 'နေရာတိုင်းတွင် ရှာဖွေရေး အော်ပရေတာများ',
+      th: 'ตัวดำเนินการค้นหาได้ทุกที่',
+    },
+    description: {
+      en: 'Narrow searches with query operators in the app, the CLI and the browser extension.',
+      my: 'အက်ပ်၊ CLI နှင့် ဘရောက်ဇာ extension တို့တွင် အော်ပရေတာများဖြင့် ရှာဖွေမှုကို ကျဉ်းမြောင်းနိုင်ပါပြီ။',
+      th: 'จำกัดผลการค้นหาด้วยตัวดำเนินการในแอป CLI และส่วนขยายเบราว์เซอร์',
+    },
+    showMe: {
+      route: { name: 'items', filter: { kind: 'all', sort: 'updated' } },
+    },
+  },
+  {
+    id: 'list-density-text-size',
+    icon: LayoutList,
+    title: {
+      en: 'Density, Text Size and Icon Rail',
+      my: 'စာရင်းသိပ်သည်းမှု၊ စာလုံးအရွယ်နှင့် အိုင်ကွန်ဘေးဘောင်',
+      th: 'ความหนาแน่น ขนาดตัวอักษร และแถบไอคอน',
+    },
+    description: {
+      en: 'Choose a compact or comfortable list, set the text size (⌘+ / ⌘− / ⌘0) and collapse the sidebar to an icon rail.',
+      my: 'စာရင်းကို ကျစ်လျစ်သော သို့မဟုတ် ချောင်ချိသောပုံစံ ရွေးပါ၊ စာလုံးအရွယ် (⌘+ / ⌘− / ⌘0) သတ်မှတ်ပြီး ဘေးဘောင်ကို အိုင်ကွန်အဖြစ် ခေါက်သိမ်းနိုင်ပါသည်။',
+      th: 'เลือกรายการแบบกะทัดรัดหรือแบบสบายตา ปรับขนาดตัวอักษร (⌘+ / ⌘− / ⌘0) และย่อแถบด้านข้างเป็นแถบไอคอน',
+    },
+    showMe: {
+      route: { name: 'settings', tab: 'general' },
+    },
+  },
+  {
+    id: 'qr-codes',
+    icon: QrCode,
+    title: {
+      en: 'QR Codes In and Out',
+      my: 'QR ကုဒ် ပြသခြင်းနှင့် စကင်ဖတ်ခြင်း',
+      th: 'แสดงและสแกนรหัส QR',
+    },
+    description: {
+      en: 'Show item fields as a QR code, and scan a TOTP QR code from the screen, the clipboard or a dropped image.',
+      my: 'ပစ္စည်းအကွက်များကို QR ကုဒ်အဖြစ် ပြသပြီး TOTP QR ကုဒ်ကို မျက်နှာပြင်၊ ကလစ်ဘုတ် သို့မဟုတ် ဆွဲချထားသောပုံမှ စကင်ဖတ်နိုင်ပါသည်။',
+      th: 'แสดงฟิลด์ของรายการเป็นรหัส QR และสแกนรหัส QR ของ TOTP จากหน้าจอ คลิปบอร์ด หรือรูปภาพที่ลากมาวาง',
+    },
+  },
+  {
+    id: 'extension-archive-site-settings',
+    icon: Puzzle,
+    title: {
+      en: 'Extension Archive and Site Settings',
+      my: 'Extension မှတ်တမ်းဟောင်းနှင့် ဆိုက်ဆက်တင်များ',
+      th: 'คลังเก็บและการตั้งค่าเว็บไซต์ในส่วนขยาย',
+    },
+    description: {
+      en: 'The browser extension popup now has Archive and Recently Deleted views with restore, plus per-site settings.',
+      my: 'ဘရောက်ဇာ extension popup တွင် Archive နှင့် မကြာသေးမီ ဖျက်ထားသည်များကို ပြန်ယူနိုင်ပြီး ဆိုက်တစ်ခုချင်းစီ ဆက်တင်များ ပါဝင်လာပါပြီ။',
+      th: 'ป๊อปอัปของส่วนขยายเบราว์เซอร์มีมุมมองคลังเก็บและรายการที่ลบล่าสุดพร้อมการกู้คืน และการตั้งค่ารายเว็บไซต์',
+    },
+  },
+  {
+    id: 'ssh-commit-signing-cli',
+    icon: Terminal,
+    title: {
+      en: 'SSH Commit Signing and CLI Commands',
+      my: 'SSH ဖြင့် commit လက်မှတ်ထိုးခြင်းနှင့် CLI ညွှန်ကြားချက်များ',
+      th: 'ลงนามคอมมิตด้วย SSH และคำสั่ง CLI ใหม่',
+    },
+    description: {
+      en: 'Sign Git commits and tags with an SSH key from your vault, and manage items from the CLI: tag, favorite, archive, move and create more item types.',
+      my: 'Vault ထဲရှိ SSH key ဖြင့် Git commit နှင့် tag များကို လက်မှတ်ထိုးပြီး CLI မှ ပစ္စည်းများကို tag၊ အကြိုက်ဆုံး၊ archive၊ ရွှေ့ခြင်းနှင့် အမျိုးအစားသစ်များ ဖန်တီးနိုင်ပါသည်။',
+      th: 'ลงนามคอมมิตและแท็ก Git ด้วยคีย์ SSH จากห้องนิรภัย และจัดการรายการจาก CLI: ติดแท็ก รายการโปรด เก็บถาวร ย้าย และสร้างรายการประเภทใหม่',
+    },
+    showMe: {
+      route: { name: 'settings', tab: 'ssh' },
+    },
+  },
+  {
+    id: 'unlock-protection-passkeys',
+    icon: KeyRound,
+    title: {
+      en: 'Safer Unlock and Passkey Fix',
+      my: 'ပိုလုံခြုံသော သော့ဖွင့်ခြင်းနှင့် Passkey ပြင်ဆင်မှု',
+      th: 'ปลดล็อกปลอดภัยขึ้นและแก้ไขพาสคีย์',
+    },
+    description: {
+      en: 'Repeated wrong master passwords now add an increasing delay, a Caps Lock hint warns you while typing, and sites can register passkeys created by gitpass again.',
+      my: 'မာစတာစကားဝှက် အကြိမ်ကြိမ်မှားပါက စောင့်ချိန် တိုးလာမည်၊ Caps Lock ဖွင့်ထားလျှင် သတိပေးမည်ဖြစ်ပြီး gitpass ဖန်တီးသော passkey များကို ဆိုက်များတွင် မှတ်ပုံတင်နိုင်ပါပြီ။',
+      th: 'การใส่รหัสผ่านหลักผิดซ้ำจะมีการหน่วงเวลาเพิ่มขึ้น มีคำเตือนเมื่อเปิด Caps Lock และเว็บไซต์สามารถลงทะเบียนพาสคีย์ที่ gitpass สร้างได้แล้ว',
+    },
+    showMe: {
+      route: { name: 'settings', tab: 'security' },
+    },
+  },
+];
+
 export const RELEASES: ReleaseHighlights[] = [
+  { version: '0.6.7', highlights: HIGHLIGHTS_0_6_6 },
+  { version: '0.6.6', highlights: HIGHLIGHTS_0_6_6 },
   {
     version: '0.6.5',
     highlights: [

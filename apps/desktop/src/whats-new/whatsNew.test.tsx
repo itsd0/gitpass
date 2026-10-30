@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -66,6 +68,19 @@ describe("What's new", () => {
             expect(h.showMe.label.th).toBeTruthy();
           }
         }
+      }
+    });
+
+    it('has highlights for the app version being released', () => {
+      // Release guard: bumping the version without a releases.ts entry fails CI,
+      // otherwise the sheet silently falls back to an older release's highlights.
+      const pkg = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../package.json'), 'utf8'));
+      const tauri = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../src-tauri/tauri.conf.json'), 'utf8'));
+      for (const version of [pkg.version, tauri.version]) {
+        expect(
+          RELEASES.some((r) => r.version === version),
+          `apps/desktop/src/whats-new/releases.ts has no entry for ${version}`,
+        ).toBe(true);
       }
     });
 
