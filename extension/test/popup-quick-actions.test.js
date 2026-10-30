@@ -7,7 +7,7 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 const V = require('../popup/view.js');
 const root = path.join(__dirname, '..');
-const SCRIPTS = ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/generator.js', 'popup/popup.js'];
+const SCRIPTS = ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/generator.js', 'popup/skeletons.js', 'popup/recent.js', 'popup/totp-list.js', 'popup/detail.js', 'popup/edit.js', 'popup/largetype.js', 'popup/quick-actions.js', 'popup/panels.js', 'popup/settings.js', 'popup/popup.js'];
 
 test('quickActions: per-category actions, Open website only for logins with an http(s) URL', () => {
   assert.deepStrictEqual(V.quickActions({ category: 'login', url: 'https://example.com' }), ['copyUsername', 'copyPassword', 'openWebsite']);
@@ -70,7 +70,7 @@ function popup() {
       default: return ok({});
     }
   };
-  for (const f of SCRIPTS) w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
+  w.eval("'use strict';\n" + SCRIPTS.map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n'));
   return { dom, w, sent };
 }
 
