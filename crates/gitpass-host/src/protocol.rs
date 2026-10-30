@@ -7,7 +7,7 @@ use crate::handler::{code, coded};
 use crate::origin::{origin_matches, parse_request_origin};
 use crate::passkey::record_matches_origin;
 use anyhow::Result;
-use gitpass_core::audit::Finding;
+use gitpass_core::audit::{Finding, FINDING_KINDS};
 use gitpass_core::item::{Category, Field, FieldKind};
 use gitpass_core::merge::ItemRecord;
 use serde_json::{json, Map, Value};
@@ -234,6 +234,14 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord, last_used: Opti
     m.insert("notes".into(), json!(nonempty(&r.item.notes)));
     m.insert("tags".into(), json!(r.tags));
     m.insert("created_at".into(), json!(r.created_at));
+    if r.category == Category::Login && !r.password_history.is_empty() {
+        let history: Vec<Value> = r.password_history.iter().map(|h| {
+            json!({
+                "replaced_at": h.replaced_at,
+            })
+        }).collect();
+        m.insert("password_history".into(), json!(history));
+    }
     v
 }
 
@@ -515,4 +523,99 @@ pub fn item_findings(
     if let Some(h) = insecure_url_host { out["insecure_url_host"] = json!(h); }
     if let Some(u) = change_pw_url { out["change_password_url"] = json!(u); }
     out
+}
+
+/// Shared pure logic for `audit_summary` command.
+pub fn audit_summary<'a, I>(
+    report: &gitpass_core::audit::AuditReport,
+    records: I,
+) -> Value
+where
+    I: IntoIterator<Item = (&'a str, &'a str, &'a str, &'a ItemRecord)>,
+{
+    let recs: Vec<(&'a str, &'a str, &'a str, &'a ItemRecord)> = records.into_iter().collect();
+    let with_pw = recs.iter().filter(|(_, _, _, r)| r.item.password.as_deref().is_some_and(|p| !p.is_empty())).count();
+
+    let mut bad: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    let mut old_count = 0;
+    let mut missing_totp_count = 0;
+
+    for f in &report.per_item {
+        let full_id = format!("{}:{}", f.vault, f.id);
+        let mut has_bad = false;
+        let mut has_old = false;
+        let mut has_totp = false;
+        for x in &f.findings {
+            match x {
+                Finding::Weak { .. } | Finding::Reused { .. } | Finding::Pwned { .. } => has_bad = true,
+                Finding::Old { .. } => has_old = true,
+                Finding::MissingTotp | Finding::TotpAvailable { .. } => has_totp = true,
+                _ => {}
+            }
+        }
+        if has_bad { bad.insert(full_id); }
+        if has_old { old_count += 1; }
+        if has_totp { missing_totp_count += 1; }
+    }
+
+    let score = if with_pw > 0 {
+        let penalty = bad.len() as f64 / with_pw as f64 * 80.0
+            + old_count as f64 / with_pw as f64 * 10.0
+            + missing_totp_count as f64 / report.items_checked.max(1) as f64 * 10.0;
+        (100.0 - penalty).round().clamp(0.0, 100.0) as u8
+    } else {
+        100
+    };
+
+    let rec_map: std::collections::HashMap<(&str, &str), &'a ItemRecord> = recs
+        .iter()
+        .map(|(v, _, i, r)| ((*v, *i), *r))
+        .collect();
+
+    let mut findings_out = vec![];
+    for kind in FINDING_KINDS {
+        let mut kind_items = vec![];
+        let mut seen = std::collections::BTreeSet::new();
+        for f in &report.per_item {
+            if f.findings.iter().any(|x| x.kind() == *kind) {
+                let full_id = format!("{}:{}", f.vault, f.id);
+                if seen.insert(full_id.clone()) {
+                    let (username, url, category) = if let Some(r) = rec_map.get(&(f.vault.as_str(), f.id.as_str())) {
+                        (
+                            r.item.username.clone().unwrap_or_default(),
+                            r.item.url.clone().unwrap_or_default(),
+                            r.category.as_str(),
+                        )
+                    } else {
+                        (String::new(), String::new(), "login")
+                    };
+                    let title = if f.title.is_empty() {
+                        rec_map.get(&(f.vault.as_str(), f.id.as_str())).map(|r| r.item.title.as_str()).unwrap_or("").to_string()
+                    } else {
+                        f.title.clone()
+                    };
+                    kind_items.push(json!({
+                        "id": full_id,
+                        "title": title,
+                        "username": username,
+                        "url": url,
+                        "category": category,
+                    }));
+                }
+            }
+        }
+        if !kind_items.is_empty() {
+            findings_out.push(json!({
+                "kind": kind,
+                "count": kind_items.len(),
+                "items": kind_items,
+            }));
+        }
+    }
+
+    json!({
+        "score": score,
+        "items_checked": report.items_checked,
+        "findings": findings_out,
+    })
 }

@@ -14,6 +14,10 @@
         { "name": "Remember me", "value": "true", "type": 2, "linkedId": null }
       ],
       "login": {
+        "passwordHistory": [
+          { "lastUsedDate": "2025-01-15T10:30:00.000Z", "password": "Older-P@ss-2025" },
+          { "lastUsedDate": "2024-05-01T08:00:00.000Z", "password": "Oldest-P@ss-2024" }
+        ],
         "fido2Credentials": [],
         "uris": [ { "match": null, "uri": "https://mail.example.com/login" }, { "match": 1, "uri": "https://example.com" } ],
         "username": "alice@example.com", "password": "Fake-P@ss, \"quoted\"", "totp": "otpauth://totp/Example:alice@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Example"

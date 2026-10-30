@@ -70,6 +70,7 @@ pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>)
 #[tauri::command] pub fn create_item(s: State<App>, input: a::ItemInput) -> R<a::ItemSummary> { s.create_item(&input).map_err(e) }
 #[tauri::command] pub fn update_item(s: State<App>, item_id: String, input: a::ItemInput) -> R<a::ItemSummary> { s.update_item(&item_id, &input).map_err(e) }
 #[tauri::command] pub fn set_favorite(s: State<App>, vault_id: String, item_id: String, favorite: bool) -> R<()> { s.set_favorite(&vault_id, &item_id, favorite).map_err(e) }
+#[tauri::command] pub fn set_rotation(s: State<App>, vault_id: String, item_id: String, days: Option<u32>) -> R<()> { s.set_rotation(&vault_id, &item_id, days).map_err(e) }
 #[tauri::command] pub fn archive_item(s: State<App>, vault_id: String, item_id: String, archived: bool) -> R<()> { s.archive_item(&vault_id, &item_id, archived).map_err(e) }
 #[tauri::command] pub fn delete_item(s: State<App>, vault_id: String, item_id: String) -> R<()> { s.delete_item(&vault_id, &item_id).map_err(e) }
 #[tauri::command] pub fn restore_item(s: State<App>, vault_id: String, item_id: String) -> R<()> { s.restore_item(&vault_id, &item_id).map_err(e) }
@@ -78,6 +79,7 @@ pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>)
 #[tauri::command] pub fn unignore_finding(s: State<App>, vault_id: String, item_id: String, kind: String) -> R<()> { s.unignore_finding(&vault_id, &item_id, &kind).map_err(e) }
 #[tauri::command] pub fn add_related_item(s: State<App>, vault_id: String, item_id: String, related_id: String) -> R<()> { s.add_related_item(&vault_id, &item_id, &related_id).map_err(e) }
 #[tauri::command] pub fn remove_related_item(s: State<App>, vault_id: String, item_id: String, related_id: String) -> R<()> { s.remove_related_item(&vault_id, &item_id, &related_id).map_err(e) }
+#[tauri::command] pub fn clear_password_history(s: State<App>, vault_id: String, item_id: String) -> R<()> { s.clear_password_history(&vault_id, &item_id).map_err(e) }
 #[tauri::command] pub fn empty_trash(s: State<App>) -> R<usize> { s.empty_trash().map_err(e) }
 #[tauri::command] pub fn bulk_items(s: State<App>, req: a::BulkRequest) -> R<a::BulkResult> { s.bulk_items(&req).map_err(e) }
 #[tauri::command] pub fn move_item(s: State<App>, vault_id: String, item_id: String, to_vault_id: String) -> R<a::ItemSummary> { s.move_item(&vault_id, &item_id, &to_vault_id).map_err(e) }

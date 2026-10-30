@@ -100,6 +100,7 @@ gitpass edit github --tag work --favorite
 gitpass edit github --untag old-tag --unfavorite
 gitpass edit github --link "Recovery codes" --link 01J...   # related items, by title or ID, repeatable
 gitpass edit github --unlink "Recovery codes"                  # remove a related item, by title or ID
+gitpass edit bank --rotate-every 90d
 gitpass archive github
 gitpass unarchive github
 gitpass undelete github
@@ -107,6 +108,8 @@ gitpass mv github --to Work
 gitpass rm Personal github
 gitpass history github
 gitpass history github --vault Personal --json
+gitpass show github --password-history
+gitpass show github --password-history --reveal
 gitpass restore github --version 3
 ```
 
@@ -116,16 +119,19 @@ gitpass restore github --version 3
   Secrets are never accepted as command-line arguments to avoid shell-history leaks; `add` prompts
   without echo, accepts stdin flags (`--password-stdin`, `--credential-stdin`, `--notes-stdin`,
   `--account-number-stdin`, `--pin-stdin`), or reads key files (`--private-key-file`).
-- `get` prints the item, or only the password with `--password-only`. `--json` prints the
+- `get` and `show` print the item, or only the password with `--password-only`. `--json` prints the
   item with concealed values set to `null` unless `--reveal` is also passed; see the
   README section "Scripting with --json".
+- `show <item> --password-history` (and `get <vault> <item> --password-history`) lists previous passwords
+  with replacement dates (masked by default; use `--reveal` to show values, or `--json` for structured output).
 - `get --copy` and `copy` block for `--clear-secs` (default 30) while the clipboard is
   owned, then clear it; `--clear-secs 0` copies without waiting. `--quiet` never echoes
   the value when no clipboard is available.
 - `--field` takes `password`, `username`, `url`, `totp`, `notes` or `title`.
 - `edit` and `rm` take an item query; `edit` replaces only the fields you pass,
   `--password` / `--generate [N]` set a new password, `--tag` / `--untag` add or remove tags (repeatable),
-  and `--favorite` / `--unfavorite` toggle favorite status.
+  and `--favorite` / `--unfavorite` toggle favorite status. `--rotate-every 30d|90d|180d|365d|none`
+  sets or clears a "change this password every N days" reminder (shown by `get` and flagged by `audit`).
 - Related items: `edit --link <title|id>` (alias `--related`, repeatable) links another item,
   `edit --unlink <title|id>` (alias `--unrelated`, repeatable) removes the link, and linking an
   item to itself is rejected. `get` prints a `related:` line with the linked titles (a missing or
@@ -139,8 +145,8 @@ gitpass restore github --version 3
   `--pick <N>`, and `--json`, and never print secrets.
 - `history` lists versions without secrets (current version first); `restore --version N`
   restores a previous version as a new version. Both accept `<vault>/<item>` instead of
-  `--vault` and refuse to guess when several items match.
-- `list`, `find`, `get` and `get --json` skip archived and deleted items unless
+  `--vault` and refuse to guess when several items match. To view previous passwords with replacement dates on a login item, see `gitpass show <item> --password-history`.
+- `list`, `find`, `get`, `show` and `get --json` skip archived and deleted items unless
   `--include-archived` is passed.
 
 ## Attachments
@@ -347,7 +353,8 @@ gitpass audit --include-ignored
 and duplicates on login items, plus expired or expiring credentials on cards and API
 credentials; it also reports offline 2FA/passkey availability. `--unused-months` (default
 12, `0` disables) flags logins not used on this device for that long, falling back to the
-last edit/creation time when the item was never used. `--hibp` opts in to Have I
+last edit/creation time when the item was never used. Logins with a `--rotate-every`
+reminder are reported as `rotation_due` or `rotation_soon` (within 14 days). `--hibp` opts in to Have I
 Been Pwned k-anonymity checks (only five hex characters of a SHA-1 leave the machine).
 `--max-age-days` defaults to 365 and `--expiring-days` to 30. The scoring and checks are
 documented in [WATCHTOWER.md](WATCHTOWER.md).

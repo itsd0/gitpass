@@ -35,10 +35,12 @@ export const api = {
   createItem: (a:{input:T.ItemInput}) => call<T.ItemSummary>('create_item', a),
   updateItem: (a:{itemId:string; input:T.ItemInput}) => call<T.ItemSummary>('update_item', a),
   setFavorite: (a:{vaultId:string; itemId:string; favorite:boolean}) => call<void>('set_favorite', a),
+  setRotation: (a:{vaultId:string; itemId:string; days:number|null}) => call<void>('set_rotation', a),
   archiveItem: (a:{vaultId:string; itemId:string; archived:boolean}) => call<void>('archive_item', a),
   deleteItem: (a:{vaultId:string; itemId:string}) => call<void>('delete_item', a),       // soft delete
   restoreItem: (a:{vaultId:string; itemId:string}) => call<void>('restore_item', a),
   purgeItem: (a:{vaultId:string; itemId:string}) => call<void>('purge_item', a),
+  clearPasswordHistory: (a:{vaultId:string; itemId:string}) => call<void>('clear_password_history', a),
   /** permanently delete every item in Recently Deleted in one commit; returns the count */
   emptyTrash: () => call<number>('empty_trash'),
   /** multi-select bulk action; one vault commit (move = two) */
