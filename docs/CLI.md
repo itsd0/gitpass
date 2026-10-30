@@ -241,7 +241,10 @@ OpenSSH private key (Ed25519, ECDSA P-256/P-384, or RSA 2048+ bits; RSA under 20
 are rejected; a passphrase comes from `GITPASS_SSH_PASSPHRASE` or a prompt). The SSH agent signs
 RSA requests with `rsa-sha2-256` or `rsa-sha2-512` only (plain SHA-1 `ssh-rsa` is refused). `ssh public` prints the
 `authorized_keys` line; `ssh config` prints the `~/.ssh/config` `IdentityAgent` snippet
-(both `config` and `agent` accept `--socket PATH`).
+(both `config` and `agent` accept `--socket PATH`). The desktop app's
+**Settings → SSH Agent → Recent activity** lists the last 50 sign requests (time, key, requested
+algorithm, client app, and whether the request was signed, denied or refused). That list lives only
+in memory and is cleared when the vault locks.
 
 ### Git commit signing
 
