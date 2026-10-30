@@ -841,4 +841,13 @@ export const th: Partial<Record<Key, string>> = {
   "ctx.trashN": "ย้าย {n} รายการไปที่ลบล่าสุด",
   "ctx.restoreN": "กู้คืน {n} รายการ",
   "ctx.purgeN": "ลบ {n} รายการอย่างถาวร…",
+  "related.title": "รายการที่เกี่ยวข้อง",
+  "related.add": "เพิ่มรายการที่เกี่ยวข้อง",
+  "related.notAvailable": "ไม่มีรายการนี้",
+  "related.removeLink": "ลบรายการที่เกี่ยวข้อง",
+  "related.pickerTitle": "เลือกรายการที่เกี่ยวข้อง",
+  "related.searchPlaceholder": "ค้นหารายการ…",
+  "related.noMatches": "ไม่พบรายการที่ตรงกัน",
+  "related.toast.linked": "เพิ่มรายการที่เกี่ยวข้องแล้ว",
+  "related.toast.unlinked": "ลบรายการที่เกี่ยวข้องแล้ว",
 };

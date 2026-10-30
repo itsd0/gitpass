@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Dices, Eye, EyeOff, GripVertical, Plus, Trash2, X } from 'lucide-react';
 import { api } from '../../api/client';
-import type { Field, FieldKind, ItemDetail, ItemInput, ScannedTotp, Section, VaultInfo } from '../../api/types';
+import type { Field, FieldKind, ItemCategory, ItemDetail, ItemInput, ItemSummary, ScannedTotp, Section, VaultInfo } from '../../api/types';
+import { RelatedItemPickerModal } from './RelatedItemPickerModal';
 import { cn } from '../../lib/utils';
 import { TotpAutofillOffer, TotpScanButton, handleTotpImageDrop } from './TotpScanButton';
 import { useApp } from '../../lib/store';
@@ -22,11 +23,32 @@ const newId = (p: string) => `new_${p}_${Math.random().toString(36).slice(2, 9)}
 
 /** Convert a detail into an editable input. Concealed values stay null = "unchanged" unless the user types a new one. */
 export function toInput(d: ItemDetail): ItemInput {
-  return { vaultId: d.vaultId, category: d.category, title: d.title, sections: structuredClone(d.sections), notes: d.notes, tags: [...d.tags], favorite: d.favorite, url: d.url ?? null };
+  return {
+    vaultId: d.vaultId,
+    category: d.category,
+    title: d.title,
+    sections: structuredClone(d.sections),
+    notes: d.notes,
+    tags: [...d.tags],
+    favorite: d.favorite,
+    url: d.url ?? null,
+    relatedItemIds: d.relatedItemIds ? [...d.relatedItemIds] : (d.relatedItems ? d.relatedItems.map((r) => r.id) : []),
+  };
 }
 /** New fields get an empty id so the backend assigns one. */
 export function normalizeInput(i: ItemInput): ItemInput {
-  return { ...i, title: i.title.trim() || 'Untitled', sections: i.sections.map((s) => ({ ...s, id: s.id.startsWith('new_') ? '' : s.id, fields: s.fields.filter((f) => f.label.trim() || f.value).map((f) => ({ ...f, id: f.id.startsWith('new_') ? '' : f.id })) })) };
+  return {
+    ...i,
+    title: i.title.trim() || 'Untitled',
+    sections: i.sections.map((s) => ({
+      ...s,
+      id: s.id.startsWith('new_') ? '' : s.id,
+      fields: s.fields
+        .filter((f) => f.label.trim() || f.value)
+        .map((f) => ({ ...f, id: f.id.startsWith('new_') ? '' : f.id })),
+    })),
+    relatedItemIds: i.relatedItemIds ?? [],
+  };
 }
 
 export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: VaultInfo[] }) {
@@ -35,6 +57,32 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
   const [draft, setDraft] = useState<ItemInput>(() => toInput(detail));
   const [tagText, setTagText] = useState(detail.tags.join(', '));
   const [rotateEvery, setRotateEvery] = useState<number | null>(detail.rotateEveryDays ?? null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [relatedMap, setRelatedMap] = useState<Map<string, { id: string; category?: ItemCategory; title: string; subtitle?: string | null }>>(() => {
+    const m = new Map();
+    for (const r of detail.relatedItems ?? []) {
+      m.set(r.id, { id: r.id, category: r.category, title: r.title, subtitle: r.subtitle });
+    }
+    return m;
+  });
+
+  const addRelated = (item: ItemSummary) => {
+    setRelatedMap((prev) => {
+      const next = new Map(prev);
+      next.set(item.id, { id: item.id, category: item.category, title: item.title, subtitle: item.subtitle });
+      return next;
+    });
+    const currentIds = draft.relatedItemIds ?? [];
+    if (!currentIds.includes(item.id)) {
+      upd({ relatedItemIds: [...currentIds, item.id] });
+      toast(t('related.toast.linked'));
+    }
+  };
+
+  const removeRelated = (id: string) => {
+    const currentIds = draft.relatedItemIds ?? [];
+    upd({ relatedItemIds: currentIds.filter((x) => x !== id) });
+  };
   const [busy, setBusy] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [drag, setDrag] = useState<Drag>(null);
@@ -213,6 +261,66 @@ export function ItemEditor({ detail, vaults }: { detail: ItemDetail; vaults: Vau
 
           <label className="block text-xs text-muted">{t('editor.website')}<Input className="mt-1" value={draft.url ?? ''} onChange={(e) => upd({ url: e.target.value || null })} placeholder="https://" /></label>
           <label className="block text-xs text-muted">{t('editor.tags')}<Input className="mt-1" value={tagText} onChange={(e) => setTagText(e.target.value)} /></label>
+
+          <div className="rounded-lg border border-border bg-card p-3" data-testid="editor-related-card">
+            <div className="flex items-center justify-between pb-2">
+              <span className="text-xs font-semibold uppercase tracking-wider text-muted">{t('related.title')}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs text-accent hover:text-accent font-medium gap-1 px-1.5"
+                onClick={() => setShowPicker(true)}
+                data-testid="add-related-item-btn"
+              >
+                <Plus size={12} />
+                {t('related.add')}
+              </Button>
+            </div>
+            {(draft.relatedItemIds ?? []).length > 0 ? (
+              <div className="divide-y divide-border/50">
+                {(draft.relatedItemIds ?? []).map((id) => {
+                  const info = relatedMap.get(id);
+                  const title = info?.title || t('related.notAvailable');
+                  const subtitle = info?.subtitle;
+                  const category: ItemCategory = info?.category ?? 'login';
+                  return (
+                    <div
+                      key={id}
+                      className="flex items-center gap-3 py-2 px-1 text-sm"
+                      data-testid={`editor-related-item-${id}`}
+                    >
+                      <ItemIcon item={{ category, title, subtitle: subtitle ?? '' }} size={20} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">{title}</div>
+                        {subtitle && <div className="truncate text-xs text-muted">{subtitle}</div>}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="iconSm"
+                        aria-label={t('related.removeLink')}
+                        onClick={() => removeRelated(id)}
+                        data-testid={`remove-related-${id}`}
+                        className="text-muted hover:text-danger"
+                      >
+                        <X size={13} />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+
+          <RelatedItemPickerModal
+            open={showPicker}
+            onOpenChange={setShowPicker}
+            currentItemId={detail.id}
+            excludeItemIds={draft.relatedItemIds ?? []}
+            onSelect={addRelated}
+          />
+
           <NotesEditorField label={t('detail.notes')} value={draft.notes ?? ''} onChange={(notes) => upd({ notes: notes || null })} rows={4} />
         </div>
       </div>

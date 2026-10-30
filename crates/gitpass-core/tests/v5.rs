@@ -676,3 +676,57 @@ fn rotation_reminder_survives_edit_restore_copy_merge_and_export() {
     assert!(matches!(back.rotation_status(1_000_000 + 170 * 86400), Some(RotationStatus::Soon { every_days: 180, in_days: 10 })));
     assert_eq!(back.rotation_status(1_000_000 + 100 * 86400), None);
 }
+
+#[test]
+fn old_item_without_related_items_loads_and_saves_unchanged() {
+    let old_json = r#"{
+        "title": "Legacy Item",
+        "username": "alice",
+        "password": "secretpassword",
+        "updated_at": "1700000000"
+    }"#;
+    let rec: ItemRecord = serde_json::from_str(old_json).unwrap();
+    assert!(rec.related_item_ids.is_empty());
+
+    // Reserialization does not include related_item_ids field
+    let reserialized = serde_json::to_string(&rec).unwrap();
+    assert!(!reserialized.contains("related_item_ids"));
+
+    // Setting related_item_ids serializes it
+    let mut updated = rec.clone();
+    updated.related_item_ids = vec!["item-123".into()];
+    let reserialized_updated = serde_json::to_string(&updated).unwrap();
+    assert!(reserialized_updated.contains(r#""related_item_ids":["item-123"]"#));
+}
+
+#[test]
+fn session_related_item_linking_and_unlinking() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("vault");
+    let sk = store::init(&root, "correct horse", gitpass_core::crypto::KdfParams { alg: "argon2id".into(), m_kib: 8192, t: 1, p: 1 }).unwrap();
+    let s = Session::unlock(&root, "correct horse", &sk).unwrap();
+    let vid = s.create_vault("Personal").unwrap();
+
+    let mut it1 = Item::default(); it1.title = "Item 1".into();
+    let id1 = s.add_record(&vid, ItemRecord::new(it1)).unwrap();
+    let mut it2 = Item::default(); it2.title = "Item 2".into();
+    let id2 = s.add_record(&vid, ItemRecord::new(it2)).unwrap();
+
+    // Link item 1 to item 2
+    s.add_related_item(&vid, &id1, &id2).unwrap();
+    let (_, r1) = s.read_record(&vid, &id1).unwrap();
+    assert_eq!(r1.related_item_ids, vec![id2.clone()]);
+
+    // Self linking is rejected
+    assert!(s.add_related_item(&vid, &id1, &id1).is_err());
+
+    // Idempotent add
+    s.add_related_item(&vid, &id1, &id2).unwrap();
+    let (_, r1) = s.read_record(&vid, &id1).unwrap();
+    assert_eq!(r1.related_item_ids, vec![id2.clone()]);
+
+    // Unlink item 2
+    s.remove_related_item(&vid, &id1, &id2).unwrap();
+    let (_, r1) = s.read_record(&vid, &id1).unwrap();
+    assert!(r1.related_item_ids.is_empty());
+}

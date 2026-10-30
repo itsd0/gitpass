@@ -837,5 +837,14 @@ export const en = {
   "ctx.trashN": "Move {n} items to Recently Deleted",
   "ctx.restoreN": "Restore {n} items",
   "ctx.purgeN": "Delete {n} items permanently…",
+  "related.title": "Related items",
+  "related.add": "Add related item",
+  "related.notAvailable": "Item not available",
+  "related.removeLink": "Remove related item",
+  "related.pickerTitle": "Select related item",
+  "related.searchPlaceholder": "Search items…",
+  "related.noMatches": "No matching items",
+  "related.toast.linked": "Related item added",
+  "related.toast.unlinked": "Related item removed",
 } as const;
 export type Key = keyof typeof en;

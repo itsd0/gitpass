@@ -913,7 +913,7 @@ mod tests {
         rec.history.push(HistoryEntry {
             version: 1,
             updated_at: "1000".into(),
-            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![] },
+            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![], related_item_ids: vec![] },
         });
         rec.item.notes = Some("updated note".into());
         rec.item.updated_at = "2000".into();
@@ -923,7 +923,7 @@ mod tests {
         rec.history.push(HistoryEntry {
             version: 2,
             updated_at: "2000".into(),
-            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![] },
+            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![], related_item_ids: vec![] },
         });
         rec.item.password = Some("secretB".into());
         rec.item.updated_at = "3000".into();
@@ -933,7 +933,7 @@ mod tests {
         rec.history.push(HistoryEntry {
             version: 3,
             updated_at: "3000".into(),
-            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![] },
+            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![], related_item_ids: vec![] },
         });
         rec.tags = vec!["tag1".into()];
         rec.item.updated_at = "4000".into();
@@ -995,7 +995,7 @@ mod tests {
         edited.history.push(crate::item::HistoryEntry {
             version: 1,
             updated_at: edited.item.updated_at.clone(),
-            snapshot: crate::item::Snapshot { item: edited.item.clone(), category: edited.category, sections: vec![], tags: vec![] },
+            snapshot: crate::item::Snapshot { item: edited.item.clone(), category: edited.category, sections: vec![], tags: vec![], related_item_ids: vec![] },
         });
         edited.item.notes = Some("edited today".into());
         edited.item.updated_at = now_secs.to_string();
@@ -1040,7 +1040,7 @@ mod tests {
         rec.history.push(HistoryEntry {
             version: 1,
             updated_at: created.to_string(),
-            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![] },
+            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![], related_item_ids: vec![] },
         });
         rec.item.notes = Some("new note added today".into());
         rec.item.updated_at = (now_secs - day).to_string();
@@ -1053,7 +1053,7 @@ mod tests {
         rec.history.push(HistoryEntry {
             version: 2,
             updated_at: rec.item.updated_at.clone(),
-            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![] },
+            snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: vec![], tags: vec![], related_item_ids: vec![] },
         });
         rec.item.password = Some("BrandNewPassword123!".into());
         rec.item.updated_at = (now_secs - 10 * day).to_string();
@@ -1084,7 +1084,7 @@ mod tests {
             rec.history.push(HistoryEntry {
                 version: *version,
                 updated_at: rec.item.updated_at.clone(),
-                snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: rec.sections.clone(), tags: rec.tags.clone() },
+                snapshot: Snapshot { item: rec.item.clone(), category: rec.category, sections: rec.sections.clone(), tags: rec.tags.clone(), related_item_ids: vec![] },
             });
             let n = rec.history.len();
             if n > HISTORY_LIMIT { rec.history.drain(..n - HISTORY_LIMIT); }
@@ -1125,7 +1125,7 @@ mod tests {
         fresh.history.push(HistoryEntry {
             version: 1,
             updated_at: created.to_string(),
-            snapshot: Snapshot { item: fresh.item.clone(), category: fresh.category, sections: vec![], tags: vec![] },
+            snapshot: Snapshot { item: fresh.item.clone(), category: fresh.category, sections: vec![], tags: vec![], related_item_ids: vec![] },
         });
         assert_eq!(fresh.password_changed_at(), Some(created));
     }

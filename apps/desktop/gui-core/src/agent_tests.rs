@@ -80,13 +80,13 @@ fn fld(id: &str, kind: FieldKind, v: &str) -> Field { Field { id: id.into(), lab
 fn add_login(e: &Env, title: &str, url: &str, user: &str, pw: &str) -> String {
     let s = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: title.into(), url: Some(url.into()),
         sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, user), fld("password", FieldKind::Concealed, pw)] }],
-        notes: None, tags: None, favorite: None }).unwrap();
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
     format!("{}:{}", e.vault, s.id)
 }
 fn add_card(e: &Env) -> String {
     let s = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::CreditCard, title: "Example Bank".into(), url: None,
         sections: vec![Section { id: "card".into(), title: Some("Card".into()), fields: vec![fld("number", FieldKind::Concealed, "4111 1111 1111 1111"), fld("cvv", FieldKind::Concealed, "123")] }],
-        notes: None, tags: None, favorite: Some(true) }).unwrap();
+        notes: None, tags: None, favorite: Some(true), related_item_ids: None }).unwrap();
     format!("{}:{}", e.vault, s.id)
 }
 
@@ -447,8 +447,7 @@ fn agent_api_credential_masked_hint_in_summary_and_detail() {
         }],
         notes: None,
         tags: None,
-        favorite: None,
-    }).unwrap();
+        favorite: None, related_item_ids: None }).unwrap();
 
     let list = c.ok("list_items", json!({"category": "api_credential"}));
     let items = list["items"].as_array().unwrap();
