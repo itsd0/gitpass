@@ -252,6 +252,25 @@ function clearWatchtowerBadge() {
   btn.title = t('watchtower', 'Watchtower');
 }
 
+// List density (#397): 'comfortable' (default) or 'compact', stored in the shared
+// extension settings. Applied as a class on the list container; storage changes
+// apply instantly without reopening the popup.
+function applyDensity(d) {
+  const list = $('list');
+  if (list) list.classList.toggle('compact', d === 'compact');
+}
+function loadDensity() {
+  if (typeof window !== 'undefined' && window.__gitpassMockDensity) { applyDensity(window.__gitpassMockDensity); return Promise.resolve(); }
+  return popupSettings().then((st) => applyDensity(st && st.density)).catch(() => {});
+}
+if (globalThis.chrome && chrome.storage && chrome.storage.onChanged) {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local' || !changes.settings) return;
+    const d = changes.settings.newValue && changes.settings.newValue.density;
+    applyDensity(d);
+  });
+}
+
 async function refresh() {
   let st = null, err = null;
   try { st = await send({ type: 'popup:status' }); } catch (e) { err = e; }
@@ -265,6 +284,7 @@ async function refresh() {
     $('acctName').textContent = (!nm || /^[0-9a-f]{8}-[0-9a-f]{4}-/i.test(nm)) ? 'gitpass' : nm;
     $('acct').title = st.account.email || '';
   }
+  loadDensity();
   await loadData();
   refreshWatchtowerBadge();
   if (!document.querySelector('.inline-err')) $('q').focus();

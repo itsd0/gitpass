@@ -389,6 +389,15 @@ async function initSettings() {
       showToast(t('saved', 'Saved'));
     };
   }
+  // List density (#397): string setting, stored alongside the boolean toggles.
+  const density = $('density');
+  if (density) {
+    density.value = s.density === 'compact' ? 'compact' : 'comfortable';
+    density.onchange = async () => {
+      await GitpassOnboard.setSettings({ density: density.value === 'compact' ? 'compact' : 'comfortable' });
+      showToast(t('saved', 'Saved'));
+    };
+  }
 }
 
 async function renderShortcut() {
