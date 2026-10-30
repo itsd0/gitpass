@@ -206,6 +206,13 @@ describe('groupRows', () => {
     });
   });
 
+  it('returns plain item rows with no headers when flat is set', () => {
+    const list = [itemYesterday, itemToday, itemOlder1];
+    const rows = groupRows(list, 'updated', { flat: true, now, showRecentSection: true });
+    expect(rows.every((r) => r.type === 'item')).toBe(true);
+    expect(rows.map((r) => (r.type === 'item' ? r.item.id : ''))).toEqual(['2', '1', '5']);
+  });
+
   it('hides empty sections', () => {
     // Only today and August 2026 items
     const list = [itemToday, itemOlder1];
