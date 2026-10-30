@@ -25,7 +25,7 @@ fn map() -> Map {
 fn parse_refs() {
     assert_eq!(SecretRef::parse("gp://Dev/Postgres/password").unwrap(), SecretRef { vault: "Dev".into(), item: "Postgres".into(), field: "password".into() });
     assert_eq!(SecretRef::parse("gp://My%20Vault/a%2Fb/token").unwrap().item, "a/b");
-    for bad in ["op://a/b/c", "gp://a/b", "gp://a//c", "gp://a/b/c/d", "gp://a/b/%zz"] { assert!(SecretRef::parse(bad).is_err(), "{bad}"); }
+    for bad in ["xx://a/b/c", "gp://a/b", "gp://a//c", "gp://a/b/c/d", "gp://a/b/%zz"] { assert!(SecretRef::parse(bad).is_err(), "{bad}"); }
 }
 
 #[test]
@@ -344,4 +344,72 @@ fn run_inherited_env_end_to_end() {
     assert!(err.contains("BAD_TOKEN_VAR"), "stderr must name variable: {err}");
     assert!(err.contains("NoSuchItem"), "stderr must contain reason: {err}");
     assert!(!err.contains("FAKE-s3cret") && !err.contains("ghp_FAKE"), "no secrets in stderr: {err}");
+}
+
+#[test]
+fn reference_encoding_round_trips_through_parse() {
+    for (v, i, f) in [("Dev", "Postgres", "password"), ("My Vault", "a/b", "api key"), ("100% {legit}", "Caf\u{e9} \u{1F600} #1", "x%2Fy"), ("v", "t", "a.b-c_d~e")] {
+        let r = SecretRef { vault: v.into(), item: i.into(), field: f.into() };
+        let text = r.to_string();
+        assert!(text.starts_with("gp://") && !text.contains(' ') && !text.contains('{'), "{text}");
+        assert_eq!(text.matches('/').count(), 4, "only the separators are literal slashes: {text}");
+        assert_eq!(SecretRef::parse(&text).unwrap(), r, "{text}");
+    }
+    assert_eq!(SecretRef { vault: "My Vault".into(), item: "a/b".into(), field: "token".into() }.to_string(), "gp://My%20Vault/a%2Fb/token");
+    // a produced reference resolves through the same resolver `run`/`inject` use
+    let m = map();
+    let text = SecretRef { vault: "My Vault".into(), item: "a/b".into(), field: "token".into() }.to_string();
+    assert_eq!(render_template(&format!("{{{{ {text} }}}}"), &mut Resolved::new(&m)).unwrap().as_str(), "tok-FAKE-123");
+}
+
+#[test]
+fn field_segment_prefers_standard_names_then_unique_labels_then_ids() {
+    let f = |id: &str, label: &str| (id.to_string(), label.to_string());
+    let fields = vec![f("username", "username"), f("password", "password"), f("f1", "API Key"), f("f2", "Region"), f("f3", "region"), f("f4", "Password")];
+    assert_eq!(field_segment("Password", &fields).unwrap(), "password");
+    assert_eq!(field_segment("otp", &fields).unwrap(), "otp");
+    assert_eq!(field_segment("api key", &fields).unwrap(), "API Key");
+    assert_eq!(field_segment("f1", &fields).unwrap(), "API Key");
+    assert_eq!(field_segment("Region", &fields).unwrap(), "f2", "duplicate labels fall back to the field id");
+    assert_eq!(field_segment("f4", &fields).unwrap(), "f4", "a custom label that shadows a standard name uses the id");
+    let e = field_segment("nope", &fields).unwrap_err().to_string();
+    assert!(e.contains("no field 'nope'") && e.contains("API Key"), "{e}");
+}
+
+#[test]
+#[cfg(unix)]
+fn ref_command_prints_references_that_run_and_inject_resolve() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "My Vault"], None).status.success());
+    assert!(gp(&root, &["add", "My Vault", "--title", "Prod DB/primary", "--username", "app"], Some("pg-FAKE-ref-1")).status.success());
+
+    let refp = gp(&root, &["ref", "My Vault", "Prod DB"], None);
+    assert!(refp.status.success(), "{}", String::from_utf8_lossy(&refp.stderr));
+    let pw_ref = String::from_utf8_lossy(&refp.stdout).trim().to_string();
+    assert_eq!(pw_ref, "gp://My%20Vault/Prod%20DB%2Fprimary/password");
+    let user_ref = String::from_utf8_lossy(&gp(&root, &["ref", "My Vault", "Prod DB", "username"], None).stdout).trim().to_string();
+    assert_eq!(user_ref, "gp://My%20Vault/Prod%20DB%2Fprimary/username");
+
+    // the printed references resolve through inject and run
+    let tpl = d.path().join("t.tpl");
+    std::fs::write(&tpl, format!("{{{{ {user_ref} }}}}:{{{{ {pw_ref} }}}}\n")).unwrap();
+    let o = gp(&root, &["inject", "-i", tpl.to_str().unwrap()], None);
+    assert!(o.status.success(), "{}", String::from_utf8_lossy(&o.stderr));
+    assert_eq!(String::from_utf8_lossy(&o.stdout), "app:pg-FAKE-ref-1\n");
+    let envf = d.path().join(".env");
+    std::fs::write(&envf, format!("PW={pw_ref}\n")).unwrap();
+    let o = gp(&root, &["run", "--no-masking", "--env-file", envf.to_str().unwrap(), "--", "sh", "-c", "echo $PW"], None);
+    assert_eq!(String::from_utf8_lossy(&o.stdout).trim(), "pg-FAKE-ref-1");
+
+    // the reference never contains the secret
+    assert!(!pw_ref.contains("FAKE"));
+    // unknown field and ambiguous / missing items are errors, not references
+    let o = gp(&root, &["ref", "My Vault", "Prod DB", "nope"], None);
+    assert!(!o.status.success() && o.stdout.is_empty());
+    let o = gp(&root, &["ref", "My Vault", "zzz-no-such-item"], None);
+    assert!(!o.status.success() && o.stdout.is_empty());
+    let o = gp(&root, &["ref", "Nope Vault", "Prod DB"], None);
+    assert!(!o.status.success() && o.stdout.is_empty());
 }

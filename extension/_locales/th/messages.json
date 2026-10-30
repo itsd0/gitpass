@@ -50,6 +50,15 @@
   "genWords": {
     "message": "จำนวนคำ"
   },
+  "genSeparator": {
+    "message": "ตัวคั่น"
+  },
+  "genSeparatorSpace": {
+    "message": "ช่องว่าง"
+  },
+  "genCapitalize": {
+    "message": "ขึ้นต้นด้วยตัวพิมพ์ใหญ่"
+  },
   "genIncludeDigits": {
     "message": "ใส่ตัวเลข"
   },
@@ -164,6 +173,9 @@
   "unlockReason": {
     "message": "ปลดล็อกส่วนขยายเบราว์เซอร์ gitpass"
   },
+  "unlockThrottled": {
+    "message": "พยายามมากเกินไป ลองใหม่อีกครั้งในอีก $1 วินาที"
+  },
   "unlockCancelled": {
     "message": "ยกเลิกการปลดล็อกแล้ว"
   },
@@ -187,6 +199,18 @@
   },
   "vaults": {
     "message": "ห้องนิรภัย"
+  },
+  "filterTags": {
+    "message": "แท็ก"
+  },
+  "filterTagsPh": {
+    "message": "กรองแท็ก…"
+  },
+  "clearTag": {
+    "message": "ล้างตัวกรองแท็ก"
+  },
+  "filterByTag": {
+    "message": "แสดงรายการที่มีแท็กนี้"
   },
   "catLogin": {
     "message": "ข้อมูลเข้าสู่ระบบ"
@@ -954,7 +978,6 @@
   "badgeAppNotRunning": {
     "message": "แอป gitpass ไม่ได้ทำงานอยู่"
   },
-
   "optAutoSubmit": {
     "message": "ส่งแบบฟอร์มหลังจากกรอกข้อมูลเข้าสู่ระบบ"
   },
@@ -990,6 +1013,9 @@
   },
   "catServer": {
     "message": "เซิร์ฟเวอร์"
+  },
+  "catOther": {
+    "message": "อื่น ๆ"
   },
   "genRecent": {
     "message": "ล่าสุด"
@@ -1064,5 +1090,93 @@
   },
   "itemRestored": {
     "message": "กู้คืนรายการแล้ว"
+  },
+  "attachments": {
+    "message": "ไฟล์แนบ"
+  },
+  "hasAttachments": {
+    "message": "มีไฟล์แนบ"
+  },
+  "openAttachmentInGitpass": {
+    "message": "เปิด $1 ใน gitpass",
+    "placeholders": {
+      "name": {
+        "content": "$1"
+      }
+    }
+  },
+  "filterArchive": {
+    "message": "คลังข้อมูล"
+  },
+  "filterDeleted": {
+    "message": "รายการที่เพิ่งลบ"
+  },
+  "restore": {
+    "message": "กู้คืน"
+  },
+  "unarchive": {
+    "message": "ยกเลิกการเก็บถาวร"
+  },
+  "archive": {
+    "message": "เก็บถาวร"
+  },
+  "itemUnarchived": {
+    "message": "ยกเลิกการเก็บถาวรรายการแล้ว"
+  },
+  "itemArchived": {
+    "message": "เก็บถาวรรายการแล้ว"
+  },
+  "shortcutRestore": {
+    "message": "กู้คืนรายการ"
+  },
+  "deletedToday": {
+    "message": "ลบวันนี้"
+  },
+  "deletedDayOne": {
+    "message": "ลบเมื่อ 1 วันที่แล้ว"
+  },
+  "deletedDaysAgo": {
+    "message": "ลบเมื่อ $1 วันที่แล้ว",
+    "placeholders": {
+      "count": {
+        "content": "$1"
+      }
+    }
+  },
+  "deletesToday": {
+    "message": "จะลบวันนี้"
+  },
+  "deletesInDayOne": {
+    "message": "จะลบใน 1 วัน"
+  },
+  "deletesInDays": {
+    "message": "จะลบใน $1 วัน",
+    "placeholders": {
+      "days": {
+        "content": "$1"
+      }
+    }
+  },
+  "emptyArchiveTitle": {
+    "message": "ไม่มีรายการที่เก็บถาวร"
+  },
+  "emptyArchiveBody": {
+    "message": "รายการที่คุณเก็บถาวรจะปรากฏที่นี่"
+  },
+  "emptyTrashTitle": {
+    "message": "รายการที่เพิ่งลบว่างเปล่า"
+  },
+  "emptyTrashBody": {
+    "message": "รายการที่คุณลบจะอยู่ที่นี่เป็นเวลา 30 วัน"
+  },
+  "inTrash": {
+    "message": "รายการนี้อยู่ในรายการที่เพิ่งลบ"
+  },
+  "inArchive": {
+    "message": "รายการนี้ถูกเก็บถาวรแล้ว"
+  },
+  "capsLockOn": {
+    "message": "Caps Lock เปิดอยู่",
+    "description": "Shown under a master-password field while Caps Lock is on"
   }
 }

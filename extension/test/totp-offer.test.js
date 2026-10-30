@@ -5,6 +5,9 @@ const assert = require('node:assert');
 const fs = require('fs'), path = require('path');
 const { JSDOM } = require('jsdom');
 const root = path.join(__dirname, '..');
+// content.js + content/*.js in manifest order, evaluated as ONE script: a browser shares
+// top-level let/const across content scripts, but jsdom w.eval calls do not share them.
+const CONTENT_SRC = ['content.js', 'content/messaging.js', 'content/settings.js', 'content/detection.js', 'content/totp.js', 'content/dropdown.js', 'content/username.js', 'content/banner.js', 'content/command.js', 'content/prompts.js', 'content/wiring.js'].map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
 globalThis.GitpassPolicy = require('../lib/policy.js');
 const B = require('../bg-page.js');
 const Chip = require('../lib/totp-chip.js');
@@ -145,7 +148,7 @@ function pageWith(html, offer, url = 'https://github.com/sessions/two-factor') {
     storage: { local: { get() {}, onChanged: { addListener() {} } } },
     i18n: { getMessage: () => '' },
   };
-  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js', 'lib/totp-chip.js', 'content.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
+  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'lib/banner.js', 'lib/totp-chip.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8')); w.eval(CONTENT_SRC);
   return { w, sent };
 }
 const OTP_PAGE = '<!doctype html><body><form action="/2fa"><input id="otp" name="otp" autocomplete="one-time-code" inputmode="numeric" maxlength="6"><button>Verify</button></form></body>';

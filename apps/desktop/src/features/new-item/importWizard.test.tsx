@@ -10,6 +10,7 @@ import {
   detectImportFormat,
   importReducer,
   initialImport,
+  isPasswordProtectedBitwarden,
 } from './importWizardLogic';
 import { ImportWizard } from './ImportWizard';
 
@@ -19,14 +20,14 @@ const FIXTURES_DIR = path.resolve(
 );
 
 describe('detectImportFormat pure function', () => {
-  it('detects 1password .1pux from extension', () => {
-    expect(detectImportFormat('export.1pux')).toBe('1password-1pux');
-    expect(detectImportFormat('/Users/alice/Downloads/1password.1pux')).toBe('1password-1pux');
+  it('detects .1pux from extension', () => {
+    expect(detectImportFormat('export.1pux')).toBe('1pux');
+    expect(detectImportFormat('/Users/alice/Downloads/export.1pux')).toBe('1pux');
   });
 
-  it('detects 1password CSV from fixture header', () => {
-    const content = fs.readFileSync(path.join(FIXTURES_DIR, '1password.csv'), 'utf8');
-    expect(detectImportFormat('export.csv', content)).toBe('1password-csv');
+  it('detects generic CSV from fixture header', () => {
+    const content = fs.readFileSync(path.join(FIXTURES_DIR, 'generic.csv'), 'utf8');
+    expect(detectImportFormat('export.csv', content)).toBe('generic-csv');
   });
 
   it('detects bitwarden CSV from fixture header', () => {
@@ -72,13 +73,13 @@ describe('detectImportFormat pure function', () => {
     expect(detectImportFormat('export.json', encrypted)).toBe('gitpass-json');
   });
 
-  it('detects Apple Passwords CSV from fixture header and distinguishes it from 1Password 8', () => {
+  it('detects Apple Passwords CSV from fixture header and distinguishes it from generic CSV', () => {
     const content = fs.readFileSync(path.join(FIXTURES_DIR, 'apple-passwords.csv'), 'utf8');
     expect(detectImportFormat('export.csv', content)).toBe('apple-passwords-csv');
     expect(detectImportFormat('export.csv', 'Title,URL,Username,Password,Notes,OTPAuth\n')).toBe('apple-passwords-csv');
     expect(
       detectImportFormat('export.csv', 'Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes\n')
-    ).toBe('1password-csv');
+    ).toBe('generic-csv');
     expect(detectImportFormat('export.csv', 'name,url,username,password,note\n')).toBe('chrome-csv');
   });
 
@@ -90,8 +91,8 @@ describe('detectImportFormat pure function', () => {
   it('ignores apple/safari in parent folders when guessing from the path', () => {
     expect(
       detectImportFormat('/Users/demo/Library/Mobile Documents/com~apple~CloudDocs/export.csv')
-    ).toBe('1password-csv');
-    expect(detectImportFormat('/Users/demo/Safari/export.csv')).toBe('1password-csv');
+    ).toBe('generic-csv');
+    expect(detectImportFormat('/Users/demo/Safari/export.csv')).toBe('generic-csv');
     expect(detectImportFormat('/Users/demo/Safari/my-bitwarden.csv')).toBe('bitwarden-csv');
   });
 
@@ -101,7 +102,6 @@ describe('detectImportFormat pure function', () => {
     expect(detectImportFormat('Chrome Passwords.csv')).toBe('chrome-csv');
     expect(detectImportFormat('lastpass_export.csv')).toBe('lastpass-csv');
     expect(detectImportFormat('proton_pass.csv')).toBe('protonpass-csv');
-    expect(detectImportFormat('1Password Export.csv')).toBe('1password-csv');
     expect(detectImportFormat('gitpass-backup.json')).toBe('gitpass-json');
     expect(detectImportFormat('bitwarden-backup.json')).toBe('bitwarden-json');
   });
@@ -136,19 +136,42 @@ describe('import wizard reducer', () => {
     expect(s.step).toBe('done');
   });
 
+  it('detects .1pif from filename and content', () => {
+    expect(detectImportFormat('export.1pif')).toBe('1pif');
+    expect(detectImportFormat('data.1pif')).toBe('1pif');
+    expect(detectImportFormat('random.txt', '***uuid***\n{"typeName":"webforms.WebForm"}')).toBe('1pif');
+  });
+
   it('offers all required formats including Apple Passwords / Safari', () => {
     expect(IMPORT_FORMATS.map((f) => f.id)).toEqual([
       'apple-passwords-csv',
       'bitwarden-json',
       'bitwarden-csv',
-      '1password-csv',
-      '1password-1pux',
+      'generic-csv',
+      '1pux',
+      '1pif',
       'keepass-csv',
       'chrome-csv',
       'lastpass-csv',
       'protonpass-csv',
       'gitpass-json',
     ]);
+  });
+
+  it('recognises password-protected Bitwarden JSON and tracks the password', () => {
+    const protectedJson = fs.readFileSync(
+      path.join(FIXTURES_DIR, 'bitwarden-password-protected.json'),
+      'utf8'
+    );
+    expect(isPasswordProtectedBitwarden(protectedJson)).toBe(true);
+    expect(isPasswordProtectedBitwarden(fs.readFileSync(path.join(FIXTURES_DIR, 'bitwarden.json'), 'utf8'))).toBe(false);
+    expect(isPasswordProtectedBitwarden('not json')).toBe(false);
+
+    let s = initialImport('v1');
+    s = importReducer(s, { type: 'file', path: '/tmp/bw.json', format: 'bitwarden-json', needsPassword: true });
+    expect(s.needsPassword).toBe(true);
+    s = importReducer(s, { type: 'password', password: 'fake-export-password' });
+    expect(s.password).toBe('fake-export-password');
   });
 });
 
@@ -281,7 +304,7 @@ describe('ImportWizard component', () => {
 
     // Enter path
     fireEvent.change(screen.getByLabelText('Export file path'), {
-      target: { value: '/tmp/1password.1pux' },
+      target: { value: '/tmp/export.1pux' },
     });
 
     // Press Enter to advance to preview
@@ -325,7 +348,7 @@ describe('ImportWizard component', () => {
 
     // Enter path
     fireEvent.change(screen.getByLabelText('Export file path'), {
-      target: { value: '/tmp/1password.1pux' },
+      target: { value: '/tmp/export.1pux' },
     });
 
     const backButton = screen.getByRole('button', { name: 'Back' });
@@ -380,5 +403,67 @@ describe('ImportWizard component', () => {
     fireEvent.click(screen.getByText('Preview import'));
     expect(await screen.findByTestId('preview-Parsed')).toHaveProperty('textContent', '4');
     expect(spy).toHaveBeenCalledWith(expect.objectContaining({ format: 'apple-passwords-csv', dryRun: true }));
+  });
+});
+
+describe('ImportWizard password-protected Bitwarden export', () => {
+  const protectedJson = () =>
+    fs.readFileSync(path.join(FIXTURES_DIR, 'bitwarden-password-protected.json'), 'utf8');
+
+  it('auto-detects the password step and submits the export password on Enter', async () => {
+    const spy = vi.spyOn(api, 'importFile').mockImplementation(async (a: any) => ({
+      parsed: 2,
+      added: a.dryRun ? 0 : 2,
+      duplicates: 0,
+    }));
+    render(<ImportWizard onBack={() => {}} onDone={() => {}} />);
+    await waitFor(() => {
+      expect((screen.getByLabelText('Import into vault') as HTMLSelectElement).value).toBe('v_private');
+    });
+
+    // jsdom has no Blob.text(); give the dropped file the snippet the wizard reads in the app.
+    const file = new File([protectedJson()], 'bitwarden.json', { type: 'application/json' });
+    (file as any).slice = () => ({ text: async () => protectedJson() });
+    fireEvent.drop(screen.getByTestId('drop-zone'), { dataTransfer: { files: [file] } });
+    const password = await screen.findByLabelText('Export password');
+    expect((screen.getByLabelText('Format') as HTMLSelectElement).value).toBe('bitwarden-json');
+    expect(screen.getByTestId('export-password').textContent).toMatch(/only decrypts the file and is never saved/);
+
+    fireEvent.change(password, { target: { value: 'fake-export-password' } });
+    fireEvent.keyDown(password, { key: 'Enter' });
+
+    expect(await screen.findByTestId('preview-Parsed')).toHaveProperty('textContent', '2');
+    expect(spy).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'bitwarden-json', password: 'fake-export-password', dryRun: true })
+    );
+  });
+
+  it('reveals the password step when a file chosen by path needs one', async () => {
+    const spy = vi
+      .spyOn(api, 'importFile')
+      .mockRejectedValueOnce(
+        new Error('bitwarden-json: this export is password-protected; the export password is required')
+      )
+      .mockResolvedValueOnce({ parsed: 2, added: 0, duplicates: 0 });
+    render(<ImportWizard onBack={() => {}} onDone={() => {}} />);
+    await waitFor(() => {
+      expect((screen.getByLabelText('Import into vault') as HTMLSelectElement).value).toBe('v_private');
+    });
+
+    fireEvent.change(screen.getByLabelText('Export file path'), {
+      target: { value: '/tmp/bitwarden-protected.json' },
+    });
+    expect(screen.queryByLabelText('Export password')).toBeNull();
+    fireEvent.click(screen.getByText('Preview import'));
+
+    const password = await screen.findByLabelText('Export password');
+    expect(screen.getByRole('alert').textContent).toContain('export password is required');
+
+    fireEvent.change(password, { target: { value: 'fake-export-password' } });
+    fireEvent.click(screen.getByText('Preview import'));
+    expect(await screen.findByTestId('preview-Parsed')).toHaveProperty('textContent', '2');
+    expect(spy).toHaveBeenLastCalledWith(
+      expect.objectContaining({ format: 'bitwarden-json', password: 'fake-export-password', dryRun: true })
+    );
   });
 });

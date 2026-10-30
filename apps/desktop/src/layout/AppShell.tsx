@@ -7,6 +7,7 @@ import { Sidebar } from './Sidebar';
 import { PaletteHost } from '../features/palette';
 import { useSettings } from '../features/settings/useSettings';
 import { Toolbar } from './Toolbar';
+import { useWhatsNewOnStartup } from '../whats-new';
 
 function RouteView() {
   const route = useApp((s) => s.route);
@@ -19,6 +20,7 @@ export function AppShell() {
   const { sidebarCollapsed, modal } = useApp();
   const search = useRef<HTMLInputElement>(null);
   const M = modal ? modalFor(modal.id) : undefined;
+  useWhatsNewOnStartup();
   // Rust-persisted settings drive theme + language once unlocked.
   useEffect(() => { void useSettings.getState().load(); }, []);
   useEffect(() => {
@@ -29,7 +31,10 @@ export function AppShell() {
     window.addEventListener('keydown', onKey); return () => window.removeEventListener('keydown', onKey);
   }, []);
   return (
-    <div className="h-full">
+    <div className="flex h-full">
+      {/* Collapsed: a fixed-width icon rail sits beside the panels instead of hiding the sidebar. */}
+      {sidebarCollapsed && <div className="h-full shrink-0 border-r border-border"><Sidebar /></div>}
+      <div className="h-full min-w-0 flex-1">
       <PanelGroup direction="horizontal">
         {!sidebarCollapsed && <>
           <Panel id="sidebar" order={1} defaultSize={18} minSize={13} maxSize={28}><Sidebar /></Panel>
@@ -39,6 +44,7 @@ export function AppShell() {
           <div className="flex h-full flex-col"><Toolbar ref={search} /><div className="min-h-0 flex-1"><RouteView /></div></div>
         </Panel>
       </PanelGroup>
+      </div>
       {M && <M />}
       <PaletteHost />
     </div>

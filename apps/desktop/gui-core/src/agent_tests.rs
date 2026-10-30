@@ -137,6 +137,16 @@ fn locked_responses() {
     assert!(c.ok("generate", json!({"len": 24, "digits": true, "symbols": false}))["password"].as_str().unwrap().len() == 24);
     assert_eq!(c.err("generate", json!({"len": 4})), "bad_request");
     assert_eq!(c.ok("generate", json!({"pin": true}))["password"].as_str().unwrap().len(), 6);
+
+    let g = c.ok("generate", json!({"words": true, "separator": "_", "capitalize": true}))["password"].as_str().unwrap().to_string();
+    assert_eq!(g.split('_').count(), 5);
+    for w in g.split('_') {
+        assert!(w.chars().next().unwrap().is_ascii_uppercase());
+    }
+    assert_eq!(c.err("generate", json!({"words": true, "separator": "/"})), "bad_request");
+    assert_eq!(c.err("generate", json!({"words": true, "separator": "invalid"})), "bad_request");
+    assert_eq!(c.err("generate", json!({"words": true, "separator": ""})), "bad_request");
+    assert_eq!(c.err("generate", json!({"words": true, "separator": 123})), "bad_request");
 }
 
 #[test]
@@ -189,6 +199,18 @@ fn match_fill_reveal_origin_rules_and_categories() {
     assert!(!cd.to_string().contains("4111 1111"));
     assert_eq!(c.ok("list_items", json!({"query": "exam", "limit": 5}))["items"].as_array().unwrap().len(), 2);
     assert_eq!(c.ok("list_items", json!({"limit": 1}))["items"].as_array().unwrap().len(), 1);
+    // Paging (the popup fetches pages of 500 and follows next_offset): every item comes back exactly once.
+    let total = all.as_array().unwrap().len();
+    let p1 = c.ok("list_items", json!({"limit": 1}));
+    assert_eq!(p1["total"], json!(total)); assert_eq!(p1["next_offset"], json!(1));
+    let mut seen = vec![]; let mut off = 0u64;
+    loop {
+        let p = c.ok("list_items", json!({"limit": 1, "offset": off}));
+        for i in p["items"].as_array().unwrap() { seen.push(i["id"].clone()); }
+        match p["next_offset"].as_u64() { Some(n) => off = n, None => break }
+    }
+    assert_eq!(seen.len(), total);
+    assert_eq!(seen, all.as_array().unwrap().iter().map(|i| i["id"].clone()).collect::<Vec<_>>());
 
     // fill_card: popup or in-page click only
     assert_eq!(c.err("fill_card", json!({"item_id": card})), "denied");
@@ -278,6 +300,77 @@ fn trash_and_restore_via_agent_use_the_shared_vault() {
 }
 
 #[test]
+fn list_archived_and_deleted_and_archive_unarchive_via_agent() {
+    let e = env();
+    let id = add_login(&e, "Agent Octo", "https://github.com", "octo", "agent-secret-pw-999");
+    let (mut c, _) = Client::connect(&e);
+
+    // Initial lists are empty
+    let arch_init = c.ok("list_archived", json!({}));
+    assert!(arch_init["items"].as_array().unwrap().is_empty());
+    let del_init = c.ok("list_deleted", json!({}));
+    assert!(del_init["items"].as_array().unwrap().is_empty());
+
+    // Archive permissions: requires popup source
+    assert_eq!(c.err("archive_item", json!({"item_id": id})), "denied");
+    assert_eq!(c.err("archive_item", json!({"item_id": id, "source": "page"})), "denied");
+
+    // Archive item via agent
+    assert_eq!(c.ok("archive_item", json!({"item_id": id, "source": "popup", "archived": true}))["ok"], json!(true));
+
+    // list_archived returns metadata only (no secrets)
+    let arch_list = c.ok("list_archived", json!({}));
+    let arch_items = arch_list["items"].as_array().unwrap();
+    assert_eq!(arch_items.len(), 1);
+    assert_eq!(arch_items[0]["id"], id);
+    assert_eq!(arch_items[0]["archived"], true);
+    let arch_str = arch_list.to_string();
+    assert!(!arch_str.contains("agent-secret-pw-999"), "secrets must never leak in archived summaries");
+
+    // Archived item leaves default list_items and match (suggestions)
+    assert!(c.ok("list_items", json!({}))["items"].as_array().unwrap().iter().all(|i| i["id"] != json!(id)));
+    assert!(c.ok("match", json!({"origin": "https://github.com"}))["items"].as_array().unwrap().is_empty());
+
+    // list_items with state: "archived" includes it
+    let state_arch = c.ok("list_items", json!({"state": "archived"}));
+    assert_eq!(state_arch["items"].as_array().unwrap().len(), 1);
+
+    // Unarchive item
+    assert_eq!(c.err("unarchive_item", json!({"item_id": id})), "denied");
+    assert_eq!(c.ok("unarchive_item", json!({"item_id": id, "source": "popup"}))["ok"], json!(true));
+    assert!(c.ok("list_archived", json!({}))["items"].as_array().unwrap().is_empty());
+    assert!(c.ok("list_items", json!({}))["items"].as_array().unwrap().iter().any(|i| i["id"] == json!(id)));
+
+    // Soft delete via trash_item
+    assert_eq!(c.ok("trash_item", json!({"item_id": id, "source": "popup"}))["ok"], json!(true));
+    let del_list = c.ok("list_deleted", json!({}));
+    let del_items = del_list["items"].as_array().unwrap();
+    assert_eq!(del_items.len(), 1);
+    assert_eq!(del_items[0]["id"], id);
+    assert!(del_items[0]["deleted_at"].is_string());
+    let del_str = del_list.to_string();
+    assert!(!del_str.contains("agent-secret-pw-999"), "secrets must never leak in deleted summaries");
+
+    // get_item with include_deleted: false is not_found; with true returns detail
+    assert_eq!(c.err("get_item", json!({"item_id": id})), "not_found");
+    assert_eq!(c.err("get_item", json!({"item_id": id, "include_deleted": false})), "not_found");
+    let del_detail = c.ok("get_item", json!({"item_id": id, "include_deleted": true}))["item"].clone();
+    assert_eq!(del_detail["id"], id);
+    assert!(del_detail["deleted_at"].is_string());
+    let flds = del_detail["fields"].as_array().unwrap();
+    let pw = flds.iter().find(|x| x["name"] == "password").unwrap();
+    assert_eq!(pw["concealed"], true);
+    assert!(pw.get("value").is_none());
+
+    // Cannot archive a deleted item
+    assert_eq!(c.err("archive_item", json!({"item_id": id, "source": "popup"})), "not_found");
+
+    // Restore item
+    assert_eq!(c.ok("restore_item", json!({"item_id": id, "source": "popup"}))["ok"], json!(true));
+    assert!(c.ok("list_deleted", json!({}))["items"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn lock_unlock_events_and_request_unlock() {
     let e = env();
     let (mut c, _) = Client::connect(&e);
@@ -332,6 +425,47 @@ fn create_item_any_category_via_agent() {
     assert_eq!(c.err("create_item", json!({})), "bad_request");
     e.app.lock();
     assert_eq!(c.err("create_item", json!({"item": {"category": "secure_note", "title": "x"}})), "locked");
+}
+
+#[test]
+fn agent_api_credential_masked_hint_in_summary_and_detail() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+    const LONG_KEY: &str = "sk-live-0123456789abcdefgh";
+    let api = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::ApiCredential,
+        title: "Agent API Item".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                fld("username", FieldKind::Text, "svc"),
+                fld("credential", FieldKind::Concealed, LONG_KEY),
+            ],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+
+    let list = c.ok("list_items", json!({"category": "api_credential"}));
+    let items = list["items"].as_array().unwrap();
+    let item = items.iter().find(|i| i["title"] == "Agent API Item").unwrap();
+    assert_eq!(item["subtitle"], "sk-l••••••••efgh");
+
+    let detail = c.ok("get_item", json!({"item_id": format!("{}:{}", e.vault, api.id)}))["item"].clone();
+    let cred = detail["fields"].as_array().unwrap().iter().find(|f| f["name"] == "credential").unwrap();
+    assert_eq!(cred["concealed"], true);
+    assert_eq!(cred["masked"], "sk-l••••••••efgh");
+    assert!(cred.get("value").is_none());
+
+    // Assert full secret never appears in serialized JSON
+    let list_str = list.to_string();
+    assert!(!list_str.contains("0123456789abcd"));
+    let detail_str = detail.to_string();
+    assert!(!detail_str.contains("0123456789abcd"));
 }
 
 #[test]
@@ -670,4 +804,33 @@ fn record_generated_password_agent_contract_and_settings() {
 
     let hist3 = e.app.get_generator_history().unwrap();
     assert_eq!(hist3.len(), 2);
+}
+
+#[test]
+fn agent_get_item_attachments_metadata_only_no_file_bytes() {
+    let e = env();
+    let (mut c, _) = Client::connect(&e);
+
+    let item_id = add_login(&e, "Attachment Test Login", "https://example.com", "alice", "pw123");
+    let iid = item_id.split_once(':').unwrap().1;
+    let secret_payload = b"AGENT-SOCKET-SECRET-ATTACHMENT-PAYLOAD-BYTES";
+    let tmp_file = tempfile::NamedTempFile::new().unwrap();
+    std::fs::write(tmp_file.path(), secret_payload).unwrap();
+    e.app.add_attachment(&e.vault, iid, &tmp_file.path().display().to_string()).unwrap();
+
+    // 1. list_items: has_attachments is true
+    let list_res = c.ok("list_items", json!({}));
+    let items = list_res["items"].as_array().unwrap();
+    let found = items.iter().find(|i| i["title"] == "Attachment Test Login").expect("item found");
+    assert_eq!(found["has_attachments"], true);
+
+    // 2. get_item: returns attachment metadata
+    let get_res = c.ok("get_item", json!({"item_id": item_id}));
+    let detail = &get_res["item"];
+    assert_eq!(detail["has_attachments"], true);
+    let atts = detail["attachments"].as_array().expect("attachments array");
+    assert_eq!(atts.len(), 1);
+    assert_eq!(atts[0]["size"], secret_payload.len() as u64);
+    let raw_json = serde_json::to_string(&get_res).unwrap();
+    assert!(!raw_json.contains("AGENT-SOCKET-SECRET-ATTACHMENT-PAYLOAD-BYTES"));
 }

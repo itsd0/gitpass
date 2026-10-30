@@ -142,7 +142,7 @@ fn filters_favorite_archive_delete_restore_purge_move_duplicate() {
     let n = e.app.create_item(&ItemInput { vault_id: e.vault.clone(), category: Category::SecureNote, title: "Note".into(),
         sections: vec![Section { id: "s".into(), title: None, fields: vec![fld("body", FieldKind::Multiline, Some("hello"))] }], notes: None, tags: None, favorite: None, url: None }).unwrap();
     assert_eq!(n.subtitle, "hello");
-    let f = |kind: FilterKind| Filter { kind, vault_id: Some(e.vault.clone()), tag: Some("work".into()), category: Some(Category::CreditCard), query: None, sort: Some(Sort::Title) };
+    let f = |kind: FilterKind| Filter { kind, vault_id: Some(e.vault.clone()), tag: Some("work".into()), category: (kind == FilterKind::Category).then_some(Category::CreditCard), query: None, sort: Some(Sort::Title) };
     let ids = |v: Vec<ItemSummary>| v.into_iter().map(|s| s.title).collect::<Vec<_>>();
     assert_eq!(ids(e.app.list_items(&f(FilterKind::All)).unwrap()), vec!["Alpha", "Example Bank", "Note"]);
     assert_eq!(ids(e.app.list_items(&f(FilterKind::Favorites)).unwrap()), vec!["Example Bank"]);
@@ -536,7 +536,7 @@ fn watchtower_score_without_passwords_and_with_an_old_password() {
     let dir = tempfile::tempdir().unwrap();
     let f = dir.path().join("old-fake.json");
     std::fs::write(&f, r#"{"encrypted":false,"items":[{"id":"1","type":1,"name":"Old fake","revisionDate":"2020-01-02T03:04:05.000Z","login":{"username":"old@example.invalid","password":"Xq7#vR2!mK9@pL4$wZ","uris":[{"uri":"https://example.invalid"}]}}]}"#).unwrap();
-    e.app.import_file(&e.vault, "bitwarden-json", &f.display().to_string(), false).unwrap();
+    e.app.import_file(&e.vault, "bitwarden-json", &f.display().to_string(), false, None).unwrap();
     let r = e.app.watchtower(false).unwrap();
     assert_eq!((r.old.len(), r.missing_totp.len(), r.score), (1, 2, 80));
 }
@@ -547,15 +547,38 @@ fn import_file_dry_run_and_real() {
     let dir = tempfile::tempdir().unwrap();
     let f = dir.path().join("chrome.csv");
     std::fs::write(&f, "name,url,username,password\nExample,https://a.example.invalid,alice,FAKE1\nOther,https://b.example.invalid,bob,FAKE2\n").unwrap();
-    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), true).unwrap();
+    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), true, None).unwrap();
     assert_eq!((r.parsed, r.added, r.duplicates), (2, 2, 0));
     assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 0);
-    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), false).unwrap();
+    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), false, None).unwrap();
     assert_eq!(r.added, 2);
     assert!(e.app.onboarding().imported);
-    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), false).unwrap();
+    let r = e.app.import_file(&e.vault, "chrome-csv", &f.display().to_string(), false, None).unwrap();
     assert_eq!((r.added, r.duplicates), (0, 2));
-    assert!(e.app.import_file(&e.vault, "nope", &f.display().to_string(), true).is_err());
+    assert!(e.app.import_file(&e.vault, "nope", &f.display().to_string(), true, None).is_err());
+}
+
+#[test]
+fn import_file_password_protected_bitwarden_json() {
+    let e = env();
+    let dir = tempfile::tempdir().unwrap();
+    let f = dir.path().join("bitwarden-password-protected.json");
+    let fixture = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../crates/gitpass-core/tests/fixtures/import/bitwarden-password-protected.json");
+    std::fs::copy(fixture, &f).unwrap();
+    let path = f.display().to_string();
+    // Missing and wrong passwords fail with the core errors; nothing is written.
+    let err = e.app.import_file(&e.vault, "bitwarden-json", &path, true, None).unwrap_err().to_string();
+    assert!(err.contains("export password is required"), "{err}");
+    let err = e.app.import_file(&e.vault, "bitwarden-json", &path, true, Some("wrong")).unwrap_err().to_string();
+    assert!(err.contains("wrong export password"), "{err}");
+    assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 0);
+    // The export password decrypts the preview, and the real import stores the items.
+    let r = e.app.import_file(&e.vault, "bitwarden-json", &path, true, Some("fake-export-password")).unwrap();
+    assert_eq!((r.parsed, r.added, r.duplicates), (2, 2, 0));
+    assert_eq!(r.categories.get("login"), Some(&1));
+    let r = e.app.import_file(&e.vault, "bitwarden-json", &path, false, Some("fake-export-password")).unwrap();
+    assert_eq!(r.added, 2);
 }
 
 #[test]
@@ -564,10 +587,10 @@ fn import_file_apple_passwords_csv() {
     let dir = tempfile::tempdir().unwrap();
     let f = dir.path().join("apple.csv");
     std::fs::write(&f, "Title,URL,Username,Password,Notes,OTPAuth\nApple Service,https://apple.example.invalid,alice,FAKE1,Notes line,otpauth://totp/Apple:alice?secret=JBSWY3DPEHPK3PXP\n").unwrap();
-    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), true).unwrap();
+    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), true, None).unwrap();
     assert_eq!((r.parsed, r.added, r.duplicates), (1, 1, 0));
     assert_eq!(e.app.list_vaults().unwrap()[0].item_count, 0);
-    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), false).unwrap();
+    let r = e.app.import_file(&e.vault, "apple-passwords-csv", &f.display().to_string(), false, None).unwrap();
     assert_eq!(r.added, 1);
     let items = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: Some(e.vault.clone()), tag: None, category: None, query: None, sort: None }).unwrap();
     let it = items.iter().find(|i| i.title == "Apple Service").unwrap();
@@ -591,7 +614,7 @@ fn export_vault_round_trip_and_errors() {
     #[cfg(unix)] { use std::os::unix::fs::PermissionsExt; assert_eq!(std::fs::metadata(&plain).unwrap().permissions().mode() & 0o777, 0o600); }
     // round-trip export -> GUI import into a fresh vault
     let v2 = e.app.create_vault("Imported", None, None, None).unwrap();
-    let ir = e.app.import_file(&v2.id, "gitpass-json", &plain.display().to_string(), false).unwrap();
+    let ir = e.app.import_file(&v2.id, "gitpass-json", &plain.display().to_string(), false, None).unwrap();
     assert_eq!(ir.added, 2);
     let titles: Vec<String> = e.app.list_items(&Filter { kind: FilterKind::All, vault_id: Some(v2.id.clone()), tag: None, category: None, query: None, sort: None }).unwrap().into_iter().map(|i| i.title).collect();
     assert!(titles.contains(&"Export Login".to_string()) && titles.contains(&"Example Bank".to_string()));
@@ -907,6 +930,82 @@ fn update_item_assigns_ids_for_new_fields_and_keeps_null_secrets() {
 }
 
 #[test]
+fn api_credential_masked_hint_in_summary_and_detail_without_secret_leak() {
+    let e = env();
+    const LONG_KEY: &str = "sk-live-0123456789abcdefgh";
+    let api = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::ApiCredential,
+        title: "Stripe Production".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                fld("username", FieldKind::Text, Some("svc-payments")),
+                fld("credential", FieldKind::Concealed, Some(LONG_KEY)),
+            ],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+
+    let d = e.app.get_item(&e.vault, &api.id).unwrap();
+    assert_eq!(d.summary.subtitle, "sk-l••••••••efgh");
+    let cred_field = d.sections.iter().flat_map(|s| &s.fields).find(|f| f.id == "credential").unwrap();
+    assert_eq!(cred_field.masked.as_deref(), Some("sk-l••••••••efgh"));
+    assert_eq!(cred_field.value, None);
+
+    // Assert full secret never appears in serialized DTO
+    let json_str = serde_json::to_string(&d).unwrap();
+    assert!(!json_str.contains("0123456789abcd"), "secret middle leaked in JSON: {json_str}");
+
+    // Reveal returns the full secret unchanged
+    let revealed = e.app.reveal_field(&e.vault, &api.id, "credential").unwrap();
+    assert_eq!(&*revealed, LONG_KEY);
+
+    // Also test short and tiny keys
+    let short_api = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::ApiCredential,
+        title: "Short API".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![fld("credential", FieldKind::Concealed, Some("short-12345"))],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+    let short_d = e.app.get_item(&e.vault, &short_api.id).unwrap();
+    assert_eq!(short_d.summary.subtitle, "sh••••••••");
+    assert_eq!(short_d.sections[0].fields[0].masked.as_deref(), Some("sh••••••••"));
+    assert_eq!(short_d.sections[0].fields[0].value, None);
+
+    let tiny_api = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::ApiCredential,
+        title: "Tiny API".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![fld("credential", FieldKind::Concealed, Some("tiny"))],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+    let tiny_d = e.app.get_item(&e.vault, &tiny_api.id).unwrap();
+    assert_eq!(tiny_d.summary.subtitle, "••••••••");
+    assert_eq!(tiny_d.sections[0].fields[0].masked.as_deref(), Some("••••••••"));
+    assert_eq!(tiny_d.sections[0].fields[0].value, None);
+}
+
+#[test]
 fn fingerprint_of_matches_identity_and_share() {
     let e = env();
     let me = e.app.identity().unwrap();
@@ -995,7 +1094,7 @@ fn emergency_kit_data_reveal_rules() {
     let root = tempfile::tempdir().unwrap();
     let cfg = tempfile::tempdir().unwrap();
     let dir = root.path().join("v");
-    let app = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default()));
+    let app = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default())).with_biometric(Box::new(MemBio(Default::default())));
     app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
     let r = app.create_account(&dir.display().to_string(), "correct horse", false).unwrap();
     // right after create_account the kit carries the fresh Secret Key
@@ -1851,6 +1950,76 @@ fn settings_list_density_roundtrip_and_defaults() {
 }
 
 #[test]
+fn unlock_throttling_and_biometric_reset() {
+    gitpass_core::unlock_throttle::reset_memory();
+    let root = tempfile::tempdir().unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let dir = root.path().join("v");
+    let app = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default())).with_biometric(Box::new(MemBio(Default::default())));
+    app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
+    let r = app.create_account(&dir.display().to_string(), "correct horse", false).unwrap();
+    let mut s = app.get_settings();
+    s.biometric_unlock = true;
+    app.set_settings(s).unwrap();
+    app.lock();
+
+    let vp = dir.display().to_string();
+
+    // 1st wrong attempt
+    let err1 = app.unlock(&vp, "wrong-1", Some(&r.secret_key)).unwrap_err();
+    assert!(err1.to_string().contains("unlock failed"));
+
+    // 2nd wrong attempt
+    let err2 = app.unlock(&vp, "wrong-2", Some(&r.secret_key)).unwrap_err();
+    assert!(err2.to_string().contains("unlock failed"));
+
+    // 3rd wrong attempt
+    let err3 = app.unlock(&vp, "wrong-3", Some(&r.secret_key)).unwrap_err();
+    assert!(err3.to_string().contains("unlock failed"));
+
+    // 4th attempt is throttled
+    let err4 = app.unlock(&vp, "correct horse", Some(&r.secret_key)).unwrap_err();
+    assert!(err4.to_string().starts_with("throttled: try again in "));
+
+    // Status reports throttledSecs
+    let st = app.status().unwrap();
+    assert!(!st.unlocked);
+    assert!(st.throttled_secs.is_some());
+    assert!(st.throttled_secs.unwrap() >= 1);
+
+    // Biometric unlock is NOT throttled by password failures and succeeds
+    let bio_st = app.unlock_biometric(&vp).unwrap();
+    assert!(bio_st.unlocked);
+
+    // Throttle is now reset
+    app.lock();
+    let post_st = app.status().unwrap();
+    assert!(!post_st.unlocked);
+    assert_eq!(post_st.throttled_secs, None);
+
+    // Normal password unlock now succeeds
+    let ok_st = app.unlock(&vp, "correct horse", Some(&r.secret_key)).unwrap();
+    assert!(ok_st.unlocked);
+}
+
+#[test]
+fn item_type_picker_filters_every_view_including_recently_deleted() {
+    let e = env();
+    let a = login(&e, "Alpha", "a", "pw-a-FAKE-xx");
+    let b = card(&e);
+    let f = |kind: FilterKind, category: Option<Category>| Filter { kind, vault_id: Some(e.vault.clone()), tag: None, category, query: None, sort: Some(Sort::Title) };
+    let titles = |v: Vec<ItemSummary>| v.into_iter().map(|s| s.title).collect::<Vec<_>>();
+    assert_eq!(titles(e.app.list_items(&f(FilterKind::All, Some(Category::Login))).unwrap()), vec!["Alpha"]);
+    assert_eq!(titles(e.app.list_items(&f(FilterKind::Vault, Some(Category::CreditCard))).unwrap()), vec!["Example Bank"]);
+    e.app.delete_item(&e.vault, &a.id).unwrap();
+    e.app.delete_item(&e.vault, &b.id).unwrap();
+    assert_eq!(e.app.list_items(&f(FilterKind::Deleted, None)).unwrap().len(), 2);
+    assert_eq!(titles(e.app.list_items(&f(FilterKind::Deleted, Some(Category::CreditCard))).unwrap()), vec!["Example Bank"]);
+    assert_eq!(titles(e.app.list_items(&f(FilterKind::Deleted, Some(Category::Login))).unwrap()), vec!["Alpha"]);
+    assert!(e.app.list_items(&f(FilterKind::Deleted, Some(Category::Passkey))).unwrap().is_empty());
+}
+
+#[test]
 fn bank_account_and_server_crud_masking_and_subtitles() {
     let e = env();
 
@@ -1946,4 +2115,89 @@ fn bank_account_and_server_crud_masking_and_subtitles() {
 
     let srv_detail = e.app.get_item(&e.vault, &srv_item.id).unwrap();
     assert!(srv_detail.password_strength.is_some());
+
+}
+
+#[test]
+fn test_list_items_with_search_query_operators() {
+    let e = env();
+    e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Login,
+        title: "Work GitHub".into(),
+        url: Some("https://github.com/myorg".into()),
+        sections: vec![],
+        notes: None,
+        tags: Some(vec!["work".into(), "code".into()]),
+        favorite: Some(true),
+    }).unwrap();
+
+    e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::CreditCard,
+        title: "Personal Visa".into(),
+        url: None,
+        sections: vec![],
+        notes: None,
+        tags: Some(vec!["finance".into()]),
+        favorite: Some(false),
+    }).unwrap();
+
+    let f = |q: &str| Filter {
+        kind: FilterKind::All,
+        vault_id: None,
+        tag: None,
+        category: None,
+        query: Some(q.into()),
+        sort: None,
+    };
+
+    let all = e.app.list_items(&f("")).unwrap();
+    assert_eq!(all.len(), 2);
+
+    let tag_work = e.app.list_items(&f("tag:work")).unwrap();
+    assert_eq!(tag_work.len(), 1);
+    assert_eq!(tag_work[0].title, "Work GitHub");
+
+    let type_card = e.app.list_items(&f("type:card")).unwrap();
+    assert_eq!(type_card.len(), 1);
+    assert_eq!(type_card[0].title, "Personal Visa");
+
+    let is_fav = e.app.list_items(&f("is:favorite")).unwrap();
+    assert_eq!(is_fav.len(), 1);
+    assert_eq!(is_fav[0].title, "Work GitHub");
+
+    let neg_tag = e.app.list_items(&f("-tag:work")).unwrap();
+    assert_eq!(neg_tag.len(), 1);
+    assert_eq!(neg_tag[0].title, "Personal Visa");
+
+    let url_host = e.app.list_items(&f("url:github.com")).unwrap();
+    assert_eq!(url_host.len(), 1);
+    assert_eq!(url_host[0].title, "Work GitHub");
+}
+
+#[test]
+fn settings_last_seen_version_roundtrip() {
+    let e = env();
+    let initial = e.app.get_settings();
+    assert_eq!(initial.last_seen_version, None);
+
+    let updated = e.app.set_settings(Settings {
+        last_seen_version: Some("0.6.5".to_string()),
+        ..initial.clone()
+    }).unwrap();
+    assert_eq!(updated.last_seen_version, Some("0.6.5".to_string()));
+    assert_eq!(e.app.get_settings().last_seen_version, Some("0.6.5".to_string()));
+
+    // Deserialization from JSON missing lastSeenVersion defaults to None
+    let json = serde_json::to_string(&initial).unwrap();
+    assert!(!json.contains("lastSeenVersion"));
+    let de: Settings = serde_json::from_str(&json).unwrap();
+    assert_eq!(de.last_seen_version, None);
+
+    // Serialization with Some("0.6.5") produces camelCase lastSeenVersion
+    let json_with_ver = serde_json::to_string(&updated).unwrap();
+    assert!(json_with_ver.contains(r#""lastSeenVersion":"0.6.5""#));
+    let de_with_ver: Settings = serde_json::from_str(&json_with_ver).unwrap();
+    assert_eq!(de_with_ver.last_seen_version, Some("0.6.5".to_string()));
 }

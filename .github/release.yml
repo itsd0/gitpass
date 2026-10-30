@@ -1,0 +1,44 @@
+# Auto-generated release notes ("Generate release notes" on a draft release).
+# Categories map from PR labels. The conventional labels (feat, fix, perf,
+# security, docs, chore) are the primary keys; the long-standing repo labels
+# (enhancement, bug, documentation, dependencies) map to the same sections so
+# already-labelled PRs are categorised too. See docs/RELEASE.md
+# ("Writing release notes") for the labelling convention.
+#
+# NOTE: this file only affects releases created in the repo that contains it.
+# Releases are currently drafted on itsd0/gitpass-releases, so until #292
+# moves release hosting to itsd0/gitpass, copy this file to
+# itsd0/gitpass-releases (same path) for its drafts to pick it up.
+changelog:
+  exclude:
+    labels:
+      # chore(release) PRs carry the `release` label; `skip-changelog` opts
+      # any other PR out of the generated notes.
+      - release
+      - skip-changelog
+  categories:
+    - title: Features
+      labels:
+        - feat
+        - enhancement
+    - title: Fixes
+      labels:
+        - fix
+        - bug
+    - title: Performance
+      labels:
+        - perf
+    - title: Security
+      labels:
+        - security
+    - title: Docs
+      labels:
+        - docs
+        - documentation
+    - title: Maintenance
+      labels:
+        - chore
+        - dependencies
+    - title: Other Changes
+      labels:
+        - "*"

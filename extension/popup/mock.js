@@ -27,11 +27,14 @@
   for (let i = 1; i <= 30; i++) raw.push(['v1', 'login', 'Demo site ' + i, 'user' + i + '@example.com', 'https://demo' + i + '.example', false, false]);
   const items = raw.map(([v, category, title, subtitle, url, favorite, has_totp], i) => ({
     id: v + ':i' + i, vault_id: v, vault_name: V.find((x) => x.id === v).name, category, title, subtitle,
-    url: url || undefined, favicon_host: url ? new URL(url).hostname : undefined, has_totp, favorite, updated_at: now - i * 3600e3,
+    url: url || undefined, favicon_host: url ? new URL(url).hostname : undefined, has_totp,
+    has_attachments: category === 'document' || i === 0, favorite, updated_at: now - i * 3600e3,
+    tags: i === 0 || i === 1 ? ['dev'] : i === 2 ? ['personal'] : i === 4 ? ['dev', 'cloud'] : i === 3 ? ['family'] : [],
   }));
   for (const v of V) v.item_count = items.filter((i) => i.vault_id === v.id).length;
-  const trashed = new Set();
-  const liveItems = () => items.filter((i) => !trashed.has(i.id));
+  const trashed = new Set(['v1:i6']);
+  const archived = new Set(['v2:i14']);
+  const liveItems = () => items.filter((i) => !trashed.has(i.id) && !archived.has(i.id));
   const liveItem = (id) => items.find((i) => i.id === id && !trashed.has(i.id));
   const F = (name, label, kind, value, concealed) => ({ name, label, kind, concealed: !!concealed, value: concealed ? undefined : value });
   const secrets = {};
@@ -49,7 +52,11 @@
       case 'ssh_key': fields = [F('public', 'public key', 'text', 'ssh-ed25519 AAAAC3Nza…demo naing@mac'), F('private', 'private key', 'password', null, true), F('fp', 'fingerprint', 'text', 'SHA256:x2Tq…9fA')]; secrets.private = '-----BEGIN OPENSSH PRIVATE KEY-----demo'; break;
       case 'wifi': fields = [F('ssid', 'network name', 'text', 'NaingHome-5G'), F('password', 'wireless password', 'password', null, true), F('security', 'security', 'text', 'WPA3')]; secrets.password = 'wifi-demo-pass'; break;
     }
-    return { ...it, fields, notes: it.notes != null ? it.notes : (it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : ''), tags: ['demo'], created_at: now - 864e5 * 30 };
+    const attachments = (it && it.has_attachments) ? [
+      { id: 'att-1', name: 'passport-scan.pdf', size: 1258291, mime: 'application/pdf' },
+    ] : [];
+    const dAt = trashed.has(it.id) ? new Date(now - 864e5 * 2).toISOString() : undefined;
+    return { ...it, fields, attachments, archived: archived.has(it.id), deleted_at: dAt, notes: it.notes != null ? it.notes : (it.category === 'secure_note' ? 'Demo recovery codes:\n1111-2222\n3333-4444' : ''), tags: ['demo'], created_at: now - 864e5 * 30 };
   }
   let unlocked = !['locked', 'appdown', 'nohost'].includes(P.get('view'));
   const appRunning = P.get('view') !== 'appdown';
@@ -74,10 +81,13 @@
       }
       case 'list_vaults': return ok({ vaults: V });
       case 'list_items': return ok({ items: liveItems() });
+      case 'list_archived': return ok({ items: items.filter((i) => archived.has(i.id) && !trashed.has(i.id)).map((i) => ({ ...i, archived: true })) });
+      case 'list_deleted': return ok({ items: items.filter((i) => trashed.has(i.id)).map((i) => ({ ...i, deleted_at: new Date(now - 864e5 * 2).toISOString() })) });
       case 'match_active': return ok({ origin: 'https://github.com', items: liveItems().filter((i) => i.favicon_host === 'github.com') });
       case 'get_item': {
-        const it = liveItem(msg.item_id);
-        return it ? ok({ item: detail(it) }) : err('not_found');
+        const it = items.find((i) => i.id === msg.item_id);
+        if (!it || (trashed.has(it.id) && !msg.include_deleted)) return err('not_found');
+        return ok({ item: detail(it) });
       }
       case 'item_findings': {
         const it = liveItem(msg.item_id);
@@ -126,6 +136,16 @@
         if (!items.some((x) => x.id === msg.item_id)) return err('not_found');
         trashed.delete(msg.item_id);
         return ok({ ok: true });
+      }
+      case 'archive_item': {
+        if (!items.some((x) => x.id === msg.item_id)) return err('not_found');
+        archived.add(msg.item_id);
+        return ok({ ok: true, archived: true });
+      }
+      case 'unarchive_item': {
+        if (!items.some((x) => x.id === msg.item_id)) return err('not_found');
+        archived.delete(msg.item_id);
+        return ok({ ok: true, archived: false });
       }
       case 'open_fill': case 'fill_active': return ok(true);
     }

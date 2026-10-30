@@ -131,6 +131,7 @@ Options and environment variables:
 - `--path DIR` or `GITPASS_PATH` sets the vault dir (default `~/.gitpass`).
 - The Secret Key is read in this order: `GITPASS_SECRET_KEY`, then `<path>/secret.key` (mode 0600, git-ignored, written by `init --save-secret-key`), then an interactive prompt.
 - `GITPASS_PASSWORD` and `GITPASS_ITEM_PASSWORD` supply passwords without prompting. They are meant for scripts and tests only, because environment variables can leak.
+- `GITPASS_IMPORT_PASSWORD` supplies the export password for a password-protected Bitwarden JSON import (`gitpass import --from bitwarden-json`); the desktop Import wizard asks for it in a password step.
 
 ## Shell completions
 
@@ -188,6 +189,9 @@ Reference a field as `gp://<vault>/<item>/<field>`. `<item>` is an item id, an e
 (case-insensitive) or a unique fuzzy match; `<field>` is `password`, `username`, `url`, `notes`,
 `title`, `totp` (current code) or the label/id of a custom field. Percent-encode `/` (`%2F`), spaces
 (`%20`) and `%` (`%25`) inside a segment.
+
+Don't type references by hand: `gitpass ref <vault> <query> [field]` prints (or `--copy`s) the exact
+reference for an item field, and the desktop app has a "Copy secret reference" action on each field.
 
 ```sh
 # Inherited environment variables

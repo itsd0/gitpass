@@ -71,10 +71,10 @@ fn import_bitwarden_csv() {
 }
 
 #[test]
-fn import_1password_csv_case_insensitive_and_bom() {
+fn import_generic_csv_case_insensitive_and_bom() {
     let csv = "\u{feff}Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes\n\
                Fake Shop,https://shop.example.invalid,carol,FAKE-pw-3,otpauth://totp/x?secret=JBSWY3DPEHPK3PXP,false,false,shopping,n1\n";
-    let p = import::parse(ImportFormat::OnePasswordCsv, csv, None).unwrap();
+    let p = import::parse(ImportFormat::GenericCsv, csv, None).unwrap();
     let i = &p.items[0].item;
     assert_eq!(i.title, "Fake Shop");
     assert_eq!(i.url.as_deref(), Some("https://shop.example.invalid"));
@@ -82,7 +82,7 @@ fn import_1password_csv_case_insensitive_and_bom() {
     assert_eq!(i.notes.as_deref(), Some("n1"));
     assert_eq!(p.items[0].tags, vec!["shopping"]);
     // lower-case / older header variants
-    let p2 = import::parse(ImportFormat::OnePasswordCsv, "title,website,username,password,notesPlain\nX,https://x.invalid,u,p,nn\n", None).unwrap();
+    let p2 = import::parse(ImportFormat::GenericCsv, "title,website,username,password,notesPlain\nX,https://x.invalid,u,p,nn\n", None).unwrap();
     assert_eq!(p2.items[0].item.url.as_deref(), Some("https://x.invalid"));
     assert_eq!(p2.items[0].item.notes.as_deref(), Some("nn"));
 }
@@ -149,9 +149,9 @@ fn export_import_roundtrip_plain_json_and_csv() {
     let mut want = items.clone();
     got.sort_by(|a, b| a.title.cmp(&b.title)); want.sort_by(|a, b| a.title.cmp(&b.title));
     assert_eq!(got, want);
-    // CSV export is readable back through the tolerant 1password-csv mapper (title/username/password/url/notes/totp)
+    // CSV export is readable back through the tolerant generic-csv mapper (title/username/password/url/notes/totp)
     let csv = import::export_csv(&items).unwrap();
-    let back = import::parse(ImportFormat::OnePasswordCsv, &csv, None).unwrap().items;
+    let back = import::parse(ImportFormat::GenericCsv, &csv, None).unwrap().items;
     let rt = by_title(&back, "Round, \"Trip\"");
     assert_eq!(rt.password.as_deref(), Some("FAKE-pw,\"q\"")); // CSV path trims surrounding whitespace
     assert!(rt.notes.as_deref().unwrap().starts_with("line1\nline2"));

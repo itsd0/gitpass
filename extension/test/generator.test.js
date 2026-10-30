@@ -7,7 +7,7 @@ const path = require('path');
 const { JSDOM } = require('jsdom');
 const GEN = require('../popup/generator.js');
 const root = path.join(__dirname, '..');
-const SCRIPTS = ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/generator.js', 'popup/popup.js'];
+const SCRIPTS = ['lib/i18n.js', 'lib/icons.js', 'popup/icons.js', 'popup/view.js', 'popup/newitem.js', 'popup/generator.js', 'popup/skeletons.js', 'popup/recent.js', 'popup/totp-list.js', 'popup/detail.js', 'popup/edit.js', 'popup/largetype.js', 'popup/quick-actions.js', 'popup/panels.js', 'popup/settings.js', 'popup/popup.js'];
 const ORIGIN = 'https://example.invalid/login';
 const PASSWORD = 'FAKE-Gen-Abc-123';
 
@@ -33,13 +33,16 @@ function popup({ generate, stored, canFill = true } = {}) {
       case 'generate': {
         if (generate) return generate(msg);
         const words = ['amber', 'coral', 'lunar', 'ivory', 'ocean', 'maple', 'quartz', 'willow'];
-        const pw = msg.pin ? '1234567890'.slice(0, msg.len) : msg.words ? Array.from({ length: msg.len }, (_, i) => words[i % words.length]).join('-') : PASSWORD;
+        const sep = msg.separator != null ? msg.separator : '-';
+        let wordList = Array.from({ length: msg.len }, (_, i) => words[i % words.length]);
+        if (msg.capitalize) wordList = wordList.map((w) => w[0].toUpperCase() + w.slice(1));
+        const pw = msg.pin ? '1234567890'.slice(0, msg.len) : msg.words ? wordList.join(sep) : PASSWORD;
         return ok({ password: pw });
       }
       default: return ok({});
     }
   };
-  for (const f of SCRIPTS) w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
+  w.eval("'use strict';\n" + SCRIPTS.map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n'));
   return { dom, w, sent };
 }
 
@@ -67,8 +70,13 @@ test('mode limits match the desktop generator', () => {
 
 test('stored settings never include the generated value', () => {
   const s = GEN.safeSettings({ mode: 'pin', length: 9, digits: false, symbols: false, password: 'FAKE-secret', extra: 'x' });
-  assert.deepStrictEqual(s, { mode: 'pin', length: 9, digits: false, symbols: false });
-  assert.deepStrictEqual(GEN.safeSettings({ mode: 'bogus', length: 999 }), { mode: 'random', length: 64, digits: true, symbols: true });
+  assert.deepStrictEqual(s, { mode: 'pin', length: 9, digits: false, symbols: false, separator: '-', capitalize: false });
+  assert.deepStrictEqual(GEN.safeSettings({ mode: 'bogus', length: 999 }), { mode: 'random', length: 64, digits: true, symbols: true, separator: '-', capitalize: false });
+  assert.deepStrictEqual(GEN.safeSettings({ mode: 'memorable', length: 5, separator: '_', capitalize: true, password: 'FAKE-secret' }), { mode: 'memorable', length: 5, digits: true, symbols: true, separator: '_', capitalize: true });
+  assert.strictEqual(GEN.safeSettings({ separator: 'invalid' }).separator, '-');
+  assert.strictEqual(GEN.safeSettings({ separator: ' ' }).separator, ' ');
+  assert.strictEqual(GEN.safeSettings({ capitalize: true }).capitalize, true);
+  assert.strictEqual(GEN.safeSettings({ capitalize: false }).capitalize, false);
 });
 
 test('strength meter bands', () => {
@@ -134,7 +142,7 @@ test('length, toggles and mode persist without the generated password', async ()
   await settle();
   assert.strictEqual(lastGenerate(sent).digits, false);
 
-  assert.deepStrictEqual(JSON.parse(JSON.stringify(w.__gitpassMockGenSettings)), { mode: 'random', length: 30, digits: false, symbols: true });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(w.__gitpassMockGenSettings)), { mode: 'random', length: 30, digits: false, symbols: true, separator: '-', capitalize: false });
   assert.ok(!JSON.stringify(w.__gitpassMockGenSettings).includes(PASSWORD));
 });
 
@@ -209,4 +217,82 @@ test('New item form links to the generator', async () => {
   q(w, '#newBtn').click();
   await settle();
   assert.ok(button(w, 'Generate a password…'));
+});
+
+test('memorable mode shows separator and capitalize controls; changes regenerate and persist', async () => {
+  const { w, sent } = popup();
+  await settle();
+  await openGen(w);
+
+  // Hidden in Random mode
+  assert.ok(q(w, '.gen-sep-row').classList.contains('hidden'));
+  assert.ok(q(w, '.gen-cap-row').classList.contains('hidden'));
+
+  // Switch to Memorable mode
+  button(w, 'Memorable').click();
+  await settle();
+
+  // Controls visible in Memorable mode
+  assert.ok(!q(w, '.gen-sep-row').classList.contains('hidden'));
+  assert.ok(!q(w, '.gen-cap-row').classList.contains('hidden'));
+
+  let gen = lastGenerate(sent);
+  assert.strictEqual(gen.words, true);
+  assert.strictEqual(gen.separator, '-');
+  assert.strictEqual(gen.capitalize, false);
+
+  // Select '_' separator button
+  const sepUnderscore = q(w, '.gen-sep[data-sep="_"]');
+  assert.ok(sepUnderscore);
+  sepUnderscore.click();
+  await settle();
+
+  gen = lastGenerate(sent);
+  assert.strictEqual(gen.separator, '_');
+  assert.strictEqual(gen.capitalize, false);
+  assert.match(q(w, '#panel .gen-code').textContent, /_/);
+  assert.strictEqual(JSON.parse(JSON.stringify(w.__gitpassMockGenSettings)).separator, '_');
+
+  // Toggle capitalize
+  const capTog = q(w, '.gen-cap-row input[type=checkbox]');
+  assert.ok(capTog);
+  capTog.checked = true;
+  capTog.dispatchEvent(new w.Event('change', { bubbles: true }));
+  await settle();
+
+  gen = lastGenerate(sent);
+  assert.strictEqual(gen.separator, '_');
+  assert.strictEqual(gen.capitalize, true);
+  assert.strictEqual(JSON.parse(JSON.stringify(w.__gitpassMockGenSettings)).capitalize, true);
+
+  // Arrow key navigation on separator segmented control
+  // From '_' (index 2), ArrowRight navigates to ' ' (index 3)
+  const sepGroup = q(w, '.gen-seps');
+  sepGroup.dispatchEvent(new w.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+  await settle();
+
+  gen = lastGenerate(sent);
+  assert.strictEqual(gen.separator, ' ');
+  assert.strictEqual(gen.capitalize, true);
+  assert.strictEqual(JSON.parse(JSON.stringify(w.__gitpassMockGenSettings)).separator, ' ');
+
+  // Switch to PIN mode: controls hidden again
+  button(w, 'PIN').click();
+  await settle();
+  assert.ok(q(w, '.gen-sep-row').classList.contains('hidden'));
+  assert.ok(q(w, '.gen-cap-row').classList.contains('hidden'));
+});
+
+test('restores the last used separator and capitalize in memorable mode', async () => {
+  const { w, sent } = popup({ stored: { mode: 'memorable', length: 4, digits: true, symbols: true, separator: '.', capitalize: true } });
+  await settle();
+  await openGen(w);
+
+  assert.strictEqual(q(w, '#panel .gen-mode.sel').textContent, 'Memorable');
+  assert.strictEqual(q(w, '.gen-sep.sel').getAttribute('data-sep'), '.');
+  assert.strictEqual(q(w, '.gen-cap-row input[type=checkbox]').checked, true);
+  const gen = lastGenerate(sent);
+  assert.strictEqual(gen.words, true);
+  assert.strictEqual(gen.separator, '.');
+  assert.strictEqual(gen.capitalize, true);
 });

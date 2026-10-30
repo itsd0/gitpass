@@ -11,6 +11,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  merge_group:
   workflow_dispatch:
 
 permissions:
@@ -31,33 +32,84 @@ jobs:
     timeout-minutes: 5
     outputs:
       code: ${{ steps.f.outputs.code }}
+      rust: ${{ steps.f.outputs.rust }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           fetch-depth: 0
       - id: f
-        name: code changed? (anything other than *.md, docs/, LICENSE)
+        name: code changed? (anything other than *.md, docs/, LICENSE); rust changed? (also ignores apps/desktop/src/, extension/)
+        # merge_group and workflow_dispatch always run everything.
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD: ${{ github.sha }}
         run: |
-          code=true
-          if [ "$EVENT" != workflow_dispatch ] && [ -n "$BASE" ] && [ "$BASE" != 0000000000000000000000000000000000000000 ] \
+          code=true; rust=true
+          if [ "$EVENT" != workflow_dispatch ] && [ "$EVENT" != merge_group ] && [ -n "$BASE" ] && [ "$BASE" != 0000000000000000000000000000000000000000 ] \
              && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
             files=$(git diff --name-only "$BASE" "$HEAD")
             echo "$files"
             if [ -n "$files" ] && ! echo "$files" | grep -vqE '(\.md$|^docs/|^LICENSE$)'; then code=false; fi
+            if [ -n "$files" ] && ! echo "$files" | grep -vqE '(\.md$|^docs/|^LICENSE$|^apps/desktop/src/|^extension/)'; then rust=false; fi
           fi
+          [ "$code" = true ] || rust=false
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
+          echo "rust=$rust" | tee -a "$GITHUB_OUTPUT"
 
-  rust:
-    name: rust (test + clippy)
+  rust-test:
+    name: rust (test)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.rust == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; version pinned below
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          # Only main pushes write the cache, so PRs (incl. forks) and merge-queue runs cannot poison it.
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-nextest
+      - name: isolated HOME
+        run: |
+          echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> "$GITHUB_ENV"
+          echo "RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}" >> "$GITHUB_ENV"
+          T="$RUNNER_TEMP/home"; rm -rf "$T"; mkdir -p "$T"
+          echo "TEST_HOME=$T" >> "$GITHUB_ENV"
+      - name: cargo nextest
+        run: |
+          export HOME="$TEST_HOME"
+          git config --global user.name "gitpass ci"
+          git config --global user.email "ci@gitpass.invalid"
+          cargo nextest run --workspace --locked --profile ci
+      - name: doctests
+        run: |
+          export HOME="$TEST_HOME"
+          cargo test --workspace --locked --doc
+
+  rust-clippy:
+    name: rust (clippy + machete)
+    needs: changes
+    if: needs.changes.outputs.rust == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -67,18 +119,8 @@ jobs:
           toolchain: ${{ env.RUST_TOOLCHAIN }}
           components: clippy
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
-      - name: isolated HOME
-        run: |
-          echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> "$GITHUB_ENV"
-          echo "RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}" >> "$GITHUB_ENV"
-          T="$RUNNER_TEMP/home"; rm -rf "$T"; mkdir -p "$T"
-          echo "TEST_HOME=$T" >> "$GITHUB_ENV"
-      - name: cargo test
-        run: |
-          export HOME="$TEST_HOME"
-          git config --global user.name "gitpass ci"
-          git config --global user.email "ci@gitpass.invalid"
-          cargo test --workspace --locked
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: cargo clippy (gating, -D warnings)
         run: cargo clippy --workspace --locked --all-targets -- -D warnings
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
@@ -139,6 +181,7 @@ jobs:
       - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: apps/desktop/src-tauri
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
       - name: frontend dist (needed by tauri build script)
         working-directory: apps/desktop
         run: |
@@ -186,7 +229,7 @@ jobs:
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [changes, rust, frontend, tauri-macos, supply-chain]
+    needs: [changes, rust-test, rust-clippy, frontend, tauri-macos, supply-chain]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

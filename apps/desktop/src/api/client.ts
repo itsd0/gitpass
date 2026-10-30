@@ -63,7 +63,7 @@ export const api = {
   watchtower: (a:{hibp:boolean}) => call<T.WatchtowerReport>('watchtower', a),
   ignoreFinding: (a:{vaultId:string; itemId:string; kind:string}) => call<void>('ignore_finding', a),
   unignoreFinding: (a:{vaultId:string; itemId:string; kind:string}) => call<void>('unignore_finding', a),
-  importFile: (a:{vaultId:string; format:string; path:string; dryRun:boolean}) => call<T.ImportResult>('import_file', a),
+  importFile: (a:{vaultId:string; format:string; path:string; dryRun:boolean; password?:string|null}) => call<T.ImportResult>('import_file', a),
   exportItems: (a:{req:T.ExportRequest}) => call<T.ExportResult>('export_items', a),
   identity: () => call<T.Identity>('identity'),
   /** v0.7: new Ed25519 key in a new SSH Key item (private key never reaches the webview) */
@@ -94,6 +94,7 @@ export const api = {
   remoteDisconnect: () => call<T.SyncStatus>('remote_disconnect'),
   /** Opens https://github.com/new in the default browser (fixed URL). */
   openNewRepoPage: () => call<void>('open_new_repo_page'),
+  openGithubSshKeysPage: () => call<void>('open_github_ssh_keys_page'),
   /** Opens the item's `https://<host>/.well-known/change-password` page in the default browser (URL derived in Rust). */
   openChangePassword: (a:{vaultId:string; itemId:string}) => call<void>('open_change_password', a),
   /** Opens the passkey's `https://<rp_id>` site in the default browser (URL derived in Rust). */

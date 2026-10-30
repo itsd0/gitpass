@@ -9,10 +9,10 @@ const items = [
   { id: 'v2:d', vault_id: 'v2', vault_name: 'Work', category: 'wifi', title: 'Office', subtitle: 'net', favorite: false },
 ];
 
-test('buildFilters has suggestions, all, favorites, 11 categories and vaults', () => {
+test('buildFilters has suggestions, all, favorites, 12 categories and vaults', () => {
   const f = V.buildFilters([{ id: 'v1', name: 'Personal' }, { id: 'v2', name: 'Work' }]);
   assert.deepStrictEqual(f.slice(0, 3).map((x) => x.id), ['suggested', 'all', 'favorites']);
-  assert.strictEqual(f.filter((x) => x.group === 'category').length, 11);
+  assert.strictEqual(f.filter((x) => x.group === 'category').length, 12);
   assert.deepStrictEqual(f.filter((x) => x.group === 'vault').map((x) => x.id), ['vault:v1', 'vault:v2']);
 });
 
@@ -193,7 +193,11 @@ test('viewFor chooses locked / appdown / nohost / unlocked', () => {
 });
 
 test('popup routes all use the popup: prefix and in-page routes are untouched', () => {
-  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'popup', 'popup.js'), 'utf8');
+  // popup.js was split (issue #318): routes now live across popup/*.js, so scan them all.
+  const src = require('fs').readdirSync(require('path').join(__dirname, '..', 'popup'))
+    .filter((f) => f.endsWith('.js'))
+    .map((f) => require('fs').readFileSync(require('path').join(__dirname, '..', 'popup', f), 'utf8'))
+    .join('\n');
   const types = [...src.matchAll(/send\(\{ type: '([^']+)'/g)].map((m) => m[1]);
   assert.ok(types.length > 10);
   for (const ty of types) assert.ok(ty.startsWith('popup:'), ty);

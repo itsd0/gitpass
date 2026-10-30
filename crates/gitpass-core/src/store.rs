@@ -427,7 +427,7 @@ fn list_enc(d: &Path) -> Vec<String> {
         .map(|p| p.file_stem().unwrap().to_string_lossy().to_string()).collect()).unwrap_or_default()
 }
 
-#[derive(Default)]
+#[derive(Default, Clone, Debug)]
 pub struct UnlockOpts {
     /// Accept integrity/rollback failures and re-seal the manifest from what's on disk.
     pub accept_rollback: bool,
@@ -500,23 +500,41 @@ impl Session {
 
     /// Unlock and register/refresh this device in the registry (`device_name` None => env/hostname).
     pub fn unlock_device(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>) -> Result<Self> {
-        Self::unlock_device_inner(root, password, secret, opts, device_name, true)
+        Self::unlock_device_inner(root, password, secret, opts, device_name, true, false)
+    }
+    /// Unlock via biometric authentication: bypasses password failure throttling, but resets it on success.
+    pub fn unlock_device_biometric(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>) -> Result<Self> {
+        Self::unlock_device_inner(root, password, secret, opts, device_name, true, true)
     }
     /// Verify-only re-unlock used after a sync pull: same integrity/rollback checks, but never touches the
     /// device registry or upgrades the KDF, so the working tree stays exactly as committed/pulled.
     pub fn reopen_verify(root: &Path, password: &str, secret: &SecretKey, accept_rollback: bool) -> Result<Self> {
         let fmt = read_format(root)?;
         let opts = UnlockOpts { accept_rollback, target_kdf: fmt.kdf.clone() };
-        Self::unlock_device_inner(root, password, secret, &opts, None, false)
+        Self::unlock_device_inner(root, password, secret, &opts, None, false, false)
     }
-    fn unlock_device_inner(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>, touch: bool) -> Result<Self> {
+    fn unlock_device_inner(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>, touch: bool, is_biometric: bool) -> Result<Self> {
+        if !is_biometric {
+            crate::unlock_throttle::check_throttle(root)?;
+        }
         let recovered = {
             let _g = fsutil::lock(root)?;
             finish_pending_rewrap(root, password, secret)?
         };
         let fmt = read_format(root)?;
         if fmt.version < MIN_READ_FORMAT { bail!("vault is format v{}; run `gitpass migrate` to upgrade to v{FORMAT_VERSION}", fmt.version); }
-        let (auk, account_key) = open_keyset_auk(root, &fmt, &root.join("keyset.enc"), password, secret)?;
+        let (auk, account_key) = match open_keyset_auk(root, &fmt, &root.join("keyset.enc"), password, secret) {
+            Ok(k) => {
+                let _ = crate::unlock_throttle::record_success(root);
+                k
+            }
+            Err(e) => {
+                if !is_biometric {
+                    let _ = crate::unlock_throttle::record_failure(root);
+                }
+                return Err(e);
+            }
+        };
         let device_kek = device_kek(&auk, &fmt.account_id);
         drop(auk);
         let device_id = crate::device::local_device_id(root)?;
@@ -1469,9 +1487,7 @@ impl Session {
         Ok(plan.len())
     }
 
-    /// Copy several items to `to_vid`: all records land in one commit; attachments (if any) are then
-    /// re-encrypted per file. Returns the new ids in input order.
-    pub fn copy_items_to(&self, targets: &[(String, String)], to_vid: &str) -> Result<Vec<String>> {
+    fn copy_items_impl(&self, targets: &[(String, String)], to_vid: &str, preserve_history: bool) -> Result<Vec<String>> {
         self.vault_key(to_vid)?; // target must exist
         let now = merge::now_ms();
         let mut writes = vec![];
@@ -1483,10 +1499,15 @@ impl Session {
             n.ignored_findings = r.ignored_findings.clone();
             n.archived = r.archived;
             if n.item.updated_at.is_empty() { n.item.updated_at = (now / 1000).to_string(); }
-            n.created_at.get_or_insert(now / 1000);
+            if preserve_history {
+                n.created_at = r.created_at.or(Some(now / 1000));
+                n.history = r.history.clone();
+            } else {
+                n.created_at = Some(now / 1000);
+                n.history.clear();
+            }
             n.clocks = Some(merge::stamp(None, &n.item, now));
             merge::stamp_ext(None, &mut n, now);
-            n.history.clear();
             let nid = uuid::Uuid::new_v4().to_string();
             if !r.attachments.is_empty() { atts.push((vid.clone(), iid.clone(), nid.clone(), r.attachments.clone())); }
             writes.push((to_vid.to_string(), nid, 1, n));
@@ -1497,16 +1518,34 @@ impl Session {
                 let bytes = zeroize::Zeroizing::new(self.read_attachment(&vid, &iid, &a.id)?);
                 self.add_attachment(to_vid, &nid, &a.name, &a.mime, &bytes)?;
             }
+            if preserve_history {
+                let (_, r_orig) = self.read_record(&vid, &iid)?;
+                let (v, mut rec) = self.read_record(to_vid, &nid)?;
+                rec.history = r_orig.history.clone();
+                rec.created_at = r_orig.created_at;
+                self.put_item(to_vid, &nid, v, &rec)?;
+            } else {
+                let (v, mut rec) = self.read_record(to_vid, &nid)?;
+                rec.history.clear();
+                self.put_item(to_vid, &nid, v, &rec)?;
+            }
         }
         Ok(writes.into_iter().map(|w| w.1).collect())
     }
 
+    /// Copy several items to `to_vid`: all records land in one commit; attachments (if any) are then
+    /// re-encrypted per file. Returns the new ids in input order. History starts empty and `created_at` is reset.
+    pub fn copy_items_to(&self, targets: &[(String, String)], to_vid: &str) -> Result<Vec<String>> {
+        self.copy_items_impl(targets, to_vid, false)
+    }
+
     /// Move several items to `to_vid` (items already there are left alone): copy (one commit) then
     /// remove the originals (one commit). Returns (old vault, old id, new id) for each moved item.
+    /// Preserves version history, `created_at`, tags, and attachments.
     pub fn move_items(&self, targets: &[(String, String)], to_vid: &str) -> Result<Vec<(String, String, String)>> {
         let movers: Vec<(String, String)> = dedup_targets(targets).into_iter().filter(|(v, _)| v != to_vid).collect();
         if movers.is_empty() { return Ok(vec![]); }
-        let nids = self.copy_items_to(&movers, to_vid)?;
+        let nids = self.copy_items_impl(&movers, to_vid, true)?;
         self.remove_items(&movers)?;
         Ok(movers.into_iter().zip(nids).map(|((v, i), n)| (v, i, n)).collect())
     }
@@ -1599,24 +1638,18 @@ impl Session {
     }
 
     /// Copy an item (content, tags, attachments) to a new id in `to_vid` (title unchanged).
+    /// Version history starts empty and `created_at` is reset.
     pub fn copy_item_to(&self, vid: &str, iid: &str, to_vid: &str) -> Result<String> {
-        let (_, r) = self.read_record(vid, iid)?;
-        let mut n = ItemRecord::from_snapshot(&r.snapshot());
-        n.favorite = r.favorite;
-        n.archived = r.archived;
-        let nid = self.add_record(to_vid, n)?;
-        for a in &r.attachments {
-            let bytes = zeroize::Zeroizing::new(self.read_attachment(vid, iid, &a.id)?);
-            self.add_attachment(to_vid, &nid, &a.name, &a.mime, &bytes)?;
-        }
-        Ok(nid)
+        let nids = self.copy_items_impl(&[(vid.to_string(), iid.to_string())], to_vid, false)?;
+        nids.into_iter().next().ok_or_else(|| anyhow!("copy item failed"))
     }
 
     /// Move an item to another vault (re-encrypted under the target Vault Key). Returns the new id.
+    /// Preserves version history, `created_at`, tags, and attachments.
     pub fn move_item(&self, vid: &str, iid: &str, to_vid: &str) -> Result<String> {
         if vid == to_vid { return Ok(iid.to_string()); }
-        let nid = self.copy_item_to(vid, iid, to_vid)?;
-        self.remove_item(vid, iid)?;
+        let moved = self.move_items(&[(vid.to_string(), iid.to_string())], to_vid)?;
+        let nid = moved.into_iter().next().map(|(_, _, n)| n).ok_or_else(|| anyhow!("failed to move item"))?;
         Ok(nid)
     }
 

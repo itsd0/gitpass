@@ -19,8 +19,9 @@ export const IMPORT_FORMATS = [
   },
   { id: 'bitwarden-json', label: 'Bitwarden (.json)', labelKey: 'import.formatBitwardenJson', ext: 'json' },
   { id: 'bitwarden-csv', label: 'Bitwarden (.csv)', labelKey: 'import.formatBitwardenCsv', ext: 'csv' },
-  { id: '1password-csv', label: '1Password 8 (.csv)', labelKey: 'import.format1PasswordCsv', ext: 'csv' },
-  { id: '1password-1pux', label: '1Password (.1pux)', labelKey: 'import.format1Password1pux', ext: '1pux' },
+  { id: 'generic-csv', label: 'Other password manager (.csv)', labelKey: 'import.formatGenericCsv', ext: 'csv' },
+  { id: '1pux', label: '1PUX export file (.1pux)', labelKey: 'import.format1pux', ext: '1pux' },
+  { id: '1pif', label: '.1pif export file (.1pif)', labelKey: 'import.format1pif', ext: '1pif' },
   { id: 'keepass-csv', label: 'KeePass (.csv)', labelKey: 'import.formatKeepassCsv', ext: 'csv' },
   { id: 'chrome-csv', label: 'Chrome / Chromium (.csv)', labelKey: 'import.formatChromeCsv', ext: 'csv' },
   { id: 'lastpass-csv', label: 'LastPass (.csv)', labelKey: 'import.formatLastpass', ext: 'csv' },
@@ -41,13 +42,18 @@ export interface ImportState {
   result: ImportResult | null;
   error: string | null;
   autoDetected?: boolean;
+  /** The file is a Bitwarden export that needs its export password. */
+  needsPassword?: boolean;
+  password: string;
 }
 
 export type ImportAction =
-  | { type: 'file'; path: string; format?: string | null; autoDetected?: boolean }
+  | { type: 'file'; path: string; format?: string | null; autoDetected?: boolean; needsPassword?: boolean }
   | { type: 'format'; format: string; autoDetected?: boolean }
   | { type: 'path'; path: string }
   | { type: 'vault'; vaultId: string }
+  | { type: 'password'; password: string }
+  | { type: 'needsPassword' }
   | { type: 'preview'; preview: ImportResult }
   | { type: 'done'; result: ImportResult }
   | { type: 'error'; error: string }
@@ -62,7 +68,19 @@ export const initialImport = (vaultId: string | null = null): ImportState => ({
   result: null,
   error: null,
   autoDetected: false,
+  needsPassword: false,
+  password: '',
 });
+
+/** True when the JSON snippet is a Bitwarden export protected by a user-chosen password. */
+export function isPasswordProtectedBitwarden(content: string): boolean {
+  try {
+    const parsed = JSON.parse(content.trim());
+    return parsed?.encrypted === true && parsed?.passwordProtected === true;
+  } catch {
+    return false;
+  }
+}
 
 /** Pure function to detect the import format from filename and optional content/header. */
 export function detectImportFormat(filename: string, contentOrHeader?: string): ImportFormatId | null {
@@ -70,10 +88,19 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
 
   // 1. .1pux files are zip archives
   if (lowerName.endsWith('.1pux') || lowerName.includes('1pux')) {
-    return '1password-1pux';
+    return '1pux';
+  }
+
+  // 1b. .1pif files or folder with data.1pif
+  if (lowerName.endsWith('.1pif') || lowerName.includes('1pif') || lowerName.endsWith('data.1pif')) {
+    return '1pif';
   }
 
   const content = contentOrHeader?.trim() ?? '';
+
+  if (content.includes('***') && content.includes('"typeName"')) {
+    return '1pif';
+  }
 
   // 2. JSON files or JSON content
   if (lowerName.endsWith('.json') || content.startsWith('{')) {
@@ -130,9 +157,9 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
         return 'keepass-csv';
       }
 
-      // Apple Passwords / Safari CSV vs 1Password 8 CSV:
+      // Apple Passwords / Safari CSV vs Generic CSV:
       // Apple Passwords: Title,URL,Username,Password,Notes,OTPAuth (no Favorite/Archived/Tags)
-      // 1Password 8:     Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
+      // Generic:          Title,Url,Username,Password,OTPAuth,Favorite,Archived,Tags,Notes
       if (
         cols.includes('otpauth') &&
         cols.includes('title') &&
@@ -141,9 +168,9 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
         return 'apple-passwords-csv';
       }
 
-      // 1Password CSV distinctive headers
+      // Generic CSV distinctive headers
       if (cols.some((c) => ['otpauth', 'archived', 'tags'].includes(c)) || (cols.includes('title') && cols.includes('favorite'))) {
-        return '1password-csv';
+        return 'generic-csv';
       }
 
       // Chrome CSV distinctive headers
@@ -157,7 +184,6 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
     if (lowerName.includes('proton') || lowerName.includes('protonpass')) return 'protonpass-csv';
     if (lowerName.includes('keepass')) return 'keepass-csv';
     if (lowerName.includes('chrome') || lowerName.includes('chromium')) return 'chrome-csv';
-    if (lowerName.includes('1password') || lowerName.includes('onepassword')) return '1password-csv';
     // Only look at the basename: folders such as iCloud Drive (com~apple~CloudDocs)
     // or a "Safari" directory must not force the Apple mapping on unrelated CSVs.
     const baseName = lowerName.split(/[\/\\]/).pop() ?? lowerName;
@@ -167,7 +193,7 @@ export function detectImportFormat(filename: string, contentOrHeader?: string): 
     ) {
       return 'apple-passwords-csv';
     }
-    if (lowerName.endsWith('.csv')) return '1password-csv';
+    if (lowerName.endsWith('.csv')) return 'generic-csv';
   }
 
   return null;
@@ -181,6 +207,7 @@ export function importReducer(s: ImportState, a: ImportAction): ImportState {
         path: a.path,
         format: a.format !== undefined ? a.format : s.format,
         autoDetected: a.autoDetected ?? false,
+        needsPassword: a.needsPassword ?? false,
         error: null,
       };
     case 'format':
@@ -197,6 +224,10 @@ export function importReducer(s: ImportState, a: ImportAction): ImportState {
     }
     case 'vault':
       return { ...s, vaultId: a.vaultId };
+    case 'password':
+      return { ...s, password: a.password, error: null };
+    case 'needsPassword':
+      return { ...s, needsPassword: true };
     case 'preview':
       return { ...s, preview: a.preview, step: 'preview', error: null };
     case 'done':

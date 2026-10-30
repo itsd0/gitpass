@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useEffect, useRef, useState } from 'react';
-import { Archive, Check, ChevronDown, ChevronRight, KeyRound, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
+import { Archive, Check, ChevronDown, ChevronRight, KeyRound, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, PanelLeftOpen, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
 import { VaultIcon } from '../features/home/vaultIcons';
 import { DeleteVaultDialog, EditVaultDialog } from '../features/home/VaultDialogs';
 import { NewVaultDialog } from '../features/home/NewVaultDialog';
@@ -18,6 +18,9 @@ import { useSettings } from '../features/settings/useSettings';
 import { useDragStore, canDropOnVault } from '../features/items/dragState';
 import { runBulk } from '../features/items/BulkPane';
 import { Button, Logo, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger, Tooltip, toast } from '../ui';
+
+// True when the sidebar is collapsed to its icon-only rail.
+const RailContext = React.createContext(false);
 
 const same = (r: Route, f: Filter) => r.name === 'items' && r.filter.kind === f.kind && r.filter.vaultId === f.vaultId && r.filter.tag === f.tag;
 
@@ -37,6 +40,32 @@ const NavItem = React.forwardRef<
     className?: string;
   }
 >(({ active, icon, label, onClick, right, onContextMenu, onKeyDown, onDragOver, onDragLeave, onDrop, className }, ref) => {
+  const rail = React.useContext(RailContext);
+  if (rail) {
+    return (
+      <Tooltip content={label} side="right">
+        <button
+          ref={ref}
+          aria-label={label}
+          aria-current={active ? 'page' : undefined}
+          data-testid="sidebar-rail-item"
+          onClick={onClick}
+          onContextMenu={onContextMenu}
+          onKeyDown={onKeyDown}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          className={cn(
+            'mx-auto flex h-9 w-9 items-center justify-center rounded-md outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            active ? 'bg-accent/15 text-accent ring-1 ring-inset ring-accent' : 'hover:bg-hover',
+            className
+          )}
+        >
+          <span className="flex justify-center" aria-hidden="true">{icon}</span>
+        </button>
+      </Tooltip>
+    );
+  }
   return (
     <button
       ref={ref}
@@ -88,6 +117,8 @@ function Count({ n, named }: { n: number; named?: boolean }) {
 
 function SectionHeader({ label, name, expanded, onToggle, action }: { label: string; name: string; expanded: boolean; onToggle: (open: boolean) => void; action?: React.ReactNode }) {
   const t = useT();
+  const rail = React.useContext(RailContext);
+  if (rail) return <div role="separator" aria-label={label} className="mx-2 my-2 border-t border-border" />;
   return (
     <div className="mt-5 flex items-center justify-between pb-1 pr-2.5 text-[11px] font-semibold tracking-wider text-muted">
       <button
@@ -137,6 +168,7 @@ function SidebarTagItem({
   count?: number;
 }) {
   const t = useT();
+  const rail = React.useContext(RailContext);
   const [val, setVal] = useState(tag);
   const inputRef = useRef<HTMLInputElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -267,7 +299,7 @@ function SidebarTagItem({
             aria-label={`${t('tag.more')}: ${tag}`}
             className={cn(
               'absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:bg-active hover:text-fg',
-              menuOpen ? 'visible' : 'invisible group-hover/tag:visible focus:visible'
+              rail && !menuOpen ? 'hidden' : menuOpen ? 'visible' : 'invisible group-hover/tag:visible focus:visible'
             )}
           >
             <MoreHorizontal size={14} />
@@ -318,6 +350,7 @@ function SidebarVaultItem({
   onSelect: () => void;
 }) {
   const t = useT();
+  const rail = React.useContext(RailContext);
   const setRoute = useApp((s) => s.setRoute);
   const dragged = useDragStore((s) => s.dragged);
   const [hovered, setHovered] = useState(false);
@@ -381,7 +414,7 @@ function SidebarVaultItem({
             aria-label={`${t('vault.more')}: ${vault.name}`}
             className={cn(
               'absolute right-1.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-muted hover:bg-active hover:text-fg',
-              menuOpen ? 'visible' : 'invisible group-hover/vault:visible'
+              rail && !menuOpen ? 'hidden' : menuOpen ? 'visible' : 'invisible group-hover/vault:visible'
             )}
           >
             <MoreHorizontal size={14} />
@@ -408,7 +441,7 @@ function SidebarVaultItem({
 }
 
 export function Sidebar() {
-  const { route, setRoute, account, lock, theme, setTheme, toggleSidebar, refreshItems, openModal, modal } = useApp();
+  const { route, setRoute, account, lock, theme, setTheme, toggleSidebar, sidebarCollapsed: rail, refreshItems, openModal, modal } = useApp();
   const { vaults, tags } = useVaultsAndTags();
   const counts = useSidebarCounts();
   const [collapsed, setSectionCollapsed] = useCollapsedSections();
@@ -432,14 +465,19 @@ export function Sidebar() {
   const extraBottom = features.filter((f) => f.sidebar?.section === 'bottom' && f.route);
 
   return (
-    <aside className="flex h-full flex-col bg-sidebar" data-testid="sidebar">
-      <div className="flex items-center gap-1 border-b border-border p-2.5">
+    <RailContext.Provider value={rail}>
+    <aside className={cn('flex h-full flex-col bg-sidebar', rail && 'w-14')} data-testid="sidebar" data-collapsed={rail ? 'true' : 'false'}>
+      <div className={cn('flex items-center gap-1 border-b border-border p-2.5', rail && 'flex-col px-1.5')}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
+            {rail ? (
+              <button aria-label={`gitpass: ${accountName}`} className="rounded-md p-1 outline-none hover:bg-hover focus-visible:ring-2 focus-visible:ring-accent"><Logo size={30} /></button>
+            ) : (
             <button className="flex min-w-0 flex-1 items-center gap-2.5 rounded-md px-1.5 py-1.5 hover:bg-hover">
               <Logo size={30} />
               <span className="flex min-w-0 flex-1 flex-col text-left leading-tight"><span className="truncate font-medium">{accountName}</span><span className="truncate text-[11px] text-muted">gitpass</span></span><ChevronDown size={14} className="text-muted" />
             </button>
+            )}
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56">
             <DropdownMenuLabel>{t("nav.vaults")}</DropdownMenuLabel>
@@ -451,10 +489,12 @@ export function Sidebar() {
             <DropdownMenuItem onSelect={() => { void api.lock().finally(lock); }}><Lock size={14} />{t('cmd.lock')}</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <Tooltip content={t("sidebar.collapse")}><Button variant="ghost" size="iconSm" aria-label={t("sidebar.collapse")} onClick={toggleSidebar}><PanelLeftClose size={15} /></Button></Tooltip>
+        {rail
+          ? <Tooltip content={t("sidebar.expand")} side="right"><Button variant="ghost" size="iconSm" aria-label={t("sidebar.expand")} aria-expanded={false} onClick={toggleSidebar}><PanelLeftOpen size={15} /></Button></Tooltip>
+          : <Tooltip content={t("sidebar.collapse")}><Button variant="ghost" size="iconSm" aria-label={t("sidebar.collapse")} aria-expanded onClick={toggleSidebar}><PanelLeftClose size={15} /></Button></Tooltip>}
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-2">
+      <nav className={cn('flex-1 overflow-y-auto p-2', rail && 'flex flex-col gap-0.5 overflow-x-hidden px-1.5')}>
         {extraTop.filter((f) => f.id === 'home').map((f) => { const I = f.sidebar!.icon; return <NavItem key={f.id} active={route.name === f.route} icon={<I size={15} />} label={L(f.sidebar!.label)} right={<OnboardingBadge />} onClick={() => setRoute({ name: f.route } as Route)} />; })}
         <NavItem active={same(route, { kind: 'all' })} icon={<LayoutGrid size={15} className="text-accent" />} label={t('nav.allItems')} right={<Count n={counts.all} />} onClick={() => go({ kind: 'all' })} />
         <NavItem active={same(route, { kind: 'favorites' })} icon={<Star size={15} className="fill-warn text-warn" />} label={t('nav.favorites')} right={<Count n={counts.favorites} />} onClick={() => go({ kind: 'favorites' })} />
@@ -463,7 +503,7 @@ export function Sidebar() {
         {extraTop.filter((f) => !['home', 'watchtower'].includes(f.id)).map((f) => { const I = f.sidebar!.icon; return <NavItem key={f.id} active={route.name === f.route} icon={<I size={15} />} label={L(f.sidebar!.label)} onClick={() => setRoute({ name: f.route } as Route)} />; })}
 
         <SectionHeader label={t('nav.vaults').toUpperCase()} name={t('nav.vaults')} expanded={!collapsed.vaults} onToggle={(o) => setSectionCollapsed('vaults', !o)} action={<Tooltip content={t("sidebar.newVault")}><button aria-label={t("sidebar.newVault")} className="rounded p-0.5 hover:bg-hover" onClick={() => setNewVault(true)}><Plus size={14} /></button></Tooltip>} />
-        {!collapsed.vaults && vaults.map((v) => (
+        {(rail || !collapsed.vaults) && vaults.map((v) => (
           <SidebarVaultItem
             key={v.id}
             vault={v}
@@ -478,7 +518,7 @@ export function Sidebar() {
         ))}
 
         {tags.length > 0 && <SectionHeader label={t('nav.tags').toUpperCase()} name={t('nav.tags')} expanded={!collapsed.tags} onToggle={(o) => setSectionCollapsed('tags', !o)} />}
-        {!collapsed.tags && tags.map((tName) => (
+        {(rail || !collapsed.tags) && tags.map((tName) => (
           <SidebarTagItem
             key={tName}
             tag={tName}
@@ -513,7 +553,7 @@ export function Sidebar() {
         ))}
       </nav>
 
-      <div className="border-t border-border p-2">
+      <div className={cn('border-t border-border p-2', rail && 'flex flex-col gap-0.5 px-1.5')}>
         {extraBottom.map((f) => { const I = f.sidebar!.icon; return <NavItem key={f.id} active={route.name === f.route} icon={<I size={15} />} label={L(f.sidebar!.label)} onClick={() => setRoute({ name: f.route } as Route)} />; })}
         <NavItem active={same(route, { kind: 'archive' })} icon={<Archive size={15} />} label={t('nav.archive')} right={<Count n={counts.archive} />} onClick={() => go({ kind: 'archive' })} />
         <NavItem active={same(route, { kind: 'deleted' })} icon={<Trash2 size={15} />} label={t('nav.deleted')} right={<Count n={counts.deleted} />} onClick={() => go({ kind: 'deleted' })} />
@@ -570,5 +610,6 @@ export function Sidebar() {
         }}
       />
     </aside>
+    </RailContext.Provider>
   );
 }

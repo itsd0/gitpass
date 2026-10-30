@@ -39,6 +39,7 @@ import { ItemListEmptyState } from "./ItemListEmptyState";
 import { SearchHighlight } from "./SearchHighlight";
 import { getCategoryLabel } from "./categoryLabel";
 import { TrashBar } from "./TrashBar";
+import { ItemContextMenu, type ItemMenuTarget } from "./ItemContextMenu";
 import { trashHint } from "./trash";
 
 /** Every row has a fixed, explicit height (the DOM enforces it), so virtual offsets are exact: no overlap, no stray gaps. */
@@ -187,6 +188,35 @@ export function ItemList() {
     parentRef.current?.focus();
   }
 
+  const [menu, setMenu] = useState<ItemMenuTarget | null>(null);
+  /** Open the item menu at (x, y) for the row `id`: a right-click inside a multi-selection acts on all of it, otherwise the row is selected first. */
+  function openMenu(id: string, x: number, y: number) {
+    const inMulti = multiOn && multiSet.has(id);
+    if (!inMulti && (id !== selectedItemId || multiIds.length)) selectItem(id);
+    const ids = inMulti ? multiIds : [id];
+    const targets = items.filter((it) => ids.includes(it.id));
+    if (targets.length) setMenu({ x, y, items: targets });
+  }
+  function closeMenu() {
+    setMenu(null);
+    if (!useApp.getState().editing) parentRef.current?.focus();
+  }
+  /** Keyboard path (Shift+F10 / the context-menu key): anchor the menu to the selected row. */
+  function openMenuForSelection() {
+    const id = selectedItemId ?? order[0];
+    if (!id) return false;
+    const rowEl = parentRef.current?.querySelector(`[data-item-id="${CSS.escape(id)}"]`) as HTMLElement | null;
+    const r = rowEl?.getBoundingClientRect();
+    openMenu(id, r ? r.left + Math.min(r.width / 2, 120) : 0, r ? r.bottom - 8 : 0);
+    return true;
+  }
+  function onContextMenu(e: React.MouseEvent) {
+    const rowEl = (e.target as HTMLElement).closest("[data-item-id]") as HTMLElement | null;
+    e.preventDefault();
+    if (rowEl) openMenu(rowEl.dataset.itemId!, e.clientX, e.clientY);
+    else openMenuForSelection();
+  }
+
   function onRowDragStart(e: React.DragEvent, item: (typeof items)[number]) {
     const isMulti = multiOn && multiSet.has(item.id);
     const draggedItems = isMulti ? items.filter((x) => multiSet.has(x.id)) : [item];
@@ -210,6 +240,11 @@ export function ItemList() {
   }
 
   function onKey(e: React.KeyboardEvent) {
+    if (e.key === "ContextMenu" || (e.key === "F10" && e.shiftKey)) {
+      e.preventDefault();
+      openMenuForSelection();
+      return;
+    }
     const idx = items.findIndex((x) => x.id === selectedItemId);
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
       e.preventDefault();
@@ -319,6 +354,7 @@ export function ItemList() {
         ref={parentRef}
         tabIndex={items.length === 0 ? -1 : 0}
         onKeyDown={onKey}
+        onContextMenu={onContextMenu}
         className="flex-1 overflow-y-auto outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent"
         role="listbox"
         aria-multiselectable="true"
@@ -379,6 +415,7 @@ export function ItemList() {
                       <div
                         role="option"
                         data-testid="item-row"
+                        data-item-id={r.item.id}
                         draggable={canDrag}
                         onDragStart={canDrag ? (e) => onRowDragStart(e, r.item) : undefined}
                         onDragEnd={canDrag ? onRowDragEnd : undefined}
@@ -506,6 +543,7 @@ export function ItemList() {
           </div>
         )}
       </div>
+      <ItemContextMenu target={menu} onClose={closeMenu} />
       <div
         id="drag-preview"
         data-testid="drag-preview"

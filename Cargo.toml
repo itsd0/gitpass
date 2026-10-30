@@ -8,3 +8,12 @@ version = "0.6.5"
 edition = "2021"
 rust-version = "1.85"
 license = "MIT"
+
+# Test/dev builds: compile the KDF and hash crates with optimizations. Every CLI integration test
+# unlocks a vault with the production Argon2id parameters (256 MiB, t=3), which is very slow in an
+# unoptimized build. This changes only how fast the code runs in debug builds; the KDF parameters
+# and the release profile are untouched.
+[profile.dev.package.argon2]
+opt-level = 3
+[profile.dev.package.blake2]
+opt-level = 3
