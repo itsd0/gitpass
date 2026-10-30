@@ -193,15 +193,15 @@ diverged. See the README "GitHub sync" section.
 
 ```sh
 gitpass import Personal --from bitwarden-json export.json
-gitpass import Personal --from 1password-csv export.csv --dry-run
+gitpass import Personal --from generic-csv export.csv --dry-run
 gitpass import Personal --from gitpass-json backup.json --allow-duplicates
 gitpass export Personal --format gitpass-json --out backup.json --encrypted
 gitpass export Personal --format csv --out backup.csv --yes
 ```
 
 `--from` accepts every format and alias in `crates/gitpass-core/src/import.rs`
-(`ImportFormat`): `bitwarden-json`, `bitwarden-csv`, `1password-csv`,
-`1password-1pux` (alias `1pux`), `keepass-csv` (alias `keepassxc-csv`),
+(`ImportFormat`): `bitwarden-json`, `bitwarden-csv`, `generic-csv` (alias `1password-csv`),
+`1pux` (alias `1password-1pux`), `keepass-csv` (alias `keepassxc-csv`),
 `chrome-csv`, `apple-passwords-csv` (aliases `apple-passwords`, `apple-csv`,
 `apple`, `safari-csv`, `safari`), `lastpass-csv` (alias `lastpass`),
 `protonpass-csv` (aliases `proton-pass-csv`, `protonpass`, `proton-pass`) and

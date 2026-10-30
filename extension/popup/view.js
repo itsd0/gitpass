@@ -115,7 +115,7 @@
     else if (filter && filter.startsWith('cat:')) base = all.filter((i) => i.category === filter.slice(4));
     else if (filter && filter.startsWith('vault:')) base = all.filter((i) => i.vault_id === filter.slice(6));
     else base = all;
-    // Searching from Suggestions searches everything, like 1Password.
+    // Searching from Suggestions searches everything, like other password managers.
     if (query && filter === 'suggested') base = all;
     return base.filter((i) => matchesQuery(i, query))
       .sort(compareBy(SORTS.includes(sort) ? sort : 'title'));

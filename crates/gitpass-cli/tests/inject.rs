@@ -25,7 +25,7 @@ fn map() -> Map {
 fn parse_refs() {
     assert_eq!(SecretRef::parse("gp://Dev/Postgres/password").unwrap(), SecretRef { vault: "Dev".into(), item: "Postgres".into(), field: "password".into() });
     assert_eq!(SecretRef::parse("gp://My%20Vault/a%2Fb/token").unwrap().item, "a/b");
-    for bad in ["op://a/b/c", "gp://a/b", "gp://a//c", "gp://a/b/c/d", "gp://a/b/%zz"] { assert!(SecretRef::parse(bad).is_err(), "{bad}"); }
+    for bad in ["xx://a/b/c", "gp://a/b", "gp://a//c", "gp://a/b/c/d", "gp://a/b/%zz"] { assert!(SecretRef::parse(bad).is_err(), "{bad}"); }
 }
 
 #[test]
