@@ -147,12 +147,12 @@ describe('Standalone Password Generator', () => {
     const colored = screen.getByTestId('colored-password');
     expect(colored.textContent).toBe('Abc1!Xyz2@');
 
-    // Digits are colored with text-accent, symbols with text-warn
+    // Digits are colored with text-accent, symbols with blue
     const digit1 = Array.from(colored.querySelectorAll('span')).find((el) => el.textContent === '1');
     expect(digit1?.className).toContain('text-accent');
 
     const symbol1 = Array.from(colored.querySelectorAll('span')).find((el) => el.textContent === '!');
-    expect(symbol1?.className).toContain('text-warn');
+    expect(symbol1?.className).toContain('text-blue-600');
 
     const letterA = Array.from(colored.querySelectorAll('span')).find((el) => el.textContent === 'A');
     expect(letterA?.className).toContain('text-fg');

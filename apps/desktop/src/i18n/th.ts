@@ -792,6 +792,8 @@ export const th: Partial<Record<Key, string>> = {
   "settings.textSize.large": "ใหญ่",
   "settings.textSize.largest": "ใหญ่ที่สุด",
   "settings.textSizePreview": "ตัวอย่างข้อความ The quick brown fox jumps over the lazy dog",
+  "settings.colorPasswords": "ไล่สีรหัสผ่านที่แสดงอยู่",
+  "settings.colorPasswordsHelp": "แสดงตัวเลขเป็นสีส้ม สัญลักษณ์เป็นสีน้ำเงิน และช่องว่างเป็นจุด เมื่อเปิดดูรหัสผ่านบนอุปกรณ์นี้",
   "cmd.textLarger": "เพิ่มขนาดข้อความ",
   "cmd.textSmaller": "ลดขนาดข้อความ",
   "cmd.textReset": "รีเซ็ตขนาดข้อความ",

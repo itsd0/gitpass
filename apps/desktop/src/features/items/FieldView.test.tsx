@@ -95,22 +95,22 @@ describe('FieldRow', () => {
     // 3 -> digit
     expect(cells[2].getAttribute('data-kind')).toBe('digit');
     expect(cells[2].querySelector('span')!.className).toContain('large-type-digit');
-    expect(cells[2].querySelector('span')!.className).toContain('text-orange-500');
+    expect(cells[2].querySelector('span')!.className).toContain('text-accent');
 
     // ! -> symbol
     expect(cells[3].getAttribute('data-kind')).toBe('symbol');
     expect(cells[3].querySelector('span')!.className).toContain('large-type-symbol');
-    expect(cells[3].querySelector('span')!.className).toContain('text-blue-500');
+    expect(cells[3].querySelector('span')!.className).toContain('text-blue-600');
 
     // 9 -> digit
     expect(cells[4].getAttribute('data-kind')).toBe('digit');
     expect(cells[4].querySelector('span')!.className).toContain('large-type-digit');
-    expect(cells[4].querySelector('span')!.className).toContain('text-orange-500');
+    expect(cells[4].querySelector('span')!.className).toContain('text-accent');
 
     // # -> symbol
     expect(cells[5].getAttribute('data-kind')).toBe('symbol');
     expect(cells[5].querySelector('span')!.className).toContain('large-type-symbol');
-    expect(cells[5].querySelector('span')!.className).toContain('text-blue-500');
+    expect(cells[5].querySelector('span')!.className).toContain('text-blue-600');
   });
 
   it('Esc closes large type and returns focus to the trigger', async () => {

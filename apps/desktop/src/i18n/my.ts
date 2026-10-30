@@ -800,6 +800,8 @@ export const my: Partial<Record<Key, string>> = {
   "settings.textSize.large": "ကြီး",
   "settings.textSize.largest": "အကြီးဆုံး",
   "settings.textSizePreview": "ဤစာသားသည် နမူနာဖြစ်သည်",
+  "settings.colorPasswords": "ဖော်ပြထားသော စကားဝှက်များကို အရောင်ခွဲပါ",
+  "settings.colorPasswordsHelp": "ဤစက်တွင် စကားဝှက်ကို ဖော်ပြသည့်အခါ ဂဏန်းများကို လိမ္မော်ရောင်၊ သင်္ကေတများကို အပြာရောင်၊ နေရာလွတ်များကို အစက်ဖြင့် ပြပါမည်",
   "cmd.textLarger": "စာလုံး ချဲ့ရန်",
   "cmd.textSmaller": "စာလုံး ချုံ့ရန်",
   "cmd.textReset": "စာလုံးအရွယ်အစား မူရင်းသို့",

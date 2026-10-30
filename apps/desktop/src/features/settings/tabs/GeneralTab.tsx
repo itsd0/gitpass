@@ -5,6 +5,7 @@ import { languages, useT, type Lang } from '../../../i18n';
 import { useSettings } from '../useSettings';
 import { useOnboarding } from '../../onboarding/useOnboarding';
 import { TEXT_SIZES, useTextSize, type TextSize } from '../textSize';
+import { useColorPasswords } from '../colorPasswords';
 import { SettingsSection, SettingsRow } from '../SettingsSection';
 import { errMsg, Seg } from '../shared';
 
@@ -13,6 +14,7 @@ export function GeneralTab({ highlightedId }: { highlightedId?: string | null })
   const { settings, save } = useSettings();
   const { onboarding, patch } = useOnboarding();
   const textSize = useTextSize((x) => x.size); const setTextSize = useTextSize((x) => x.set);
+  const colorPasswords = useColorPasswords((x) => x.enabled); const setColorPasswords = useColorPasswords((x) => x.set);
   if (!settings) return <Skeleton className="h-24" />;
   const s = (p: Parameters<typeof save>[0]) =>
     save(p)
@@ -51,6 +53,32 @@ export function GeneralTab({ highlightedId }: { highlightedId?: string | null })
           />
           <p className="text-sm text-muted" data-testid="text-size-preview">{t('settings.textSizePreview')}</p>
         </div>
+      </SettingsRow>
+      <SettingsRow
+        id="setting-color-passwords"
+        highlighted={highlightedId === 'setting-color-passwords'}
+        label={t('settings.colorPasswords')}
+        description={t('settings.colorPasswordsHelp')}
+      >
+        <button
+          type="button"
+          role="switch"
+          aria-checked={colorPasswords}
+          aria-label={t('settings.colorPasswords')}
+          data-testid="color-passwords-switch"
+          onClick={() => setColorPasswords(!colorPasswords)}
+          className={cn(
+            'relative h-6 w-11 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent',
+            colorPasswords ? 'bg-accent' : 'bg-border'
+          )}
+        >
+          <span
+            className={cn(
+              'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white transition-transform',
+              colorPasswords ? 'translate-x-5' : 'translate-x-0.5'
+            )}
+          />
+        </button>
       </SettingsRow>
       <SettingsRow
         id="setting-language"

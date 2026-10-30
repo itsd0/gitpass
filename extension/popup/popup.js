@@ -1460,6 +1460,17 @@ async function secretValue(d, f) {
   return (await send({ type: 'popup:reveal', item_id: d.id, field: f.name })).value;
 }
 
+/** Shows a revealed secret in `node`. Colour-coded (digits orange, symbols blue, spaces as a dim ·) unless the
+ *  "Colour-code revealed passwords" option is off or the field is a card number; textContent stays the exact value
+ *  and the node carries the whole value as one aria-label so screen readers read it as a single string (#336). */
+function paintSecret(node, value, colored) {
+  node.textContent = '';
+  node.removeAttribute('role'); node.removeAttribute('aria-label');
+  if (!colored) { node.textContent = value; return; }
+  for (const run of V.secretRuns(value)) node.append(el('span', run.kind === 'letter' ? null : 'sec-' + run.kind, run.text));
+  node.setAttribute('role', 'img'); node.setAttribute('aria-label', value);
+}
+
 function fieldRow(d, f) {
   const row = el('div', 'f'); const g = el('div', 'grow');
   g.append(el('div', 'lbl', f.label || f.name));
@@ -1470,14 +1481,15 @@ function fieldRow(d, f) {
     val.textContent = V.mask(f.kind, f.masked);
     acts.append(iconBtn(UI.eye, t('reveal', 'Reveal'), async (b) => {
       if (b.disabled) return;
-      if (S.revealed[f.name] != null) { delete S.revealed[f.name]; val.textContent = V.mask(f.kind, f.masked); b.innerHTML = UI.eye; return; }
+      if (S.revealed[f.name] != null) { delete S.revealed[f.name]; paintSecret(val, V.mask(f.kind, f.masked), false); b.innerHTML = UI.eye; return; }
       b.disabled = true;
       const prevHtml = b.innerHTML;
       b.innerHTML = '<span class="spinner"></span>';
       try {
         const v = await secretValue(d, f);
+        const colored = f.kind !== 'card_number' && (await popupSettings()).colorPasswords !== false;
         S.revealed[f.name] = v;
-        val.textContent = V.formatValue(f.kind, v);
+        paintSecret(val, V.formatValue(f.kind, v), colored);
         b.innerHTML = UI.eyeOff;
       } catch (err) {
         b.innerHTML = prevHtml;
@@ -2512,8 +2524,8 @@ document.addEventListener('keydown', (e) => {
 // ---------- user settings (options page) ----------
 function popupSettings() {
   return new Promise((res) => {
-    try { chrome.storage.local.get('settings', (r) => res(Object.assign({ autofill: true, savePrompts: true, autolockFollowsApp: true }, (r && r.settings) || {}))); }
-    catch (_) { res({ autofill: true, savePrompts: true, autolockFollowsApp: true }); }
+    try { chrome.storage.local.get('settings', (r) => res(Object.assign({ autofill: true, savePrompts: true, autolockFollowsApp: true, colorPasswords: true }, (r && r.settings) || {}))); }
+    catch (_) { res({ autofill: true, savePrompts: true, autolockFollowsApp: true, colorPasswords: true }); }
   });
 }
 
