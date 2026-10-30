@@ -20,6 +20,13 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     keywords: ['appearance', 'dark mode', 'light mode', 'colors'],
   },
   {
+    id: 'setting-text-size',
+    tab: 'general',
+    labelKey: 'settings.textSize',
+    descriptionKey: 'settings.textSizeHelp',
+    keywords: ['zoom', 'font size', 'larger', 'smaller', 'bigger', 'accessibility', 'display'],
+  },
+  {
     id: 'setting-language',
     tab: 'general',
     labelKey: 'settings.language',

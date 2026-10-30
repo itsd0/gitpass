@@ -34,6 +34,7 @@ import { DeleteVaultDialog, EditVaultDialog } from '../home/VaultDialogs';
 import { ExportDialog } from '../export';
 import { SettingsSection, SettingsRow } from './SettingsSection';
 import { searchSettings, type SearchResult } from './searchIndex';
+import { TEXT_SIZES, useTextSize, type TextSize } from './textSize';
 
 const errMsg = (e: unknown) => String((e as Error)?.message ?? e);
 /** Build-time fallback; About shows the running app's version from getAppVersion(). */
@@ -86,6 +87,7 @@ function General({ highlightedId }: { highlightedId?: string | null }) {
   const t = useT();
   const { settings, save } = useSettings();
   const { onboarding, patch } = useOnboarding();
+  const textSize = useTextSize((x) => x.size); const setTextSize = useTextSize((x) => x.set);
   if (!settings) return <Skeleton className="h-24" />;
   const s = (p: Parameters<typeof save>[0]) =>
     save(p)
@@ -108,6 +110,22 @@ function General({ highlightedId }: { highlightedId?: string | null }) {
             l: t(`settings.theme.${v}`),
           }))}
         />
+      </SettingsRow>
+      <SettingsRow
+        id="setting-text-size"
+        highlighted={highlightedId === 'setting-text-size'}
+        label={t('settings.textSize')}
+        description={t('settings.textSizeHelp')}
+      >
+        <div className="flex flex-col items-end gap-2">
+          <Seg<TextSize>
+            label={t('settings.textSize')}
+            value={textSize}
+            onChange={setTextSize}
+            options={TEXT_SIZES.map((v) => ({ v, l: t(`settings.textSize.${v}`) }))}
+          />
+          <p className="text-sm text-muted" data-testid="text-size-preview">{t('settings.textSizePreview')}</p>
+        </div>
       </SettingsRow>
       <SettingsRow
         id="setting-language"
