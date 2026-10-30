@@ -1,10 +1,13 @@
 import { forwardRef, useRef, useState, useEffect } from 'react';
-import { ArrowLeft, ArrowRight, KeyRound, Plus, Search } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bookmark, KeyRound, Plus, Search } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { useItemsUI } from '../features/items';
 import { useVaultsAndTags } from '../lib/data';
-import { Button, Kbd, Tooltip } from '../ui';
-import { useT } from '../i18n';
+import { useSavedSearches } from '../features/items/savedSearches';
+import { Button, Kbd, Tooltip, toast } from '../ui';
+import { useT, type Key } from '../i18n';
+import { cn } from '../lib/utils';
+import { SaveSearchPopover } from './SaveSearchPopover';
 import {
   detectActiveOperator,
   applySuggestion,
@@ -14,10 +17,25 @@ import {
 
 export const Toolbar = forwardRef<HTMLInputElement>(function Toolbar(_, ref) {
   const { openModal, route, setRoute } = useApp();
-  const { query, setQuery } = useItemsUI();
+  const { query, setQuery, category } = useItemsUI();
   const { vaults, tags } = useVaultsAndTags();
+  const { savePopoverOpen, setSavePopoverOpen, saveSearch } = useSavedSearches();
   const t = useT();
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
+
+  const routeFilter = route.name === 'items' ? route.filter : null;
+  const hasQuery = Boolean(query && query.trim());
+  const hasCategory = Boolean(category);
+  const hasVault = Boolean(routeFilter?.kind === 'vault' && routeFilter.vaultId);
+  const hasTag = Boolean(routeFilter?.kind === 'tag' && routeFilter.tag);
+  const canSave = hasQuery || hasCategory || hasVault || hasTag;
+
+  const defaultSearchName =
+    (hasQuery && query.trim()) ||
+    (hasTag && routeFilter?.tag) ||
+    (hasVault && vaults.find((v) => v.id === routeFilter?.vaultId)?.name) ||
+    (hasCategory && category ? t(`category.${category}` as Key) : '') ||
+    '';
 
   const internalRef = useRef<HTMLInputElement | null>(null);
   const [cursorPos, setCursorPos] = useState<number | null>(null);
@@ -126,7 +144,44 @@ export const Toolbar = forwardRef<HTMLInputElement>(function Toolbar(_, ref) {
           />
           <Kbd>{isMac ? '⌘' : 'Ctrl'}</Kbd>
           <Kbd>F</Kbd>
+          <Tooltip content={t('savedSearch.save')}>
+            <button
+              type="button"
+              disabled={!canSave}
+              aria-label={t('savedSearch.save')}
+              data-testid="save-search-button"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (canSave) setSavePopoverOpen(!savePopoverOpen);
+              }}
+              className={cn(
+                'rounded p-1 text-muted transition-colors hover:text-fg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent',
+                !canSave && 'cursor-not-allowed opacity-30 hover:text-muted',
+                savePopoverOpen && 'text-accent'
+              )}
+            >
+              <Bookmark size={15} />
+            </button>
+          </Tooltip>
         </label>
+
+        {savePopoverOpen && canSave && (
+          <SaveSearchPopover
+            initialName={defaultSearchName}
+            onSave={(name) => {
+              saveSearch({
+                name,
+                query: hasQuery ? query.trim() : undefined,
+                category: hasCategory ? category : undefined,
+                vaultId: hasVault ? routeFilter?.vaultId : undefined,
+                tag: hasTag ? routeFilter?.tag : undefined,
+              });
+              toast(t('savedSearch.saved'));
+            }}
+            onCancel={() => setSavePopoverOpen(false)}
+          />
+        )}
 
         {isOpen && activeOperator && (
           <SearchSuggestions
