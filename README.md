@@ -1,4 +1,4 @@
-# gitpass: zero-knowledge password manager synced through a private git repo (format v4)
+# gitpass: zero-knowledge password manager synced through a private git repo (format v5)
 
 A clean-room Rust password manager that follows the publicly documented two-secret model (master password + Secret Key). It is end-to-end encrypted and syncs through git. It includes real device revoke with key rotation, vault sharing (X25519),
 import/export, a security audit with optional HIBP, a Tauri desktop app, an iOS app, and a browser extension with a native messaging host.
@@ -52,15 +52,20 @@ Secret Key once to derive the session keys and then zeroizes it. Nothing is writ
 auto-lock, or a browser restart, you need to enter it again. Unlocking from the extension doesn't write to the vault repo.
 See `crates/gitpass-host/README.md` and `apps/desktop/README.md` for details, and CHANGELOG.md for the limitations of each feature.
 
-## Format compatibility (0.4.0)
-- Formats 2, 3 and 4 are read (`MIN_READ_FORMAT = 2`, `FORMAT_VERSION = 4`). The manifest becomes 4 only once an identity or vault members exist.
-  0.3.x clients refuse v4 vaults.
-
-## Format compatibility (0.3.0 notes)
-- v2 vaults open unchanged. First unlock creates `devices.enc` and the next write re-seals the manifest as format 3.
-- v2 item payloads have no clocks; clocks are synthesized from `updated_at` and written on the next update/merge.
-- `format.json` stays at 2 until the keyset is re-wrapped (passwd / rotate-secret-key / KDF upgrade / v1 migrate),
-  because the keyset AAD binds format.json; then it becomes 3. Formats newer than 3 are refused.
+## Format compatibility
+- Formats 2, 3, 4 and 5 are read (`MIN_READ_FORMAT = 2`, `FORMAT_VERSION = 5` in
+  `crates/gitpass-core/src/store.rs`). A build refuses a format newer than the one it supports,
+  so upgrade gitpass on every device before a vault moves to a newer format.
+- `init` writes `format.json` version 2 (`INIT_FORMAT_VERSION = 2`). It stays at 2 until the
+  keyset is re-wrapped (master-password change, Secret Key rotation, KDF upgrade, or v1 migration),
+  because the keyset AAD binds `format.json`; a re-wrap writes the current format, 5.
+- The manifest format is separate from `format.json` and is set by `manifest_format_for`: v5
+  once any vault has attachment files (`vaults/<id>/files/<id>.enc`), v4 once an identity or vault
+  members exist, otherwise v3. A vault that never uses attachments, identity, or sharing
+  keeps a v3 manifest.
+- v2 vaults open unchanged. First unlock creates `devices.enc` and the next write re-seals the
+  manifest as format 3. v2 item payloads have no clocks; clocks are synthesized from `updated_at`
+  and written on the next update/merge.
 
 ## Key hierarchy (two-secret model)
 ```
