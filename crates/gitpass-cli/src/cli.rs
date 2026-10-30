@@ -675,10 +675,12 @@ EXAMPLES:
         #[arg(long, default_value_t = 30)] expiring_days: u64,
         /// Flag logins not used on this device for more than this many months (falls back to the last edit/creation time); 0 turns the check off
         #[arg(long, default_value_t = 12)] unused_months: u64,
-        /// Print the report as JSON (counts, per_item and ignored_per_item findings, change_password_url)
+        /// Print the report as JSON (counts, per_item and ignored_per_item findings, change_password_url, plus the shared Watchtower `score` and `items_with_password`)
         #[arg(long)] json: bool,
         /// Show findings that were ignored by the user
         #[arg(long)] include_ignored: bool,
+        /// Exit 1 with a message on stderr when the Watchtower score is below this threshold (0-100); works with and without --json
+        #[arg(long)] fail_under: Option<u8>,
     },
     /// Generate shell completion scripts for zsh, bash, or fish
     #[command(hide = true, alias = "completion")]

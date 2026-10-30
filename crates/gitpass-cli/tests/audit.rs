@@ -290,7 +290,7 @@ fn audit_help_lists_every_finding_kind() {
     for kind in gitpass_core::audit::FINDING_KINDS {
         assert!(help.contains(kind), "audit --help does not mention {kind}:\n{help}");
     }
-    for flag in ["--hibp", "--max-age-days", "--expiring-days", "--include-ignored", "--json"] {
+    for flag in ["--hibp", "--max-age-days", "--expiring-days", "--include-ignored", "--json", "--fail-under"] {
         assert!(help.contains(flag), "audit --help does not mention {flag}");
     }
     assert!(help.contains("username or site name"), "help should mention the username/site-name rule");
@@ -403,4 +403,77 @@ fn audit_flags_unused_logins_and_turns_off_on_request() {
     let used = gp(&root, &["audit", "--json"], None);
     let v_used: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&used.stdout)).unwrap();
     assert_eq!(v_used["unused"], 0);
+}
+
+#[test]
+fn audit_cli_shows_shared_watchtower_score_and_fail_under() {
+    let d = tempfile::tempdir().unwrap();
+    let root = d.path().join("vault");
+    assert!(gp(&root, &["init", "--save-secret-key"], None).status.success());
+    assert!(gp(&root, &["vault", "create", "Personal"], None).status.success());
+
+    let sk = gitpass_core::crypto::SecretKey::parse(&std::fs::read_to_string(root.join("secret.key")).unwrap()).unwrap();
+    let s = Session::unlock(&root, "fake-master-pw-123", &sk).unwrap();
+    let vid = s.resolve_vault("Personal").unwrap();
+
+    // One weak login and one strong clean login (fake data only).
+    let mut weak = Item::default();
+    weak.title = "Weak Login".into();
+    weak.username = Some("alice".into());
+    weak.url = Some("https://weak.example.com".into());
+    weak.password = Some("123456".into());
+    s.add_record(&vid, ItemRecord::new(weak)).unwrap();
+
+    let mut strong = Item::default();
+    strong.title = "Strong Login".into();
+    strong.username = Some("bob".into());
+    strong.url = Some("https://strong.example.com".into());
+    strong.password = Some("Xq7#vR2!mK9@pL4$wZ".into());
+    s.add_record(&vid, ItemRecord::new(strong)).unwrap();
+
+    // Expected score computed with the core function on the same fixture and
+    // the same options the CLI uses by default.
+    let mut all = vec![];
+    for (iid, _, rec) in s.list_records(&vid).unwrap() {
+        if rec.deleted_at.is_some() || rec.archived { continue; }
+        all.push(("Personal".to_string(), iid, rec));
+    }
+    let opts = gitpass_core::audit::AuditOpts { max_age_days: 365, expiring_days: 30, include_ignored: false,
+        unused_months: Some(12), last_used: s.all_last_used(), ..Default::default() };
+    let report = gitpass_core::audit::audit_with_passkeys(&all, &std::collections::BTreeSet::new(), &opts, None).unwrap();
+    let with_pw = all.iter().filter(|(_, _, rec)| gitpass_core::audit::is_score_password_item(rec)).count();
+    assert_eq!(with_pw, 2);
+    let expected = gitpass_core::audit::score(&report, with_pw);
+    assert!(expected < 100, "fixture must score below 100, got {expected}");
+
+    // Text: the first summary line shows the score.
+    let text_out = gp(&root, &["audit"], None);
+    assert!(text_out.status.success());
+    let text = String::from_utf8_lossy(&text_out.stdout);
+    assert!(text.lines().next().unwrap().contains(&format!("score: {expected}/100")),
+        "first line missing score:\n{text}");
+
+    // JSON: score and items_with_password added, existing fields unchanged.
+    let json_out = gp(&root, &["audit", "--json"], None);
+    assert!(json_out.status.success());
+    let v: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&json_out.stdout)).unwrap();
+    assert_eq!(v["score"], expected);
+    assert_eq!(v["items_with_password"], 2);
+    assert_eq!(v["weak"], 1);
+
+    // --fail-under: above the score fails with exit 1 and a stderr message (text and JSON);
+    // at/below the score passes; out-of-range thresholds are rejected.
+    let fail = gp(&root, &["audit", "--fail-under", "100"], None);
+    assert!(!fail.status.success());
+    assert_eq!(fail.status.code(), Some(1));
+    assert!(String::from_utf8_lossy(&fail.stderr).contains("below --fail-under 100"),
+        "stderr: {}", String::from_utf8_lossy(&fail.stderr));
+    let fail_json = gp(&root, &["audit", "--json", "--fail-under", "100"], None);
+    assert!(!fail_json.status.success());
+    let v_fail: serde_json::Value = serde_json::from_str(&String::from_utf8_lossy(&fail_json.stdout)).unwrap();
+    assert_eq!(v_fail["score"], expected);
+    let pass = gp(&root, &["audit", "--fail-under", "0"], None);
+    assert!(pass.status.success());
+    let bad = gp(&root, &["audit", "--fail-under", "101"], None);
+    assert!(!bad.status.success());
 }
