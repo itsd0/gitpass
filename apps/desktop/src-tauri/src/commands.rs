@@ -70,6 +70,7 @@ pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>)
 #[tauri::command] pub fn create_item(s: State<App>, input: a::ItemInput) -> R<a::ItemSummary> { s.create_item(&input).map_err(e) }
 #[tauri::command] pub fn update_item(s: State<App>, item_id: String, input: a::ItemInput) -> R<a::ItemSummary> { s.update_item(&item_id, &input).map_err(e) }
 #[tauri::command] pub fn set_favorite(s: State<App>, vault_id: String, item_id: String, favorite: bool) -> R<()> { s.set_favorite(&vault_id, &item_id, favorite).map_err(e) }
+#[tauri::command] pub fn set_rotation(s: State<App>, vault_id: String, item_id: String, days: Option<u32>) -> R<()> { s.set_rotation(&vault_id, &item_id, days).map_err(e) }
 #[tauri::command] pub fn archive_item(s: State<App>, vault_id: String, item_id: String, archived: bool) -> R<()> { s.archive_item(&vault_id, &item_id, archived).map_err(e) }
 #[tauri::command] pub fn delete_item(s: State<App>, vault_id: String, item_id: String) -> R<()> { s.delete_item(&vault_id, &item_id).map_err(e) }
 #[tauri::command] pub fn restore_item(s: State<App>, vault_id: String, item_id: String) -> R<()> { s.restore_item(&vault_id, &item_id).map_err(e) }

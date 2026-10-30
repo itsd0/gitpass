@@ -1497,6 +1497,7 @@ impl Session {
             let mut n = ItemRecord::from_snapshot(&r.snapshot());
             n.favorite = r.favorite;
             n.ignored_findings = r.ignored_findings.clone();
+            n.rotate_every_days = r.rotate_every_days;
             n.archived = r.archived;
             if n.item.updated_at.is_empty() { n.item.updated_at = (now / 1000).to_string(); }
             if preserve_history {
@@ -1557,6 +1558,14 @@ impl Session {
     }
 
     pub fn set_favorite(&self, vid: &str, iid: &str, fav: bool) -> Result<()> { self.mutate_record(vid, iid, |r| r.favorite = fav) }
+    /// Set (or clear with `None`) the per-login "change password every N days" reminder. Only the
+    /// values in [`merge::ROTATION_DAYS`] are accepted.
+    pub fn set_rotation(&self, vid: &str, iid: &str, days: Option<u32>) -> Result<()> {
+        if let Some(d) = days {
+            if !merge::ROTATION_DAYS.contains(&d) { bail!("rotation must be one of 30, 90, 180 or 365 days"); }
+        }
+        self.mutate_record(vid, iid, |r| r.rotate_every_days = days)
+    }
     pub fn set_archived(&self, vid: &str, iid: &str, a: bool) -> Result<()> { self.mutate_record(vid, iid, |r| r.archived = a) }
     pub fn ignore_finding(&self, vid: &str, iid: &str, kind: &str) -> Result<()> { self.mutate_record(vid, iid, |r| { r.ignore_finding(kind); }) }
     pub fn unignore_finding(&self, vid: &str, iid: &str, kind: &str) -> Result<()> { self.mutate_record(vid, iid, |r| { r.unignore_finding(kind); }) }
@@ -1615,6 +1624,7 @@ impl Session {
         new.favorite = old.favorite;
         new.archived = old.archived;
         new.ignored_findings = old.ignored_findings.clone();
+        new.rotate_every_days = old.rotate_every_days;
         new.attachments = old.attachments.clone();
         // Keep attachment tombstones so a merge with a stale copy can't resurrect a removed file.
         new.removed_attachments = old.removed_attachments.clone();

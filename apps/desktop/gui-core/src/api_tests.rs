@@ -2201,3 +2201,25 @@ fn settings_last_seen_version_roundtrip() {
     let de_with_ver: Settings = serde_json::from_str(&json_with_ver).unwrap();
     assert_eq!(de_with_ver.last_seen_version, Some("0.6.5".to_string()));
 }
+
+#[test]
+fn set_rotation_stores_validates_and_clears_the_reminder() {
+    let e = env();
+    let a = login(&e, "Rotating", "me@example.invalid", "FAKE-Rotation-Pass-7");
+    assert_eq!(e.app.get_item(&e.vault, &a.id).unwrap().summary.rotate_every_days, None);
+    assert!(e.app.set_rotation(&e.vault, &a.id, Some(45)).is_err(), "only 30/90/180/365 are accepted");
+    e.app.set_rotation(&e.vault, &a.id, Some(90)).unwrap();
+    let d = e.app.get_item(&e.vault, &a.id).unwrap();
+    assert_eq!(d.summary.rotate_every_days, Some(90));
+    assert_eq!(d.summary.rotation, None, "a fresh password is neither due nor soon");
+    // listing carries it too, and an ordinary edit keeps it
+    assert_eq!(e.app.list_items(&Filter { kind: FilterKind::All, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap().iter().find(|i| i.id == a.id).unwrap().rotate_every_days, Some(90));
+    e.app.update_item(&a.id, &ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "Rotating 2".into(), url: None,
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("password", FieldKind::Concealed, Some("FAKE-Rotation-Pass-7"))] }],
+        notes: None, tags: None, favorite: None }).unwrap();
+    assert_eq!(e.app.get_item(&e.vault, &a.id).unwrap().summary.rotate_every_days, Some(90));
+    e.app.set_rotation(&e.vault, &a.id, None).unwrap();
+    assert_eq!(e.app.get_item(&e.vault, &a.id).unwrap().summary.rotate_every_days, None);
+    let r = e.app.watchtower(false).unwrap();
+    assert!(r.rotation_due.is_empty() && r.rotation_soon.is_empty());
+}
