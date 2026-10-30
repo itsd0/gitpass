@@ -2322,3 +2322,23 @@ fn related_items_lifecycle_linking_unlinking_missing_state_and_cross_vault() {
     assert_eq!(detail_a_updated.related_items.len(), 1);
     assert_eq!(detail_a_updated.related_items[0].id, item_v2.id);
 }
+
+#[test]
+fn watchtower_flags_reused_old_password() {
+    let e = env();
+    let retired = "FAKE-Retired-Pass-123!";
+    let b = login(&e, "Retired Source", "bob@example.invalid", retired);
+    // Rotating B's password retires the old value into B's password history.
+    e.app.update_item(&b.id, &ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "Retired Source".into(), url: Some("https://example.invalid".into()),
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("bob@example.invalid")), fld("password", FieldKind::Concealed, Some("FAKE-New-Strong-Pass-456!"))] }],
+        notes: None, tags: None, favorite: None, related_item_ids: None }).unwrap();
+    let a = login(&e, "Reused Old", "alice@example.invalid", retired);
+    let r = e.app.watchtower(false).unwrap();
+    assert_eq!(r.reused_old_password.len(), 1);
+    let hit = &r.reused_old_password[0];
+    assert_eq!(hit.item_id, a.id);
+    assert_eq!(hit.other_title, "Retired Source");
+    assert!(!hit.same_item);
+    assert!(!hit.retired_on.is_empty());
+    assert!(r.score < 100);
+}

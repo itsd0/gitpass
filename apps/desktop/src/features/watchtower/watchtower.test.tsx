@@ -38,6 +38,9 @@ describe('watchtower score', () => {
   it('flattens reused groups uniquely', () => {
     expect(issueIds({ score: 0, weak: [], reused: [['a', 'b'], ['b', 'c']], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [], checkedAt: '', hibpChecked: false }, 'reused')).toEqual(['a', 'b', 'c']);
   });
+  it('maps reused-old-password items to ids', () => {
+    expect(issueIds({ score: 0, weak: [], reused: [], old: [], breached: [], missingTotp: [], totpAvailable: [], passkeyAvailable: [], reusedOldPassword: [{ itemId: 'a', otherTitle: 'B', retiredOn: '2025-06-01T00:00:00Z', sameItem: false }], checkedAt: '', hibpChecked: false }, 'reusedOldPassword')).toEqual(['a']);
+  });
   it('shows site-specific 2FA instead of generic missing TOTP', () => {
     const r = { score: 0, weak: [], reused: [], old: [], breached: [], missingTotp: ['a', 'b'], totpAvailable: ['b'], passkeyAvailable: ['c'], checkedAt: '', hibpChecked: false };
     expect(issueIds(r, 'missingTotp')).toEqual(['a']);

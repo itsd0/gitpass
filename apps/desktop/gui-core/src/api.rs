@@ -188,6 +188,17 @@ pub struct RotationItem {
     pub days: u64,
 }
 
+/// One `reused_old_password` finding: the item's id plus the source title and retirement
+/// date from the core finding. The retired password value itself is never carried here.
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReusedOldPasswordItem {
+    pub item_id: String,
+    pub other_title: String,
+    pub retired_on: String,
+    pub same_item: bool,
+}
+
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct UnusedItem {
@@ -207,6 +218,8 @@ pub struct WatchtowerReport {
     pub insecure_urls: Vec<String>,
     pub duplicates: Vec<Vec<String>>,
     pub weak_ssh_keys: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reused_old_password: Vec<ReusedOldPasswordItem>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub unused: Vec<UnusedItem>,
     /// Logins past their own "change password every N days" reminder.
@@ -1480,6 +1493,7 @@ impl App {
                 insecure_urls: vec![],
                 duplicates: vec![],
                 weak_ssh_keys: vec![],
+                reused_old_password: vec![],
                 unused: vec![],
                 rotation_due: vec![],
                 rotation_soon: vec![],
@@ -1506,6 +1520,9 @@ impl App {
                         Finding::InsecureUrl { .. } => out.insecure_urls.push(f.id.clone()),
                         Finding::Duplicate { group } => dup_groups.entry(group.clone()).or_default().push(f.id.clone()),
                         Finding::WeakSshKey { .. } => out.weak_ssh_keys.push(f.id.clone()),
+                        Finding::ReusedOldPassword { other_title, retired_on, same_item } => out.reused_old_password.push(ReusedOldPasswordItem {
+                            item_id: f.id.clone(), other_title: other_title.clone(), retired_on: retired_on.clone(), same_item: *same_item,
+                        }),
                         Finding::Unused { days } => out.unused.push(UnusedItem {
                             item_id: f.id.clone(), days: *days, last_used: last_used.contains_key(&f.id),
                         }),
@@ -1533,7 +1550,11 @@ impl App {
                 // Sites with documented TOTP surface as TotpAvailable instead of MissingTotp, but both mean
                 // "2FA not set up", so both keep the same weight in the score.
                 let missing_totp = out.missing_totp.len() + out.totp_available.len();
-                let penalty = bad.len() as f64 / with_pw as f64 * 80.0 + out.old.len() as f64 / with_pw as f64 * 10.0
+                // A reused retired password counts at half the live-reuse weight, and only
+                // for items not already counted in `bad` (weak/breached/reused).
+                let reused_old_only = out.reused_old_password.iter().filter(|x| !bad.contains(&x.item_id)).count();
+                let penalty = bad.len() as f64 / with_pw as f64 * 80.0 + reused_old_only as f64 / with_pw as f64 * 40.0
+                    + out.old.len() as f64 / with_pw as f64 * 10.0
                     + missing_totp as f64 / items.len().max(1) as f64 * 10.0;
                 out.score = (100.0 - penalty).round().clamp(0.0, 100.0) as u8;
             }

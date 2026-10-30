@@ -41,6 +41,8 @@ test('view.js: findingLabel formats chips correctly', () => {
   assert.strictEqual(V.findingLabel('weak', {}, fakeT), 'Weak password');
   assert.strictEqual(V.findingLabel('reused', { reused_count: 3 }, fakeT), 'Reused on 3 items');
   assert.strictEqual(V.findingLabel('reused', {}, fakeT), 'Reused password');
+  assert.strictEqual(V.findingLabel('reused_old_password', {}, fakeT), 'Reused an old password');
+  assert.strictEqual(V.findingSeverity('reused_old_password'), 'warn');
   assert.strictEqual(V.findingLabel('pwned', {}, fakeT), 'In a data breach');
   assert.strictEqual(V.findingLabel('old', { old_days: 365 }, fakeT), 'Not changed in 1 year');
   assert.strictEqual(V.findingLabel('old', { old_days: 730 }, fakeT), 'Not changed in 2 years');

@@ -341,7 +341,7 @@ gitpass audit --hibp --json
 gitpass audit --include-ignored
 ```
 
-`audit` checks live items: weak, reused and old passwords, missing TOTP, insecure URLs
+`audit` checks live items: weak, reused, reused-old and old passwords, missing TOTP, insecure URLs
 and duplicates on login items, plus expired or expiring credentials on cards and API
 credentials; it also reports offline 2FA/passkey availability. `--unused-months` (default
 12, `0` disables) flags logins not used on this device for that long, falling back to the

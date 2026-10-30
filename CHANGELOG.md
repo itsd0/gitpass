@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+- Watchtower `reused_old_password` finding (#382): a login whose current password matches a retired
+  entry in any login's password history (another login's, or its own) is flagged in the core audit,
+  `gitpass audit`, the desktop Watchtower card and item detail, and the extension popup chips. The
+  finding carries only the source item's title and the retirement date — never the retired value —
+  and counts at half the live-reuse weight in the desktop and extension scores.
+
 ### Docs
 - Format 5 note (#375): format 5, introduced in the 0.5.0 work for attachments, is now documented.
   The manifest becomes v5 once any vault has attachment files, v4 with an identity or vault members,

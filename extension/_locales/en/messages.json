@@ -788,6 +788,9 @@
       }
     }
   },
+  "watchtowerReusedOldPassword": {
+    "message": "Reused an old password"
+  },
   "watchtowerPwned": {
     "message": "In a data breach"
   },

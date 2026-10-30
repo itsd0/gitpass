@@ -375,6 +375,8 @@ export const en = {
   "watchtower.weakPasswordsDesc": "Easy to guess. Generate a strong replacement.",
   "watchtower.reusedPasswords": "Reused passwords",
   "watchtower.reusedPasswordsDesc": "Same password on multiple sites.",
+  "watchtower.reusedOldPasswords": "Reused an old password",
+  "watchtower.reusedOldPasswordsDesc": "Current password matches a password this login — or another login — used before.",
   "watchtower.oldPasswords": "Old passwords",
   "watchtower.oldPasswordsDesc": "Not changed in a long time.",
   "watchtower.breachedPasswords": "Breached passwords",

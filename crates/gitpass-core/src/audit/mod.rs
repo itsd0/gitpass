@@ -32,6 +32,10 @@ pub enum Finding {
     Weak { reason: String },
     /// Password shared with `others` other items.
     Reused { group: usize, others: usize },
+    /// The current password matches a retired entry in a password history: `other_title` is the
+    /// title of the item whose history held it (the item itself when `same_item`), and
+    /// `retired_on` is that entry's `replaced_at` date. The retired value itself is never stored here.
+    ReusedOldPassword { other_title: String, retired_on: String, same_item: bool },
     Old { days: u64 },
     MissingTotp,
     /// `site` (from the bundled offline list) documents TOTP, but the item has none.
@@ -56,13 +60,14 @@ pub enum Finding {
 }
 
 /// Every [`Finding::kind`] string, in declaration order (docs and `gitpass audit --help` list these).
-pub const FINDING_KINDS: &[&str] = &["weak", "reused", "old", "missing_totp", "totp_available", "passkey_available", "pwned", "expired", "expiring_soon", "insecure_url", "duplicate", "weak_ssh_key", "unused", "rotation_due", "rotation_soon"];
+pub const FINDING_KINDS: &[&str] = &["weak", "reused", "reused_old_password", "old", "missing_totp", "totp_available", "passkey_available", "pwned", "expired", "expiring_soon", "insecure_url", "duplicate", "weak_ssh_key", "unused", "rotation_due", "rotation_soon"];
 
 impl Finding {
     pub fn kind(&self) -> &'static str {
         match self {
             Finding::Weak { .. } => "weak",
             Finding::Reused { .. } => "reused",
+            Finding::ReusedOldPassword { .. } => "reused_old_password",
             Finding::Old { .. } => "old",
             Finding::MissingTotp => "missing_totp",
             Finding::TotpAvailable { .. } => "totp_available",
@@ -112,7 +117,10 @@ impl Default for AuditOpts {
 #[derive(Default, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AuditReport {
     pub items_checked: usize,
-    pub weak: usize, pub reused: usize, pub reused_groups: usize, pub duplicates: usize, pub old: usize, pub missing_totp: usize, pub pwned: usize,
+    pub weak: usize, pub reused: usize, pub reused_groups: usize,
+    #[serde(default)]
+    pub reused_old_password: usize,
+    pub duplicates: usize, pub old: usize, pub missing_totp: usize, pub pwned: usize,
     pub totp_available: usize, pub passkey_available: usize,
     pub expired: usize, pub expiring_soon: usize,
     pub insecure_urls: usize,
@@ -227,6 +235,17 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
             dup_findings.insert(i, group.clone());
         }
     }
+    // Retired-password index: password value -> (source item index, history entry), in
+    // audit order. Values are compared in memory only; they are never copied into the
+    // report — only the source item's title and the entry's retirement date travel with
+    // the finding. Blank/whitespace-only history entries are skipped.
+    let mut retired: HashMap<&str, Vec<(usize, &crate::item::PasswordHistoryEntry)>> = HashMap::new();
+    for (j, (_, _, rec)) in items.iter().enumerate() {
+        for entry in &rec.password_history {
+            if entry.value.trim().is_empty() { continue; }
+            retired.entry(entry.value.as_str()).or_default().push((j, entry));
+        }
+    }
     let mut cache = HashMap::new();
     for (i, (vault, id, rec)) in items.iter().enumerate() {
         let it = &rec.item;
@@ -252,6 +271,13 @@ pub fn audit_with_sites(items: &[(String, String, ItemRecord)], passkey_sites: &
                 .or_else(|| strength_weakness(p, o));
             if let Some(reason) = weak_reason { record_finding(Finding::Weak { reason }, &mut r.weak); }
             if let Some(&(group, others)) = reuse.get(&i) { record_finding(Finding::Reused { group, others }, &mut r.reused); }
+            if let Some(candidates) = retired.get(p) {
+                // Cross-item match first (most informative), then the item's own history.
+                let chosen = candidates.iter().find(|(j, _)| *j != i).or_else(|| candidates.iter().find(|(j, _)| *j == i));
+                if let Some((j, entry)) = chosen {
+                    record_finding(Finding::ReusedOldPassword { other_title: items[*j].2.item.title.clone(), retired_on: entry.replaced_at.clone(), same_item: *j == i }, &mut r.reused_old_password);
+                }
+            }
             if let Some(c) = hibp { let n = hibp_pwned_count(c, p, &mut cache)?; if n > 0 { record_finding(Finding::Pwned { count: n }, &mut r.pwned); } }
             if let Some(t) = rec.password_changed_at() {
                 let days = o.now_secs.saturating_sub(t) / 86400;
@@ -385,6 +411,11 @@ impl std::fmt::Display for Finding {
         match self {
             Finding::Weak { reason } => write!(f, "weak password: {reason}"),
             Finding::Reused { group, others } => write!(f, "reused password (group #{group}, shared with {others} other item(s))"),
+            Finding::ReusedOldPassword { other_title, retired_on, same_item } => if *same_item {
+                write!(f, "reuses its own retired password (retired {retired_on})")
+            } else {
+                write!(f, "reuses a retired password previously used by {other_title} (retired {retired_on})")
+            },
             Finding::Old { days } => write!(f, "password not changed in {days} days"),
             Finding::MissingTotp => write!(f, "has a URL but no TOTP configured"),
             Finding::TotpAvailable { site } => write!(f, "site supports TOTP 2FA ({site}) but this login has none"),
@@ -592,7 +623,7 @@ mod tests {
     #[test]
     fn finding_kinds_lists_every_variant() {
         let all = [
-            Finding::Weak { reason: String::new() }, Finding::Reused { group: 1, others: 1 }, Finding::Old { days: 1 },
+            Finding::Weak { reason: String::new() }, Finding::Reused { group: 1, others: 1 }, Finding::ReusedOldPassword { other_title: String::new(), retired_on: String::new(), same_item: false }, Finding::Old { days: 1 },
             Finding::MissingTotp, Finding::TotpAvailable { site: String::new() }, Finding::PasskeyAvailable { site: String::new() },
             Finding::Pwned { count: 1 }, Finding::Expired { on: String::new() }, Finding::ExpiringSoon { on: String::new(), days: 1 },
             Finding::InsecureUrl { url_host: String::new() }, Finding::Duplicate { group: String::new() }, Finding::WeakSshKey { bits: 2048 },
@@ -1327,5 +1358,54 @@ mod tests {
         if let Some(i) = item1 {
             assert!(!i.findings.iter().any(|f| matches!(f, Finding::Reused { .. })));
         }
+    }
+
+    #[test]
+    fn test_reused_old_password_audit() {
+        use crate::item::PasswordHistoryEntry;
+        let strong = "Kj9#mQ2$vL5!wP8*zR";
+        let retired_pw = "Retired-Old-Pass-987!";
+        let hist = |value: &str, at: &str| PasswordHistoryEntry { value: value.into(), replaced_at: at.into() };
+        // A: current password equals B's retired password (cross-item).
+        let a = login_rec("Site A", Some("alice"), None, Some(retired_pw));
+        // B: retired the password, now uses a different strong one.
+        let mut b = login_rec("Site B", Some("bob"), None, Some(strong));
+        b.password_history = vec![hist(retired_pw, "2025-06-01T00:00:00Z"), hist("   ", "2025-01-01T00:00:00Z"), hist("", "2024-01-01T00:00:00Z")];
+        // C: current password equals its own retired password (same-item).
+        let mut c = login_rec("Site C", Some("carol"), None, Some("Own-Retired-111!"));
+        c.password_history = vec![hist("Own-Retired-111!", "2025-03-01T00:00:00Z")];
+        // D: clean login, plus an unmatched retired value that must never leak into the report.
+        let mut d = login_rec("Site D", Some("dan"), None, Some(strong));
+        d.password_history = vec![hist("Never-Leaked-Retired-555!", "2025-02-01T00:00:00Z")];
+        let items = vec![
+            ("v".into(), "a".into(), a),
+            ("v".into(), "b".into(), b),
+            ("v".into(), "c".into(), c),
+            ("v".into(), "d".into(), d),
+        ];
+        let report = audit(&items, &AuditOpts::default(), None).unwrap();
+        assert_eq!(report.reused_old_password, 2);
+        let find = |id: &str| report.per_item.iter().find(|i| i.id == id).map(|i| i.findings.clone()).unwrap_or_default();
+        assert_eq!(find("a").iter().filter(|f| matches!(f, Finding::ReusedOldPassword { .. })).count(), 1);
+        assert!(find("a").contains(&Finding::ReusedOldPassword { other_title: "Site B".into(), retired_on: "2025-06-01T00:00:00Z".into(), same_item: false }));
+        assert!(find("c").contains(&Finding::ReusedOldPassword { other_title: "Site C".into(), retired_on: "2025-03-01T00:00:00Z".into(), same_item: true }));
+        assert!(!find("d").iter().any(|f| matches!(f, Finding::ReusedOldPassword { .. })));
+        // The finding carries the source title and retirement date, never the retired value.
+        let json = serde_json::to_string(&report).unwrap();
+        assert!(!json.contains(retired_pw));
+        assert!(!json.contains("Own-Retired-111!"));
+        assert!(!json.contains("Never-Leaked-Retired-555!"));
+        assert!(json.contains("Site B") && json.contains("2025-06-01T00:00:00Z"));
+        // Display text is equally value-free.
+        let disp = format!("{}", Finding::ReusedOldPassword { other_title: "Site B".into(), retired_on: "2025-06-01T00:00:00Z".into(), same_item: false });
+        assert_eq!(disp, "reuses a retired password previously used by Site B (retired 2025-06-01T00:00:00Z)");
+        // Ignoring the kind moves it to the ignored list, like the other kinds.
+        let mut a_ignored = login_rec("Site A", Some("alice"), None, Some(retired_pw));
+        a_ignored.ignore_finding("reused_old_password");
+        let mut b2 = login_rec("Site B", Some("bob"), None, Some(strong));
+        b2.password_history = vec![hist(retired_pw, "2025-06-01T00:00:00Z")];
+        let r2 = audit(&[("v".into(), "a".into(), a_ignored), ("v".into(), "b".into(), b2)], &AuditOpts::default(), None).unwrap();
+        assert_eq!((r2.reused_old_password, r2.ignored), (0, 1));
+        assert!(r2.ignored_per_item.iter().any(|i| i.findings.iter().any(|f| matches!(f, Finding::ReusedOldPassword { .. }))));
     }
 }

@@ -539,15 +539,18 @@ where
     let mut bad: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut old_count = 0;
     let mut missing_totp_count = 0;
+    let mut reused_old_only_count = 0;
 
     for f in &report.per_item {
         let full_id = format!("{}:{}", f.vault, f.id);
         let mut has_bad = false;
         let mut has_old = false;
         let mut has_totp = false;
+        let mut has_reused_old = false;
         for x in &f.findings {
             match x {
                 Finding::Weak { .. } | Finding::Reused { .. } | Finding::Pwned { .. } => has_bad = true,
+                Finding::ReusedOldPassword { .. } => has_reused_old = true,
                 Finding::Old { .. } => has_old = true,
                 Finding::MissingTotp | Finding::TotpAvailable { .. } => has_totp = true,
                 _ => {}
@@ -556,10 +559,13 @@ where
         if has_bad { bad.insert(full_id); }
         if has_old { old_count += 1; }
         if has_totp { missing_totp_count += 1; }
+        // Half the live-reuse weight, and only when the item is not already counted in `bad`.
+        if has_reused_old && !has_bad { reused_old_only_count += 1; }
     }
 
     let score = if with_pw > 0 {
         let penalty = bad.len() as f64 / with_pw as f64 * 80.0
+            + reused_old_only_count as f64 / with_pw as f64 * 40.0
             + old_count as f64 / with_pw as f64 * 10.0
             + missing_totp_count as f64 / report.items_checked.max(1) as f64 * 10.0;
         (100.0 - penalty).round().clamp(0.0, 100.0) as u8
