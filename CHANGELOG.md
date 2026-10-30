@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.6.8 — 2026-10-30
+
+### Desktop
+- View / Save Emergency Kit without rotating; printing no longer marks the kit saved (#399).
+- Password history on logins (#366), per-login rotation reminders (#364), Watchtower score history (#380) and row icons (#391).
+
+### Extension
+- Vault-wide Watchtower overview (#386), shield severity dot (#394), localized chips (#373), choose login to update (#393).
+
+### Release
+- Releases are published on itsd0/gitpass only; the gitpass-releases mirror is gone. Apps older than 0.6.7 need a manual update (#406).
+
 ### CLI
 - `gitpass get --json` now resolves `related_items` to `{"id", "title", "available"}` objects instead of
   repeating the IDs, with missing or deleted targets reported as unavailable (#359). `edit --unlink`
