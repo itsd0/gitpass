@@ -6,6 +6,9 @@ const assert = require('node:assert');
 const fs = require('fs'), path = require('path');
 const { JSDOM } = require('jsdom');
 const root = path.join(__dirname, '..');
+// content.js + content/*.js in manifest order, evaluated as ONE script: a browser shares
+// top-level let/const across content scripts, but jsdom w.eval calls do not share them.
+const CONTENT_SRC = ['content.js', 'content/messaging.js', 'content/settings.js', 'content/detection.js', 'content/totp.js', 'content/dropdown.js', 'content/username.js', 'content/banner.js', 'content/command.js', 'content/prompts.js', 'content/wiring.js'].map((f) => fs.readFileSync(path.join(root, f), 'utf8')).join('\n');
 globalThis.GitpassPolicy = require('../lib/policy.js');
 const C = require('../bg-command.js');
 
@@ -121,7 +124,7 @@ function bootContent(match) {
   w.chrome = { runtime: { id: 'ext', onMessage: { addListener(l) { listener = l; } },
     sendMessage: async (m) => { sent.push(m.type); return m.type === 'page:match' ? { ok: true, result: { origin: 'https://site.example', items: match } } : { ok: true, result: { prompt: null } }; } },
   i18n: { getMessage: () => '' } };
-  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'content.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
+  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8')); w.eval(CONTENT_SRC);
   const deliver = (msg) => listener(msg, { id: 'ext' }, () => {});
   const uiText = () => [...w.document.querySelectorAll('gitpass-ui')].map((h) => h.shadowRoot.textContent).join(' | ');
   return { w, sent, deliver, uiText };
@@ -177,7 +180,7 @@ test('content: a command fill on a page with no login form shows the no-form not
   const attach = w.Element.prototype.attachShadow;
   w.Element.prototype.attachShadow = function (o) { return attach.call(this, { ...o, mode: 'open' }); };
   w.chrome = { runtime: { id: 'ext', onMessage: { addListener(l) { listener = l; } }, sendMessage: async () => ({ ok: true, result: { prompt: null } }) }, i18n: { getMessage: () => '' } };
-  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js', 'content.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8'));
+  for (const f of ['lib/policy.js', 'lib/forms.js', 'lib/i18n.js', 'lib/icons.js']) w.eval(fs.readFileSync(path.join(root, f), 'utf8')); w.eval(CONTENT_SRC);
   await tick();
   listener({ type: 'gitpass-fill', via: 'command', origin: 'https://site.example', username: 'FAKE-user', password: 'FAKE-pass' }, { id: 'ext' }, () => {});
   await tick();
