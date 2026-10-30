@@ -316,8 +316,11 @@ impl Agent {
                 if gitpass_host::origin::parse_request_origin(&origin).is_none() { return Err(err("origin_mismatch", "origin must be https:// (or http:// on loopback)")); }
                 let usage = self.app.state.with(|x| Ok(x.session.all_last_used()))?;
                 let matches_url = |u: &str| gitpass_host::origin::origin_matches(u, &origin);
+                // Passkeys only on request (popup site list): fill flows keep getting logins only.
+                let passkeys = q.get("include_passkeys").and_then(|v| v.as_bool()) == Some(true);
                 let items: Vec<Value> = self.records()?.into_iter()
-                    .filter(|(_, _, _, r)| r.category == Category::Login && (r.item.url.as_deref().is_some_and(matches_url) || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == gitpass_core::item::FieldKind::Url && f.value.as_deref().is_some_and(matches_url))))
+                    .filter(|(_, _, _, r)| (r.category == Category::Login && (r.item.url.as_deref().is_some_and(matches_url) || r.sections.iter().flat_map(|s| &s.fields).any(|f| f.kind == gitpass_core::item::FieldKind::Url && f.value.as_deref().is_some_and(matches_url))))
+                        || (passkeys && gitpass_host::passkey::record_matches_origin(r, &origin)))
                     .map(|(vid, vname, iid, r)| {
                         let mut s = summary(&vid, &vname, &iid, &r);
                         if let Some(lu) = usage.get(&iid) { s["last_used"] = json!(lu); }
@@ -405,6 +408,7 @@ impl Agent {
                 }
                 let input: crate::api::ItemInput = serde_json::from_value(v).map_err(|e| err("bad_request", e.to_string()))?;
                 if input.category == Category::Passkey { return Err(err("bad_request", "passkeys are created by websites")); }
+                if input.category == Category::Other { return Err(err("bad_request", "invalid category")); }
                 let r = self.app.create_item(&input).map_err(|e| { let m = format!("{e:#}"); if m.contains("revoked") { err("denied", m) } else if m.contains("locked") { e } else { err("bad_request", m) } })?;
                 self.poll_state();
                 Ok(json!({"item_id": format!("{}:{}", input.vault_id, r.id), "title": r.title}))
@@ -465,6 +469,22 @@ impl Agent {
                 })?;
                 self.poll_state();
                 Ok(json!({"favorite": fav}))
+            }
+            // Same soft delete as the GUI's Recently Deleted (deleted_at + 30-day purge).
+            "trash_item" | "restore_item" => {
+                if source != "popup" { return Err(err("denied", format!("{cmd} is allowed only from the popup"))); }
+                let (vid, iid) = split_id(&req("item_id")?)?;
+                if cmd == "trash_item" {
+                    self.record(&vid, &iid)?; // live items only; already-deleted ones are not_found
+                    self.app.delete_item(&vid, &iid).map_err(host_err)?;
+                } else {
+                    // The deleted record must still exist; anyhow's Display hides the io error, so map it here.
+                    self.app.state.with(|x| x.session.read_record(&vid, &iid).map(|_| ())
+                        .map_err(|e| err("not_found", format!("item not found: {e:#}"))))?;
+                    self.app.restore_item(&vid, &iid).map_err(host_err)?;
+                }
+                self.poll_state();
+                Ok(json!({"ok": true}))
             }
             "generate" => {
                 use gitpass_core::generate::{Mode, Request};
@@ -692,6 +712,14 @@ fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
         let mut x = json!({"name": f.id, "label": f.label, "concealed": concealed, "kind": kind_name(r.category, &f)});
         if !concealed { if let Some(val) = &f.value { x["value"] = json!(val); } }
         else if x["kind"] == json!("card_number") { if let Some(d) = f.value.as_deref().and_then(api::card_digits_of) { x["masked"] = json!(api::card_mask(&d)); } }
+        else if r.category == Category::BankAccount && (f.id == "account_number" || f.id == "account_no") {
+            if let Some(v) = &f.value {
+                let d: String = v.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
+                if d.len() >= 4 {
+                    x["masked"] = json!(format!("•••• •••• •••• {}", &d[d.len() - 4..]));
+                }
+            }
+        }
         fields.push(x);
     }
     v["fields"] = json!(fields);

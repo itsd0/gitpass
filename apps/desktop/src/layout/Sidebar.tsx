@@ -1,6 +1,6 @@
 import * as React from "react";
 import { useEffect, useRef, useState } from 'react';
-import { Archive, Check, ChevronDown, KeyRound, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, PanelLeftOpen, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
+import { Archive, Check, ChevronDown, ChevronRight, KeyRound, LayoutGrid, Lock, Moon, MoreHorizontal, Pencil, PanelLeftClose, PanelLeftOpen, Plus, Settings as SettingsIcon, ShieldCheck, Star, Sun, Tag, Trash2, Users } from 'lucide-react';
 import { VaultIcon } from '../features/home/vaultIcons';
 import { DeleteVaultDialog, EditVaultDialog } from '../features/home/VaultDialogs';
 import { NewVaultDialog } from '../features/home/NewVaultDialog';
@@ -9,7 +9,7 @@ import type { BulkResult, VaultInfo } from '../api/types';
 import { api } from '../api/client';
 import type { Filter } from '../api/types';
 import { features } from '../features/registry';
-import { useVaultsAndTags } from '../lib/data';
+import { useSidebarCounts, useVaultsAndTags } from '../lib/data';
 import { useApp, type Route } from '../lib/store';
 import { cn } from '../lib/utils';
 import { useT, useI18n, translate, type Key } from '../i18n';
@@ -89,9 +89,55 @@ const NavItem = React.forwardRef<
 });
 NavItem.displayName = 'NavItem';
 
-function SectionHeader({ label, action }: { label: string; action?: React.ReactNode }) {
-  if (React.useContext(RailContext)) return <div role="separator" aria-label={label} className="mx-2 my-2 border-t border-border" />;
-  return <div className="mt-5 flex items-center justify-between px-2.5 pb-1 text-[11px] font-semibold tracking-wider text-muted"><span className="flex items-center gap-1"><ChevronDown size={12} />{label}</span>{action}</div>;
+const SECTIONS_KEY = 'gitpass.sidebar.collapsedSections';
+export type SectionId = 'vaults' | 'tags';
+/** Collapsed Vaults/Tags sections, remembered on this device only (localStorage, never written to the vault). */
+function loadCollapsed(): Record<SectionId, boolean> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(SECTIONS_KEY) ?? '{}') as Partial<Record<SectionId, unknown>>;
+    return { vaults: raw.vaults === true, tags: raw.tags === true };
+  } catch {
+    return { vaults: false, tags: false };
+  }
+}
+function useCollapsedSections() {
+  const [collapsed, setCollapsed] = useState(loadCollapsed);
+  const set = (id: SectionId, value: boolean) => setCollapsed((c) => {
+    const next = { ...c, [id]: value };
+    try { localStorage.setItem(SECTIONS_KEY, JSON.stringify(next)); } catch { /* storage unavailable: keep in memory */ }
+    return next;
+  });
+  return [collapsed, set] as const;
+}
+
+/** Muted right-aligned count. Hidden from the accessible name so rows keep their plain label. */
+function Count({ n, named }: { n: number; named?: boolean }) {
+  return <span className="text-xs text-muted" data-testid="sidebar-count" aria-hidden={named ? undefined : true}>{n}</span>;
+}
+
+function SectionHeader({ label, name, expanded, onToggle, action }: { label: string; name: string; expanded: boolean; onToggle: (open: boolean) => void; action?: React.ReactNode }) {
+  const t = useT();
+  const rail = React.useContext(RailContext);
+  if (rail) return <div role="separator" aria-label={label} className="mx-2 my-2 border-t border-border" />;
+  return (
+    <div className="mt-5 flex items-center justify-between pb-1 pr-2.5 text-[11px] font-semibold tracking-wider text-muted">
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={t(expanded ? 'sidebar.collapseSection' : 'sidebar.expandSection', { section: name })}
+        onClick={() => onToggle(!expanded)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft' && expanded) { e.preventDefault(); onToggle(false); }
+          else if (e.key === 'ArrowRight' && !expanded) { e.preventDefault(); onToggle(true); }
+        }}
+        className="flex items-center gap-1 rounded px-2.5 py-0.5 font-semibold tracking-wider hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+      >
+        <ChevronRight size={12} className={cn('transition-transform duration-150 motion-reduce:transition-none', expanded && 'rotate-90')} />
+        {label}
+      </button>
+      {action}
+    </div>
+  );
 }
 
 function SidebarTagItem({
@@ -106,6 +152,7 @@ function SidebarTagItem({
   onRename,
   onSelect,
   onPromptDelete,
+  count,
 }: {
   tag: string;
   active: boolean;
@@ -118,6 +165,7 @@ function SidebarTagItem({
   onRename: (newTag: string) => Promise<void>;
   onSelect: () => void;
   onPromptDelete: () => void;
+  count?: number;
 }) {
   const t = useT();
   const rail = React.useContext(RailContext);
@@ -227,6 +275,7 @@ function SidebarTagItem({
         icon={<Tag size={14} className="text-ok" />}
         label={tag}
         onClick={onSelect}
+        right={count === undefined ? undefined : <span className="flex w-8 justify-end group-hover/tag:invisible"><Count n={count} /></span>}
         className={cn(hovered && 'ring-2 ring-inset ring-accent bg-accent/10')}
         onKeyDown={(e) => {
           if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
@@ -354,7 +403,7 @@ function SidebarVaultItem({
             {vault.shared ? (
               <Users size={13} className="text-muted" aria-label={t("sidebar.sharedVault")} />
             ) : (
-              <span className="text-xs text-muted">{vault.itemCount}</span>
+              <Count n={vault.itemCount} named />
             )}
           </span>
         }
@@ -394,6 +443,8 @@ function SidebarVaultItem({
 export function Sidebar() {
   const { route, setRoute, account, lock, theme, setTheme, toggleSidebar, sidebarCollapsed: rail, refreshItems, openModal, modal } = useApp();
   const { vaults, tags } = useVaultsAndTags();
+  const counts = useSidebarCounts();
+  const [collapsed, setSectionCollapsed] = useCollapsedSections();
   const t = useT(); const L = (label: string) => t(label as Key); // feature sidebar labels are i18n keys
   const toggleTheme = () => { const next = theme === 'dark' ? 'light' : 'dark'; setTheme(next); if (useSettings.getState().settings) void useSettings.getState().save({ theme: next }).catch(() => {}); };
   const go = (filter: Filter) => setRoute({ name: 'items', filter: { sort: 'updated', ...filter } });
@@ -445,14 +496,14 @@ export function Sidebar() {
 
       <nav className={cn('flex-1 overflow-y-auto p-2', rail && 'flex flex-col gap-0.5 overflow-x-hidden px-1.5')}>
         {extraTop.filter((f) => f.id === 'home').map((f) => { const I = f.sidebar!.icon; return <NavItem key={f.id} active={route.name === f.route} icon={<I size={15} />} label={L(f.sidebar!.label)} right={<OnboardingBadge />} onClick={() => setRoute({ name: f.route } as Route)} />; })}
-        <NavItem active={same(route, { kind: 'all' })} icon={<LayoutGrid size={15} className="text-accent" />} label={t('nav.allItems')} onClick={() => go({ kind: 'all' })} />
-        <NavItem active={same(route, { kind: 'favorites' })} icon={<Star size={15} className="fill-warn text-warn" />} label={t('nav.favorites')} onClick={() => go({ kind: 'favorites' })} />
+        <NavItem active={same(route, { kind: 'all' })} icon={<LayoutGrid size={15} className="text-accent" />} label={t('nav.allItems')} right={<Count n={counts.all} />} onClick={() => go({ kind: 'all' })} />
+        <NavItem active={same(route, { kind: 'favorites' })} icon={<Star size={15} className="fill-warn text-warn" />} label={t('nav.favorites')} right={<Count n={counts.favorites} />} onClick={() => go({ kind: 'favorites' })} />
         <NavItem active={route.name === 'watchtower'} icon={<ShieldCheck size={15} className="text-ok" />} label={t('nav.watchtower')} onClick={() => setRoute({ name: 'watchtower' })} />
         <NavItem active={modal?.id === 'password-generator'} icon={<KeyRound size={15} className="text-muted" />} label={t('generator.title')} onClick={() => openModal('password-generator')} />
         {extraTop.filter((f) => !['home', 'watchtower'].includes(f.id)).map((f) => { const I = f.sidebar!.icon; return <NavItem key={f.id} active={route.name === f.route} icon={<I size={15} />} label={L(f.sidebar!.label)} onClick={() => setRoute({ name: f.route } as Route)} />; })}
 
-        <SectionHeader label={t('nav.vaults').toUpperCase()} action={<Tooltip content={t("sidebar.newVault")}><button aria-label={t("sidebar.newVault")} className="rounded p-0.5 hover:bg-hover" onClick={() => setNewVault(true)}><Plus size={14} /></button></Tooltip>} />
-        {vaults.map((v) => (
+        <SectionHeader label={t('nav.vaults').toUpperCase()} name={t('nav.vaults')} expanded={!collapsed.vaults} onToggle={(o) => setSectionCollapsed('vaults', !o)} action={<Tooltip content={t("sidebar.newVault")}><button aria-label={t("sidebar.newVault")} className="rounded p-0.5 hover:bg-hover" onClick={() => setNewVault(true)}><Plus size={14} /></button></Tooltip>} />
+        {(rail || !collapsed.vaults) && vaults.map((v) => (
           <SidebarVaultItem
             key={v.id}
             vault={v}
@@ -466,11 +517,12 @@ export function Sidebar() {
           />
         ))}
 
-        {tags.length > 0 && <SectionHeader label={t('nav.tags').toUpperCase()} />}
-        {tags.map((tName) => (
+        {tags.length > 0 && <SectionHeader label={t('nav.tags').toUpperCase()} name={t('nav.tags')} expanded={!collapsed.tags} onToggle={(o) => setSectionCollapsed('tags', !o)} />}
+        {(rail || !collapsed.tags) && tags.map((tName) => (
           <SidebarTagItem
             key={tName}
             tag={tName}
+            count={counts.tags[tName] ?? 0}
             active={same(route, { kind: 'tag', tag: tName })}
             isEditing={editingTag === tName}
             menuOpen={menuForTag === tName}
@@ -503,8 +555,8 @@ export function Sidebar() {
 
       <div className={cn('border-t border-border p-2', rail && 'flex flex-col gap-0.5 px-1.5')}>
         {extraBottom.map((f) => { const I = f.sidebar!.icon; return <NavItem key={f.id} active={route.name === f.route} icon={<I size={15} />} label={L(f.sidebar!.label)} onClick={() => setRoute({ name: f.route } as Route)} />; })}
-        <NavItem active={same(route, { kind: 'archive' })} icon={<Archive size={15} />} label={t('nav.archive')} onClick={() => go({ kind: 'archive' })} />
-        <NavItem active={same(route, { kind: 'deleted' })} icon={<Trash2 size={15} />} label={t('nav.deleted')} onClick={() => go({ kind: 'deleted' })} />
+        <NavItem active={same(route, { kind: 'archive' })} icon={<Archive size={15} />} label={t('nav.archive')} right={<Count n={counts.archive} />} onClick={() => go({ kind: 'archive' })} />
+        <NavItem active={same(route, { kind: 'deleted' })} icon={<Trash2 size={15} />} label={t('nav.deleted')} right={<Count n={counts.deleted} />} onClick={() => go({ kind: 'deleted' })} />
       </div>
 
       <NewVaultDialog

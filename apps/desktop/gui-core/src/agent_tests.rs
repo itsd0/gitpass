@@ -244,6 +244,40 @@ fn update_login_via_agent_edits_and_records_history() {
 }
 
 #[test]
+fn trash_and_restore_via_agent_use_the_shared_vault() {
+    let e = env();
+    let id = add_login(&e, "GitHub", "https://github.com", "octo", "pw-gh");
+    let (vid, iid) = id.split_once(':').unwrap();
+    let (mut c, _) = Client::connect(&e);
+
+    // Popup-only, same rule as update_login.
+    assert_eq!(c.err("trash_item", json!({"item_id": id})), "denied");
+    assert_eq!(c.err("trash_item", json!({"item_id": id, "source": "page"})), "denied");
+    assert_eq!(c.err("restore_item", json!({"item_id": id})), "denied");
+
+    assert_eq!(c.ok("trash_item", json!({"item_id": id, "source": "popup"}))["ok"], json!(true));
+    // Soft delete: gone from every extension view, still in the vault for the desktop's Recently Deleted.
+    assert!(c.ok("list_items", json!({}))["items"].as_array().unwrap().iter().all(|i| i["id"] != json!(id)));
+    assert!(c.ok("match", json!({"origin": "https://github.com"}))["items"].as_array().unwrap().is_empty());
+    assert_eq!(c.err("get_item", json!({"item_id": id})), "not_found");
+    assert!(e.app.get_item(vid, iid).unwrap().summary.deleted_at.is_some());
+    assert_eq!(c.err("trash_item", json!({"item_id": id, "source": "popup"})), "not_found");
+
+    assert_eq!(c.ok("restore_item", json!({"item_id": id, "source": "popup"}))["ok"], json!(true));
+    assert!(e.app.get_item(vid, iid).unwrap().summary.deleted_at.is_none());
+    assert_eq!(c.ok("list_items", json!({}))["items"].as_array().unwrap().iter().filter(|i| i["id"] == json!(id)).count(), 1);
+    assert_eq!(c.ok("match", json!({"origin": "https://github.com"}))["items"].as_array().unwrap().len(), 1);
+    assert_eq!(e.app.reveal_field(vid, iid, "password").unwrap().as_str(), "pw-gh");
+
+    assert_eq!(c.err("restore_item", json!({"item_id": format!("{}:missing", e.vault), "source": "popup"})), "not_found");
+    assert_eq!(c.err("trash_item", json!({"item_id": "nocolon", "source": "popup"})), "bad_request");
+
+    e.app.lock();
+    assert_eq!(c.err("trash_item", json!({"item_id": id, "source": "popup"})), "locked");
+    assert_eq!(c.err("restore_item", json!({"item_id": id, "source": "popup"})), "locked");
+}
+
+#[test]
 fn lock_unlock_events_and_request_unlock() {
     let e = env();
     let (mut c, _) = Client::connect(&e);

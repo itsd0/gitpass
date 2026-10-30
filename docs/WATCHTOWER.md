@@ -14,6 +14,7 @@ gitpass audit                      # every vault, default thresholds (365 days)
 gitpass audit Personal             # one vault
 gitpass audit --max-age-days 180   # stricter "old password" threshold
 gitpass audit --expiring-days 60   # warn about expiry dates further ahead (default 30)
+gitpass audit --unused-months 24   # flag logins unused for 24 months (default 12; 0 = off)
 gitpass audit --hibp               # opt in to the breach check
 gitpass audit --include-ignored    # also print findings you chose to ignore
 gitpass audit --json               # machine-readable report (counts + per-item findings)
@@ -32,6 +33,7 @@ gitpass audit --json               # machine-readable report (counts + per-item 
 | `insecure_url` | items whose URL is plain `http://` on a public host | Insecure URLs | no |
 | `duplicate` | Login items with the same site and username in one vault | Duplicates | no |
 | `weak_ssh_key` | SSH key items with an RSA key under 3072 bits | Weak SSH keys | no |
+| `unused` | live Login items not used (or, if never used, not edited or created) for longer than the threshold (default 12 months) | Unused items | no |
 
 ## What gets audited
 
@@ -193,6 +195,27 @@ The desktop lists each group with an **Archive older** action: it keeps the most
 and archives the rest (with Undo). Archived items are no longer audited. Duplicates **do not change the
 score** (identical passwords in a group are already counted by `Reused`).
 
+## Unused items
+
+`Unused { days }`: a live **Login** item whose last use on this device is older than the threshold.
+It is housekeeping advice to help you archive logins you no longer need; it **never changes the score**.
+
+- **Last use comes from local state.** The desktop app, the extension host and the CLI record a use
+  (reveal, copy, fill, TOTP, passkey sign-in — not merely viewing the item) in `.gitpass-state.json`,
+  which is per device and never synced. When the item has never been used on this device, its last edit
+  time (`updated_at`) is used instead, and for items that were never edited the creation time. An item
+  with no timestamp at all is skipped rather than guessed.
+- **Threshold:** the desktop Watchtower has a *Flag logins unused for* setting with **6, 12 or 24
+  months** or **Off** (default **12**); the CLI uses `--unused-months` (default 12, `0` turns it off).
+  A month counts as one twelfth of 365 days, so 6 months = 182 days, 12 = 365 and 24 = 730.
+- The comparison is strict: an item exactly at the threshold is kept. `days` is the whole number of days
+  since the last activity.
+- Archived and recently deleted items are ignored, and so is every non-Login category. Ignoring the
+  `unused` warning on an item works like any other finding kind.
+- Because last use is local, two devices can disagree about whether an item is unused. That is
+  intentional: the finding answers "have *I* used this lately?" and never leaves the device.
+- In the desktop, each row offers **Archive** (with Undo) and **Ignore this warning**.
+
 ## Ignored findings
 
 A finding can be ignored per item and per kind (*Ignore this warning* in the desktop Watchtower; *Stop
@@ -231,8 +254,8 @@ score        = round(100 − penalty), clamped to 0…100
 ```
 
 - When no audited item has a password (`with_pw == 0`) the score stays **100** — there is nothing to weigh.
-- `passkey_available`, `expired`, `expiring_soon`, `insecure_url` and `duplicate` are advice and never
-  change the score; ignored findings are left out entirely.
+- `passkey_available`, `expired`, `expiring_soon`, `insecure_url`, `duplicate` and `unused` are advice and
+  never change the score; ignored findings are left out entirely.
 - A login on a TOTP-capable site is reported as `totp_available` rather than `missing_totp`, but both
   mean "no second factor stored" and carry the same weight.
 - Reused passwords move the score the most because each affected item counts toward `bad`.
