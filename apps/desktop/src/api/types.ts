@@ -25,7 +25,7 @@ export interface ItemDetail extends ItemSummary { version?: number; sections: Se
 export interface ItemInput { vaultId: string; category: ItemCategory; title: string; sections: Section[]; notes?: string|null; tags?: string[]; favorite?: boolean; url?: string|null; relatedItemIds?: string[]; }
 export interface VaultInfo { id: string; name: string; description: string|null; itemCount: number; shared: boolean; members: Member[]; icon?: string|null; color?: string|null; }
 export interface Member { fingerprint: string; label: string|null; isSelf: boolean; }
-export interface Filter { kind: 'all'|'favorites'|'archive'|'deleted'|'vault'|'tag'|'category'; vaultId?: string; tag?: string; category?: ItemCategory; query?: string; sort?: 'updated'|'title'|'created'|'recent'; }
+export interface Filter { kind: 'all'|'favorites'|'archive'|'deleted'|'vault'|'tag'|'category'; vaultId?: string; tag?: string; category?: ItemCategory; query?: string; sort?: 'updated'|'title'|'created'; }
 export interface UnusedItem { itemId: string; days: number; /** true = last use recorded; false = measured from the last edit/creation */ lastUsed: boolean; }
 export interface WatchtowerReport { score: number; weak: string[]; reused: string[][]; old: string[]; breached: string[]; missingTotp: string[]; totpAvailable: string[]; passkeyAvailable: string[]; expired: string[]; expiringSoon: string[]; insecureUrls: string[]; duplicates: string[][]; weakSshKeys?: string[]; unused?: UnusedItem[]; rotationDue?: RotationItem[]; rotationSoon?: RotationItem[]; weakReasons?: Record<string, string>; ignored: IgnoredFinding[]; checkedAt: string; hibpChecked: boolean; }
 export interface DeviceInfo { id: string; name: string; lastSeen: string; revoked: boolean; current: boolean; }

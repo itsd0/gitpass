@@ -16,7 +16,6 @@ const SCRIPTS = [
   'popup/generator.js',
   'popup/capslock.js',
   'popup/skeletons.js',
-  'popup/recent.js',
   'popup/totp-list.js',
   'popup/detail.js',
   'popup/edit.js',

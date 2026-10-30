@@ -34,9 +34,6 @@ export interface DateBucketOptions {
 }
 
 export interface GroupRowsOptions extends DateBucketOptions {
-  showRecentSection?: boolean;
-  recentLabel?: string;
-  neverUsedLabel?: string;
   /** Return plain item rows with no section headers (e.g. search results, which are ranked by relevance). */
   flat?: boolean;
 }
@@ -164,28 +161,9 @@ export function groupRows(
   if (options?.flat) {
     return items.map((item, index) => ({ type: 'item', key: item.id, item, index }));
   }
-  const recentLabel = options?.recentLabel ?? 'Recently used';
-  const neverUsedLabel = options?.neverUsedLabel ?? 'Never used';
-
-  let remaining = items;
-  if (options?.showRecentSection && sort !== 'recent') {
-    const recent = items
-      .filter((x) => x.lastUsed && x.lastUsed > 0)
-      .sort((a, b) => (b.lastUsed ?? 0) - (a.lastUsed ?? 0))
-      .slice(0, 6);
-    if (recent.length > 0) {
-      const recentIds = new Set(recent.map((x) => x.id));
-      const headerKey = 'h:recent';
-      rows.push({ type: 'header', key: headerKey, label: recentLabel });
-      recent.forEach((item, index) => {
-        rows.push({ type: 'item', key: item.id, item, index, headerKey });
-      });
-      remaining = items.filter((x) => !recentIds.has(x.id));
-    }
-  }
 
   let lastKey = '';
-  remaining.forEach((item, index) => {
+  items.forEach((item, index) => {
     let headerKey = '';
     let headerLabel = '';
 
@@ -193,20 +171,6 @@ export function groupRows(
       const letter = /[a-z]/i.test(item.title[0] ?? '') ? item.title[0].toUpperCase() : '#';
       headerKey = `h:letter:${letter}`;
       headerLabel = letter;
-    } else if (sort === 'recent') {
-      if (item.lastUsed && item.lastUsed > 0) {
-        const bucket = getDateBucket(item.lastUsed, options);
-        if (bucket) {
-          headerKey = `h:${bucket.key}`;
-          headerLabel = bucket.label;
-        } else {
-          headerKey = 'h:neverUsed';
-          headerLabel = neverUsedLabel;
-        }
-      } else {
-        headerKey = 'h:neverUsed';
-        headerLabel = neverUsedLabel;
-      }
     } else {
       const dateVal = sort === 'created' ? item.createdAt : item.updatedAt;
       const bucket = getDateBucket(dateVal, options);

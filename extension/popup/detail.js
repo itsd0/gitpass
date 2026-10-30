@@ -81,7 +81,6 @@ async function select(idx) {
     list.removeAttribute('aria-activedescendant');
   }
   renderList();
-  renderRecent();
   const pane = $('detail');
   const it = S.rows[idx];
   if (!it) {

@@ -51,7 +51,7 @@ export function CommandPalette({ open, onOpenChange, extraCommands = [] }: { ope
   // palette builtins + every feature's registry commands (first id wins) + caller extras
   const cmds = useMemo(() => { const seen = new Set<string>(); return [...builtinCommands(), ...allCommands(), ...extraCommands].filter((c) => !seen.has(c.id) && !!seen.add(c.id)); }, [extraCommands, open]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (!open) { setQ(''); setSel(0); setActionItem(null); setActionSel(0); return; } let live = true;
-    const filter: Filter = q ? { kind: 'all', query: q } : { kind: 'all', sort: 'recent' };
+    const filter: Filter = q ? { kind: 'all', query: q } : { kind: 'all' };
     const h = setTimeout(() => api.listItems({ filter }).then((r) => live && setItems(r)).catch(() => live && setItems([])), 80);
     return () => { live = false; clearTimeout(h); }; }, [q, open]);
   const entries = useMemo(() => buildEntries(q, cmds, items, (c) => (c.labelKey ? translate(lang, c.labelKey) : c.label)), [q, cmds, items, lang]);
@@ -104,7 +104,7 @@ export function CommandPalette({ open, onOpenChange, extraCommands = [] }: { ope
           {entries.length === 0 && <li className="px-3 py-8 text-center text-sm text-muted">{t('palette.empty', { q })}</li>}
           {entries.map((e, i) => <li key={e.kind === 'cmd' ? 'c' + e.cmd.id : 'i' + e.item.id}>
             {i === firstCmd && e.kind === 'cmd' && <div className="px-3 pb-1 pt-2 text-xs font-medium uppercase text-muted">{t('palette.commands')}</div>}
-            {i === firstItem && e.kind === 'item' && <div className="px-3 pb-1 pt-2 text-xs font-medium uppercase text-muted">{q ? t('palette.items') : t('items.recentlyUsed')}</div>}
+            {q && i === firstItem && e.kind === 'item' && <div className="px-3 pb-1 pt-2 text-xs font-medium uppercase text-muted">{t('palette.items')}</div>}
             <div id={`pal-${i}`} data-idx={i} role="option" aria-selected={sel === i} onMouseMove={() => setSel(i)} onClick={() => run(e)}
               className={cn('flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 text-sm', sel === i && 'bg-accent/20')}>
               {e.kind === 'cmd' ? <>{e.cmd.icon ? <e.cmd.icon className="h-4 w-4 text-muted" aria-hidden /> : <span className="w-4" />}<span className="flex-1">{e.cmd.labelKey ? translate(lang, e.cmd.labelKey) : e.cmd.label}</span>

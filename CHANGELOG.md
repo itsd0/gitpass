@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Desktop
+- Removed the "Recently used" section, sort option and command palette heading (#409).
+
+### Extension
+- Removed the popup's "Recently used" section (#409).
+
 ## 0.6.8 — 2026-10-30
 
 ### Desktop
