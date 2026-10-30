@@ -34,6 +34,7 @@ export const th: Partial<Record<Key, string>> = {
   'kit.openPrintable': 'เปิดชุดเอกสารสำหรับพิมพ์',
   'nav.home': 'หน้าแรก', 'nav.allItems': 'รายการทั้งหมด', 'nav.favorites': 'รายการโปรด', 'nav.watchtower': 'Watchtower', 'nav.vaults': 'ห้องนิรภัย', 'nav.tags': 'แท็ก',
   'nav.archive': 'เก็บถาวร', 'nav.deleted': 'ลบล่าสุด', 'nav.newItem': 'รายการใหม่', 'nav.search': 'ค้นหา', 'nav.lock': 'ล็อก', 'nav.settings': 'การตั้งค่า', 'nav.people': 'บุคคล',
+  'ref.copy': 'คัดลอกการอ้างอิงความลับ', 'ref.copyField': 'คัดลอกการอ้างอิงความลับของ {label}', 'ref.copyPassword': 'คัดลอกการอ้างอิงรหัสผ่าน', 'ref.copied': 'คัดลอกการอ้างอิงความลับแล้ว', 'ref.failed': 'คัดลอกการอ้างอิงความลับไม่สำเร็จ',
   'common.cancel': 'ยกเลิก', 'common.save': 'บันทึก', 'common.close': 'ปิด', 'common.copy': 'คัดลอก', 'common.copied': 'คัดลอกแล้ว', 'common.loading': 'กำลังโหลด…', 'common.error': 'เกิดข้อผิดพลาด: {msg}', 'common.saved': 'บันทึกแล้ว', 'common.undo': 'เลิกทำ', 'common.show': 'แสดง', 'common.hide': 'ซ่อน',
   'generator.title': 'เครื่องมือสร้างรหัสผ่าน',
   'generator.mode': 'โหมด',

@@ -166,6 +166,20 @@ gitpass inject -i config.yml.tpl                  # render to stdout
 gitpass inject -i .env.template -o .env           # write mode 0600 (plaintext secrets on disk)
 ```
 
+```sh
+gitpass ref Personal GitHub                       # gp://Personal/GitHub/password
+gitpass ref Personal GitHub username              # standard fields: password, username, url, notes, title, totp
+gitpass ref Personal "AWS prod" "API Key" --copy  # custom field by label (or id); copies the reference
+```
+
+`gitpass ref <vault> <query> [field]` prints the reference for an item field (never the secret
+itself) so you do not have to type it by hand. Names are percent-encoded (`/` becomes `%2F`,
+a space `%20`), and the reference is resolved once before it is printed, so a reference
+that is printed always works with `run` and `inject`. Ambiguous queries list candidates like
+`gitpass get` (`--pick <n>`). `--copy` puts the reference on the clipboard without the
+concealed marker and without auto-clear, since it is not a secret. The desktop app has the
+same action on each field of an item.
+
 References are `gp://<vault>/<item>/<field>`; `run` resolves references from inherited
 environment variables and/or `--env-file` (which is optional and overrides inherited
 variables with the same name), puts resolved values only in the child's environment, and

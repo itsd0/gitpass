@@ -37,6 +37,7 @@ export const my: Partial<Record<Key, string>> = {
   'kit.openPrintable': 'ပုံနှိပ်နိုင်သော kit ကို ဖွင့်ရန်',
   'nav.home': 'ပင်မ', 'nav.allItems': 'အရာအားလုံး', 'nav.favorites': 'အကြိုက်ဆုံးများ', 'nav.watchtower': 'Watchtower', 'nav.vaults': 'သော့ခတ်သေတ္တာများ', 'nav.tags': 'တဂ်များ',
   'nav.archive': 'မှတ်တမ်းသိမ်း', 'nav.deleted': 'မကြာသေးမီက ဖျက်ထားသည်', 'nav.newItem': 'အရာအသစ်', 'nav.search': 'ရှာဖွေရန်', 'nav.lock': 'သော့ခတ်ရန်', 'nav.settings': 'ဆက်တင်များ', 'nav.people': 'လူများ',
+  'ref.copy': 'လျှို့ဝှက်ကိုးကားချက် ကူးယူရန်', 'ref.copyField': '{label} အတွက် လျှို့ဝှက်ကိုးကားချက် ကူးယူရန်', 'ref.copyPassword': 'စကားဝှက် ကိုးကားချက် ကူးယူရန်', 'ref.copied': 'လျှို့ဝှက်ကိုးကားချက် ကူးယူပြီးပါပြီ', 'ref.failed': 'လျှို့ဝှက်ကိုးကားချက် ကူးယူ၍မရပါ',
   'common.cancel': 'မလုပ်တော့ပါ', 'common.save': 'သိမ်းရန်', 'common.close': 'ပိတ်ရန်', 'common.copy': 'ကူးယူရန်', 'common.copied': 'ကူးယူပြီးပါပြီ', 'common.loading': 'ခဏစောင့်ပါ…', 'common.error': 'အမှားဖြစ်သွားသည်- {msg}', 'common.saved': 'သိမ်းပြီး', 'common.undo': 'ပြန်ပြင်ရန်', 'common.show': 'ပြသရန်', 'common.hide': 'ဝှက်ထားရန်',
   'generator.title': 'စကားဝှက် ထုတ်လုပ်စနစ်',
   'generator.mode': 'ပုံစံ',

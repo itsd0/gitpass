@@ -389,6 +389,20 @@ enum Cmd {
         /// Write to this file (mode 0600) instead of stdout. NOTE: this puts plaintext secrets on disk.
         #[arg(long, short = 'o')] output: Option<PathBuf>,
     },
+    /// Print the `gp://<vault>/<item>/<field>` secret reference for an item field (never the secret itself)
+    Ref {
+        vault: String,
+        /// Item id, id prefix, or fuzzy match on title/username/url
+        query: String,
+        /// Field: password (default), username, url, notes, title, totp, or a custom field label or id
+        field: Option<String>,
+        /// Choose the n-th (1-based) ranked candidate when several match
+        #[arg(long)]
+        pick: Option<usize>,
+        /// Copy the reference to the clipboard instead of printing it (not a secret: no auto-clear)
+        #[arg(long)]
+        copy: bool,
+    },
     /// Connect the vault folder to a private git remote (GitHub or any git host)
     Remote { #[command(subcommand)] cmd: RemoteCmd },
     /// git add/commit/pull --rebase/push in the vault directory, then verify the manifest
@@ -2313,6 +2327,26 @@ fn run() -> Result<()> {
                 }
                 None => { use std::io::Write; std::io::stdout().write_all(out.as_bytes())?; }
             }
+        }
+        Cmd::Ref { vault, query, field, pick, copy } => {
+            use gitpass_cli::inject::{field_segment, Resolver, SecretRef};
+            let s = unlock(&cli, &root)?;
+            let vid = s.resolve_vault(vault)?;
+            let (id, rec) = pick_record(&s, &vid, query, *pick, false)?;
+            let vaults = s.list_vaults()?;
+            let vname = vaults.iter().find(|(v, _)| *v == vid).map(|(_, m)| m.name.clone()).unwrap_or_default();
+            // Name the vault and item by title only while that name resolves to exactly one of them.
+            let vault_seg = if !vname.is_empty() && vaults.iter().filter(|(_, m)| m.name == vname).count() == 1 { vname } else { vid.clone() };
+            let same_title = s.list_items(&vid)?.iter().filter(|(_, it)| it.title.eq_ignore_ascii_case(&rec.item.title)).count();
+            let item_seg = if same_title == 1 && !rec.item.title.is_empty() { rec.item.title.clone() } else { id.clone() };
+            let fields: Vec<(String, String)> = rec.sections.iter().flat_map(|sec| sec.fields.iter())
+                .filter(|f| !f.removed).map(|f| (f.id.clone(), f.label.clone())).collect();
+            let field_seg = field_segment(field.as_deref().unwrap_or("password"), &fields)?;
+            let r = SecretRef { vault: vault_seg, item: item_seg, field: field_seg };
+            // Round trip through the same resolver `run`/`inject` use, so a printed reference always works.
+            SessionResolver(&s).resolve(&r)?;
+            let text = r.to_string();
+            if *copy { do_copy(&text, 0, false, "secret reference", None)?; } else { println!("{text}"); }
         }
         Cmd::Remote { cmd } => match cmd {
             RemoteCmd::Add { url, allow_local } => {

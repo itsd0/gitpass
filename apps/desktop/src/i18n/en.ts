@@ -33,6 +33,7 @@ export const en = {
   // common shell
   'nav.home': 'Home', 'nav.allItems': 'All Items', 'nav.favorites': 'Favorites', 'nav.watchtower': 'Watchtower', 'nav.vaults': 'Vaults', 'nav.tags': 'Tags',
   'nav.archive': 'Archive', 'nav.deleted': 'Recently Deleted', 'nav.newItem': 'New Item', 'nav.search': 'Search', 'nav.lock': 'Lock', 'nav.settings': 'Settings', 'nav.people': 'People',
+  'ref.copy': 'Copy secret reference', 'ref.copyField': 'Copy secret reference for {label}', 'ref.copyPassword': 'Copy password reference', 'ref.copied': 'Secret reference copied', 'ref.failed': 'Could not copy the secret reference',
   'common.cancel': 'Cancel', 'common.save': 'Save', 'common.close': 'Close', 'common.copy': 'Copy', 'common.copied': 'Copied', 'common.loading': 'Loading…', 'common.error': 'Something went wrong: {msg}', 'common.saved': 'Saved', 'common.undo': 'Undo', 'common.show': 'Show', 'common.hide': 'Hide',
   'generator.title': 'Password Generator',
   'generator.mode': 'Mode',
