@@ -1,2 +1,2 @@
-export { Sidebar } from './sidebar';
-export type { SectionId } from './sidebar';
+export { Sidebar } from './sidebar-parts';
+export type { SectionId } from './sidebar-parts';
