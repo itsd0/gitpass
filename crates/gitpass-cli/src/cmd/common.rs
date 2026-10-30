@@ -658,6 +658,16 @@ pub(crate) struct CliField {
     pub(crate) masked: Option<String>,
 }
 
+/// One entry of `related_items` in `gitpass get --json` output: the linked item's
+/// id plus its resolved title. `title` is null and `available` is false when the
+/// target is missing or deleted; titles only, never secrets.
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub(crate) struct CliRelatedItem {
+    pub(crate) id: String,
+    pub(crate) title: Option<String>,
+    pub(crate) available: bool,
+}
+
 #[derive(Serialize, Clone, Debug, PartialEq)]
 pub(crate) struct CliItemDetail {
     pub(crate) id: String,
@@ -685,7 +695,7 @@ pub(crate) struct CliItemDetail {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) related_item_ids: Vec<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
-    pub(crate) related_items: Vec<String>,
+    pub(crate) related_items: Vec<CliRelatedItem>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub(crate) password_history: Vec<CliPasswordHistoryEntry>,
 }
@@ -809,7 +819,35 @@ pub(crate) fn item_summary(id: &str, r: &ItemRecord) -> CliItemSummary {
     }
 }
 
-pub(crate) fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: Option<String>) -> CliItemDetail {
+/// Resolve an item's `related_item_ids` to `{id, title, available}` entries, using
+/// the same lookup as the human-readable `get` output: a target counts as
+/// available only when it exists and is not deleted. Missing or deleted targets
+/// yield `title: None, available: false` and never fail the command.
+pub(crate) fn resolve_related_items(s: &Session, r: &ItemRecord) -> Vec<CliRelatedItem> {
+    r.related_item_ids
+        .iter()
+        .map(|rid| match s.get_record_by_id(rid) {
+            Ok(Some((_, _, rel_rec))) if rel_rec.deleted_at.is_none() => CliRelatedItem {
+                id: rid.clone(),
+                title: Some(rel_rec.item.title.clone()),
+                available: true,
+            },
+            _ => CliRelatedItem {
+                id: rid.clone(),
+                title: None,
+                available: false,
+            },
+        })
+        .collect()
+}
+
+pub(crate) fn item_detail(
+    id: &str,
+    r: &ItemRecord,
+    reveal: bool,
+    last_used_at: Option<String>,
+    related_items: Vec<CliRelatedItem>,
+) -> CliItemDetail {
     let mut fields = Vec::new();
     for section in r.view_sections() {
         for f in section.fields {
@@ -864,7 +902,7 @@ pub(crate) fn item_detail(id: &str, r: &ItemRecord, reveal: bool, last_used_at: 
         notes: r.item.notes.clone().filter(|n| !n.trim().is_empty()),
         fields,
         related_item_ids: r.related_item_ids.clone(),
-        related_items: r.related_item_ids.clone(),
+        related_items,
         password_history: if r.category == Category::Login {
             r.password_history.iter().map(|h| CliPasswordHistoryEntry {
                 replaced_at: ts(&h.replaced_at),
