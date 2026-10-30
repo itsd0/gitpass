@@ -381,6 +381,7 @@ fn tools_generate_strength_watchtower_hibp() {
     assert_eq!(r.reused.len(), 1);
     assert_eq!(r.missing_totp.len(), 3);
     assert!(r.totp_available.is_empty() && r.passkey_available.is_empty());
+    assert!(r.unused.is_empty(), "fresh items are never unused");
     assert!(r.score < 100);
     // HIBP is opt-in: without Settings.hibpCheck no network check happens even if asked.
     assert!(!e.app.get_settings().hibp_check);
@@ -924,10 +925,27 @@ fn fingerprint_of_matches_identity_and_share() {
 #[test]
 fn settings_hibp_defaults_off_and_old_files_parse() {
     assert!(!Settings::default().hibp_check);
+    assert_eq!(Settings::default().watchtower_unused_months, 12);
     let old = r#"{"autoLockMinutes":5,"clipboardClearSecs":90,"theme":"dark","language":"en","biometricUnlock":false,"quickAccessHotkey":"X"}"#;
     let s: Settings = serde_json::from_str(old).unwrap();
     assert!(!s.hibp_check);
-    assert!(serde_json::to_string(&Settings::default()).unwrap().contains("\"hibpCheck\":false"));
+    assert_eq!(s.watchtower_unused_months, 12, "older settings files default the unused check to 12 months");
+    let json = serde_json::to_string(&Settings::default()).unwrap();
+    assert!(json.contains("\"hibpCheck\":false"));
+    assert!(json.contains("\"watchtowerUnusedMonths\":12"));
+}
+
+#[test]
+fn settings_watchtower_unused_months_accepts_only_known_values() {
+    let e = env();
+    for ok in [0u64, 6, 12, 24] {
+        let saved = e.app.set_settings(Settings { watchtower_unused_months: ok, ..e.app.get_settings() }).unwrap();
+        assert_eq!(saved.watchtower_unused_months, ok);
+    }
+    assert!(e.app.set_settings(Settings { watchtower_unused_months: 5, ..e.app.get_settings() }).is_err());
+    // Fresh items are not unused, so the new report field stays empty.
+    login(&e, "Recent fake", "recent@example.invalid", "Xq7#vR2!mK9@pL4$wZ");
+    assert!(e.app.watchtower(false).unwrap().unused.is_empty());
 }
 
 struct MemBio(std::sync::Mutex<Option<(String, String, String)>>);
@@ -1821,4 +1839,102 @@ fn item_type_picker_filters_every_view_including_recently_deleted() {
     assert_eq!(titles(e.app.list_items(&f(FilterKind::Deleted, Some(Category::CreditCard))).unwrap()), vec!["Example Bank"]);
     assert_eq!(titles(e.app.list_items(&f(FilterKind::Deleted, Some(Category::Login))).unwrap()), vec!["Alpha"]);
     assert!(e.app.list_items(&f(FilterKind::Deleted, Some(Category::Passkey))).unwrap().is_empty());
+}
+
+#[test]
+fn bank_account_and_server_crud_masking_and_subtitles() {
+    let e = env();
+
+    // 1. Bank Account creation and masking
+    let bank_item = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::BankAccount,
+        title: "Personal Checking".into(),
+        url: None,
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                fld("bank_name", FieldKind::Text, Some("Chase")),
+                fld("account_holder", FieldKind::Text, Some("Alice Doe")),
+                fld("account_type", FieldKind::Text, Some("Checking")),
+                fld("account_number", FieldKind::Concealed, Some("123456789012")),
+                fld("routing_number", FieldKind::Text, Some("021000021")),
+                fld("pin", FieldKind::Concealed, Some("4321")),
+            ],
+        }],
+        notes: Some("Checking account".into()),
+        tags: Some(vec!["finance".into()]),
+        favorite: Some(true),
+    }).unwrap();
+
+    assert_eq!(bank_item.category, Category::BankAccount);
+    assert_eq!(bank_item.subtitle, "Checking •••• 9012");
+
+    let detail = e.app.get_item(&e.vault, &bank_item.id).unwrap();
+    let fields = detail.sections[0].fields.clone();
+    let acct_f = fields.iter().find(|f| f.id == "account_number").unwrap();
+    assert_eq!(acct_f.kind, FieldKind::Concealed);
+    assert_eq!(acct_f.value, None);
+    assert_eq!(acct_f.masked.as_deref(), Some("•••• •••• •••• 9012"));
+
+    let pin_f = fields.iter().find(|f| f.id == "pin").unwrap();
+    assert_eq!(pin_f.kind, FieldKind::Concealed);
+    assert_eq!(pin_f.value, None);
+    assert!(pin_f.masked.is_none());
+
+    // Reveal field
+    let revealed_acct = e.app.reveal_field(&e.vault, &bank_item.id, "account_number").unwrap();
+    assert_eq!(&*revealed_acct, "123456789012");
+
+    // Copy field secrecy
+    assert!(is_secret_copy(Category::BankAccount, &gitpass_core::item::Field {
+        id: "account_number".into(),
+        label: "account number".into(),
+        kind: FieldKind::Concealed,
+        value: Some("123456789012".into()),
+        removed: false,
+    }));
+    assert!(is_secret_copy(Category::BankAccount, &gitpass_core::item::Field {
+        id: "pin".into(),
+        label: "PIN".into(),
+        kind: FieldKind::Concealed,
+        value: Some("4321".into()),
+        removed: false,
+    }));
+    assert!(!is_secret_copy(Category::BankAccount, &gitpass_core::item::Field {
+        id: "bank_name".into(),
+        label: "bank name".into(),
+        kind: FieldKind::Text,
+        value: Some("Chase".into()),
+        removed: false,
+    }));
+
+    // 2. Server creation and subtitle
+    let srv_item = e.app.create_item(&ItemInput {
+        vault_id: e.vault.clone(),
+        category: Category::Server,
+        title: "Web Node 1".into(),
+        url: Some("10.0.0.50".into()),
+        sections: vec![Section {
+            id: "main".into(),
+            title: None,
+            fields: vec![
+                fld("url", FieldKind::Url, Some("10.0.0.50")),
+                fld("username", FieldKind::Text, Some("ubuntu")),
+                fld("password", FieldKind::Concealed, Some("ServerPassword123!")),
+                fld("admin_console_url", FieldKind::Url, Some("https://aws.amazon.com")),
+                fld("hosting_provider", FieldKind::Text, Some("AWS")),
+            ],
+        }],
+        notes: None,
+        tags: None,
+        favorite: None,
+    }).unwrap();
+
+    assert_eq!(srv_item.category, Category::Server);
+    assert_eq!(srv_item.subtitle, "ubuntu@10.0.0.50");
+
+    let srv_detail = e.app.get_item(&e.vault, &srv_item.id).unwrap();
+    assert!(srv_detail.password_strength.is_some());
 }
