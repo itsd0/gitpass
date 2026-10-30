@@ -15,23 +15,19 @@ const COMMON: &[&str] = &[
 ];
 
 /// Common English words (and month names) that show up as the word half of
-/// `word + year/digits` passwords (`summer2024`, `princess123`). Deliberately disjoint from
+/// `word + year/digits` passwords (`summer2024`, `soccer123`). Deliberately disjoint from
 /// both [`COMMON`] and the generator wordlist in `crate::generate::WORDLIST`, so a generated
 /// passphrase is never flagged just for containing one of its own words; a dictionary word
 /// only lowers the estimate when it combines with a year, digits, or another pattern token
 /// (see [`segment`]). Words are matched after leetspeak normalisation, so `5ummer` counts.
 const DICT_WORDS: &[&str] = &[
-    "summer", "autumn", "spring", "january", "february", "march", "april", "june", "july",
-    "august", "september", "october", "november", "december",
-    "princess", "secret", "freedom", "forever", "together", "computer", "internet",
-    "hunter", "killer", "superman", "batman", "pokemon", "starwars",
-    "charlie", "thomas", "jordan", "michael", "jennifer", "jessica", "ashley", "daniel",
-    "andrew", "joshua", "michelle", "lovely", "money", "whatever", "hello", "world",
-    "cookie", "chocolate", "soccer", "hockey", "tennis", "banana", "cheese", "flower", "garden",
-    "golden", "diamond", "emerald", "ruby", "pearl",
-    "lion", "wolf", "bear", "shark", "snake", "spider", "angel", "devil", "demon", "ghost",
-    "zombie", "ninja", "pirate", "warrior", "knight", "wizard", "magic",
-    "storm", "lightning", "rainbow", "mountain", "valley", "champion", "legend",
+    "summer", "autumn", "february", "november", "forever", "together", "internet",
+    "killer", "batman", "pokemon", "starwars", "charlie", "thomas", "jordan", "michael",
+    "jennifer", "jessica", "ashley", "daniel", "andrew", "joshua", "michelle", "lovely",
+    "money", "whatever", "hello", "world", "cookie", "chocolate", "soccer", "hockey",
+    "tennis", "flower", "golden", "diamond", "pearl", "bear", "shark", "snake", "angel",
+    "devil", "demon", "ghost", "pirate", "warrior", "knight", "magic", "lightning",
+    "rainbow",
 ];
 
 /// US QWERTY rows, then columns. A straight walk is a run of adjacent keys on one line
@@ -647,7 +643,7 @@ mod tests {
         // Guard for the passphrase guarantee above: if a future wordlist change
         // adds a dictionary word to the generator, this test fails loudly here
         // instead of silently flagging generated passphrases in audits.
-        let words = crate::generate::WORDLIST;
+        let words: &[&str] = &crate::generate::WORDLIST;
         for word in DICT_WORDS {
             assert!(!words.contains(word), "{word} is a generator word");
             assert!(!COMMON.contains(word), "{word} is a common password");
