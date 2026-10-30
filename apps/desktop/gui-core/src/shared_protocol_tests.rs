@@ -149,6 +149,12 @@ fn test_host_and_agent_identical_protocol_json() {
         tags: None,
         favorite: None, related_item_ids: None }).unwrap();
 
+    // Link related items on GitHub login (one available card, one missing item)
+    app.state.with(|u| {
+        u.session.add_related_item(&vid, &login1.id, &card.id)?;
+        u.session.add_related_item(&vid, &login1.id, "missing-item-id")
+    }).unwrap();
+
     // Touch last_used on GitHub login item
     let _ = app.state.with(|x| Ok(x.session.touch_item_used(&login1.id))).unwrap();
 
@@ -253,4 +259,17 @@ fn test_host_and_agent_identical_protocol_json() {
             idx, req, host_resp["result"], agent_resp["result"]
         );
     }
+
+    // Explicitly verify related items on get_item response
+    let gh_detail = agent.respond(json!(999), &json!({"id": 999, "cmd": "get_item", "item_id": gh_id}));
+    let rel = gh_detail["result"]["item"]["related_items"].as_array().expect("related_items array");
+    assert_eq!(rel.len(), 2);
+    assert_eq!(rel[0]["id"], card_id);
+    assert_eq!(rel[0]["title"], "Visa Card");
+    assert_eq!(rel[0]["category"], "credit_card");
+    assert_eq!(rel[0]["available"], true);
+    assert_eq!(rel[1]["id"], "missing-item-id");
+    assert_eq!(rel[1]["title"], "Item not available");
+    assert_eq!(rel[1]["category"], serde_json::Value::Null);
+    assert_eq!(rel[1]["available"], false);
 }

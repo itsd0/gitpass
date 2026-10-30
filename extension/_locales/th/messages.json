@@ -1289,5 +1289,11 @@
   },
   "watchtowerAttention": {
     "message": "Watchtower: มี $1 รายการที่ต้องตรวจสอบ"
+  },
+  "relatedItems": {
+    "message": "รายการที่เกี่ยวข้อง"
+  },
+  "itemNotAvailable": {
+    "message": "ไม่มีรายการนี้"
   }
 }

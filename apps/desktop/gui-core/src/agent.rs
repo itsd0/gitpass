@@ -329,14 +329,15 @@ impl Agent {
             "get_item" => {
                 let (vid, iid) = split_id(&req("item_id")?)?;
                 let include_deleted = q.get("include_deleted").and_then(|v| v.as_bool()).unwrap_or(false);
-                let (vname, r) = self.app.state.with(|u| {
+                let (vname, r, related) = self.app.state.with(|u| {
                     let name = u.session.list_vaults()?.into_iter().find(|(v, _)| v == &vid).map(|(_, m)| m.name.clone()).ok_or_else(|| err("not_found", "no such vault"))?;
                     let (_, r) = u.session.read_record(&vid, &iid).map_err(|e| err("not_found", e.to_string()))?;
                     if r.deleted_at.is_some() && !include_deleted { return Err(err("not_found", "item is deleted")); }
-                    Ok((name, r))
+                    let related = gitpass_host::protocol::resolve_related_items(&r, &u.session);
+                    Ok((name, r, related))
                 })?;
                 let lu = self.app.state.with(|x| Ok(x.session.last_used(&iid))).ok().flatten();
-                Ok(gitpass_host::protocol::get_item(&vid, &vname, &iid, &r, lu))
+                Ok(gitpass_host::protocol::get_item(&vid, &vname, &iid, &r, lu, related))
             }
             "reveal" => {
                 if source != "popup" { return Err(err("denied", "reveal is allowed only from the popup")); }

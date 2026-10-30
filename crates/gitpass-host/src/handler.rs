@@ -502,7 +502,8 @@ impl Host {
                     return Err(coded(code::NOT_FOUND, "item not found"));
                 }
                 let lu = s.last_used(iid);
-                Ok(crate::protocol::get_item(vid, &vname, iid, &r, lu))
+                let related = crate::protocol::resolve_related_items(&r, s);
+                Ok(crate::protocol::get_item(vid, &vname, iid, &r, lu, related))
             }
             "reveal" => {
                 if req.get("source").and_then(Value::as_str) != Some("popup") {

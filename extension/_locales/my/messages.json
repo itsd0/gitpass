@@ -1289,5 +1289,11 @@
   },
   "watchtowerAttention": {
     "message": "Watchtower: ပစ္စည်း $1 ခုကို ဆိုင်းငံ့စစ်ဆေးရန် လိုအပ်သည်"
+  },
+  "relatedItems": {
+    "message": "ဆက်စပ်ပစ္စည်းများ"
+  },
+  "itemNotAvailable": {
+    "message": "ပစ္စည်းမရနိုင်ပါ"
   }
 }

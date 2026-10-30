@@ -1209,5 +1209,11 @@
   },
   "watchtowerAttention": {
     "message": "Watchtower: $1 items need attention"
+  },
+  "relatedItems": {
+    "message": "Related items"
+  },
+  "itemNotAvailable": {
+    "message": "Item not available"
   }
 }

@@ -187,7 +187,14 @@ pub fn summary(vid: &str, vname: &str, iid: &str, r: &ItemRecord) -> Value {
 }
 
 /// ItemDetail (contract): summary + fields with secrets omitted (`concealed:true`, no value).
-pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord, last_used: Option<u64>) -> Value {
+pub fn detail(
+    vid: &str,
+    vname: &str,
+    iid: &str,
+    r: &ItemRecord,
+    last_used: Option<u64>,
+    related_items: Vec<Value>,
+) -> Value {
     let mut v = summary(vid, vname, iid, r);
     if let Some(lu) = last_used {
         v["last_used"] = json!(lu);
@@ -231,6 +238,7 @@ pub fn detail(vid: &str, vname: &str, iid: &str, r: &ItemRecord, last_used: Opti
         })
     }).collect();
     m.insert("attachments".into(), json!(attachments));
+    m.insert("related_items".into(), json!(related_items));
     m.insert("notes".into(), json!(nonempty(&r.item.notes)));
     m.insert("tags".into(), json!(r.tags));
     m.insert("created_at".into(), json!(r.created_at));
@@ -417,6 +425,34 @@ where
     Ok(json!({"items": out}))
 }
 
+/// Shared pure logic for resolving related items into `[{id, title, category, available}]`.
+pub fn resolve_related_items(r: &ItemRecord, session: &gitpass_core::store::Session) -> Vec<Value> {
+    r.related_item_ids
+        .iter()
+        .map(|rid| {
+            let actual_iid = rid.split_once(':').map(|(_, i)| i).unwrap_or(rid);
+            match session.get_record_by_id(actual_iid) {
+                Ok(Some((vid, _, rel_r))) if rel_r.deleted_at.is_none() => {
+                    json!({
+                        "id": format!("{vid}:{actual_iid}"),
+                        "title": rel_r.item.title,
+                        "category": rel_r.category.as_str(),
+                        "available": true,
+                    })
+                }
+                _ => {
+                    json!({
+                        "id": rid.clone(),
+                        "title": "Item not available",
+                        "category": Value::Null,
+                        "available": false,
+                    })
+                }
+            }
+        })
+        .collect()
+}
+
 /// Shared pure logic for `get_item` command.
 pub fn get_item(
     vid: &str,
@@ -424,8 +460,9 @@ pub fn get_item(
     iid: &str,
     r: &ItemRecord,
     last_used: Option<u64>,
+    related_items: Vec<Value>,
 ) -> Value {
-    let d = detail(vid, vname, iid, r, last_used);
+    let d = detail(vid, vname, iid, r, last_used, related_items);
     json!({ "item": d })
 }
 
