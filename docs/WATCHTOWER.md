@@ -59,10 +59,10 @@ reports, logs or the UI**.
 | # | Rule | Default |
 |---|------|---------|
 | 1 | Contains the item's username (or email local part) or registrable site name from the URL (at least 4 characters; case-insensitive, ignoring common separators and leetspeak substitutions: `0→o`, `1→l/i`, `3→e`, `4/@→a`, `5/$→s`). | — |
-| 2 | Contains a bundled common password as a substring (case-insensitive; e.g. `password`, `qwerty`, `master`). | 18-entry list |
+| 2 | Contains a bundled common password as a substring (case-insensitive; e.g. `password`, `qwerty`, `master`). | 38-entry list (top leaked passwords plus named walks such as `asdfghjkl` and `1qaz2wsx`) |
 | 3 | At least 4 characters but at most 2 distinct characters (`aaaa`, `abab`). | — |
 | 4 | Shorter than `min_length` characters (Unicode scalar values, not bytes). | 12 |
-| 5 | Estimated entropy below `min_entropy_bits`. | 60 bits |
+| 5 | Effective estimated entropy below `min_entropy_bits`: the minimum of the naive pool estimate and the pattern-aware estimate, when a pattern applies (see below). | 60 bits |
 
 The rules are substring/character based on purpose: they are cheap, deterministic and explainable.
 Rule 1 matches personal information (username and site name) even inside longer passwords like `github-alice-2024!` or `aliceGithub#99`.
@@ -88,10 +88,62 @@ used. Consequences:
   which overrates non-Latin passphrases and underrates 12-character emoji-only secrets.
 - The estimate is linear in length, so a 10 000-character password is finite and very large
   (`≈ 47 000` bits for lowercase letters). There is no length cap and no integer overflow (floating point).
-- Repetition is only caught by rule 2 of the weak checks (≤ 2 distinct characters); `aaaaaaaaaaaa`
-  otherwise scores `12 × log2(26) ≈ 56` bits, below the 60-bit default.
+- In the naive estimate alone, repetition is only caught by the few-distinct-characters weak
+  check (rule 3, ≤ 2 distinct characters); `aaaaaaaaaaaa`
+  otherwise scores `12 × log2(26) ≈ 56` bits, below the 60-bit default. The pattern-aware
+  estimate below additionally catches repeated chunks with more distinct characters.
 
-This is not zxcvbn: there is no dictionary attack, keyboard-pattern or l33t analysis.
+## Pattern-aware estimate
+
+`entropy_bits()` alone overrates patterned passwords: `Summer2024!!` scores about 79 naive
+bits, yet it is a dictionary word plus a year. `weakness()` therefore also runs
+`pattern_estimate()` (exported from `audit`, in `crates/gitpass-core/src/audit/strength.rs`)
+and takes the minimum of the two estimates: when the pattern estimate is below
+`min_entropy_bits` (default 60), the finding reports the pattern reason, e.g.
+`common word + year (~24 bits)`; otherwise the naive estimate still applies.
+
+`pattern_estimate()` greedily segments the password — in both its plain form and its
+leetspeak-normalised form, with the cheaper segmentation winning — into tokens priced at
+fixed guess counts (converted with `log2` and summed). Non-pattern runs between tokens are
+charged the naive per-class entropy, so a long random tail keeps the total high and only a
+password mostly explained by patterns comes out cheap. It returns nothing for passwords with
+no detectable pattern, so random passwords and generated passphrases fall back to the naive
+estimate. Segmentation lowercases the password and strips word-joining separators (`-`, `_`,
+`.`, whitespace), so `word-year` segments the same as `wordyear`; leetspeak normalisation
+maps `0→o`, `1/l→i`, `3→e`, `4/@→a`, `5/$→s`, so `5ummer` still counts as a word.
+
+| Token kind | What counts | Fixed guess count |
+|---|---|---|
+| Common password | Longest match (≥ 4 characters) from the 38-entry bundled list, matched first — a word that is also a walk, e.g. `qwerty`, is a common password first | ~2000 |
+| Common word | Longest match (≥ 4 characters) from a 49-word dictionary list (common English words and month names, e.g. `summer`, `soccer`) | list size × 2 (capitalised variant) |
+| Keyboard pattern | Straight run (≥ 4 keys) on one QWERTY row or column, either direction (`asdfgh`, `1qaz`, `0987`); diagonals are not modelled | ~200 |
+| Sequence pattern | Letter-only run (≥ 4 characters) stepping by a constant +1 or −1 (`abcdef`, `zyxwvu`); digit runs are caught as keyboard patterns instead (see below) | ~100 |
+| Year | Four digits in 1900–2099 | ~200 |
+| Repeated pattern | The whole password is one short (2–8 character), single-class ASCII chunk repeated (`abcabcabc`) | chunk entropy + log2(repetitions) |
+
+The 49-word dictionary list is deliberately disjoint from both the common-password list and
+the generator wordlist, enforced by the unit test
+`test_pattern_dict_disjoint_from_generator_and_common` in `strength.rs`, so a generated
+passphrase is never flagged just for containing one of its own words.
+
+Examples (pattern estimate vs. naive estimate):
+
+- `Summer2024!!` → `common word + year (~24 bits)` (naive: ~79 bits).
+- `Sdfghj4567!x` → `keyboard pattern (~27 bits)`.
+- `abcabcabcabcabcabc` → `repeated pattern (~17 bits)`.
+- `Xq7#vR2!mK9@pL4$wZ` → no pattern estimate; the naive estimate stands.
+
+This is pattern-aware, but it is still not zxcvbn: the estimate stays deterministic, cheap
+and offline (no network, no large dictionaries), with fixed guess counts and the token set
+above — not a crack-time model.
+
+Known limitations (from #430):
+
+- A leet word+year password reports the word half only: `5ummer2024!!` → `common word
+  (~27 bits)`, because in the leetspeak-normalised form `0→o` and `4→a` mask the year
+  digits. The password is still flagged either way.
+- Digit runs report as `keyboard pattern`, because the digit row is itself a walk; only
+  letter-only runs report as `sequence pattern`.
 
 ## Reuse detection
 
@@ -330,7 +382,7 @@ The desktop Watchtower page shows the score over time as a sparkline (`apps/desk
 
 - The score is a heuristic for priorities, not a security guarantee. A password that passes all checks
   can still be guessable, and an old password is not automatically compromised.
-- The entropy estimate is a character-pool calculation, not a crack-time model (see above).
+- The entropy estimate starts as a character-pool calculation, refined by the pattern-aware estimate's fixed guess counts — neither is a crack-time model (see above).
 - Reuse is exact-match only; one-character variations are not detected.
 - The offline site list is bundled with the release; it is not refreshed automatically.
 - Findings never include secret values; do not add logging that prints them.
