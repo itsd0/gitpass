@@ -9,8 +9,8 @@ export async function pickShareFile(): Promise<string | null> {
 }
 
 /** Native save dialog in the Tauri app. The browser mock (dev/tests) uses a Downloads path; nothing is written there. */
-export async function chooseExportPath(defaultName: string, ext: 'json' | 'csv'): Promise<string | null> {
+export async function chooseExportPath(defaultName: string, ext: 'json' | 'csv' | 'pdf'): Promise<string | null> {
   if (!isTauri()) return `~/Downloads/${defaultName}`;
   const { save } = await import('@tauri-apps/plugin-dialog');
-  return save({ defaultPath: defaultName, filters: [{ name: ext === 'json' ? 'gitpass JSON' : 'CSV', extensions: [ext] }] });
+  return save({ defaultPath: defaultName, filters: [{ name: ext === 'json' ? 'gitpass JSON' : ext === 'pdf' ? 'PDF' : 'CSV', extensions: [ext] }] });
 }

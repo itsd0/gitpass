@@ -3,6 +3,7 @@
 
 mod import_export;
 mod items;
+mod kit_pdf;
 mod qr;
 mod settings;
 mod sharing;

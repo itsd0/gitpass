@@ -1,11 +1,12 @@
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import QRCode from 'qrcode';
-import { Check, ClipboardCopy, KeyRound, Loader2, Printer, RefreshCw, X } from 'lucide-react';
+import { Check, ClipboardCopy, Download, KeyRound, Loader2, Printer, RefreshCw, X } from 'lucide-react';
 import logo from '../../assets/logo.png';
 import type { EmergencyKitData } from '../../api/types';
 import { api } from '../../api/client';
 import { useT } from '../../i18n';
 import { toast } from '../../ui';
+import { chooseExportPath } from '../../lib/saveDialog';
 
 /** JSON payload encoded in the kit QR code. The Secret Key is only included when it is shown on the kit. */
 export function kitQrPayload(d: EmergencyKitData, includeSecret: boolean): string {
@@ -94,6 +95,13 @@ export function EmergencyKitPage({ data, onClose, onPrinted, onReveal, onRotate,
     <div className="ek-no-print sticky top-0 z-10 flex items-center justify-end gap-2 border-b border-[#e5e5e5] bg-white/95 p-3">
       <span className="mr-auto pl-2 text-sm text-[#555]">{t('kit.toolbarHint')}</span>
       <button type="button" className="ek-btn ek-btn-primary" onClick={() => { try { window.print(); } catch { /* some webviews cannot print */ } }}><Printer size={14} /> {t('kit.print')}</button>
+      <button type="button" className="ek-btn" disabled={!data.secretKey} onClick={async () => {
+        const path = await chooseExportPath('gitpass-emergency-kit', 'pdf'); if (!path) return;
+        try {
+          await api.saveEmergencyKitPdf({ destPath: path, accountId: data.accountId, vaultPath: data.vaultPath, remote: data.remote, deviceName: data.deviceName, createdAt: data.createdAt, secretKey: data.secretKey });
+          toast(t('common.saved')); onPrinted?.();
+        } catch (e) { toast(String(e), 'danger'); }
+      }}><Download size={14} /> {t('kit.savePdf')}</button>
       {data.secretKey && <button type="button" className="ek-btn" onClick={() => { navigator.clipboard.writeText(kitText(data, t)).then(() => toast(t('common.copied')), () => {}); }}><ClipboardCopy size={14} /> {t('kit.copyText')}</button>}
       {onPrinted && <button type="button" className="ek-btn" disabled={!data.secretKey} onClick={onPrinted}><Check size={14} /> {t('kit.markSaved')}</button>}
       <button type="button" className="ek-btn" onClick={onClose}><X size={14} /> {t('kit.close')}</button>
