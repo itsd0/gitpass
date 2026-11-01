@@ -40,6 +40,7 @@ import { useSettings } from "../settings/useSettings";
 import { loadHistory, recordReport, type ScorePoint } from "./history";
 import { CHECKUP_RELOAD_EVENT } from "./SecurityCheckup";
 import { buildCheckupQueue } from "./checkup";
+import { MergeDialog } from "../items/MergeDialog";
 import { ScoreHistory } from "./ScoreHistory";
 import { gaugeDash, issueIds, scoreBand, type IssueKey } from "./score";
 import { cn } from "../../lib/utils";
@@ -162,6 +163,7 @@ export function WatchtowerPage() {
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ignoredOpen, setIgnoredOpen] = useState(false);
+  const [mergePair, setMergePair] = useState<[ItemSummary, ItemSummary] | null>(null);
 
   const load = useCallback(async (h: boolean) => {
     setBusy(true);
@@ -487,22 +489,37 @@ export function WatchtowerPage() {
                     );
                     const older = sorted.slice(1);
                     const groupTitle = t("watchtower.duplicateGroup", { n: i + 1, count: g.length });
+                    const mergeable =
+                      groupItems.length === 2 &&
+                      groupItems.every((x) => x.category === "login" && x.vaultId && x.vaultId === groupItems[0].vaultId);
                     return (
                       <li key={i} className="rounded-lg border border-border bg-bg p-3">
                         <div className="mb-2 flex items-center justify-between gap-2">
                           <span className="text-[11px] font-medium text-muted">{groupTitle}</span>
-                          {older.length > 0 && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-7 px-2 text-xs border-accent text-accent hover:bg-accent/10 focus-visible:ring-accent"
-                              onClick={() => void handleArchiveOlder(older)}
-                              aria-label={t("watchtower.archiveOlderFor", { group: groupTitle })}
-                            >
-                              <Archive size={12} className="mr-1" />
-                              {t("watchtower.archiveOlder")}
-                            </Button>
-                          )}
+                          <div className="flex gap-2">
+                            {mergeable && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs border-accent text-accent hover:bg-accent/10 focus-visible:ring-accent"
+                                onClick={() => setMergePair([groupItems[0], groupItems[1]])}
+                              >
+                                {t("watchtower.merge")}
+                              </Button>
+                            )}
+                            {older.length > 0 && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs border-accent text-accent hover:bg-accent/10 focus-visible:ring-accent"
+                                onClick={() => void handleArchiveOlder(older)}
+                                aria-label={t("watchtower.archiveOlderFor", { group: groupTitle })}
+                              >
+                                <Archive size={12} className="mr-1" />
+                                {t("watchtower.archiveOlder")}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                         <div className="space-y-1.5">
                           {sorted.map((item) => (
@@ -771,6 +788,16 @@ export function WatchtowerPage() {
         </section>
       )}
     </div>
+    {mergePair && (
+      <MergeDialog
+        open
+        onOpenChange={(o) => !o && setMergePair(null)}
+        vaultId={mergePair[0].vaultId}
+        itemA={mergePair[0]}
+        itemB={mergePair[1]}
+        onMerged={() => load(hibp)}
+      />
+    )}
     </div>
   );
 }

@@ -64,3 +64,9 @@ export interface ItemRef { vaultId: string; itemId: string }
 export type BulkAction = 'trash' | 'restore' | 'purge' | 'archive' | 'unarchive' | 'favorite' | 'unfavorite' | 'add_tag' | 'remove_tag' | 'move' | 'copy';
 export interface BulkRequest { action: BulkAction; items: ItemRef[]; tag?: string | null; toVaultId?: string | null }
 export interface BulkResult { count: number; items: ItemRef[] }
+/** Secrets-free merge report: labels and counts only, never secret values. */
+export interface MergeDuplicateReport { passwordFromOther: boolean; passwordMovedToHistory: boolean; totpFromOther: boolean; urlsAdded: number; tagsAdded: string[]; relatedAdded: number; notesJoined: boolean; fieldsCopied: string[]; fieldsConflicted: string[]; attachmentsAdded: number; historyEntries: number; }
+/** Secrets-free preview of merging `otherId` into `keepId` (no write performed). */
+export interface MergeDuplicatePreview { keepId: string; otherId: string; mergedTitle: string; mergedUrl: string|null; mergedTags: string[]; report: MergeDuplicateReport; }
+/** Result of a completed duplicate merge; `keepVersionBefore` drives the Undo path. */
+export interface MergeDuplicateResult { kept: ItemSummary; otherId: string; otherTitle: string; keepVersionBefore: number; keepVersion: number; report: MergeDuplicateReport; }
