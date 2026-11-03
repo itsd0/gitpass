@@ -988,6 +988,67 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
                 println!("restored {iid}");
             }
         }
+        Cmd::Merge { keep, other, vault, yes, json } => {
+            let s = unlock(cli, root)?;
+            let (vid, keep_id, keep_rec) = resolve_target_item(&s, vault.as_deref(), keep, None, None, false)?;
+            let (other_id, other_rec) = pick_record(&s, &vid, other, None, false)?;
+            if other_id == keep_id {
+                bail!("cannot merge an item with itself");
+            }
+            if !*yes
+                && !confirm(&format!(
+                    "Merge '{}' into '{}'? '{}' will move to Recently Deleted (restorable).",
+                    other_rec.item.title, keep_rec.item.title, other_rec.item.title
+                ))?
+            {
+                bail!("aborted (pass --yes to confirm)");
+            }
+            let out = s.merge_duplicate_items(&vid, &keep_id, &other_id)?;
+            if *json {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&serde_json::json!({
+                        "kept_id": keep_id,
+                        "discarded_id": other_id,
+                        "kept_title": keep_rec.item.title,
+                        "discarded_title": other_rec.item.title,
+                        "keep_version_before": out.keep_version_before,
+                        "keep_version": out.keep_version,
+                        "discarded_version": out.other_version,
+                        "report": out.report,
+                    }))?
+                );
+            } else {
+                println!("merged {other_id} into {keep_id} (kept version {}, discarded item in Recently Deleted)", out.keep_version);
+                if out.report.password_from_other {
+                    println!("  password: kept the newer password from the discarded item");
+                }
+                if out.report.password_moved_to_history {
+                    println!("  password history: losing password preserved");
+                }
+                if out.report.totp_from_other {
+                    println!("  totp: taken from the discarded item");
+                }
+                if !out.report.tags_added.is_empty() {
+                    println!("  tags added: {}", out.report.tags_added.join(", "));
+                }
+                if out.report.urls_added > 0 {
+                    println!("  urls: differing discarded URL kept as a 'website (merged)' field");
+                }
+                if out.report.notes_joined {
+                    println!("  notes: joined");
+                }
+                if !out.report.fields_copied.is_empty() {
+                    println!("  fields copied: {}", out.report.fields_copied.join(", "));
+                }
+                if !out.report.fields_conflicted.is_empty() {
+                    println!("  fields kept twice (labelled '(merged)'): {}", out.report.fields_conflicted.join(", "));
+                }
+                if out.report.attachments_added > 0 {
+                    println!("  attachments copied: {}", out.report.attachments_added);
+                }
+            }
+        }
         Cmd::Mv { item, item2, vault, to, pick, json } => {
             let s = unlock(cli, root)?;
             let (from_vid, iid, _rec) = resolve_target_item(&s, vault.as_deref(), item, item2.as_deref(), *pick, false)?;

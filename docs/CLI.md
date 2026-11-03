@@ -140,6 +140,7 @@ gitpass restore github --version 3
   and `available` is `false` for a missing or deleted target. Titles only, never secrets.
 - `archive` and `unarchive` mark or unmark an item as archived.
 - `undelete` restores an item from Recently Deleted (searches deleted items only; clear error if the item is not deleted).
+- `gitpass merge <keep> <other>` merges two duplicate logins in the same vault: the kept item absorbs the other's password history, tags, URLs, notes, TOTP, extra fields and attachments, and the discarded item moves to Recently Deleted (restorable; undo by restoring it and `restore --version` on the kept item to its pre-merge version). Prompts for confirmation unless `--yes`; `--json` prints the merge summary (ids, versions, counts — never secrets).
 - `mv <item> --to <vault>` moves an item to another vault, keeping its version history, attachments, tags and metadata.
 - `edit`, `archive`, `unarchive`, `undelete`, and `mv` accept `--vault` (or `<vault>/<item>` or `<vault> <item>`),
   `--pick <N>`, and `--json`, and never print secrets.

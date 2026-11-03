@@ -107,6 +107,47 @@ pub struct BulkRequest { pub action: String, pub items: Vec<ItemRef>, #[serde(de
 pub struct BulkResult { pub count: usize, pub items: Vec<ItemRef> }
 /// Upper bound for one bulk request (keeps a single commit reasonable).
 pub const BULK_MAX: usize = 5000;
+/// Secrets-free merge report (mirrors `gitpass_core::DuplicateMergeReport`:
+/// labels and counts only, never secret values).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeDuplicateReport {
+    pub password_from_other: bool,
+    pub password_moved_to_history: bool,
+    pub totp_from_other: bool,
+    pub urls_added: usize,
+    pub tags_added: Vec<String>,
+    pub related_added: usize,
+    pub notes_joined: bool,
+    pub fields_copied: Vec<String>,
+    pub fields_conflicted: Vec<String>,
+    pub attachments_added: usize,
+    pub history_entries: usize,
+}
+/// Secrets-free preview of merging `other_id` into `keep_id` (no write performed).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeDuplicatePreview {
+    pub keep_id: String,
+    pub other_id: String,
+    pub merged_title: String,
+    pub merged_url: Option<String>,
+    pub merged_tags: Vec<String>,
+    pub report: MergeDuplicateReport,
+}
+/// Result of a completed duplicate merge: the kept item plus the versions
+/// the Undo path needs (restore the discarded item, then restore the kept
+/// item to `keep_version_before`).
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeDuplicateResult {
+    pub kept: ItemSummary,
+    pub other_id: String,
+    pub other_title: String,
+    pub keep_version_before: u64,
+    pub keep_version: u64,
+    pub report: MergeDuplicateReport,
+}
 
 /// `export_items`: export a whole vault or an explicit `{vaultId,itemId}` selection to `path`.
 /// `format`: `gitpass-json` (full records) or `csv` (login fields only); encrypted is gitpass-json only.

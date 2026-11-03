@@ -86,6 +86,8 @@ pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>)
 #[tauri::command] pub fn bulk_items(s: State<App>, req: a::BulkRequest) -> R<a::BulkResult> { s.bulk_items(&req).map_err(e) }
 #[tauri::command] pub fn move_item(s: State<App>, vault_id: String, item_id: String, to_vault_id: String) -> R<a::ItemSummary> { s.move_item(&vault_id, &item_id, &to_vault_id).map_err(e) }
 #[tauri::command] pub fn duplicate_item(s: State<App>, vault_id: String, item_id: String) -> R<a::ItemSummary> { s.duplicate_item(&vault_id, &item_id).map_err(e) }
+#[tauri::command] pub fn preview_merge_duplicate_items(s: State<App>, vault_id: String, keep_id: String, other_id: String) -> R<a::MergeDuplicatePreview> { s.preview_merge_duplicate_items(&vault_id, &keep_id, &other_id).map_err(e) }
+#[tauri::command] pub fn merge_duplicate_items(s: State<App>, vault_id: String, keep_id: String, other_id: String) -> R<a::MergeDuplicateResult> { s.merge_duplicate_items(&vault_id, &keep_id, &other_id).map_err(e) }
 #[tauri::command] pub fn item_version(s: State<App>, vault_id: String, item_id: String, version: u64) -> R<a::ItemDetail> { s.item_version(&vault_id, &item_id, version).map_err(e) }
 #[tauri::command] pub fn restore_item_version(s: State<App>, vault_id: String, item_id: String, version: u64) -> R<a::ItemDetail> { s.restore_item_version(&vault_id, &item_id, version).map_err(e) }
 #[tauri::command(async)] pub fn add_attachment(s: State<'_, App>, vault_id: String, item_id: String, path: String) -> R<a::Attachment> { s.add_attachment(&vault_id, &item_id, &path).map_err(e) }
