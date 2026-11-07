@@ -22,6 +22,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         protectWindow()
+        // Main-thread delays do not advance in deep sleep; check the
+        // monotonic deadline as soon as the app is visible again.
+        (application as GitpassApplication).session.enforceInactivity()
     }
 
     private fun protectWindow() {

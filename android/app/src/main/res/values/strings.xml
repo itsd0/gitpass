@@ -37,4 +37,5 @@
     <string name="copy_secret_key">Copy Secret Key</string>
     <string name="copied">Copied. The clipboard clears in 60 seconds.</string>
     <string name="field_empty">Empty</string>
+    <string name="setup_interrupted">Account setup was interrupted before you confirmed saving the Secret Key, and gitpass never stores it. If you wrote it down, unlock with it. Otherwise this account cannot be opened; clear gitpass storage in Android Settings to start over.</string>
 </resources>

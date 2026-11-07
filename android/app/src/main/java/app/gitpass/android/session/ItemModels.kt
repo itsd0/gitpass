@@ -75,6 +75,8 @@ data class VaultSnapshot(
     val items: List<ItemRow>,
     val query: String,
     val detail: ItemView?,
+    /** Lock generation. Changes on every lock, so UI state keyed on it starts fresh. */
+    val epoch: Long = 0,
 )
 
 object ItemSearch {

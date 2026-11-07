@@ -35,8 +35,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -46,6 +46,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -60,6 +61,7 @@ import androidx.compose.ui.unit.sp
 import app.gitpass.android.GitpassApplication
 import app.gitpass.android.R
 import app.gitpass.android.session.AccountCreatedButLocked
+import app.gitpass.android.session.AccountSetup
 import app.gitpass.android.session.DetailRow
 import app.gitpass.android.session.ItemRow
 import app.gitpass.android.session.ItemView
@@ -86,45 +88,63 @@ private sealed interface Screen {
 @Composable
 fun GitpassRoot(app: GitpassApplication) {
     val session = app.session
+    val setup = app.accountSetup
     val scope = rememberCoroutineScope()
-    var revision by remember { mutableIntStateOf(0) }
-    var screen by remember { mutableStateOf<Screen>(Screen.List) }
+    // Main.immediate: a lock on the main thread (background, Lock button,
+    // inactivity) updates this state synchronously, before the next frame.
+    val snapshot by session.state.collectAsState(context = Dispatchers.Main.immediate)
+    val hasPending by app.pendingSecret.present.collectAsState(context = Dispatchers.Main.immediate)
+    val setupState by setup.state.collectAsState(context = Dispatchers.Main.immediate)
+    var unlocking by remember { mutableStateOf(false) }
     var errorText by remember { mutableStateOf<String?>(null) }
-    var busy by remember { mutableStateOf(false) }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var secretKey by remember { mutableStateOf("") }
     var showSecretKey by remember { mutableStateOf(false) }
     var copiedNotice by remember { mutableStateOf(false) }
-    var revealedKeys by remember { mutableStateOf(setOf<String>()) }
+    // Keyed on the lock generation: every lock discards the open screen,
+    // revealed fields, and search text, whatever triggered it.
+    var screen by remember(snapshot.epoch) { mutableStateOf<Screen>(Screen.List) }
+    var revealedKeys by remember(snapshot.epoch) { mutableStateOf(setOf<String>()) }
+    var queryText by remember(snapshot.epoch) { mutableStateOf("") }
 
     val tooShort = stringResource(R.string.password_too_short)
     val mismatch = stringResource(R.string.passwords_do_not_match)
     val context = LocalContext.current
+    val root = app.vaultRoot.absolutePath
+    val creating = setupState == AccountSetup.State.Creating
+    val busy = unlocking || creating
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(1_000)
-            val wasUnlocked = session.isUnlocked()
+    LaunchedEffect(snapshot.unlocked, snapshot.epoch) {
+        // Wakes near the deadline only; the lock itself reaches the UI
+        // through session.state, not through this loop.
+        while (snapshot.unlocked) {
+            val wait = session.millisUntilAutoLock() ?: break
+            delay(wait.coerceIn(MIN_TICK_MS, MAX_TICK_MS))
             session.enforceInactivity()
-            if (wasUnlocked) revision++
         }
     }
 
-    val snapshot = remember(revision) { session.snapshot() }
-    val pending = app.pendingSecret.get()
-    val vaultExists = File(app.vaultRoot, "format.json").isFile
-
     LaunchedEffect(snapshot.unlocked) {
         if (!snapshot.unlocked) {
-            screen = Screen.List
-            revealedKeys = emptySet()
             password = ""
             confirmPassword = ""
             secretKey = ""
         }
     }
 
+    LaunchedEffect(setupState) {
+        when (val current = setupState) {
+            is AccountSetup.State.Failed -> errorText = userVisibleError(current.error)
+            AccountSetup.State.Idle -> Unit
+            AccountSetup.State.Creating -> {
+                password = ""
+                confirmPassword = ""
+            }
+        }
+    }
+
+    val pending = if (hasPending) app.pendingSecret.get() else null
     if (pending != null) {
         SecretKeyGate(
             secret = pending,
@@ -134,12 +154,18 @@ fun GitpassRoot(app: GitpassApplication) {
                 copiedNotice = true
             },
             onSaved = {
-                app.pendingSecret.clear()
+                setup.confirmSaved()
                 copiedNotice = false
-                revision++
             },
         )
         return
+    }
+
+    val vaultExists = remember(snapshot.epoch, snapshot.unlocked, hasPending, setupState) {
+        File(app.vaultRoot, "format.json").isFile
+    }
+    val interrupted = remember(snapshot.epoch, snapshot.unlocked, hasPending, setupState) {
+        setup.isInterrupted(root)
     }
 
     Scaffold(
@@ -160,6 +186,7 @@ fun GitpassRoot(app: GitpassApplication) {
             UnlockScreen(
                 padding = padding,
                 vaultExists = vaultExists,
+                interrupted = interrupted,
                 password = password,
                 confirmPassword = confirmPassword,
                 secretKey = secretKey,
@@ -173,23 +200,22 @@ fun GitpassRoot(app: GitpassApplication) {
                 onUnlock = {
                     if (busy) return@UnlockScreen
                     errorText = null
-                    busy = true
-                    val root = app.vaultRoot.absolutePath
+                    unlocking = true
                     val typedPassword = password
                     val typedSecret = secretKey
                     scope.launch {
                         val result = withContext(Dispatchers.IO) {
                             runCatching { session.unlock(root, typedPassword, typedSecret) }
                         }
-                        busy = false
+                        unlocking = false
                         result.onSuccess {
+                            setup.noteUnlocked()
                             password = ""
                             secretKey = ""
                             errorText = null
                         }.onFailure { error ->
                             errorText = userVisibleError(error)
                         }
-                        revision++
                     }
                 },
                 onCreate = {
@@ -203,53 +229,33 @@ fun GitpassRoot(app: GitpassApplication) {
                         errorText = mismatch
                         return@UnlockScreen
                     }
-                    busy = true
-                    val root = app.vaultRoot.absolutePath
-                    val typedPassword = password
-                    scope.launch {
-                        val result = withContext(Dispatchers.IO) {
-                            runCatching { session.createAccount(root, typedPassword) }
-                        }
-                        busy = false
-                        password = ""
-                        confirmPassword = ""
-                        result.onSuccess { secret ->
-                            app.pendingSecret.set(secret)
-                            errorText = null
-                        }.onFailure { error ->
-                            if (error is AccountCreatedButLocked) {
-                                app.pendingSecret.set(error.secretKey)
-                            }
-                            errorText = userVisibleError(error)
-                        }
-                        revision++
-                    }
+                    // Application-scoped: survives Activity recreation and
+                    // hands the Secret Key to app.pendingSecret itself.
+                    setup.start(root, password)
+                    password = ""
+                    confirmPassword = ""
                 },
             )
         } else when (val current = screen) {
             Screen.List -> ItemListScreen(
                 padding = padding,
                 snapshot = snapshot,
+                query = queryText,
                 onQuery = {
-                    session.setQuery(it)
-                    revision++
+                    queryText = it
+                    runCatching { session.setQuery(it) }
                 },
                 onSelectVault = { id ->
                     runCatching { session.selectVault(id) }
                         .onFailure { errorText = userVisibleError(it) }
-                    revision++
                 },
                 onOpen = { row ->
                     revealedKeys = emptySet()
                     runCatching { session.openDetail(row.id) }
                         .onSuccess { screen = Screen.Detail(row.id) }
                         .onFailure { errorText = userVisibleError(it) }
-                    revision++
                 },
-                onLock = {
-                    session.lock()
-                    revision++
-                },
+                onLock = { session.lock() },
                 errorText = errorText,
             )
             is Screen.Detail -> {
@@ -257,11 +263,10 @@ fun GitpassRoot(app: GitpassApplication) {
                     session.clearDetail()
                     revealedKeys = emptySet()
                     screen = Screen.List
-                    revision++
                 }
                 ItemDetailScreen(
                     padding = padding,
-                    item = snapshot.detail,
+                    item = snapshot.detail?.takeIf { it.id == current.itemId },
                     revealed = revealedKeys,
                     errorText = errorText,
                     onToggle = { key ->
@@ -272,17 +277,16 @@ fun GitpassRoot(app: GitpassApplication) {
                         session.clearDetail()
                         revealedKeys = emptySet()
                         screen = Screen.List
-                        revision++
                     },
-                    onLock = {
-                        session.lock()
-                        revision++
-                    },
+                    onLock = { session.lock() },
                 )
             }
         }
     }
 }
+
+private const val MIN_TICK_MS = 250L
+private const val MAX_TICK_MS = 1_000L
 
 @Composable
 private fun localizedLabel(row: DetailRow): String = when (row.key) {
@@ -322,6 +326,7 @@ private fun fieldColors() = OutlinedTextFieldDefaults.colors(
 private fun UnlockScreen(
     padding: PaddingValues,
     vaultExists: Boolean,
+    interrupted: Boolean,
     password: String,
     confirmPassword: String,
     secretKey: String,
@@ -359,10 +364,18 @@ private fun UnlockScreen(
             color = GitpassSecondary,
             fontSize = 13.sp,
         )
+        if (interrupted) {
+            Text(
+                text = stringResource(R.string.setup_interrupted),
+                color = MaterialTheme.colorScheme.error,
+                fontSize = 13.sp,
+                modifier = Modifier.testTag(TestTags.SETUP_INTERRUPTED),
+            )
+        }
         OutlinedTextField(
             value = password,
             onValueChange = onPassword,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag(TestTags.MASTER_PASSWORD),
             label = { Text(stringResource(R.string.master_password)) },
             singleLine = true,
             enabled = !busy,
@@ -379,7 +392,7 @@ private fun UnlockScreen(
             OutlinedTextField(
                 value = secretKey,
                 onValueChange = onSecretKey,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag(TestTags.SECRET_KEY),
                 label = { Text(stringResource(R.string.secret_key)) },
                 placeholder = { Text(stringResource(R.string.secret_key_hint)) },
                 singleLine = true,
@@ -401,7 +414,7 @@ private fun UnlockScreen(
             OutlinedTextField(
                 value = confirmPassword,
                 onValueChange = onConfirm,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag(TestTags.CONFIRM_PASSWORD),
                 label = { Text(stringResource(R.string.confirm_master_password)) },
                 singleLine = true,
                 enabled = !busy,
@@ -427,12 +440,14 @@ private fun UnlockScreen(
                 text = stringResource(R.string.unlock),
                 enabled = !busy && password.isNotEmpty() && secretKey.isNotEmpty(),
                 onClick = onUnlock,
+                tag = TestTags.UNLOCK,
             )
         } else {
             AccentButton(
                 text = stringResource(R.string.create_account),
                 enabled = !busy && password.isNotEmpty() && confirmPassword.isNotEmpty(),
                 onClick = onCreate,
+                tag = TestTags.CREATE_ACCOUNT,
             )
         }
     }
@@ -442,6 +457,7 @@ private fun UnlockScreen(
 private fun ItemListScreen(
     padding: PaddingValues,
     snapshot: VaultSnapshot,
+    query: String,
     onQuery: (String) -> Unit,
     onSelectVault: (String) -> Unit,
     onOpen: (ItemRow) -> Unit,
@@ -480,12 +496,12 @@ private fun ItemListScreen(
                     }
                 }
             }
-            TextButton(onClick = onLock) {
+            TextButton(onClick = onLock, modifier = Modifier.testTag(TestTags.LOCK)) {
                 Text(stringResource(R.string.lock), color = GitpassAccent, fontWeight = FontWeight.Bold)
             }
         }
         OutlinedTextField(
-            value = snapshot.query,
+            value = query,
             onValueChange = onQuery,
             modifier = Modifier.fillMaxWidth(),
             label = { Text(stringResource(R.string.search_items)) },
@@ -498,7 +514,7 @@ private fun ItemListScreen(
         }
         when {
             snapshot.vaults.isEmpty() -> Hint(stringResource(R.string.no_vaults))
-            snapshot.items.isEmpty() && snapshot.query.isBlank() -> Hint(stringResource(R.string.no_items))
+            snapshot.items.isEmpty() && query.isBlank() -> Hint(stringResource(R.string.no_items))
             snapshot.items.isEmpty() -> Hint(stringResource(R.string.no_matches))
             else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 items(snapshot.items, key = { it.id }) { row ->
@@ -555,7 +571,9 @@ private fun ItemDetailScreen(
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = onBack) { Text(stringResource(R.string.back), color = GitpassAccent) }
-            TextButton(onClick = onLock) { Text(stringResource(R.string.lock), color = GitpassAccent, fontWeight = FontWeight.Bold) }
+            TextButton(onClick = onLock, modifier = Modifier.testTag(TestTags.LOCK)) {
+                Text(stringResource(R.string.lock), color = GitpassAccent, fontWeight = FontWeight.Bold)
+            }
         }
         if (item == null) {
             Hint(stringResource(R.string.no_items))
@@ -631,6 +649,7 @@ private fun SecretKeyGate(
         Text(stringResource(R.string.secret_saved_body), color = GitpassSecondary, fontSize = 14.sp)
         Text(
             text = secret,
+            modifier = Modifier.testTag(TestTags.SECRET_KEY_VALUE),
             color = GitpassOnSurface,
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.Bold,
@@ -640,16 +659,16 @@ private fun SecretKeyGate(
             Text(stringResource(R.string.copied), color = GitpassSecondary, fontSize = 13.sp)
         }
         AccentButton(text = stringResource(R.string.copy_secret_key), enabled = true, onClick = onCopy)
-        AccentButton(text = stringResource(R.string.i_saved_it), enabled = true, onClick = onSaved)
+        AccentButton(text = stringResource(R.string.i_saved_it), enabled = true, onClick = onSaved, tag = TestTags.I_SAVED_IT)
     }
 }
 
 @Composable
-private fun AccentButton(text: String, enabled: Boolean, onClick: () -> Unit) {
+private fun AccentButton(text: String, enabled: Boolean, onClick: () -> Unit, tag: String? = null) {
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().let { if (tag != null) it.testTag(tag) else it },
         colors = ButtonDefaults.buttonColors(
             containerColor = GitpassAccent,
             contentColor = GitpassBackground,
@@ -665,4 +684,17 @@ private fun AccentButton(text: String, enabled: Boolean, onClick: () -> Unit) {
 @Composable
 private fun Hint(text: String) {
     Text(text, color = GitpassSecondary, fontSize = 14.sp)
+}
+
+/** Semantics tags for UI tests. Not shown to the user. */
+object TestTags {
+    const val MASTER_PASSWORD = "master-password"
+    const val CONFIRM_PASSWORD = "confirm-master-password"
+    const val SECRET_KEY = "secret-key"
+    const val UNLOCK = "unlock"
+    const val CREATE_ACCOUNT = "create-account"
+    const val LOCK = "lock"
+    const val SECRET_KEY_VALUE = "secret-key-value"
+    const val I_SAVED_IT = "i-saved-it"
+    const val SETUP_INTERRUPTED = "setup-interrupted"
 }
