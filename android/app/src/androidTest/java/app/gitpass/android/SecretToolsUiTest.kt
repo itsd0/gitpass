@@ -28,7 +28,7 @@ class SecretToolsUiTest {
             rule.waitUntil(10_000) { tools.generations > 0 }
             rule.onNodeWithText("Length: 20").assertIsDisplayed()
             rule.onNodeWithText("G".repeat(20)).assertDoesNotExist()
-            rule.onNodeWithText("Cancel").performClick()
+            rule.onNodeWithTag("generator-cancel").performClick()
             rule.onNodeWithTag("crud-password").assertTextEquals("FAKE-original")
             rule.onNodeWithText("Password generator").performScrollTo().performClick()
             rule.waitUntil(10_000) { tools.generations > 1 }

@@ -41,13 +41,14 @@ fun PasswordGenerator(session: VaultSession, epoch: Long, onApply: (String) -> U
             if (failed) Text(stringResource(R.string.generator_failed))
         } },
         confirmButton = { TextButton(enabled = generated != null, onClick = {
+            session.enforceInactivity()
             val state = session.state.value
             if (state.unlocked && state.epoch == epoch) {
                 generated?.let(onApply)
                 session.noteActivity()
             } else onCancel()
         }) { Text(stringResource(R.string.apply_password)) } },
-        dismissButton = { TextButton(onClick = onCancel) { Text(stringResource(R.string.cancel_edit)) } },
+        dismissButton = { TextButton(modifier = Modifier.testTag("generator-cancel"), onClick = onCancel) { Text(stringResource(R.string.cancel_edit)) } },
     )
 }
 
