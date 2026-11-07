@@ -318,33 +318,30 @@ jobs:
           done
           EXTRACT_DIR="$(mktemp -d)"
           unzip -q "$APK" "lib/*/*.so" -d "$EXTRACT_DIR"
-          for so in "$EXTRACT_DIR"/lib/*/*.so; do
-            echo "Inspecting ELF alignment and congruency: $so"
-            readelf -lW "$so" | awk -v file="$so" '
-              $1 == "LOAD" {
-                offset = strtonum($2)
-                vaddr = strtonum($3)
-                align = strtonum($NF)
-                if (align < 16384) {
-                  printf "::error file=%s::LOAD segment alignment %d is less than required 16384 (16 KB)\n", file, align
-                  err = 1
-                }
-                if ((offset % 16384) != (vaddr % 16384)) {
-                  printf "::error file=%s::LOAD segment offset (0x%x) and vaddr (0x%x) not congruent modulo 16384\n", file, offset, vaddr
-                  err = 1
-                }
-              }
-              $1 == "GNU_RELRO" {
-                offset = strtonum($2)
-                vaddr = strtonum($3)
-                if ((offset % 16384) != (vaddr % 16384)) {
-                  printf "::error file=%s::GNU_RELRO segment offset (0x%x) and vaddr (0x%x) not congruent modulo 16384\n", file, offset, vaddr
-                  err = 1
-                }
-              }
-              END { if (err) exit 1 }
-            '
-          done
+          python3 -c "
+          import sys, subprocess, glob
+          for so in glob.glob('$EXTRACT_DIR/lib/*/*.so'):
+              print(f'Inspecting ELF alignment and congruency: {so}')
+              out = subprocess.check_output(['readelf', '-lW', so], text=True)
+              for line in out.splitlines():
+                  parts = line.strip().split()
+                  if not parts:
+                      continue
+                  if parts[0] == 'LOAD':
+                      offset = int(parts[1], 16)
+                      vaddr = int(parts[2], 16)
+                      align = int(parts[-1], 16)
+                      if align < 16384:
+                          sys.exit(f'::error file={so}::LOAD segment alignment {align} < 16384 (16 KB)')
+                      if (offset % 16384) != (vaddr % 16384):
+                          sys.exit(f'::error file={so}::LOAD segment offset ({hex(offset)}) and vaddr ({hex(vaddr)}) not congruent mod 16384')
+                  elif parts[0] == 'GNU_RELRO':
+                      offset = int(parts[1], 16)
+                      vaddr = int(parts[2], 16)
+                      if (offset % 16384) != (vaddr % 16384):
+                          sys.exit(f'::error file={so}::GNU_RELRO segment offset ({hex(offset)}) and vaddr ({hex(vaddr)}) not congruent mod 16384')
+          print('All packaged native libraries verified!')
+          "
           rm -rf "$EXTRACT_DIR"
           sha256sum "$APK" | tee "$APK.sha256"
           echo "Static ELF checks complete: verified 16-KB segment alignment and offset/vaddr congruency for arm64-v8a and x86_64."
