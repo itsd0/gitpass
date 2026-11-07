@@ -12,13 +12,16 @@ on:
       - "ios/**"
       - "crates/gitpass-core/**"
       - "Cargo.lock"
+      - "Cargo.toml"
       - ".github/workflows/ios.yml"
   pull_request:
     paths:
       - "ios/**"
       - "crates/gitpass-core/**"
       - "Cargo.lock"
+      - "Cargo.toml"
       - ".github/workflows/ios.yml"
+  merge_group:
   workflow_dispatch:
 
 permissions:

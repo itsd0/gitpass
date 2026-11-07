@@ -1,12 +1,12 @@
 name: CI
-# Runs on GitHub-hosted runners only (ubuntu-latest for Rust/frontend/extension/supply chain,
+# Runs on GitHub-hosted runners only (ubuntu-latest / ubuntu-24.04 for Rust/frontend/extension/supply chain/Android,
 # macos-latest for the Tauri desktop crate). No self-hosted runners are used
 # anywhere (fork PRs get no secrets: release.yml has no PR trigger).
 # Isolation: test steps run with HOME pointed at a fresh temp dir, so tests can never touch a real
 # ~/.gitpass or ~/.gitconfig even if this file is later run somewhere else.
 #
 # Required status check for branch protection: "ci-ok". It always runs (also on docs-only PRs) and
-# passes when every code job either succeeded or was skipped because no code changed.
+# passes when every code job either succeeded (if applicable) or was cleanly skipped (if non-applicable).
 on:
   push:
     branches: [main]
@@ -33,30 +33,28 @@ jobs:
     outputs:
       code: ${{ steps.f.outputs.code }}
       rust: ${{ steps.f.outputs.rust }}
+      desktop: ${{ steps.f.outputs.desktop }}
+      frontend: ${{ steps.f.outputs.frontend }}
+      supply_chain: ${{ steps.f.outputs.supply_chain }}
+      android: ${{ steps.f.outputs.android }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: verify CI scripts
+        run: |
+          chmod +x scripts/test-ci.sh
+          ./scripts/test-ci.sh < /dev/null
       - id: f
-        name: code changed? (anything other than *.md, docs/, LICENSE); rust changed? (also ignores apps/desktop/src/, extension/)
-        # merge_group and workflow_dispatch always run everything.
+        name: detect changed areas
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
           HEAD: ${{ github.sha }}
         run: |
-          code=true; rust=true
-          if [ "$EVENT" != workflow_dispatch ] && [ "$EVENT" != merge_group ] && [ -n "$BASE" ] && [ "$BASE" != 0000000000000000000000000000000000000000 ] \
-             && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-            files=$(git diff --name-only "$BASE" "$HEAD")
-            echo "$files"
-            if [ -n "$files" ] && ! echo "$files" | grep -vqE '(\.md$|^docs/|^LICENSE$)'; then code=false; fi
-            if [ -n "$files" ] && ! echo "$files" | grep -vqE '(\.md$|^docs/|^LICENSE$|^apps/desktop/src/|^extension/)'; then rust=false; fi
-          fi
-          [ "$code" = true ] || rust=false
-          echo "code=$code" | tee -a "$GITHUB_OUTPUT"
-          echo "rust=$rust" | tee -a "$GITHUB_OUTPUT"
+          chmod +x scripts/ci-detect-changes.sh
+          scripts/ci-detect-changes.sh < /dev/null | tee -a "$GITHUB_OUTPUT"
 
   rust-test:
     name: rust (test)
@@ -132,7 +130,7 @@ jobs:
   frontend:
     name: desktop UI + extension
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.frontend == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -164,7 +162,7 @@ jobs:
   tauri-macos:
     name: desktop app crate (macOS)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.desktop == 'true'
     runs-on: macos-latest
     timeout-minutes: 45
     steps:
@@ -196,7 +194,7 @@ jobs:
   supply-chain:
     name: supply chain (cargo deny + cargo audit)
     needs: changes
-    if: needs.changes.outputs.code == 'true'
+    if: needs.changes.outputs.supply_chain == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -226,17 +224,326 @@ jobs:
           cargo audit --file apps/desktop/src-tauri/Cargo.lock \
             --ignore RUSTSEC-2026-0387 --ignore RUSTSEC-2023-0071
 
+  android:
+    name: android (build + 16kb runtime)
+    needs: changes
+    if: needs.changes.outputs.android == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; version pinned below
+        with:
+          toolchain: ${{ env.RUST_TOOLCHAIN }}
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          save-if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-ndk@4.1.2
+      - name: isolated HOME and toolchain setup
+        run: |
+          echo "CARGO_HOME=${CARGO_HOME:-$HOME/.cargo}" >> "$GITHUB_ENV"
+          echo "RUSTUP_HOME=${RUSTUP_HOME:-$HOME/.rustup}" >> "$GITHUB_ENV"
+          T="$RUNNER_TEMP/home"; rm -rf "$T"; mkdir -p "$T"
+          echo "TEST_HOME=$T" >> "$GITHUB_ENV"
+          if [ ! -d "$ANDROID_HOME/ndk/27.1.12297006" ]; then
+            echo "Installing NDK 27.1.12297006..."
+            echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;27.1.12297006"
+          fi
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.1.12297006" >> "$GITHUB_ENV"
+      - name: Build native libraries & regenerate UniFFI bindings
+        run: |
+          export HOME="$TEST_HOME"
+          if [ ! -f "android/scripts/build-rust.sh" ]; then
+            echo "::error::android/scripts/build-rust.sh not found. Ensure Android companion sources are present."
+            exit 1
+          fi
+          chmod +x android/scripts/build-rust.sh
+          ./android/scripts/build-rust.sh
+      - name: Verify UniFFI Kotlin bindings file-set
+        run: |
+          EXPECTED_BINDING="android/app/src/main/java/app/gitpass/core/gitpass_ios_ffi.kt"
+          test -f "$EXPECTED_BINDING" || { echo "::error::Expected UniFFI Kotlin binding $EXPECTED_BINDING is missing!"; exit 1; }
+          if [ -d "android/app/src/main/java/uniffi" ]; then
+            echo "::error::Stale uniffi/ directory detected in android/app/src/main/java!"
+            exit 1
+          fi
+          FOUND_BINDINGS=$(find android/app/src/main/java -name "*gitpass*ffi*.kt")
+          COUNT=$(echo "$FOUND_BINDINGS" | grep -c -v '^$' || true)
+          if [ "$COUNT" -ne 1 ]; then
+            echo "::error::Duplicate or stale UniFFI bindings detected (found $COUNT, expected 1):"
+            echo "$FOUND_BINDINGS"
+            exit 1
+          fi
+          DIFF=$(git status --porcelain android/app/src/main/java)
+          if [ -n "$DIFF" ]; then
+            echo "::error::Generated Kotlin bindings drift detected. Commit updated generated files."
+            echo "$DIFF"
+            git diff android/app/src/main/java
+            exit 1
+          fi
+      - name: Assemble debug APK, lint & unit checks
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew clean lintDebug testDebugUnitTest assembleDebug --no-daemon --stacktrace
+      - name: Inspect packaged APK, required ABIs & ELF alignment
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -f "$APK" || { echo "::error::Debug APK not found at $APK"; exit 1; }
+          REQUIRED_LIBS=(
+            "lib/arm64-v8a/libgitpass_ios_ffi.so"
+            "lib/arm64-v8a/libjnidispatch.so"
+            "lib/x86_64/libgitpass_ios_ffi.so"
+            "lib/x86_64/libjnidispatch.so"
+          )
+          for lib in "${REQUIRED_LIBS[@]}"; do
+            if ! unzip -l "$APK" | grep -q "$lib"; then
+              echo "::error::Required native library $lib is missing from APK!"
+              exit 1
+            fi
+            echo "Verified APK contains: $lib"
+          done
+          EXTRACT_DIR="$(mktemp -d)"
+          unzip -q "$APK" "lib/*/*.so" -d "$EXTRACT_DIR"
+          python3 -c "
+          import sys, subprocess, glob
+          for so in glob.glob('$EXTRACT_DIR/lib/*/*.so'):
+              print(f'Inspecting ELF alignment and congruency: {so}')
+              out = subprocess.check_output(['readelf', '-lW', so], text=True)
+              for line in out.splitlines():
+                  parts = line.strip().split()
+                  if not parts:
+                      continue
+                  if parts[0] == 'LOAD':
+                      offset = int(parts[1], 16)
+                      vaddr = int(parts[2], 16)
+                      align = int(parts[-1], 16)
+                      if align < 16384:
+                          sys.exit(f'::error file={so}::LOAD segment alignment {align} < 16384 (16 KB)')
+                      if (offset % 16384) != (vaddr % 16384):
+                          sys.exit(f'::error file={so}::LOAD segment offset ({hex(offset)}) and vaddr ({hex(vaddr)}) not congruent mod 16384')
+                  elif parts[0] == 'GNU_RELRO':
+                      offset = int(parts[1], 16)
+                      vaddr = int(parts[2], 16)
+                      if (offset % 16384) != (vaddr % 16384):
+                          sys.exit(f'::error file={so}::GNU_RELRO segment offset ({hex(offset)}) and vaddr ({hex(vaddr)}) not congruent mod 16384')
+          print('All packaged native libraries verified!')
+          "
+          rm -rf "$EXTRACT_DIR"
+          sha256sum "$APK" | tee "$APK.sha256"
+          echo "Static ELF checks complete: verified 16-KB segment alignment and offset/vaddr congruency for arm64-v8a and x86_64."
+          echo "Coverage note: Physical ARM64 runtime execution is not verified in hosted x86_64 CI runners. Runtime testing is executed solely on emulated x86_64 16-KB environment."
+      - name: Configure KVM acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -la /dev/kvm || { echo "::error::/dev/kvm not found or accessible"; exit 1; }
+      - name: Launch API 35 16-KB emulator & run instrumented smoke tests
+        run: |
+          mkdir -p "$RUNNER_TEMP/android-diagnostics"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          export ANDROID_USER_HOME="$HOME/.android"
+          export ANDROID_EMULATOR_HOME="$HOME/.android"
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+
+          echo "Installing system-images;android-35;google_apis_ps16k;x86_64..."
+          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-35;google_apis_ps16k;x86_64"
+
+          # The hardware profile only sets screen/RAM defaults; page size comes from the
+          # ps16k system image. Runner cmdline-tools may not ship newer profiles (pixel_8 is
+          # missing on ubuntu-24.04), so pick the first profile the runner actually lists and
+          # fall back to avdmanager's default profile instead of assuming one exists.
+          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+          "$AVDMANAGER" list device -c > "$RUNNER_TEMP/android-diagnostics/avd-device-profiles.txt" 2>&1 || true
+          echo "Available AVD device profiles:"
+          cat "$RUNNER_TEMP/android-diagnostics/avd-device-profiles.txt"
+
+          DEVICE_NAME=$(python3 -c "
+          import re
+          try:
+              content = open('$RUNNER_TEMP/android-diagnostics/avd-device-profiles.txt').read()
+              available = set(re.findall(r'\"([^\"]+)\"', content) + content.split())
+              candidates = ['pixel_8', 'pixel_7', 'pixel_6', 'pixel_5', 'pixel_4', 'pixel_3a', 'pixel']
+              for cand in candidates:
+                  if cand in available:
+                      print(cand)
+                      break
+          except Exception:
+              pass
+          ")
+          DEVICE_ARGS=()
+          if [ -n "$DEVICE_NAME" ]; then
+            echo "Using AVD device profile: $DEVICE_NAME"
+            DEVICE_ARGS=(--device "$DEVICE_NAME")
+          else
+            echo "::notice::No preferred Pixel profile available; creating AVD with avdmanager default profile."
+          fi
+
+          echo "no" | "$AVDMANAGER" create avd \
+            --name "test_api35_16k" \
+            --package "system-images;android-35;google_apis_ps16k;x86_64" \
+            "${DEVICE_ARGS[@]}" \
+            --force
+
+          echo "Configured AVDs:"
+          "$ANDROID_HOME/emulator/emulator" -list-avds
+
+          "$ANDROID_HOME/emulator/emulator" \
+            -avd test_api35_16k \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -gpu swiftshader_indirect \
+            -camera-back none \
+            -camera-front none \
+            -timezone UTC \
+            -no-snapshot \
+            > "$RUNNER_TEMP/android-diagnostics/emulator.log" 2>&1 &
+          EMU_PID=$!
+          echo "EMU_PID=$EMU_PID" >> "$GITHUB_ENV"
+
+          # 1. Bounded adb device discovery (120s timeout)
+          echo "Waiting for adb device discovery (bounded timeout 120s)..."
+          device_ready=0
+          for i in $(seq 1 120); do
+            if adb devices | grep -E 'emulator-[0-9]+\s+device' >/dev/null 2>&1; then
+              device_ready=1
+              echo "Device discovered by adb after ${i}s."
+              break
+            fi
+            if ! kill -0 "$EMU_PID" 2>/dev/null && ! pgrep -f "qemu-system|emulator" >/dev/null 2>&1; then
+              echo "::error::Emulator process (PID $EMU_PID) died unexpectedly during device discovery."
+              cat "$RUNNER_TEMP/android-diagnostics/emulator.log" || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ "$device_ready" -ne 1 ]; then
+            echo "::error::Emulator device discovery timed out after 120 seconds."
+            adb devices -l > "$RUNNER_TEMP/android-diagnostics/adb-devices-timeout.txt" 2>&1 || true
+            cat "$RUNNER_TEMP/android-diagnostics/emulator.log" || true
+            exit 1
+          fi
+
+          # 2. Bounded emulator boot completion (240s timeout)
+          echo "Waiting for emulator boot completion (bounded timeout 240s)..."
+          boot_completed=0
+          for i in $(seq 1 240); do
+            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
+              boot_completed=1
+              echo "Emulator boot completed after ${i}s."
+              break
+            fi
+            if ! kill -0 "$EMU_PID" 2>/dev/null && ! pgrep -f "qemu-system|emulator" >/dev/null 2>&1; then
+              echo "::error::Emulator process (PID $EMU_PID) died unexpectedly during boot."
+              cat "$RUNNER_TEMP/android-diagnostics/emulator.log" || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ "$boot_completed" -ne 1 ]; then
+            echo "::error::Emulator boot timed out after 240 seconds."
+            timeout 15 adb logcat -d > "$RUNNER_TEMP/android-diagnostics/logcat-boot-timeout.txt" 2>&1 || true
+            timeout 15 adb shell getprop > "$RUNNER_TEMP/android-diagnostics/getprop-timeout.txt" 2>&1 || true
+            cat "$RUNNER_TEMP/android-diagnostics/emulator.log" || true
+            exit 1
+          fi
+
+          echo "=== Device & Runtime Diagnostics ==="
+          echo "Release:   $(adb shell getprop ro.build.version.release | tr -d '\r')"
+          echo "SDK:       $(adb shell getprop ro.build.version.sdk | tr -d '\r')"
+          echo "ABI:       $(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
+          echo "Model:     $(adb shell getprop ro.product.model | tr -d '\r')"
+          echo "Kernel:    $(adb shell uname -a | tr -d '\r')"
+          PAGE_SIZE=$(adb shell getconf PAGE_SIZE | tr -d '\r')
+          echo "PAGE_SIZE: $PAGE_SIZE"
+
+          if [ "$PAGE_SIZE" != "16384" ]; then
+            echo "::error::Emulator did not boot with 16-KB pages! Expected 16384, got $PAGE_SIZE"
+            exit 1
+          fi
+          echo "Verified: Accelerated x86_64 emulator running on true 16-KB page size kernel."
+          echo "Coverage notice: This validates x86_64 emulated 16-KB behavior; physical ARM64 runtime execution remains unverified in hosted CI."
+
+          cd android
+          ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace
+      - name: Collect diagnostics and stop emulator
+        if: always()
+        run: |
+          mkdir -p "$RUNNER_TEMP/android-diagnostics"
+          timeout 15 adb devices -l > "$RUNNER_TEMP/android-diagnostics/adb-devices-final.txt" 2>&1 || true
+          timeout 15 adb logcat -d > "$RUNNER_TEMP/android-diagnostics/logcat-final.txt" 2>&1 || true
+          echo "Stopping emulator..."
+          timeout 20 adb emu kill 2>/dev/null || true
+          if [ -n "${EMU_PID:-}" ]; then
+            for _ in $(seq 1 15); do kill -0 "$EMU_PID" 2>/dev/null || break; sleep 1; done
+            if kill -0 "$EMU_PID" 2>/dev/null; then
+              echo "Emulator still running after graceful stop; sending SIGKILL."
+              kill -9 "$EMU_PID" 2>/dev/null || true
+            fi
+          fi
+          pkill -9 -f "qemu-system|emulator" 2>/dev/null || true
+      - name: Upload Android artifacts & test reports
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: gitpass-android-debug-apk
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/debug/app-debug.apk.sha256
+            android/app/build/reports/tests/testDebugUnitTest/
+            android/app/build/reports/androidTests/connected/
+            android/app/build/reports/lint-results-debug.html
+            ${{ runner.temp }}/android-diagnostics/
+          retention-days: 7
+          if-no-files-found: warn
+
   ci-ok:
     name: ci-ok
     if: always()
-    needs: [changes, rust-test, rust-clippy, frontend, tauri-macos, supply-chain]
+    needs: [changes, rust-test, rust-clippy, frontend, tauri-macos, supply-chain, android]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: all code jobs passed or were skipped
-        env:
-          RESULTS: ${{ join(needs.*.result, ' ') }}
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: verify CI scripts logic
         run: |
-          echo "results: $RESULTS"
-          for r in $RESULTS; do case "$r" in success|skipped) ;; *) echo "::error::a CI job ended with '$r'"; exit 1;; esac; done
-          [ "${{ needs.changes.result }}" = success ] || { echo "::error::change detection failed"; exit 1; }
+          chmod +x scripts/test-ci.sh
+          ./scripts/test-ci.sh < /dev/null
+      - name: evaluate applicability-aware status gate
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          RUST_NEEDED: ${{ needs.changes.outputs.rust }}
+          RUST_TEST_RESULT: ${{ needs.rust-test.result }}
+          RUST_CLIPPY_RESULT: ${{ needs.rust-clippy.result }}
+          FRONTEND_NEEDED: ${{ needs.changes.outputs.frontend }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          DESKTOP_NEEDED: ${{ needs.changes.outputs.desktop }}
+          TAURI_MACOS_RESULT: ${{ needs.tauri-macos.result }}
+          SUPPLY_CHAIN_NEEDED: ${{ needs.changes.outputs.supply_chain }}
+          SUPPLY_CHAIN_RESULT: ${{ needs.supply-chain.result }}
+          ANDROID_NEEDED: ${{ needs.changes.outputs.android }}
+          ANDROID_RESULT: ${{ needs.android.result }}
+        run: |
+          chmod +x scripts/ci-ok-gate.sh
+          scripts/ci-ok-gate.sh
