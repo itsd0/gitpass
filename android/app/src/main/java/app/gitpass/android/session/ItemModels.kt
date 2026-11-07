@@ -77,14 +77,15 @@ data class VaultSnapshot(
     val detail: ItemView?,
     /** Lock generation. Changes on every lock, so UI state keyed on it starts fresh. */
     val epoch: Long = 0,
+    val trash: Boolean = false,
 )
 
 object ItemSearch {
     /** Default list hides deleted and archived rows, then applies a case-insensitive substring. */
-    fun visible(items: List<ItemRow>, query: String): List<ItemRow> {
+    fun visible(items: List<ItemRow>, query: String, trash: Boolean = false): List<ItemRow> {
         val q = query.trim().lowercase(Locale.ROOT)
         return items
-            .filter { !it.deleted && !it.archived }
+            .filter { if (trash) it.deleted else !it.deleted && !it.archived }
             .filter { row ->
                 if (q.isEmpty()) {
                     true

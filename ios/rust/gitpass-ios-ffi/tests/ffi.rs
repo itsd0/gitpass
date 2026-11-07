@@ -248,3 +248,74 @@ fn concurrent_reads_stay_stable() {
         }
     });
 }
+
+#[test]
+fn android_login_edit_and_trash_preserve_extra_fields() {
+    use gitpass_ios_ffi::{FfiField, FfiSection};
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("fake-vault").to_str().unwrap().to_string();
+    let password = "FAKE-test-password-only".to_string();
+    let secret = create_account(root.clone(), password.clone()).unwrap();
+    let vault = open_vault(root.clone(), password.clone(), secret.clone()).unwrap();
+    let vid = vault.create_vault("Fake".into(), None).unwrap();
+    let mut input = empty_input("Original");
+    input.password = Some("FAKE-old".into());
+    input.tags = vec!["tag".into()];
+    input.favorite = true;
+    input.sections = vec![FfiSection {
+        id: "custom".into(),
+        title: Some("Extra".into()),
+        fields: vec![FfiField {
+            id: "x".into(),
+            label: "Extra".into(),
+            kind: "concealed".into(),
+            value: Some("FAKE-extra".into()),
+        }],
+    }];
+    let id = vault.create_item(vid.clone(), input).unwrap();
+    let old = vault.get_item(vid.clone(), id.clone()).unwrap();
+    let mut sections = old.sections.clone();
+    for section in &mut sections {
+        if section.id == "login" {
+            for field in &mut section.fields {
+                if field.id == "password" {
+                    field.value = Some("FAKE-new".into());
+                }
+            }
+        }
+    }
+    vault
+        .update_item(
+            vid.clone(),
+            id.clone(),
+            ItemInput {
+                title: "Edited".into(),
+                username: old.username,
+                password: Some("FAKE-new".into()),
+                url: old.url,
+                notes: old.notes,
+                totp: old.totp,
+                category: old.category,
+                tags: old.tags,
+                favorite: old.favorite,
+                sections,
+            },
+        )
+        .unwrap();
+    vault.delete_item(vid.clone(), id.clone()).unwrap();
+    assert!(vault.get_item(vid.clone(), id.clone()).unwrap().deleted);
+    vault.restore_item(vid.clone(), id.clone()).unwrap();
+    drop(vault);
+    let reopened = open_vault(root, password, secret).unwrap();
+    let edited = reopened.get_item(vid, id).unwrap();
+    assert!(!edited.deleted);
+    assert_eq!(edited.title, "Edited");
+    assert_eq!(edited.password.as_deref(), Some("FAKE-new"));
+    assert_eq!(edited.tags, vec!["tag"]);
+    assert!(edited.favorite);
+    assert!(edited
+        .sections
+        .iter()
+        .flat_map(|s| &s.fields)
+        .any(|f| f.id == "x" && f.value.as_deref() == Some("FAKE-extra")));
+}

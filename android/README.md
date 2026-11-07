@@ -131,3 +131,24 @@ With an emulator or device attached:
 cd android
 ./gradlew connectedDebugAndroidTest
 ```
+
+## Stacked milestone: local login CRUD (#443)
+
+Depends on the local-vault foundation in #442; do not merge before that foundation
+has passed Android runtime/security regression tests and merged.
+
+- Create login items and edit title, username, password, URL and notes. Other
+  categories stay view-only for editing; existing custom sections, tags,
+  favorite flag and TOTP are retained, not silently discarded.
+- Move any item to Trash (core soft-delete) and restore it; no permanent delete.
+  Archived items remain hidden in the active list as before.
+- Writes capture vault ID and lock epoch, enforce inactivity and reject stale
+  submissions after lock/re-unlock. Editor state is not saved across Activity
+  recreation or lock; unsaved edits are deliberately discarded.
+- Password generation, live TOTP, sync, Autofill and passkeys are separate work.
+  No crypto, vault format, Swift API or workflow changes in this milestone.
+
+Tests use fake/temp vaults only. Physical connected tests are not run (avoids
+uninstall/data-loss risk). The foundation CI emulator currently needs a separately
+authorized memory-provisioning workflow fix after a confirmed lowmemorykiller kill;
+no green runtime claim is made until the whole instrumented suite executes.
