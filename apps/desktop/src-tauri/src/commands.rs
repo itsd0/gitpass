@@ -188,9 +188,8 @@ fn open_external(url: &str) -> R<()> {
 /// does nothing there, so the PDF must not go through print at all. The
 /// Secret Key must be revealed (the frontend disables the button otherwise);
 /// the backend refuses a keyless kit rather than writing an incomplete file.
-#[tauri::command] pub fn save_emergency_kit_pdf(s: State<App>, dest_path: String, account_id: String, vault_path: String, remote: Option<String>, device_name: Option<String>, created_at: String, secret_key: Option<String>) -> R<()> {
-    let data = a::EmergencyKitData { account_id, vault_path, remote, device_name, created_at, secret_key_available: secret_key.is_some(), secret_key };
-    s.save_emergency_kit_pdf(&data, &dest_path).map_err(e)
+#[tauri::command] pub fn save_emergency_kit_pdf(s: State<App>, dest_path: String, kit: a::EmergencyKitData) -> R<()> {
+    s.save_emergency_kit_pdf(&kit, &dest_path).map_err(e)
 }
 /// Favicon URL (null when showWebsiteIcons setting is off or fetch fails).
 #[tauri::command(async)] pub fn favicon_url(s: State<'_, App>, url: String) -> Option<String> { s.favicon_url(&url) }

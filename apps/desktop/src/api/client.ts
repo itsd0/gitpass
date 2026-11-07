@@ -112,6 +112,6 @@ export const api = {
   emergencyKit: () => call<string>('emergency_kit'),
   /** Structured kit; secretKey is null unless just created/rotated or `password` (master password) is given. */
   emergencyKitData: (a: { password?: string } = {}) => call<T.EmergencyKitData>('emergency_kit_data', a),   // returns HTML/text kit WITHOUT secret key unless user just rotated
-  saveEmergencyKitPdf: (a: { destPath: string; accountId: string; vaultPath: string; remote?: string | null; deviceName?: string | null; createdAt: string; secretKey?: string | null }) => call<void>('save_emergency_kit_pdf', a),
+  saveEmergencyKitPdf: (a: { destPath: string; kit: T.EmergencyKitData }) => call<void>('save_emergency_kit_pdf', a),
   faviconUrl: (a:{url:string}) => call<string|null>('favicon_url', a), // local cache/data URL; never leaks vault data
 };

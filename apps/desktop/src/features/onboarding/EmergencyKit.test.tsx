@@ -76,7 +76,7 @@ describe('emergency kit', () => {
     await screen.findByText('A3-K');
     fireEvent.click(screen.getByText(en['kit.savePdf']));
     await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
-    expect(save).toHaveBeenCalledWith(expect.objectContaining({ accountId: 'acc-1', secretKey: 'A3-K' }));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ kit: expect.objectContaining({ accountId: 'acc-1', secretKey: 'A3-K' }) }));
     expect(save.mock.calls[0][0].destPath).toContain('gitpass-emergency-kit');
     await waitFor(() => expect(done).toHaveBeenCalledTimes(1));
   });

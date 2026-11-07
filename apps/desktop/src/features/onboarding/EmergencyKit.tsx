@@ -98,7 +98,7 @@ export function EmergencyKitPage({ data, onClose, onPrinted, onReveal, onRotate,
       <button type="button" className="ek-btn" disabled={!data.secretKey} onClick={async () => {
         const path = await chooseExportPath('gitpass-emergency-kit', 'pdf'); if (!path) return;
         try {
-          await api.saveEmergencyKitPdf({ destPath: path, accountId: data.accountId, vaultPath: data.vaultPath, remote: data.remote, deviceName: data.deviceName, createdAt: data.createdAt, secretKey: data.secretKey });
+          await api.saveEmergencyKitPdf({ destPath: path, kit: data });
           toast(t('common.saved')); onPrinted?.();
         } catch (e) { toast(String(e), 'danger'); }
       }}><Download size={14} /> {t('kit.savePdf')}</button>
