@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">gitpass</string>
+    <string name="app_tagline">Encrypted vault in your git repo</string>
+    <string name="bridge_status_title">Kotlin-to-Rust Bridge</string>
+    <string name="bridge_status_connected">Connected</string>
+    <string name="bridge_status_generating">Generating…</string>
+    <string name="smoke_test_button">Run FFI Smoke Test</string>
+    <string name="smoke_test_result_title">Generated Test Secret</string>
+    <string name="native_bridge_verified">UniFFI native bridge verified</string>
+</resources>

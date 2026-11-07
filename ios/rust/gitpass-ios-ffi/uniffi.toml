@@ -1,2 +1,5 @@
 [bindings.swift]
 ffi_module_name = "GitpassCore"
+
+[bindings.kotlin]
+package_name = "app.gitpass.core"
