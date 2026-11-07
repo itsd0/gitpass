@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">gitpass</string>
+    <string name="app_tagline">git repo အတွင်း လုံခြုံစွာသိမ်းဆည်းထားသော စကားဝှက်များ</string>
+    <string name="bridge_status_title">Kotlin-to-Rust ချိတ်ဆက်မှု</string>
+    <string name="bridge_status_connected">ချိတ်ဆက်ထားသည်</string>
+    <string name="bridge_status_generating">ထုတ်ယူနေသည်…</string>
+    <string name="smoke_test_button">FFI စမ်းသပ်မှု ပြုလုပ်မည်</string>
+    <string name="smoke_test_result_title">ထုတ်ယူထားသော စမ်းသပ်စကားဝှက်</string>
+    <string name="native_bridge_verified">UniFFI ချိတ်ဆက်မှု အောင်မြင်သည်</string>
+</resources>

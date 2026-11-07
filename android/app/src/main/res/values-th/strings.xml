@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">gitpass</string>
+    <string name="app_tagline">ห้องนิรภัยที่เข้ารหัสไว้ในที่เก็บ git ของคุณ</string>
+    <string name="bridge_status_title">การเชื่อมต่อ Kotlin-to-Rust</string>
+    <string name="bridge_status_connected">เชื่อมต่อแล้ว</string>
+    <string name="bridge_status_generating">กำลังสร้าง…</string>
+    <string name="smoke_test_button">ทดสอบ FFI</string>
+    <string name="smoke_test_result_title">รหัสผ่านทดสอบที่สร้างขึ้น</string>
+    <string name="native_bridge_verified">การเชื่อมต่อ UniFFI สำเร็จ</string>
+</resources>
