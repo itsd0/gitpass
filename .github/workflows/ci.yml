@@ -229,7 +229,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.android == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     env:
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_DEV_DEBUG: "0"
@@ -355,12 +355,34 @@ jobs:
       - name: Launch API 35 16-KB emulator & run instrumented smoke tests
         run: |
           mkdir -p "$RUNNER_TEMP/android-diagnostics"
-          echo "Installing system-images;android-35;google_apis_ps16k;x86_64..."
-          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-35;google_apis_ps16k;x86_64"
-          echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          echo "Installing emulator, platform-tools and system-images;android-35;google_apis_ps16k;x86_64..."
+          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "emulator" "platform-tools" "system-images;android-35;google_apis_ps16k;x86_64"
+          # The hardware profile only sets screen/RAM defaults; page size comes from the
+          # ps16k system image. Runner cmdline-tools may not ship newer profiles (pixel_8 is
+          # missing on ubuntu-24.04), so pick the first profile the runner actually lists and
+          # fall back to avdmanager's default profile instead of assuming one exists.
+          AVDMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
+          "$AVDMANAGER" list device -c > "$RUNNER_TEMP/android-diagnostics/avd-device-profiles.txt" 2>&1 || true
+          echo "Available AVD device profiles:"
+          cat "$RUNNER_TEMP/android-diagnostics/avd-device-profiles.txt"
+          DEVICE_ARGS=()
+          for candidate in pixel_8 pixel_7 pixel_6 pixel_5 pixel_4 pixel_3a pixel; do
+            if tr -d '\r' < "$RUNNER_TEMP/android-diagnostics/avd-device-profiles.txt" | grep -qx "$candidate"; then
+              DEVICE_ARGS=(--device "$candidate")
+              break
+            fi
+          done
+          if [ "${#DEVICE_ARGS[@]}" -eq 0 ]; then
+            echo "::notice::No preferred Pixel profile available; creating AVD with avdmanager's default profile."
+          else
+            echo "Using AVD device profile: ${DEVICE_ARGS[1]}"
+          fi
+          echo "no" | "$AVDMANAGER" create avd \
             --name "test_api35_16k" \
             --package "system-images;android-35;google_apis_ps16k;x86_64" \
-            --device "pixel_8" \
+            "${DEVICE_ARGS[@]}" \
             --force
           "$ANDROID_HOME/emulator/emulator" \
             -avd test_api35_16k \
@@ -449,7 +471,12 @@ jobs:
           adb logcat -d > "$RUNNER_TEMP/android-diagnostics/logcat-final.txt" 2>&1 || true
           if [ -n "${EMU_PID:-}" ]; then
             echo "Stopping emulator (PID $EMU_PID)..."
-            adb emu kill 2>/dev/null || kill -9 "$EMU_PID" 2>/dev/null || true
+            timeout 20 adb emu kill 2>/dev/null || true
+            for _ in $(seq 1 30); do kill -0 "$EMU_PID" 2>/dev/null || break; sleep 1; done
+            if kill -0 "$EMU_PID" 2>/dev/null; then
+              echo "Emulator still running after graceful stop; sending SIGKILL."
+              kill -9 "$EMU_PID" 2>/dev/null || true
+            fi
           fi
       - name: Upload Android artifacts & test reports
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
