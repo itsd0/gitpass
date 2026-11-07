@@ -159,3 +159,92 @@ fn merge_prefers_higher_clock() {
     let merged: ItemRecord = serde_json::from_str(&merged_json).unwrap();
     assert_eq!(merged.item.title, "Local");
 }
+
+#[test]
+fn tampered_keyset_does_not_unlock() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("vault");
+    let secret = create_account(root.to_str().unwrap().to_string(), "pw-one-ok".to_string()).unwrap();
+    let path = root.join("keyset.enc");
+    let mut value: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    let ct = value["ct"].as_str().unwrap().to_string();
+    assert!(ct.len() > 8, "ciphertext too short");
+    let mut chars = ct.into_bytes();
+    let index = chars.len() / 2;
+    chars[index] = if chars[index] == b'A' { b'B' } else { b'A' };
+    value["ct"] = serde_json::Value::String(String::from_utf8(chars).unwrap());
+    std::fs::write(&path, serde_json::to_vec(&value).unwrap()).unwrap();
+    let opened = open_vault(root.to_str().unwrap().to_string(), "pw-one-ok".to_string(), secret);
+    let message = match opened {
+        Ok(_) => panic!("tampered keyset must not unlock"),
+        Err(error) => error.to_string(),
+    };
+    assert!(
+        message.contains("tampered") || message.contains("unlock failed"),
+        "unexpected failure: {message}"
+    );
+}
+
+#[test]
+fn tampered_item_does_not_decrypt() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("vault");
+    let secret = create_account(root.to_str().unwrap().to_string(), "pw-one-ok".to_string()).unwrap();
+    let vault = open_vault(root.to_str().unwrap().to_string(), "pw-one-ok".to_string(), secret).unwrap();
+    let vid = vault.create_vault("Personal".to_string(), None).unwrap();
+    let mut input = empty_input("Keep");
+    input.password = Some("do-not-leak".to_string());
+    let iid = vault.create_item(vid.clone(), input).unwrap();
+    let item_path = root.join("vaults").join(&vid).join("items").join(format!("{iid}.enc"));
+    let mut bytes = std::fs::read(&item_path).unwrap();
+    assert!(!bytes.is_empty());
+    let index = bytes.len() / 2;
+    bytes[index] ^= 0xff;
+    std::fs::write(&item_path, &bytes).unwrap();
+    let message = vault.get_item(vid, iid).expect_err("tampered item must fail").to_string();
+    assert!(!message.contains("do-not-leak"), "{message}");
+}
+
+#[test]
+fn dropping_the_vault_lets_it_open_again() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("vault");
+    let secret = create_account(root.to_str().unwrap().to_string(), "pw-one-ok".to_string()).unwrap();
+    {
+        let vault = open_vault(root.to_str().unwrap().to_string(), "pw-one-ok".to_string(), secret.clone()).unwrap();
+        assert!(vault.list_vaults().unwrap().is_empty());
+    }
+    let vault = open_vault(root.to_str().unwrap().to_string(), "pw-one-ok".to_string(), secret).unwrap();
+    let vid = vault.create_vault("Personal".to_string(), None).unwrap();
+    assert_eq!(vault.list_vaults().unwrap().len(), 1);
+    assert!(!vid.is_empty());
+}
+
+#[test]
+fn concurrent_reads_stay_stable() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("vault");
+    let secret = create_account(root.to_str().unwrap().to_string(), "pw-one-ok".to_string()).unwrap();
+    let vault = open_vault(root.to_str().unwrap().to_string(), "pw-one-ok".to_string(), secret).unwrap();
+    let vid = vault.create_vault("Personal".to_string(), None).unwrap();
+    let mut input = empty_input("Stable");
+    input.username = Some("alice".to_string());
+    let iid = vault.create_item(vid.clone(), input).unwrap();
+    std::thread::scope(|scope| {
+        for _ in 0..8 {
+            let vault = &vault;
+            let vid = &vid;
+            let iid = &iid;
+            scope.spawn(move || {
+                for _ in 0..20 {
+                    let items = vault.list_items(vid.clone()).expect("list");
+                    assert_eq!(items.len(), 1);
+                    assert_eq!(items[0].title, "Stable");
+                    let detail = vault.get_item(vid.clone(), iid.clone()).expect("get");
+                    assert_eq!(detail.title, "Stable");
+                    assert_eq!(detail.username.as_deref(), Some("alice"));
+                }
+            });
+        }
+    });
+}
