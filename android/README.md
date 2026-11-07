@@ -4,8 +4,9 @@ This directory contains the first approved Android milestone for the `gitpass` c
 
 ## Scope & Status
 
-- **Milestone 1 (current):** Buildable Kotlin + Jetpack Compose shell in `android/`, `#121212` dark background, `#F28C28` orange accent, localized string scaffolding (`en`, `values-my`, `values-th`), and a working Kotlin-to-Rust UniFFI bridge packaging `arm64-v8a` and `x86_64` native libraries into a debug APK.
-- **Non-goals:** No vault CRUD, credential caching, biometrics, sync/OAuth, Autofill, passkeys, release signing, or crypto/KDF modifications. Temp/fake data only.
+- **Milestone 1:** Buildable Kotlin + Jetpack Compose shell in `android/`, `#121212` dark background, `#F28C28` orange accent, localized strings (`en`, `values-my`, `values-th`), and a Kotlin-to-Rust UniFFI bridge packaging `arm64-v8a` and `x86_64` native libraries into a debug APK (#438).
+- **Milestone 2 (current):** Local vault unlock with Master Password + Secret Key, in-account vault selection, item list, substring search, item detail, and lock (#441). A new account can be created on the device so there is a vault to unlock. The vault directory is `noBackupFilesDir/vault`. Locking drops the UniFFI `Vault` (and the core `Session`). The app also locks when it leaves the foreground, and after 5 minutes with no activity while it is open. `FLAG_SECURE` is set on the activity window. The one-time Secret Key from account creation stays on that secure screen until the owner confirms they saved it.
+- **Not in this milestone:** Item editing, sync, Autofill, biometrics, Credential Provider passkeys, release signing, and crypto/KDF changes. Kotlin `String` values that cross the bridge are not wiped from the JVM heap. Search uses list summaries (title, subtitle, URL, category, tags), not notes or secrets. Deleted and archived items are hidden. Temp/fake data only.
 
 ## Pinned Build Inputs
 
