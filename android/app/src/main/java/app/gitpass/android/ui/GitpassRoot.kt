@@ -269,7 +269,7 @@ fun GitpassRoot(app: GitpassApplication) {
             }
             is Screen.Edit -> {
                 val vaultId = snapshot.selectedVaultId
-                LoginEditor(current.item, writing, errorText, padding,
+                LoginEditor(current.item, writing, errorText, padding, session, snapshot.epoch,
                     onLock = { session.lock() },
                     onCancel = { screen = Screen.List },
                     onSave = { edit ->
@@ -324,6 +324,8 @@ fun GitpassRoot(app: GitpassApplication) {
                 ItemDetailScreen(
                     padding = padding,
                     item = snapshot.detail?.takeIf { it.id == current.itemId },
+                    session = session,
+                    epoch = snapshot.epoch,
                     revealed = revealedKeys,
                     errorText = errorText,
                     onToggle = { key ->
@@ -613,6 +615,8 @@ private fun ItemListScreen(
 private fun ItemDetailScreen(
     padding: PaddingValues,
     item: ItemView?,
+    session: VaultSession,
+    epoch: Long,
     revealed: Set<String>,
     errorText: String?,
     onToggle: (String) -> Unit,
@@ -652,13 +656,18 @@ private fun ItemDetailScreen(
                 Spacer(Modifier.height(4.dp))
                 Text(row.sectionTitle, color = GitpassAccent, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
             }
-            DetailField(row, revealed.contains(row.key), onToggle)
+            DetailField(row, revealed.contains(row.key), onToggle, session, item.id, epoch)
         }
     }
 }
 
 @Composable
-private fun DetailField(row: DetailRow, revealed: Boolean, onToggle: (String) -> Unit) {
+private fun DetailField(row: DetailRow, revealed: Boolean, onToggle: (String) -> Unit,
+                        session: VaultSession, itemId: String, epoch: Long) {
+    if (row.isTotp) {
+        LiveTotpField(stringResource(R.string.one_time_password), session, itemId, row.key, epoch, revealed) { onToggle(row.key) }
+        return
+    }
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = GitpassSurface),
@@ -759,14 +768,16 @@ object TestTags {
 
 @Composable
 private fun LoginEditor(
-    item: ItemView?, busy: Boolean, error: String?, padding: PaddingValues,
+    item: ItemView?, busy: Boolean, error: String?, padding: PaddingValues, session: VaultSession, epoch: Long,
     onLock: () -> Unit, onCancel: () -> Unit, onSave: (ItemEdit) -> Unit,
 ) {
+    var generator by remember { mutableStateOf(false) }
     var title by remember { mutableStateOf(item?.title.orEmpty()) }
     var username by remember { mutableStateOf(item?.username.orEmpty()) }
     var password by remember { mutableStateOf(item?.password.orEmpty()) }
     var url by remember { mutableStateOf(item?.url.orEmpty()) }
     var notes by remember { mutableStateOf(item?.notes.orEmpty()) }
+    if (generator) PasswordGenerator(session, epoch, onApply = { password = it; generator = false }, onCancel = { generator = false })
     BackHandler(enabled = !busy, onBack = onCancel)
     Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -777,6 +788,7 @@ private fun LoginEditor(
         OutlinedTextField(password, { password = it }, modifier = Modifier.testTag("crud-password"), label = { Text(stringResource(R.string.password)) }, enabled = !busy,
             singleLine = true, visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false))
+        TextButton(enabled = !busy, onClick = { session.noteActivity(); generator = true }) { Text(stringResource(R.string.generator)) }
         OutlinedTextField(url, { url = it }, modifier = Modifier.testTag("crud-url"), label = { Text(stringResource(R.string.website)) }, enabled = !busy, singleLine = true)
         OutlinedTextField(notes, { notes = it }, modifier = Modifier.testTag("crud-notes"), label = { Text(stringResource(R.string.notes)) }, enabled = !busy)
         if (error != null) Text(error, color = MaterialTheme.colorScheme.error)

@@ -319,3 +319,25 @@ fn android_login_edit_and_trash_preserve_extra_fields() {
         .flat_map(|s| &s.fields)
         .any(|f| f.id == "x" && f.value.as_deref() == Some("FAKE-extra")));
 }
+
+#[test]
+fn android_tools_use_core_rfc6238_rollover_and_supported_generator_lengths() {
+    let spec = gitpass_core::totp::parse("otpauth://totp/FAKE?secret=GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ&digits=8&algorithm=SHA1&period=30").unwrap();
+    assert_eq!(
+        gitpass_core::totp::code_at(&spec, 59),
+        ("94287082".into(), 1)
+    );
+    assert_eq!(
+        gitpass_core::totp::code_at(&spec, 60),
+        ("37359152".into(), 30)
+    );
+    assert_eq!(
+        gitpass_core::totp::code_at(&spec, 59),
+        ("94287082".into(), 1)
+    );
+    for length in [12, 20, 64] {
+        let generated = generate_password(length);
+        assert_eq!(generated.len(), length as usize);
+        assert!(!generated.chars().any(char::is_whitespace));
+    }
+}
