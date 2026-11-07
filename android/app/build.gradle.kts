@@ -68,8 +68,12 @@ dependencies {
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
 
-    // JNA AAR dependency required by UniFFI generated Kotlin bindings
-    implementation("net.java.dev.jna:jna:5.14.0@aar")
+    // JNA AAR dependency required by UniFFI generated Kotlin bindings (pinned in libs.versions.toml)
+    implementation(libs.net.java.dev.jna) {
+        artifact {
+            type = "aar"
+        }
+    }
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

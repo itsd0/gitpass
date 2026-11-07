@@ -15,6 +15,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.gitpass.android.ui.theme.*
+import app.gitpass.core.generatePassword
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -36,7 +37,7 @@ fun GitpassApp() {
     fun runSmokeTest() {
         try {
             // Real Kotlin-to-UniFFI native call: generate password of length 16
-            val pw = uniffi.gitpass_ios_ffi.generatePassword(16UL)
+            val pw = generatePassword(16UL)
             generatedSecret = pw
             bridgeStatus = "OK (len=${pw.length})"
             errorMessage = null

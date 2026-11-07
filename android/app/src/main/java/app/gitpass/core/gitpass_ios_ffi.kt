@@ -3,7 +3,7 @@
 
 @file:Suppress("NAME_SHADOWING")
 
-package uniffi.gitpass_ios_ffi
+package app.gitpass.core
 
 // Common helper code.
 //

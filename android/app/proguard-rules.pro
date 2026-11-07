@@ -1,3 +1,3 @@
 -keep class com.sun.jna.** { *; }
 -keepclassmembers class * extends com.sun.jna.** { *; }
--keep class uniffi.** { *; }
+-keep class app.gitpass.core.** { *; }
