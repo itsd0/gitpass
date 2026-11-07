@@ -47,4 +47,11 @@
     <string name="item_title">ชื่อรายการ</string>
     <string name="save_item">บันทึก</string>
     <string name="cancel_edit">ยกเลิก</string>
+    <string name="generator">สร้างรหัสผ่าน</string>
+    <string name="generator_length">ความยาว: %1$d</string>
+    <string name="regenerate">สร้างใหม่</string>
+    <string name="apply_password">ใช้รหัสผ่าน</string>
+    <string name="generator_failed">สร้างรหัสผ่านไม่สำเร็จ</string>
+    <string name="invalid_totp">การตั้งค่า TOTP ไม่ถูกต้อง</string>
+    <string name="totp_remaining">เหลือ %1$d วินาที</string>
 </resources>

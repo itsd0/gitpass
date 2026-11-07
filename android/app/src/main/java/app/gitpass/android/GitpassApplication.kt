@@ -5,6 +5,8 @@ import androidx.annotation.VisibleForTesting
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import app.gitpass.android.session.SecretTools
+import app.gitpass.android.session.NativeSecretTools
 import app.gitpass.android.session.AccountSetup
 import app.gitpass.android.session.FfiVaultGateway
 import app.gitpass.android.session.PendingSecret
@@ -50,15 +52,15 @@ class GitpassApplication : Application() {
      * and a controllable clock. Never used with the production directory.
      */
     @VisibleForTesting
-    fun installForTest(gateway: VaultGateway, root: File, nowMs: () -> Long) {
+    fun installForTest(gateway: VaultGateway, root: File, nowMs: () -> Long, secretTools: SecretTools = NativeSecretTools) {
         if (this::session.isInitialized) session.lock()
         pendingSecret.clear()
-        install(gateway, root, nowMs)
+        install(gateway, root, nowMs, secretTools)
     }
 
-    private fun install(gateway: VaultGateway, root: File, nowMs: () -> Long) {
+    private fun install(gateway: VaultGateway, root: File, nowMs: () -> Long, secretTools: SecretTools = NativeSecretTools) {
         vaultRoot = root
-        val fresh = VaultSession(gateway, nowMs = nowMs)
+        val fresh = VaultSession(gateway, nowMs = nowMs, secretTools = secretTools)
         session = fresh
         accountSetup = AccountSetup(
             session = fresh,

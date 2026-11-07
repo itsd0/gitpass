@@ -152,3 +152,21 @@ Tests use fake/temp vaults only. Physical connected tests are not run (avoids
 uninstall/data-loss risk). The foundation CI emulator currently needs a separately
 authorized memory-provisioning workflow fix after a confirmed lowmemorykiller kill;
 no green runtime claim is made until the whole instrumented suite executes.
+
+## Native password generator and live TOTP (#445)
+
+The login editor offers the existing core generator (letters/digits/symbols), with
+length 12–64 and explicit regenerate, masked/reveal, apply and cancel. Applying
+only changes the unsaved editor; only Save writes the item. No automatic copy or
+plaintext persistence is added. Lock/background discards editor/dialog state.
+
+TOTP fields display masked live codes, never seed values. Explicit Reveal starts
+native `totpCode` refreshes at wall-second boundaries; Hide/lock discards codes.
+Native core owns otpauth parsing, digits, algorithm, period and Unix-time rollover.
+The monotonic inactivity clock is independent; code polling is not user activity.
+Invalid configurations get a generic error with no native parser details. There
+are no fake production algorithms or new crypto/format/Swift API changes.
+
+Tests separate native RFC6238 vectors and generator lengths, fake-clock/session
+validation, and actual Compose apply/cancel/lock and live-code/invalid-config UI.
+All fixtures are fake/cache-only; no physical-device runner or data wipe is used.

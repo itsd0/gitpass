@@ -66,6 +66,7 @@ data class DetailRow(
     val value: String,
     val secret: Boolean,
     val sectionTitle: String?,
+    val isTotp: Boolean = false,
 )
 
 data class VaultSnapshot(
@@ -112,7 +113,7 @@ fun detailRows(item: ItemView): List<DetailRow> {
     val rows = mutableListOf<DetailRow>()
     fun legacy(id: String, label: String, value: String?, secret: Boolean) {
         if (value.isNullOrEmpty() || id in sectionIds) return
-        rows += DetailRow(id, label, value, secret, null)
+        rows += DetailRow(id, label, value, secret, null, id == "totp")
     }
     legacy("username", "username", item.username, false)
     legacy("password", "password", item.password, true)
@@ -127,6 +128,7 @@ fun detailRows(item: ItemView): List<DetailRow> {
                 value = field.value.orEmpty(),
                 secret = field.isSecret(),
                 sectionTitle = section.title,
+                isTotp = field.kind == "totp" || (section.id == "login" && field.id == "totp"),
             )
         }
     }

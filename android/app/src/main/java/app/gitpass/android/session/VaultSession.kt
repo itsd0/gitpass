@@ -27,6 +27,7 @@ class VaultSession(
     private val gateway: VaultGateway,
     private val nowMs: () -> Long = ELAPSED_REALTIME,
     private val autoLockMs: Long = DEFAULT_AUTO_LOCK_MS,
+    private val secretTools: SecretTools = NativeSecretTools,
 ) {
     private val mutex = ReentrantLock()
     private var generation: Long = 0
@@ -171,6 +172,28 @@ class VaultSession(
             publishLocked()
             loaded
         }
+    }
+
+    fun generatePassword(length: Int, epoch: Long): String = mutex.withLock {
+        enforceInactivity()
+        if (opened == null) throw VaultLockedException()
+        if (generation != epoch) throw UnlockCancelledException()
+        require(length in 12..64) { "Length must be 12..64" }
+        // Never store generated values in the session or write the vault here.
+        secretTools.generate(length)
+    }
+
+    fun liveTotp(itemId: String, fieldKey: String, epoch: Long): LiveCode = mutex.withLock {
+        enforceInactivity()
+        if (opened == null) throw VaultLockedException()
+        if (generation != epoch) throw UnlockCancelledException()
+        val current = detail?.takeIf { it.id == itemId } ?: throw VaultSessionException("Item is not open")
+        val field = detailRows(current).singleOrNull { it.key == fieldKey && it.isTotp }
+            ?: throw VaultSessionException("No TOTP configuration")
+        // Core uses Unix wall time; the inactivity clock must never be used here.
+        // Never surface native parser errors: they may quote seed characters.
+        try { secretTools.totp(field.value) }
+        catch (_: Exception) { throw VaultSessionException("Invalid TOTP configuration") }
     }
 
     fun setTrash(value: Boolean) = mutex.withLock {

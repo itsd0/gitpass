@@ -47,4 +47,11 @@
     <string name="item_title">ခေါင်းစဉ်</string>
     <string name="save_item">သိမ်းမည်</string>
     <string name="cancel_edit">မလုပ်တော့ပါ</string>
+    <string name="generator">စကားဝှက်ထုတ်မည်</string>
+    <string name="generator_length">အရှည်: %1$d</string>
+    <string name="regenerate">ပြန်ထုတ်မည်</string>
+    <string name="apply_password">စကားဝှက်ကို သုံးမည်</string>
+    <string name="generator_failed">စကားဝှက် ထုတ်မရပါ</string>
+    <string name="invalid_totp">TOTP သတ်မှတ်ချက် မမှန်ပါ</string>
+    <string name="totp_remaining">%1$d စက္ကန့် ကျန်သည်</string>
 </resources>
