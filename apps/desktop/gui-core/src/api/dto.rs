@@ -414,7 +414,7 @@ pub struct ImportPreviewItem { pub title: String, pub category: Category, pub us
 pub struct RotateResult { pub emergency_kit: String }
 /// Structured Emergency Kit for the printable kit page. `secret_key` is only filled right after
 /// create_account / rotate_secret_key, or after the master password was re-entered (`reveal`).
-#[derive(Serialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct EmergencyKitData { pub account_id: String, pub vault_path: String, pub remote: Option<String>, pub device_name: Option<String>,
     pub created_at: String, pub secret_key_available: bool, pub secret_key: Option<String> }

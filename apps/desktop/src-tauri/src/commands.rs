@@ -183,6 +183,14 @@ fn open_external(url: &str) -> R<()> {
     let pw = password.map(Zeroizing::new);
     s.emergency_kit_data(pw.as_deref().map(|x| x.as_str())).map_err(e)
 }
+/// Write the Emergency Kit as a native PDF to a path the frontend chose with
+/// the save dialog. This is the macOS path: the webview's `window.print()`
+/// does nothing there, so the PDF must not go through print at all. The
+/// Secret Key must be revealed (the frontend disables the button otherwise);
+/// the backend refuses a keyless kit rather than writing an incomplete file.
+#[tauri::command] pub fn save_emergency_kit_pdf(s: State<App>, dest_path: String, kit: a::EmergencyKitData) -> R<()> {
+    s.save_emergency_kit_pdf(&kit, &dest_path).map_err(e)
+}
 /// Favicon URL (null when showWebsiteIcons setting is off or fetch fails).
 #[tauri::command(async)] pub fn favicon_url(s: State<'_, App>, url: String) -> Option<String> { s.favicon_url(&url) }
 /// Not in the contract: resets the idle timer (harmless extra; the contract UI may ignore it).

@@ -1066,6 +1066,7 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   emergency_kit_data: (a: { password?: string }) => (a?.password !== undefined && a.password !== 'demo-password' ? Promise.reject(new Error('wrong master password'))
     : delay<T.EmergencyKitData>({ accountId: 'acc-demo-0000', vaultPath: '~/.gitpass (mock)', remote: 'git@example.com:demo/vault.git', deviceName: 'Demo Mac', createdAt: '2026-10-26T09:00:00Z', secretKeyAvailable: true, secretKey: a?.password ? 'A3-MOCK00-000000-00000-00000-00000-00000' : null })),
   emergency_kit: () => delay('gitpass Emergency Kit (DEMO)\nAccount: Demo Family\nSecret Key: (not shown — rotate to reveal a new one)'),
+  save_emergency_kit_pdf: () => delay(undefined),
   favicon_url: (a?: { url?: string }) => delay(settings.showWebsiteIcons && a?.url?.startsWith('https://') ? 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiiciHI9IjEwIiBmaWxsPSIjZjI4YzI4Ii8+PC9zdmc+' : null),
   get_generator_history: () => delay([...mockGeneratorHistory]),
   delete_generator_history_entry: (a: { id: string }) => {

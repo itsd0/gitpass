@@ -68,6 +68,26 @@ describe('emergency kit', () => {
     fireEvent.click(screen.getByText(en['kit.print']));
     expect(done).not.toHaveBeenCalled();
   });
+  it('Save as PDF writes through the backend (not window.print) and only then marks the kit saved', async () => {
+    vi.spyOn(api, 'emergencyKitData').mockResolvedValue({ ...base, secretKey: 'A3-K' });
+    const save = vi.spyOn(api, 'saveEmergencyKitPdf').mockResolvedValue(undefined);
+    const done = vi.fn();
+    render(<EmergencyKitFlow onClose={() => {}} onPrinted={done} />);
+    await screen.findByText('A3-K');
+    fireEvent.click(screen.getByText(en['kit.savePdf']));
+    await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ kit: expect.objectContaining({ accountId: 'acc-1', secretKey: 'A3-K' }) }));
+    expect(save.mock.calls[0][0].destPath).toContain('gitpass-emergency-kit');
+    await waitFor(() => expect(done).toHaveBeenCalledTimes(1));
+  });
+  it('Save as PDF is disabled while the Secret Key is hidden', async () => {
+    vi.spyOn(api, 'emergencyKitData').mockResolvedValue(base);
+    const save = vi.spyOn(api, 'saveEmergencyKitPdf').mockResolvedValue(undefined);
+    render(<EmergencyKitFlow onClose={() => {}} onPrinted={() => {}} />);
+    await screen.findByTestId('emergency-kit-sheet');
+    expect((screen.getByText(en['kit.savePdf']).closest('button') as HTMLButtonElement).disabled).toBe(true);
+    expect(save).not.toHaveBeenCalled();
+  });
   it('cannot confirm "saved" while the Secret Key is hidden', async () => {
     vi.spyOn(api, 'emergencyKitData').mockResolvedValue(base);
     render(<EmergencyKitFlow onClose={() => {}} onPrinted={() => {}} />);
