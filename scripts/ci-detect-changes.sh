@@ -2,9 +2,16 @@
 # Classifies repository changes into CI target areas without regex lookahead.
 #
 # Supported inputs:
-#  - Piped via stdin: echo "file" | scripts/ci-detect-changes.sh
-#  - Via env CI_DETECT_FILES: CI_DETECT_FILES="file" scripts/ci-detect-changes.sh
-#  - Via git diff: uses env EVENT, BASE, HEAD
+#  - Explicit filename inputs:
+#      --stdin / - / --from-stdin : reads filenames from stdin
+#      --files <list> / -f <list> : reads filenames from arguments
+#      CI_DETECT_FILES="<list>"   : reads filenames from environment
+#      <file1> <file2> ...        : positional arguments
+#  - Default mode (when no explicit filename input is provided):
+#      Detects changed files via Git event / git diff (never reading stdin):
+#      - workflow_dispatch / merge_group : all targets run conservatively
+#      - push / pull_request             : git diff --name-only "$BASE" "$HEAD"
+#      - fallback                        : if BASE cannot be resolved, all targets run
 #
 # Outputs key=value pairs:
 #  code, rust, desktop, frontend, supply_chain, android
@@ -16,18 +23,36 @@ HEAD="${HEAD:-HEAD}"
 
 files=""
 
-if [ -n "${CI_DETECT_FILES:-}" ]; then
-  files="$CI_DETECT_FILES"
-elif [ ! -t 0 ]; then
+# 1. Explicit filename-input modes
+if [ "${1:-}" = "--stdin" ] || [ "${1:-}" = "-" ] || [ "${1:-}" = "--from-stdin" ]; then
   files="$(cat)"
-elif [ "$EVENT" = "workflow_dispatch" ] || [ "$EVENT" = "merge_group" ]; then
-  # Full suite runs on manual dispatch and merge queue runs
-  files="__ALL__"
-elif [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
-  files="$(git diff --name-only "$BASE" "$HEAD")"
+elif [ "${1:-}" = "--files" ] || [ "${1:-}" = "-f" ]; then
+  shift
+  files="$*"
+elif [ -n "${CI_DETECT_FILES:-}" ]; then
+  files="$CI_DETECT_FILES"
+elif [ $# -gt 0 ]; then
+  files="$(printf '%s\n' "$@")"
 else
-  # Fallback when base commit cannot be resolved
-  files="__ALL__"
+  # 2. Event & git-diff detection mode (never reads stdin, safe with stdin=/dev/null)
+  if [ "$EVENT" = "workflow_dispatch" ] || [ "$EVENT" = "merge_group" ]; then
+    # Full suite runs conservatively on manual dispatch and merge queue runs
+    files="__ALL__"
+  elif [ -n "$BASE" ] && [ "$BASE" != "0000000000000000000000000000000000000000" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+    files="$(git diff --name-only "$BASE" "$HEAD")"
+  elif [ -z "$BASE" ] && git rev-parse --verify "$HEAD" >/dev/null 2>&1; then
+    # Fallback in local checkout when BASE is unset
+    if git rev-parse --verify origin/main >/dev/null 2>&1; then
+      files="$(git diff --name-only origin/main "$HEAD" 2>/dev/null || echo "__ALL__")"
+    elif git rev-parse --verify "$HEAD~1" >/dev/null 2>&1; then
+      files="$(git diff --name-only "$HEAD~1" "$HEAD" 2>/dev/null || echo "__ALL__")"
+    else
+      files="__ALL__"
+    fi
+  else
+    # Fallback when base commit cannot be resolved
+    files="__ALL__"
+  fi
 fi
 
 if [ "$files" = "__ALL__" ]; then

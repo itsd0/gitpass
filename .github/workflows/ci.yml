@@ -42,6 +42,10 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: verify CI scripts
+        run: |
+          chmod +x scripts/test-ci.sh
+          ./scripts/test-ci.sh < /dev/null
       - id: f
         name: detect changed areas
         env:
@@ -50,7 +54,7 @@ jobs:
           HEAD: ${{ github.sha }}
         run: |
           chmod +x scripts/ci-detect-changes.sh
-          scripts/ci-detect-changes.sh | tee -a "$GITHUB_OUTPUT"
+          scripts/ci-detect-changes.sh < /dev/null | tee -a "$GITHUB_OUTPUT"
 
   rust-test:
     name: rust (test)
@@ -315,12 +319,26 @@ jobs:
           EXTRACT_DIR="$(mktemp -d)"
           unzip -q "$APK" "lib/*/*.so" -d "$EXTRACT_DIR"
           for so in "$EXTRACT_DIR"/lib/*/*.so; do
-            echo "Inspecting ELF alignment: $so"
+            echo "Inspecting ELF alignment and congruency: $so"
             readelf -lW "$so" | awk -v file="$so" '
               $1 == "LOAD" {
+                offset = strtonum($2)
+                vaddr = strtonum($3)
                 align = strtonum($NF)
                 if (align < 16384) {
                   printf "::error file=%s::LOAD segment alignment %d is less than required 16384 (16 KB)\n", file, align
+                  err = 1
+                }
+                if ((offset % 16384) != (vaddr % 16384)) {
+                  printf "::error file=%s::LOAD segment offset (0x%x) and vaddr (0x%x) not congruent modulo 16384\n", file, offset, vaddr
+                  err = 1
+                }
+              }
+              $1 == "GNU_RELRO" {
+                offset = strtonum($2)
+                vaddr = strtonum($3)
+                if ((offset % 16384) != (vaddr % 16384)) {
+                  printf "::error file=%s::GNU_RELRO segment offset (0x%x) and vaddr (0x%x) not congruent modulo 16384\n", file, offset, vaddr
                   err = 1
                 }
               }
@@ -329,6 +347,8 @@ jobs:
           done
           rm -rf "$EXTRACT_DIR"
           sha256sum "$APK" | tee "$APK.sha256"
+          echo "Static ELF checks complete: verified 16-KB segment alignment and offset/vaddr congruency for arm64-v8a and x86_64."
+          echo "Coverage note: Physical ARM64 runtime execution is not verified in hosted x86_64 CI runners. Runtime testing is executed solely on emulated x86_64 16-KB environment."
       - name: Configure KVM acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
@@ -337,6 +357,7 @@ jobs:
           ls -la /dev/kvm || { echo "::error::/dev/kvm not found or accessible"; exit 1; }
       - name: Launch API 35 16-KB emulator & run instrumented smoke tests
         run: |
+          mkdir -p "$RUNNER_TEMP/android-diagnostics"
           echo "Installing system-images;android-35;google_apis_ps16k;x86_64..."
           echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-35;google_apis_ps16k;x86_64"
           echo "no" | "$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager" create avd \
@@ -354,24 +375,54 @@ jobs:
             -camera-front none \
             -timezone UTC \
             -no-snapshot \
-            &
+            > "$RUNNER_TEMP/android-diagnostics/emulator.log" 2>&1 &
           EMU_PID=$!
           echo "EMU_PID=$EMU_PID" >> "$GITHUB_ENV"
 
-          echo "Waiting for emulator boot (bounded timeout 300s)..."
-          adb wait-for-device
+          # 1. Bounded adb device discovery (120s timeout)
+          echo "Waiting for adb device discovery (bounded timeout 120s)..."
+          device_ready=0
+          for i in $(seq 1 120); do
+            if adb devices | grep -E 'emulator-[0-9]+\s+device' >/dev/null 2>&1; then
+              device_ready=1
+              echo "Device discovered by adb after ${i}s."
+              break
+            fi
+            if ! kill -0 "$EMU_PID" 2>/dev/null; then
+              echo "::error::Emulator process (PID $EMU_PID) died unexpectedly during device discovery."
+              cat "$RUNNER_TEMP/android-diagnostics/emulator.log" || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          if [ "$device_ready" -ne 1 ]; then
+            echo "::error::Emulator device discovery timed out after 120 seconds."
+            adb devices -l > "$RUNNER_TEMP/android-diagnostics/adb-devices-timeout.txt" 2>&1 || true
+            exit 1
+          fi
+
+          # 2. Bounded emulator boot completion (240s timeout)
+          echo "Waiting for emulator boot completion (bounded timeout 240s)..."
           boot_completed=0
-          for _ in $(seq 1 300); do
+          for i in $(seq 1 240); do
             if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
               boot_completed=1
+              echo "Emulator boot completed after ${i}s."
               break
+            fi
+            if ! kill -0 "$EMU_PID" 2>/dev/null; then
+              echo "::error::Emulator process (PID $EMU_PID) died unexpectedly during boot."
+              cat "$RUNNER_TEMP/android-diagnostics/emulator.log" || true
+              exit 1
             fi
             sleep 1
           done
 
           if [ "$boot_completed" -ne 1 ]; then
-            echo "::error::Emulator boot timed out after 300 seconds."
-            adb logcat -d > logcat-boot-timeout.txt || true
+            echo "::error::Emulator boot timed out after 240 seconds."
+            adb logcat -d > "$RUNNER_TEMP/android-diagnostics/logcat-boot-timeout.txt" 2>&1 || true
+            adb shell getprop > "$RUNNER_TEMP/android-diagnostics/getprop-timeout.txt" 2>&1 || true
             exit 1
           fi
 
@@ -393,9 +444,12 @@ jobs:
 
           cd android
           ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace
-      - name: Stop emulator
+      - name: Collect diagnostics and stop emulator
         if: always()
         run: |
+          mkdir -p "$RUNNER_TEMP/android-diagnostics"
+          adb devices -l > "$RUNNER_TEMP/android-diagnostics/adb-devices-final.txt" 2>&1 || true
+          adb logcat -d > "$RUNNER_TEMP/android-diagnostics/logcat-final.txt" 2>&1 || true
           if [ -n "${EMU_PID:-}" ]; then
             echo "Stopping emulator (PID $EMU_PID)..."
             adb emu kill 2>/dev/null || kill -9 "$EMU_PID" 2>/dev/null || true
@@ -411,6 +465,7 @@ jobs:
             android/app/build/reports/tests/testDebugUnitTest/
             android/app/build/reports/androidTests/connected/
             android/app/build/reports/lint-results-debug.html
+            ${{ runner.temp }}/android-diagnostics/
           retention-days: 7
           if-no-files-found: warn
 
@@ -424,6 +479,10 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
+      - name: verify CI scripts logic
+        run: |
+          chmod +x scripts/test-ci.sh
+          ./scripts/test-ci.sh < /dev/null
       - name: evaluate applicability-aware status gate
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}

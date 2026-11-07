@@ -24,8 +24,8 @@ assert_eq() {
 
 echo "=== Running Path Classification Tests ==="
 
-# Test 1: Android-only changes
-out=$(echo "android/app/src/main/MainActivity.kt" | "$DETECT_SCRIPT")
+# Test 1: Android-only changes (via --stdin)
+out=$(echo "android/app/src/main/MainActivity.kt" | "$DETECT_SCRIPT" --stdin)
 assert_eq "Android-only: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
 assert_eq "Android-only: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
 assert_eq "Android-only: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "false"
@@ -33,8 +33,8 @@ assert_eq "Android-only: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f
 assert_eq "Android-only: frontend" "$(echo "$out" | grep '^frontend=' | cut -d= -f2)" "false"
 assert_eq "Android-only: supply_chain" "$(echo "$out" | grep '^supply_chain=' | cut -d= -f2)" "false"
 
-# Test 2: iOS-only changes (outside shared bridge)
-out=$(echo "ios/Sources/ContentView.swift" | "$DETECT_SCRIPT")
+# Test 2: iOS-only changes (outside shared bridge, via positional arg)
+out=$("$DETECT_SCRIPT" "ios/Sources/ContentView.swift")
 assert_eq "iOS-only: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
 assert_eq "iOS-only: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "false"
 assert_eq "iOS-only: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "false"
@@ -42,8 +42,8 @@ assert_eq "iOS-only: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" 
 assert_eq "iOS-only: frontend" "$(echo "$out" | grep '^frontend=' | cut -d= -f2)" "false"
 assert_eq "iOS-only: supply_chain" "$(echo "$out" | grep '^supply_chain=' | cut -d= -f2)" "false"
 
-# Test 3: Shared mobile UniFFI bridge
-out=$(echo "ios/rust/gitpass-ios-ffi/src/lib.rs" | "$DETECT_SCRIPT")
+# Test 3: Shared mobile UniFFI bridge (via --stdin)
+out=$(echo "ios/rust/gitpass-ios-ffi/src/lib.rs" | "$DETECT_SCRIPT" --stdin)
 assert_eq "Shared FFI: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
 assert_eq "Shared FFI: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
 assert_eq "Shared FFI: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "true"
@@ -51,39 +51,39 @@ assert_eq "Shared FFI: supply_chain" "$(echo "$out" | grep '^supply_chain=' | cu
 assert_eq "Shared FFI: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "false"
 assert_eq "Shared FFI: frontend" "$(echo "$out" | grep '^frontend=' | cut -d= -f2)" "false"
 
-# Test 4: Universal core crate
-out=$(echo "crates/gitpass-core/src/crypto.rs" | "$DETECT_SCRIPT")
+# Test 4: Universal core crate (via positional arg)
+out=$("$DETECT_SCRIPT" "crates/gitpass-core/src/crypto.rs")
 assert_eq "Core: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
 assert_eq "Core: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "true"
 assert_eq "Core: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "true"
 assert_eq "Core: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
 assert_eq "Core: supply_chain" "$(echo "$out" | grep '^supply_chain=' | cut -d= -f2)" "true"
 
-# Test 5: Root Cargo manifests
-out=$(printf "Cargo.lock\nCargo.toml" | "$DETECT_SCRIPT")
+# Test 5: Root Cargo manifests (via --stdin)
+out=$(printf "Cargo.lock\nCargo.toml" | "$DETECT_SCRIPT" --stdin)
 assert_eq "Cargo manifests: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "true"
 assert_eq "Cargo manifests: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "true"
 assert_eq "Cargo manifests: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
 assert_eq "Cargo manifests: supply_chain" "$(echo "$out" | grep '^supply_chain=' | cut -d= -f2)" "true"
 
-# Test 6: Desktop UI changes
-out=$(echo "apps/desktop/src/App.tsx" | "$DETECT_SCRIPT")
+# Test 6: Desktop UI changes (via positional arg)
+out=$("$DETECT_SCRIPT" "apps/desktop/src/App.tsx")
 assert_eq "Desktop UI: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
 assert_eq "Desktop UI: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "true"
 assert_eq "Desktop UI: frontend" "$(echo "$out" | grep '^frontend=' | cut -d= -f2)" "true"
 assert_eq "Desktop UI: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "false"
 assert_eq "Desktop UI: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "false"
 
-# Test 7: Extension-only changes
-out=$(echo "extension/popup.js" | "$DETECT_SCRIPT")
+# Test 7: Extension-only changes (via positional arg)
+out=$("$DETECT_SCRIPT" "extension/popup.js")
 assert_eq "Extension: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
 assert_eq "Extension: frontend" "$(echo "$out" | grep '^frontend=' | cut -d= -f2)" "true"
 assert_eq "Extension: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "false"
 assert_eq "Extension: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "false"
 assert_eq "Extension: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "false"
 
-# Test 8: Docs-only changes
-out=$(printf "README.md\ndocs/CLI.md\nLICENSE\nAGENTS.md" | "$DETECT_SCRIPT")
+# Test 8: Docs-only changes (via --stdin)
+out=$(printf "README.md\ndocs/CLI.md\nLICENSE\nAGENTS.md" | "$DETECT_SCRIPT" --stdin)
 assert_eq "Docs-only: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "false"
 assert_eq "Docs-only: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "false"
 assert_eq "Docs-only: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "false"
@@ -91,25 +91,92 @@ assert_eq "Docs-only: frontend" "$(echo "$out" | grep '^frontend=' | cut -d= -f2
 assert_eq "Docs-only: supply_chain" "$(echo "$out" | grep '^supply_chain=' | cut -d= -f2)" "false"
 assert_eq "Docs-only: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "false"
 
-# Test 9: Mixed changes (Android + Docs)
-out=$(printf "android/app/build.gradle.kts\nREADME.md" | "$DETECT_SCRIPT")
+# Test 9: Mixed changes (Android + Docs, via --stdin)
+out=$(printf "android/app/build.gradle.kts\nREADME.md" | "$DETECT_SCRIPT" --stdin)
 assert_eq "Mixed Android+Docs: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
 assert_eq "Mixed Android+Docs: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
 assert_eq "Mixed Android+Docs: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "false"
 
-# Test 10: Workflow file edit (.github/workflows/ci.yml)
-out=$(echo ".github/workflows/ci.yml" | "$DETECT_SCRIPT")
+# Test 10: Workflow file edit (.github/workflows/ci.yml, via positional arg)
+out=$("$DETECT_SCRIPT" ".github/workflows/ci.yml")
 assert_eq "Workflow ci.yml: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
 assert_eq "Workflow ci.yml: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "true"
 assert_eq "Workflow ci.yml: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "true"
 assert_eq "Workflow ci.yml: frontend" "$(echo "$out" | grep '^frontend=' | cut -d= -f2)" "true"
 assert_eq "Workflow ci.yml: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
 
-# Test 11: merge_group / workflow_dispatch forced run
-out=$(EVENT=merge_group "$DETECT_SCRIPT")
+# Test 11: merge_group forced run (with stdin=/dev/null)
+out=$(EVENT=merge_group "$DETECT_SCRIPT" < /dev/null)
 assert_eq "merge_group: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "true"
 assert_eq "merge_group: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
 assert_eq "merge_group: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "true"
+
+# Test 12: workflow_dispatch forced run (with stdin=/dev/null)
+out=$(EVENT=workflow_dispatch "$DETECT_SCRIPT" < /dev/null)
+assert_eq "workflow_dispatch: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "true"
+assert_eq "workflow_dispatch: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
+assert_eq "workflow_dispatch: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "true"
+
+echo "=== Running Workflow Git-Diff & Stdin=/dev/null Regression Tests ==="
+TEMP_REPO=$(mktemp -d)
+git -C "$TEMP_REPO" init -q -b main
+git -C "$TEMP_REPO" config user.name "CI Test"
+git -C "$TEMP_REPO" config user.email "test@example.invalid"
+
+echo "# Test" > "$TEMP_REPO/README.md"
+git -C "$TEMP_REPO" add README.md
+git -C "$TEMP_REPO" commit -q -m "initial commit"
+C_INIT=$(git -C "$TEMP_REPO" rev-parse HEAD)
+
+mkdir -p "$TEMP_REPO/android/app/src/main"
+echo "package app.gitpass.android" > "$TEMP_REPO/android/app/src/main/MainActivity.kt"
+git -C "$TEMP_REPO" add android/
+git -C "$TEMP_REPO" commit -q -m "android change"
+C_ANDROID=$(git -C "$TEMP_REPO" rev-parse HEAD)
+
+mkdir -p "$TEMP_REPO/crates/gitpass-core/src"
+echo "// core" > "$TEMP_REPO/crates/gitpass-core/src/lib.rs"
+git -C "$TEMP_REPO" add crates/
+git -C "$TEMP_REPO" commit -q -m "core change"
+C_CORE=$(git -C "$TEMP_REPO" rev-parse HEAD)
+
+echo "Doc update" >> "$TEMP_REPO/README.md"
+git -C "$TEMP_REPO" add README.md
+git -C "$TEMP_REPO" commit -q -m "doc update"
+C_DOCS=$(git -C "$TEMP_REPO" rev-parse HEAD)
+
+mkdir -p "$TEMP_REPO/.github/workflows"
+echo "# ci" > "$TEMP_REPO/.github/workflows/ci.yml"
+git -C "$TEMP_REPO" add .github/workflows/ci.yml
+git -C "$TEMP_REPO" commit -q -m "ci change"
+C_CI=$(git -C "$TEMP_REPO" rev-parse HEAD)
+
+# Regression 1: Android-only PR diff with stdin=/dev/null
+out=$(cd "$TEMP_REPO" && EVENT=pull_request BASE="$C_INIT" HEAD="$C_ANDROID" "$DETECT_SCRIPT" < /dev/null)
+assert_eq "Regression stdin=/dev/null: Android PR: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
+assert_eq "Regression stdin=/dev/null: Android PR: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
+assert_eq "Regression stdin=/dev/null: Android PR: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "false"
+assert_eq "Regression stdin=/dev/null: Android PR: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "false"
+
+# Regression 2: Docs-only PR diff with stdin=/dev/null
+out=$(cd "$TEMP_REPO" && EVENT=pull_request BASE="$C_CORE" HEAD="$C_DOCS" "$DETECT_SCRIPT" < /dev/null)
+assert_eq "Regression stdin=/dev/null: Docs-only PR: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "false"
+assert_eq "Regression stdin=/dev/null: Docs-only PR: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "false"
+assert_eq "Regression stdin=/dev/null: Docs-only PR: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "false"
+
+# Regression 3: CI workflow edit PR diff with stdin=/dev/null
+out=$(cd "$TEMP_REPO" && EVENT=pull_request BASE="$C_DOCS" HEAD="$C_CI" "$DETECT_SCRIPT" < /dev/null)
+assert_eq "Regression stdin=/dev/null: CI workflow PR: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
+assert_eq "Regression stdin=/dev/null: CI workflow PR: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
+assert_eq "Regression stdin=/dev/null: CI workflow PR: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "true"
+assert_eq "Regression stdin=/dev/null: CI workflow PR: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "true"
+
+# Regression 4: Push event with stdin=/dev/null
+out=$(cd "$TEMP_REPO" && EVENT=push BASE="$C_INIT" HEAD="$C_ANDROID" "$DETECT_SCRIPT" < /dev/null)
+assert_eq "Regression stdin=/dev/null: push event: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
+assert_eq "Regression stdin=/dev/null: push event: desktop" "$(echo "$out" | grep '^desktop=' | cut -d= -f2)" "false"
+
+rm -rf "$TEMP_REPO"
 
 echo "=== Running ci-ok Gate Truth-Table Tests ==="
 
