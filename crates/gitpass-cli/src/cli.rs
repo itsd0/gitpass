@@ -496,6 +496,23 @@ EXAMPLES:
         #[arg(long)]
         json: bool,
     },
+    /// Merge two duplicate login items: the kept item absorbs the other,
+    /// which moves to Recently Deleted (restorable)
+    Merge {
+        /// Item to keep (query or id)
+        keep: String,
+        /// Item to merge into the kept item (query or id; same vault)
+        other: String,
+        /// Vault containing both items (optional if unambiguous)
+        #[arg(long)]
+        vault: Option<String>,
+        /// Skip the confirmation prompt
+        #[arg(long)]
+        yes: bool,
+        /// Output JSON
+        #[arg(long)]
+        json: bool,
+    },
     /// Move an item to another vault
     Mv {
         /// Item query (or vault if item is also given)

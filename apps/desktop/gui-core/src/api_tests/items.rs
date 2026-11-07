@@ -575,3 +575,38 @@ fn test_list_items_with_search_query_operators() {
     assert_eq!(url_host.len(), 1);
     assert_eq!(url_host[0].title, "Work GitHub");
 }
+
+#[test]
+fn merge_duplicate_preview_merge_and_undo() {
+    let e = env();
+    let keep = login(&e, "Example Mail", "alice@example.invalid", "FAKE-keep-pw-1!");
+    let other_input = ItemInput { vault_id: e.vault.clone(), category: Category::Login, title: "Example Mail".into(), url: Some("https://other.example.invalid".into()),
+        sections: vec![Section { id: "login".into(), title: None, fields: vec![fld("username", FieldKind::Text, Some("alice@example.invalid")), fld("password", FieldKind::Concealed, Some("FAKE-other-pw-2!"))] }],
+        notes: Some("other note".into()), tags: Some(vec!["personal".into()]), favorite: None, related_item_ids: None };
+    let other = e.app.create_item(&other_input).unwrap();
+    // Preview is read-only: both items still live, and the merged tags/URL match the core rules.
+    let p = e.app.preview_merge_duplicate_items(&e.vault, &keep.id, &other.id).unwrap();
+    assert_eq!(p.merged_title, "Example Mail");
+    assert!(p.merged_tags.contains(&"work".to_string()) && p.merged_tags.contains(&"personal".to_string()));
+    assert_eq!(p.report.urls_added, 1, "differing discarded URL is preserved");
+    assert!(e.app.list_items(&Filter { kind: FilterKind::All, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap().len() == 2);
+    // Self-merge and non-login merges are rejected.
+    assert!(e.app.preview_merge_duplicate_items(&e.vault, &keep.id, &keep.id).is_err());
+    let c = card(&e);
+    assert!(e.app.preview_merge_duplicate_items(&e.vault, &keep.id, &c.id).is_err());
+    // Merge: kept item absorbs the other; the other lands in Recently Deleted.
+    let r = e.app.merge_duplicate_items(&e.vault, &keep.id, &other.id).unwrap();
+    assert_eq!(r.other_id, other.id);
+    assert!(r.kept.tags.contains(&"personal".to_string()));
+    assert!(r.report.urls_added == 1 && r.report.history_entries >= 1);
+    let deleted = e.app.list_items(&Filter { kind: FilterKind::Deleted, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap();
+    assert!(deleted.iter().any(|i| i.id == other.id));
+    // Undo: restore the discarded item, then restore the kept item to its pre-merge version.
+    e.app.restore_item(&e.vault, &other.id).unwrap();
+    let undone = e.app.restore_item_version(&e.vault, &keep.id, r.keep_version_before).unwrap();
+    assert_eq!(undone.summary.tags, vec!["work".to_string()]);
+    assert!(e.app.list_items(&Filter { kind: FilterKind::All, vault_id: None, tag: None, category: None, query: None, sort: None }).unwrap().iter().any(|i| i.id == other.id));
+    // No secret value leaks through the preview/result JSON.
+    let json = serde_json::to_string(&p).unwrap() + &serde_json::to_string(&r).unwrap();
+    assert!(!json.contains("FAKE-keep-pw") && !json.contains("FAKE-other-pw"));
+}

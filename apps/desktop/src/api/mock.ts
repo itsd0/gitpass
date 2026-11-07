@@ -163,6 +163,34 @@ const summary = (d: T.ItemDetail): T.ItemSummary => {
   return { ...s, ...(expiry ? { expiry } : {}), ignoredFindings: d.ignoredFindings ?? [] };
 };
 const get = (id: string) => { const r = db.get(id); if (!r) throw new Error(`item not found: ${id}`); return r; };
+/** Dev-mock duplicate-merge preview from visible data only (real rules live in Rust). */
+const mergePreview = (keep: Rec, other: Rec): T.MergeDuplicatePreview => {
+  const kd = keep.detail, od = other.detail;
+  if (kd.id === od.id) throw new Error('cannot merge an item with itself');
+  if (kd.category !== 'login' || od.category !== 'login') throw new Error('only login items can be merged');
+  if (kd.deletedAt || od.deletedAt) throw new Error('cannot merge a deleted item (restore it first)');
+  const tagsAdded = od.tags.filter((t) => !kd.tags.includes(t));
+  const keepLabels = new Set(kd.sections.flatMap((s) => s.fields).map((f) => f.label));
+  const fieldsCopied = od.sections.flatMap((s) => s.fields)
+    .filter((f) => !['username', 'password', 'totp'].includes(f.label) && !keepLabels.has(f.label))
+    .map((f) => f.label);
+  const attachmentsAdded = od.attachments.filter((a) => !kd.attachments.some((k) => k.name === a.name)).length;
+  return {
+    keepId: kd.id, otherId: od.id,
+    mergedTitle: kd.title || od.title,
+    mergedUrl: kd.url ?? od.url ?? null,
+    mergedTags: [...kd.tags, ...tagsAdded],
+    report: {
+      passwordFromOther: false, passwordMovedToHistory: false,
+      totpFromOther: !kd.hasTotp && od.hasTotp,
+      urlsAdded: kd.url && od.url && kd.url !== od.url ? 1 : 0,
+      tagsAdded, relatedAdded: (od.relatedItemIds ?? []).filter((id) => !(kd.relatedItemIds ?? []).includes(id)).length,
+      notesJoined: !!kd.notes?.trim() && !!od.notes?.trim() && kd.notes !== od.notes,
+      fieldsCopied, fieldsConflicted: [], attachmentsAdded,
+      historyEntries: keep.passwordHistory?.length ?? 0,
+    },
+  };
+};
 const vaultInfo = () => vaults.map((v) => ({ ...v, itemCount: [...db.values()].filter((r) => r.detail.vaultId === v.id && !r.detail.deletedAt).length }));
 const touch = (r: Rec) => {
   r.versions.push(structuredClone(r.detail));
@@ -613,6 +641,22 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
     const src = get(a.itemId); const r: Rec = structuredClone(src); const now = new Date().toISOString();
     r.versions = []; Object.assign(r.detail, { id: uid('i'), title: `${src.detail.title} (copy)`, createdAt: now, updatedAt: now, history: [{ version: 1, updatedAt: now }] });
     db.set(r.detail.id, r); return delay(summary(r.detail));
+  },
+  preview_merge_duplicate_items: (a: { keepId: string; otherId: string }) => delay(mergePreview(get(a.keepId), get(a.otherId))),
+  merge_duplicate_items: (a: { keepId: string; otherId: string }) => {
+    const keep = get(a.keepId), other = get(a.otherId);
+    const preview = mergePreview(keep, other);
+    const before = keep.detail.version ?? 1;
+    touch(keep);
+    const kd = keep.detail, od = other.detail;
+    kd.tags = preview.mergedTags;
+    kd.url = preview.mergedUrl;
+    if (!kd.notes?.trim() && od.notes) kd.notes = od.notes;
+    else if (preview.report.notesJoined) kd.notes = `${kd.notes}\n\n---\n\n${od.notes}`;
+    kd.hasTotp = kd.hasTotp || od.hasTotp;
+    for (const att of od.attachments) if (!kd.attachments.some((k) => k.name === att.name)) kd.attachments.push({ ...att });
+    od.deletedAt = new Date().toISOString();
+    return delay<T.MergeDuplicateResult>({ kept: summary(kd), otherId: od.id, otherTitle: od.title, keepVersionBefore: before, keepVersion: kd.version ?? before, report: preview.report });
   },
   item_version: (a: { itemId: string; version: number }) => {
     const r = get(a.itemId);

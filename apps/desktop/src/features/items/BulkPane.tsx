@@ -8,6 +8,7 @@ import { useVaultsAndTags } from '../../lib/data';
 import { Button, Dialog, DialogContent, DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, Input, toast } from '../../ui';
 import { ExportDialog } from '../export';
 import { ItemIcon } from './categories';
+import { MergeDialog } from './MergeDialog';
 import { errText } from './actions';
 import { useItemsUI } from './state';
 import { readSel, refsFor, selectedIds } from './selection';
@@ -126,11 +127,13 @@ export function BulkPane() {
   const route = useApp((s) => s.route);
   const items = useItemsUI((s) => s.items);
   const [exportRefs, setExportRefs] = useState<ItemRef[] | null>(null);
+  const [mergePair, setMergePair] = useState<[ItemSummary, ItemSummary] | null>(null);
   const { vaults, tags } = useVaultsAndTags();
   const [tag, setTag] = useState('');
   const kind = route.name === 'items' ? route.filter.kind : 'all';
   const sel = items.filter((x) => multi.includes(x.id));
   const n = sel.length;
+  const mergeable = n === 2 && sel.every((x) => x.category === 'login') && sel[0].vaultId === sel[1].vaultId;
   const allFav = n > 0 && sel.every((x) => x.favorite);
   const anyFav = sel.some((x) => x.favorite);
   const clear = () => useApp.setState({ multiIds: [] });
@@ -164,12 +167,23 @@ export function BulkPane() {
           <VaultMenu label={t('bulk.moveToVault')} icon={<FolderInput size={15} className="text-accent" />} vaults={vaults} onPick={(id) => void runBulk('move', { toVaultId: id })} />
           <VaultMenu label={t('bulk.copyToVault')} icon={<Copy size={15} className="text-accent" />} vaults={vaults} onPick={(id) => void runBulk('copy', { toVaultId: id })} />
           <Button variant="outline" onClick={() => void runBulk('archive')}><Archive size={15} className="text-accent" />{t('bulk.archive')}</Button>
+          {mergeable && <Button variant="outline" onClick={() => setMergePair([sel[0], sel[1]])}>{t('bulk.merge')}</Button>}
           <Button variant="outline" className="text-danger" onClick={() => useApp.getState().setBulkConfirm('trash')}><Trash2 size={15} />{t('bulk.moveToTrash')}</Button>
         </>)}
         {kind !== 'deleted' && <Button variant="outline" disabled={!n} onClick={() => { const refs = refsFor(items, selectedIds(readSel())); if (refs.length) setExportRefs(refs); }}><Download size={15} className="text-accent" />{t('export.buttonSelected')}</Button>}
       </div>
       <p className="mt-6 max-w-sm text-center text-xs text-muted">{t('bulk.hint')}</p>
       <ExportDialog open={!!exportRefs} onOpenChange={(o) => !o && setExportRefs(null)} items={exportRefs ?? []} />
+      {mergePair && (
+        <MergeDialog
+          open
+          onOpenChange={(o) => !o && setMergePair(null)}
+          vaultId={mergePair[0].vaultId}
+          itemA={mergePair[0]}
+          itemB={mergePair[1]}
+          onMerged={() => useApp.getState().refreshItems()}
+        />
+      )}
     </div>
   );
 }

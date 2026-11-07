@@ -254,6 +254,83 @@ impl App {
     pub fn archive_item(&self, vault_id: &str, item_id: &str, archived: bool) -> Result<()> { self.write(|u| u.session.set_archived(vault_id, item_id, archived)) }
     pub fn delete_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.soft_delete(vault_id, item_id)) }
     pub fn restore_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.restore(vault_id, item_id)) }
+    /// Secrets-free preview of merging two duplicate logins (issue #396):
+    /// runs the pure core merge on the decrypted records without writing,
+    /// so the dialog shows exactly what Confirm will do. Attachment
+    /// dedup mirrors the session merge (same name, MIME and size = already
+    /// present); the reported count is the number of copies the real merge
+    /// would add.
+    pub fn preview_merge_duplicate_items(&self, vault_id: &str, keep_id: &str, other_id: &str) -> Result<MergeDuplicatePreview> {
+        if keep_id == other_id {
+            bail!("cannot merge an item with itself");
+        }
+        self.with(|u| {
+            let (_, keep_rec) = u.session.read_record(vault_id, keep_id)
+                .with_context(|| format!("kept item '{keep_id}' not found in this vault"))?;
+            let (_, other_rec) = u.session.read_record(vault_id, other_id)
+                .with_context(|| format!("discarded item '{other_id}' not found in this vault"))?;
+            let mut other_mapped = other_rec.clone();
+            other_mapped.attachments = other_rec.attachments.iter().filter(|a| {
+                !keep_rec.attachments.iter().any(|k| k.name == a.name && k.mime == a.mime && k.size == a.size)
+            }).cloned().collect();
+            let copies = other_mapped.attachments.len();
+            let (merged, mut report) = gitpass_core::merge_duplicate_records(&keep_rec, &other_mapped)?;
+            report.attachments_added = copies;
+            Ok(MergeDuplicatePreview {
+                keep_id: keep_id.to_string(),
+                other_id: other_id.to_string(),
+                merged_title: merged.item.title.clone(),
+                merged_url: merged.item.url.clone(),
+                merged_tags: merged.tags.clone(),
+                report: MergeDuplicateReport {
+                    password_from_other: report.password_from_other,
+                    password_moved_to_history: report.password_moved_to_history,
+                    totp_from_other: report.totp_from_other,
+                    urls_added: report.urls_added,
+                    tags_added: report.tags_added,
+                    related_added: report.related_added,
+                    notes_joined: report.notes_joined,
+                    fields_copied: report.fields_copied,
+                    fields_conflicted: report.fields_conflicted,
+                    attachments_added: report.attachments_added,
+                    history_entries: report.history_entries,
+                },
+            })
+        })
+    }
+    /// Merge two duplicate logins (issue #396): the kept item absorbs the
+    /// discarded item in one manifest commit; the discarded item moves to
+    /// Recently Deleted (restorable). Undo: `restore_item` on the discarded
+    /// item, then `restore_item_version` on the kept item to
+    /// `keep_version_before`.
+    pub fn merge_duplicate_items(&self, vault_id: &str, keep_id: &str, other_id: &str) -> Result<MergeDuplicateResult> {
+        self.write(|u| {
+            let outcome = u.session.merge_duplicate_items(vault_id, keep_id, other_id)?;
+            let (_, keep_rec) = u.session.read_record(vault_id, keep_id)?;
+            let (_, other_rec) = u.session.read_record(vault_id, other_id)?;
+            let r = outcome.report;
+            Ok(MergeDuplicateResult {
+                kept: summary(vault_id, keep_id, &keep_rec, u.session.last_used(keep_id)),
+                other_id: other_id.to_string(),
+                other_title: other_rec.item.title.clone(),
+                keep_version_before: outcome.keep_version_before,
+                keep_version: outcome.keep_version,
+                report: MergeDuplicateReport {
+                    password_from_other: r.password_from_other,
+                    password_moved_to_history: r.password_moved_to_history,
+                    totp_from_other: r.totp_from_other,
+                    urls_added: r.urls_added,
+                    tags_added: r.tags_added,
+                    related_added: r.related_added,
+                    notes_joined: r.notes_joined,
+                    fields_copied: r.fields_copied,
+                    fields_conflicted: r.fields_conflicted,
+                    attachments_added: r.attachments_added,
+                    history_entries: r.history_entries,
+                },
+            })
+        })
+    }
     pub fn purge_item(&self, vault_id: &str, item_id: &str) -> Result<()> { self.write(|u| u.session.purge_item(vault_id, item_id)) }
     pub fn ignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.ignore_finding(vault_id, item_id, kind)) }
     pub fn unignore_finding(&self, vault_id: &str, item_id: &str, kind: &str) -> Result<()> { self.write(|u| u.session.unignore_finding(vault_id, item_id, kind)) }
