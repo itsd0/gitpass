@@ -6,7 +6,8 @@
 > That prompt is enough: this file holds the whole workflow. Follow it top to bottom.
 
 gitpass is a **personal** password manager whose encrypted vault lives in a git repo.
-Targets: **macOS** (desktop app, CLI, iOS) and **Chromium** browsers (extension). Single owner
+Targets: **macOS** (desktop app, CLI), **iOS** (companion app), and **Chromium** browsers (extension).
+**Android** companion development is owner-approved in stages (see below), not yet a supported production app. Single owner
 (@itsd0); no team, SSO or enterprise features. Merges, tags and releases happen **only with the owner's OK**.
 
 Known agents: **edison**, **opencode**, **agy** (Antigravity), **muse**, **grokbot** (review, Mac build/install, releases).
@@ -84,6 +85,7 @@ They also cannot edit `.github/workflows` (and must not anyway).
 | `apps/desktop/src` | React/TypeScript UI (Vite, zustand, vitest). Browser mock in `src/api/mock.ts` |
 | `extension/` | Chromium MV3 extension (plain JS, `node --test`) |
 | `ios/` | SwiftUI app + `ios/rust/gitpass-ios-ffi` (uniffi), XcodeGen `project.yml` |
+| `android/` (planned) | Owner-approved staged Kotlin/Jetpack Compose companion, reusing the Rust UniFFI bridge; no production-support claim |
 | `.github/workflows` | All workflows run on GitHub-hosted runners; `release.yml` (v* tags, owner only, `release` environment) — **owner only, do not edit unless an issue asks for it** |
 | `docs/RELEASE.md`, `scripts/` | Release notes/process, helper scripts |
 
@@ -146,12 +148,30 @@ GitHub-only agents may not be able to read CI results; ask the owner or Grok Bot
 6. **Do not edit `.github/workflows/*`** — owner only. If a workflow change is needed, describe it in the PR.
    New actions must be pinned to a full commit SHA with a version comment.
 7. **Style:** desktop app accent is **orange**; the iOS UI stays **monochrome**. Follow existing patterns and UI kit (`apps/desktop/src/ui`).
-8. **Scope:** macOS + Chromium only; personal use — no team/SSO/admin-console features.
+8. **Scope:** macOS, iOS and Chromium, plus owner-approved staged Android companion development below;
+   no other platform expansion. Personal use — no team/SSO/admin-console features.
 9. Crypto, vault format and release config (`crates/gitpass-core/src/crypto.rs`, `keys.rs`, `store/` format,
    `apps/desktop/src-tauri/tauri.conf.json`, `docs/RELEASE.md`) need an explicit note in the PR and owner review.
 10. Keep `Cargo.lock` / `package-lock.json` changes intentional (`--locked` in CI). New deps must pass `cargo deny`.
 11. Locale changes: add every new extension key to `en`, `my` and `th`.
 12. Never fabricate results: only claim a test/CI passed if you ran or saw it.
+
+## Android: owner-approved staged development
+
+The owner explicitly authorized this Android scope update. This is not a blanket override of any rule above:
+**one issue = one branch = one small PR**, owner review/merge, secret handling and real-vault restrictions all remain.
+
+- **First milestone:** buildable Kotlin/Jetpack Compose shell in `android/`, `en`/`my`/`th` strings, and a
+  shared Rust UniFFI bridge. Reuse `ios/rust/gitpass-ios-ffi` where feasible; preserve existing Swift APIs
+  and iOS builds rather than duplicating crypto or assuming full mobile feature parity.
+- **Later milestones, separate issues/PRs:** read-only local test vault with manual unlock/lock first;
+  then CRUD/TOTP; reviewed sync; Autofill; and passkeys as a separate security-reviewed integration.
+  Biometric unlock/credential caching requires a security review before implementation.
+- Use fake/temp vaults only; do not weaken crypto/KDF parameters. Crypto, vault-format and passkey
+  changes require explicit owner review. Existing platform tests must not regress.
+- `.github/workflows/*` remains **owner only**: agents document Android build/test commands and proposed
+  checks in the PR; the owner adds/reviews CI separately. No implied permission for workflow, settings,
+  release or tag changes. Report actual build/device/emulator results and unverified targets honestly.
 
 ## Worktrees (`scripts/agent-worktree.sh`)
 
