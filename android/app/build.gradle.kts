@@ -56,6 +56,10 @@ android {
             useLegacyPackaging = true
         }
     }
+    lint {
+        // UniFFI generated bindings include runtime reflection fallback for java.lang.ref.Cleaner (API 33+)
+        disable += "NewApi"
+    }
 }
 
 dependencies {
