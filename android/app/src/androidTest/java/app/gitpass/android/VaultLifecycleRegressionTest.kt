@@ -4,12 +4,14 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import app.gitpass.android.session.AccountSetup
 import app.gitpass.android.session.ItemRow
 import app.gitpass.android.session.ItemView
 import app.gitpass.android.session.OpenVault
@@ -193,17 +195,24 @@ class VaultLifecycleRegressionTest {
 
             // Release creation IO to complete
             fakeGateway.creationRelease.countDown()
+            // Compose idleness does not wait for application-scoped IO.
+            // Wait for the actual key handoff, then scroll the secure gate
+            // into view on small emulator displays / with an open IME.
+            composeTestRule.waitUntil(timeoutMillis = 10_000) {
+                app.pendingSecret.get() != null &&
+                    app.accountSetup.state.value != AccountSetup.State.Creating
+            }
             composeTestRule.waitForIdle()
 
             // 4. Verify the SecretKeyGate is displayed with the pending Secret Key
-            composeTestRule.onNodeWithTag(TestTags.SECRET_KEY_VALUE).assertIsDisplayed()
+            composeTestRule.onNodeWithTag(TestTags.SECRET_KEY_VALUE).performScrollTo().assertIsDisplayed()
             val handedKey = app.pendingSecret.get()
             assertNotNull("Pending secret must be established in-memory across recreate", handedKey)
             assertEquals("A3-NEW-GENERATED-KEY", handedKey)
             composeTestRule.onNodeWithText("A3-NEW-GENERATED-KEY").assertIsDisplayed()
 
             // 5. Confirm saved key
-            composeTestRule.onNodeWithTag(TestTags.I_SAVED_IT).performClick()
+            composeTestRule.onNodeWithTag(TestTags.I_SAVED_IT).performScrollTo().performClick()
             composeTestRule.waitForIdle()
 
             // 6. Test that the created account can be unlocked with the handed-off key
