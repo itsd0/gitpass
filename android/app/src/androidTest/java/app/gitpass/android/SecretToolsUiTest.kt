@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import app.gitpass.android.session.*
 import app.gitpass.android.ui.TestTags
+import app.gitpass.core.ItemInput
 import java.io.File
 import java.util.UUID
 import org.junit.Assert.*
@@ -19,7 +20,7 @@ class SecretToolsUiTest {
     @get:Rule val rule = createEmptyComposeRule()
 
     @Test fun generatorCancelApplyAndLockAreExplicitAndNeverAutoSave() {
-        withFakeApp { app, tools ->
+        withFakeApp { app, tools, gateway ->
             unlock(app)
             rule.onNodeWithText("New login").performClick()
             rule.onNodeWithTag("crud-title").performTextInput("Unsaved")
@@ -29,7 +30,13 @@ class SecretToolsUiTest {
             rule.onNodeWithText("Length: 20").assertIsDisplayed()
             rule.onNodeWithText("G".repeat(20)).assertDoesNotExist()
             rule.onNodeWithTag("generator-cancel").performClick()
-            rule.onNodeWithTag("crud-password").assertTextEquals("FAKE-original")
+            rule.onNodeWithTag("crud-password").assert(hasText("•".repeat(13)))
+            assertEquals(0, gateway.writes)
+            rule.onNodeWithTag("crud-save").performScrollTo().performClick()
+            rule.waitUntil(10_000) { app.session.state.value.items.size == 3 }
+            assertEquals("FAKE-original", gateway.lastSaved?.password)
+            rule.onNodeWithText("Unsaved").performClick()
+            rule.onNodeWithText("Edit login").performClick()
             rule.onNodeWithText("Password generator").performScrollTo().performClick()
             rule.waitUntil(10_000) { tools.generations > 1 }
             rule.onNodeWithText("+").performClick()
@@ -37,8 +44,13 @@ class SecretToolsUiTest {
             rule.onNodeWithText("Regenerate").performClick()
             rule.waitUntil(10_000) { rule.onAllNodes(hasText("Use password") and isEnabled()).fetchSemanticsNodes().isNotEmpty() }
             rule.onNodeWithText("Use password").performClick()
-            rule.onNodeWithTag("crud-password").assertTextEquals("G".repeat(21))
-            assertTrue(app.session.state.value.items.size == 2) // no implicit vault write
+            rule.onNodeWithTag("crud-password").assert(hasText("•".repeat(21)))
+            assertEquals(1, gateway.writes) // applying did not write
+            rule.onNodeWithTag("crud-save").performScrollTo().performClick()
+            rule.waitUntil(10_000) { gateway.writes == 2 && app.session.state.value.detail == null }
+            assertEquals("G".repeat(21), gateway.lastSaved?.password)
+            rule.onNodeWithText("Unsaved").performClick()
+            rule.onNodeWithText("Edit login").performClick()
             rule.onNodeWithText("Password generator").performScrollTo().performClick()
             InstrumentationRegistry.getInstrumentation().runOnMainSync { app.session.onHostBackground() }
             rule.onNodeWithTag(TestTags.MASTER_PASSWORD).assertIsDisplayed()
@@ -48,7 +60,7 @@ class SecretToolsUiTest {
     }
 
     @Test fun totpRolloverInvalidConfigurationAndBackgroundLockNeverShowSeed() {
-        withFakeApp { app, tools ->
+        withFakeApp { app, tools, _ ->
             unlock(app)
             rule.onNodeWithText("OTP valid").performClick()
             rule.onNodeWithText(FIXTURE_SEED).assertDoesNotExist()
@@ -78,14 +90,15 @@ class SecretToolsUiTest {
         rule.waitUntil(10_000) { app.session.state.value.unlocked }
     }
 
-    private fun withFakeApp(test: (GitpassApplication, UiTools) -> Unit) {
+    private fun withFakeApp(test: (GitpassApplication, UiTools, UiToolGateway) -> Unit) {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val app = context.applicationContext as GitpassApplication
         val root = File(context.cacheDir, "secret-tools-${UUID.randomUUID()}").apply { mkdirs() }
         File(root, "format.json").writeText("{}")
         val tools = UiTools()
-        app.installForTest(UiToolGateway(), root, nowMs = { 0L }, secretTools = tools)
-        try { ActivityScenario.launch(MainActivity::class.java).use { test(app, tools) } }
+        val gateway = UiToolGateway()
+        app.installForTest(gateway, root, nowMs = { 0L }, secretTools = tools)
+        try { ActivityScenario.launch(MainActivity::class.java).use { test(app, tools, gateway) } }
         finally { app.session.lock(); app.pendingSecret.clear(); root.deleteRecursively() }
     }
 }
@@ -102,15 +115,25 @@ private class UiTools : SecretTools {
     }
 }
 private class UiToolGateway : VaultGateway, OpenVault {
+    @Volatile var lastSaved: ItemInput? = null
+    @Volatile var writes = 0
     override fun vaultExists(root: String) = true
     override fun createAccount(root: String, password: String) = "FAKE-key"
     override fun open(root: String, password: String, secretKey: String): OpenVault = this
     override fun listVaults() = listOf(VaultSummary("v", "Fake", null, 2))
     override fun listItems(vaultId: String) = listOf("valid", "invalid").map {
         ItemRow(it, "v", "OTP $it", "", null, "login", emptyList(), false, false, false, true)
-    }
-    override fun getItem(vaultId: String, itemId: String) = ItemView(itemId, "v", "OTP $itemId", null, null, null, null,
+    } + listOfNotNull(lastSaved?.let { ItemRow("created", "v", it.title, "", null, "login", emptyList(), false, false, false, false) })
+    override fun createItem(vaultId: String, input: ItemInput): String { lastSaved = input; writes++; return "created" }
+    override fun updateItem(vaultId: String, itemId: String, input: ItemInput) { lastSaved = input; writes++ }
+    override fun getItem(vaultId: String, itemId: String): ItemView {
+        if (itemId == "created") {
+            val item = requireNotNull(lastSaved)
+            return ItemView(itemId, "v", item.title, item.username, item.password, item.url, item.notes, item.totp, "login", emptyList(), false, false, false, "", emptyList())
+        }
+        return ItemView(itemId, "v", "OTP $itemId", null, null, null, null,
         if (itemId == "valid") FIXTURE_SEED else "FAKE-invalid-seed", "login", emptyList(), false, false, false, "", emptyList())
+    }
     override fun createVault(name: String) = "v"
     override fun close() { }
 }
