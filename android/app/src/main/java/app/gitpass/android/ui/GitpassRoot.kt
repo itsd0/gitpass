@@ -269,7 +269,8 @@ fun GitpassRoot(app: GitpassApplication) {
             }
             is Screen.Edit -> {
                 val vaultId = snapshot.selectedVaultId
-                LoginEditor(current.item, writing, errorText,
+                LoginEditor(current.item, writing, errorText, padding,
+                    onLock = { session.lock() },
                     onCancel = { screen = Screen.List },
                     onSave = { edit ->
                         if (vaultId != null && !writing) {
@@ -758,8 +759,8 @@ object TestTags {
 
 @Composable
 private fun LoginEditor(
-    item: ItemView?, busy: Boolean, error: String?,
-    onCancel: () -> Unit, onSave: (ItemEdit) -> Unit,
+    item: ItemView?, busy: Boolean, error: String?, padding: PaddingValues,
+    onLock: () -> Unit, onCancel: () -> Unit, onSave: (ItemEdit) -> Unit,
 ) {
     var title by remember { mutableStateOf(item?.title.orEmpty()) }
     var username by remember { mutableStateOf(item?.username.orEmpty()) }
@@ -767,18 +768,19 @@ private fun LoginEditor(
     var url by remember { mutableStateOf(item?.url.orEmpty()) }
     var notes by remember { mutableStateOf(item?.notes.orEmpty()) }
     BackHandler(enabled = !busy, onBack = onCancel)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+    Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        TextButton(onClick = onLock) { Text(stringResource(R.string.lock)) }
         Text(stringResource(if (item == null) R.string.new_login else R.string.edit_item))
-        OutlinedTextField(title, { title = it }, label = { Text(stringResource(R.string.item_title)) }, enabled = !busy, singleLine = true)
-        OutlinedTextField(username, { username = it }, label = { Text(stringResource(R.string.username)) }, enabled = !busy, singleLine = true)
-        OutlinedTextField(password, { password = it }, label = { Text(stringResource(R.string.password)) }, enabled = !busy,
+        OutlinedTextField(title, { title = it }, modifier = Modifier.testTag("crud-title"), label = { Text(stringResource(R.string.item_title)) }, enabled = !busy, singleLine = true)
+        OutlinedTextField(username, { username = it }, modifier = Modifier.testTag("crud-username"), label = { Text(stringResource(R.string.username)) }, enabled = !busy, singleLine = true)
+        OutlinedTextField(password, { password = it }, modifier = Modifier.testTag("crud-password"), label = { Text(stringResource(R.string.password)) }, enabled = !busy,
             singleLine = true, visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false))
-        OutlinedTextField(url, { url = it }, label = { Text(stringResource(R.string.website)) }, enabled = !busy, singleLine = true)
-        OutlinedTextField(notes, { notes = it }, label = { Text(stringResource(R.string.notes)) }, enabled = !busy)
+        OutlinedTextField(url, { url = it }, modifier = Modifier.testTag("crud-url"), label = { Text(stringResource(R.string.website)) }, enabled = !busy, singleLine = true)
+        OutlinedTextField(notes, { notes = it }, modifier = Modifier.testTag("crud-notes"), label = { Text(stringResource(R.string.notes)) }, enabled = !busy)
         if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
-        Button(enabled = !busy && title.isNotBlank(), onClick = { onSave(ItemEdit(title, username, password, url, notes)) }) { Text(stringResource(R.string.save_item)) }
+        Button(modifier = Modifier.testTag("crud-save"), enabled = !busy && title.isNotBlank(), onClick = { onSave(ItemEdit(title, username, password, url, notes)) }) { Text(stringResource(R.string.save_item)) }
         TextButton(enabled = !busy, onClick = onCancel) { Text(stringResource(R.string.cancel_edit)) }
     }
 }
