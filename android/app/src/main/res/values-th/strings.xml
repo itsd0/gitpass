@@ -38,4 +38,13 @@
     <string name="copied">คัดลอกแล้ว คลิปบอร์ดจะถูกล้างใน 60 วินาที</string>
     <string name="field_empty">ว่าง</string>
     <string name="setup_interrupted">การตั้งค่าบัญชีถูกขัดจังหวะก่อนที่คุณจะยืนยันว่าบันทึกกุญแจลับแล้ว และ gitpass ไม่เคยเก็บกุญแจนี้ไว้ หากคุณจดไว้ ให้ปลดล็อกด้วยกุญแจนั้น มิฉะนั้นจะเปิดบัญชีนี้ไม่ได้ ให้ล้างพื้นที่เก็บข้อมูลของ gitpass ในการตั้งค่า Android เพื่อเริ่มใหม่</string>
+    <string name="new_login">เพิ่มการเข้าสู่ระบบ</string>
+    <string name="active_items">รายการปัจจุบัน</string>
+    <string name="trash">ถังขยะ</string>
+    <string name="edit_item">แก้ไขการเข้าสู่ระบบ</string>
+    <string name="restore_item">กู้คืน</string>
+    <string name="move_to_trash">ย้ายไปถังขยะ</string>
+    <string name="item_title">ชื่อรายการ</string>
+    <string name="save_item">บันทึก</string>
+    <string name="cancel_edit">ยกเลิก</string>
 </resources>

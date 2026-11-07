@@ -63,6 +63,7 @@ import app.gitpass.android.R
 import app.gitpass.android.session.AccountCreatedButLocked
 import app.gitpass.android.session.AccountSetup
 import app.gitpass.android.session.DetailRow
+import app.gitpass.android.session.ItemEdit
 import app.gitpass.android.session.ItemRow
 import app.gitpass.android.session.ItemView
 import app.gitpass.android.session.VaultSession
@@ -83,6 +84,7 @@ import kotlinx.coroutines.delay
 private sealed interface Screen {
     data object List : Screen
     data class Detail(val itemId: String) : Screen
+    data class Edit(val item: ItemView?) : Screen
 }
 
 @Composable
@@ -107,6 +109,7 @@ fun GitpassRoot(app: GitpassApplication) {
     var screen by remember(snapshot.epoch) { mutableStateOf<Screen>(Screen.List) }
     var revealedKeys by remember(snapshot.epoch) { mutableStateOf(setOf<String>()) }
     var queryText by remember(snapshot.epoch) { mutableStateOf("") }
+    var writing by remember(snapshot.epoch) { mutableStateOf(false) }
 
     val tooShort = stringResource(R.string.password_too_short)
     val mismatch = stringResource(R.string.passwords_do_not_match)
@@ -237,7 +240,12 @@ fun GitpassRoot(app: GitpassApplication) {
                 },
             )
         } else when (val current = screen) {
-            Screen.List -> ItemListScreen(
+            Screen.List -> Column {
+                Row {
+                    TextButton(onClick = { screen = Screen.Edit(null) }, enabled = snapshot.selectedVaultId != null && !snapshot.trash) { Text(stringResource(R.string.new_login)) }
+                    TextButton(onClick = { session.setTrash(!snapshot.trash); queryText = "" }) { Text(stringResource(if (snapshot.trash) R.string.active_items else R.string.trash)) }
+                }
+                ItemListScreen(
                 padding = padding,
                 snapshot = snapshot,
                 query = queryText,
@@ -258,12 +266,61 @@ fun GitpassRoot(app: GitpassApplication) {
                 onLock = { session.lock() },
                 errorText = errorText,
             )
+            }
+            is Screen.Edit -> {
+                val vaultId = snapshot.selectedVaultId
+                LoginEditor(current.item, writing, errorText, padding,
+                    onLock = { session.lock() },
+                    onCancel = { screen = Screen.List },
+                    onSave = { edit ->
+                        if (vaultId != null && !writing) {
+                            val epoch = snapshot.epoch
+                            writing = true
+                            errorText = null
+                            scope.launch {
+                                val result = withContext(Dispatchers.IO) {
+                                    runCatching { session.saveItem(vaultId, current.item?.id, edit, epoch) }
+                                }
+                                if (session.state.value.epoch == epoch) {
+                                    writing = false
+                                    result.onSuccess { screen = Screen.List }
+                                        .onFailure { errorText = userVisibleError(it) }
+                                }
+                            }
+                        }
+                    })
+            }
             is Screen.Detail -> {
                 BackHandler {
                     session.clearDetail()
                     revealedKeys = emptySet()
                     screen = Screen.List
                 }
+                Column {
+                    val item = snapshot.detail?.takeIf { it.id == current.itemId }
+                    Row {
+                        if (item != null && !item.deleted && !item.archived && item.category == "login") {
+                            TextButton(onClick = { screen = Screen.Edit(item) }, enabled = !writing) { Text(stringResource(R.string.edit_item)) }
+                        }
+                        if (item != null) {
+                            // Soft deletion only; never remove encrypted files permanently.
+                            TextButton(enabled = !writing, onClick = {
+                                val epoch = snapshot.epoch
+                                writing = true
+                                errorText = null
+                                scope.launch {
+                                    val result = withContext(Dispatchers.IO) {
+                                        runCatching { session.setDeleted(item.vaultId, item.id, !item.deleted, epoch) }
+                                    }
+                                    if (session.state.value.epoch == epoch) {
+                                        writing = false
+                                        result.onSuccess { screen = Screen.List }
+                                            .onFailure { errorText = userVisibleError(it) }
+                                    }
+                                }
+                            }) { Text(stringResource(if (item.deleted) R.string.restore_item else R.string.move_to_trash)) }
+                        }
+                    }
                 ItemDetailScreen(
                     padding = padding,
                     item = snapshot.detail?.takeIf { it.id == current.itemId },
@@ -280,6 +337,7 @@ fun GitpassRoot(app: GitpassApplication) {
                     },
                     onLock = { session.lock() },
                 )
+                }
             }
         }
     }
@@ -697,4 +755,32 @@ object TestTags {
     const val SECRET_KEY_VALUE = "secret-key-value"
     const val I_SAVED_IT = "i-saved-it"
     const val SETUP_INTERRUPTED = "setup-interrupted"
+}
+
+@Composable
+private fun LoginEditor(
+    item: ItemView?, busy: Boolean, error: String?, padding: PaddingValues,
+    onLock: () -> Unit, onCancel: () -> Unit, onSave: (ItemEdit) -> Unit,
+) {
+    var title by remember { mutableStateOf(item?.title.orEmpty()) }
+    var username by remember { mutableStateOf(item?.username.orEmpty()) }
+    var password by remember { mutableStateOf(item?.password.orEmpty()) }
+    var url by remember { mutableStateOf(item?.url.orEmpty()) }
+    var notes by remember { mutableStateOf(item?.notes.orEmpty()) }
+    BackHandler(enabled = !busy, onBack = onCancel)
+    Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        TextButton(onClick = onLock) { Text(stringResource(R.string.lock)) }
+        Text(stringResource(if (item == null) R.string.new_login else R.string.edit_item))
+        OutlinedTextField(title, { title = it }, modifier = Modifier.testTag("crud-title"), label = { Text(stringResource(R.string.item_title)) }, enabled = !busy, singleLine = true)
+        OutlinedTextField(username, { username = it }, modifier = Modifier.testTag("crud-username"), label = { Text(stringResource(R.string.username)) }, enabled = !busy, singleLine = true)
+        OutlinedTextField(password, { password = it }, modifier = Modifier.testTag("crud-password"), label = { Text(stringResource(R.string.password)) }, enabled = !busy,
+            singleLine = true, visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false))
+        OutlinedTextField(url, { url = it }, modifier = Modifier.testTag("crud-url"), label = { Text(stringResource(R.string.website)) }, enabled = !busy, singleLine = true)
+        OutlinedTextField(notes, { notes = it }, modifier = Modifier.testTag("crud-notes"), label = { Text(stringResource(R.string.notes)) }, enabled = !busy)
+        if (error != null) Text(error, color = MaterialTheme.colorScheme.error)
+        Button(modifier = Modifier.testTag("crud-save"), enabled = !busy && title.isNotBlank(), onClick = { onSave(ItemEdit(title, username, password, url, notes)) }) { Text(stringResource(R.string.save_item)) }
+        TextButton(enabled = !busy, onClick = onCancel) { Text(stringResource(R.string.cancel_edit)) }
+    }
 }

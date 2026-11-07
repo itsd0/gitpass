@@ -38,4 +38,13 @@
     <string name="copied">ကူးပြီးပါပြီ။ ကလစ်ဘုတ်ကို စက္ကန့် ၆၀ အကြာတွင် ရှင်းပါမည်။</string>
     <string name="field_empty">မရှိပါ</string>
     <string name="setup_interrupted">လျှို့ဝှက်သော့ကို သိမ်းပြီးကြောင်း အတည်မပြုမီ အကောင့်ဖန်တီးမှု ရပ်တန့်သွားခဲ့ပြီး gitpass က ၎င်းကို ဘယ်တော့မှ မသိမ်းပါ။ မှတ်ထားခဲ့လျှင် ၎င်းဖြင့် ဖွင့်ပါ။ မဟုတ်ပါက ဤအကောင့်ကို ဖွင့်၍မရပါ။ အစမှပြန်စရန် Android ဆက်တင်တွင် gitpass သိုလှောင်မှုကို ရှင်းပါ။</string>
+    <string name="new_login">Login အသစ်</string>
+    <string name="active_items">လက်ရှိအချက်များ</string>
+    <string name="trash">အမှိုက်ပုံး</string>
+    <string name="edit_item">Login ပြင်မည်</string>
+    <string name="restore_item">ပြန်ယူမည်</string>
+    <string name="move_to_trash">အမှိုက်ပုံးသို့ရွှေ့မည်</string>
+    <string name="item_title">ခေါင်းစဉ်</string>
+    <string name="save_item">သိမ်းမည်</string>
+    <string name="cancel_edit">မလုပ်တော့ပါ</string>
 </resources>

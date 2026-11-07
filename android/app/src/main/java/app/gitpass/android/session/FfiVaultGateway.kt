@@ -1,5 +1,6 @@
 package app.gitpass.android.session
 
+import app.gitpass.core.ItemInput
 import app.gitpass.core.ItemDetail
 import app.gitpass.core.ItemSummary
 import app.gitpass.core.Vault
@@ -27,6 +28,11 @@ private class FfiOpenVault(private val vault: Vault) : OpenVault {
     override fun getItem(vaultId: String, itemId: String): ItemView = mapDetail(vault.getItem(vaultId, itemId))
 
     override fun createVault(name: String): String = vault.createVault(name, null)
+
+    override fun createItem(vaultId: String, input: ItemInput): String = vault.createItem(vaultId, input)
+    override fun updateItem(vaultId: String, itemId: String, input: ItemInput) = vault.updateItem(vaultId, itemId, input)
+    override fun deleteItem(vaultId: String, itemId: String) = vault.deleteItem(vaultId, itemId)
+    override fun restoreItem(vaultId: String, itemId: String) = vault.restoreItem(vaultId, itemId)
 
     override fun close() {
         vault.close()

@@ -36,6 +36,7 @@ class VaultSession(
     private var items: List<ItemRow> = emptyList()
     private var detail: ItemView? = null
     private var query: String = ""
+    private var trash: Boolean = false
     private var lastActivityMs: Long = 0
     private val mutableState = MutableStateFlow(lockedSnapshot())
 
@@ -172,6 +173,45 @@ class VaultSession(
         }
     }
 
+    fun setTrash(value: Boolean) = mutex.withLock {
+        if (opened == null) throw VaultLockedException()
+        trash = value
+        detail = null
+        query = ""
+        lastActivityMs = nowMs()
+        publishLocked()
+    }
+
+    /** Vault and epoch are captured before dispatch, preventing writes after lock/re-unlock. */
+    fun saveItem(vaultId: String, itemId: String?, edit: ItemEdit, epoch: Long): String = mutex.withLock {
+        enforceInactivity()
+        val current = opened ?: throw VaultLockedException()
+        if (generation != epoch || selectedVaultId != vaultId) throw UnlockCancelledException()
+        val existing = itemId?.let { current.getItem(vaultId, it) }
+        if (existing?.deleted == true || existing?.archived == true) throw VaultSessionException("Restore item before editing")
+        val input = edit.input(existing)
+        val id = if (itemId == null) current.createItem(vaultId, input) else {
+            current.updateItem(vaultId, itemId, input)
+            itemId
+        }
+        detail = null
+        reloadLocked()
+        lastActivityMs = nowMs()
+        publishLocked()
+        id
+    }
+
+    fun setDeleted(vaultId: String, itemId: String, deleted: Boolean, epoch: Long) = mutex.withLock {
+        enforceInactivity()
+        val current = opened ?: throw VaultLockedException()
+        if (generation != epoch || selectedVaultId != vaultId) throw UnlockCancelledException()
+        if (deleted) current.deleteItem(vaultId, itemId) else current.restoreItem(vaultId, itemId)
+        detail = null
+        reloadLocked()
+        lastActivityMs = nowMs()
+        publishLocked()
+    }
+
     fun clearDetail() {
         mutex.withLock {
             detail = null
@@ -201,10 +241,11 @@ class VaultSession(
             unlocked = true,
             vaults = vaults,
             selectedVaultId = selectedVaultId,
-            items = ItemSearch.visible(items, query),
+            items = ItemSearch.visible(items, query, trash),
             query = query,
             detail = detail,
             epoch = generation,
+            trash = trash,
         )
     }
 
@@ -251,6 +292,7 @@ class VaultSession(
         items = emptyList()
         detail = null
         query = ""
+        trash = false
         // Publish before closing the native handle so observers drop
         // plaintext detail even if close() is slow or throws.
         publishLocked()
@@ -279,6 +321,10 @@ interface OpenVault {
     fun listItems(vaultId: String): List<ItemRow>
     fun getItem(vaultId: String, itemId: String): ItemView
     fun createVault(name: String): String
+    fun createItem(vaultId: String, input: app.gitpass.core.ItemInput): String = throw UnsupportedOperationException()
+    fun updateItem(vaultId: String, itemId: String, input: app.gitpass.core.ItemInput): Unit = throw UnsupportedOperationException()
+    fun deleteItem(vaultId: String, itemId: String): Unit = throw UnsupportedOperationException()
+    fun restoreItem(vaultId: String, itemId: String): Unit = throw UnsupportedOperationException()
     fun close()
 }
 
