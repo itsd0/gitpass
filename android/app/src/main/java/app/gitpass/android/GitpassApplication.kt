@@ -13,27 +13,93 @@ import app.gitpass.android.session.PendingSecret
 import app.gitpass.android.session.VaultGateway
 import app.gitpass.android.session.VaultSession
 import java.io.File
+import app.gitpass.android.firstpull.AccountRoots
+import app.gitpass.android.firstpull.FirstPullAttempt
+import app.gitpass.android.firstpull.FirstPullFailure
+import app.gitpass.android.firstpull.RepositorySelection
+import java.util.concurrent.atomic.AtomicReference
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 class GitpassApplication : Application() {
-    lateinit var session: VaultSession
+    @Volatile lateinit var session: VaultSession
         private set
-    lateinit var vaultRoot: File
+    @Volatile lateinit var vaultRoot: File
         private set
-    lateinit var accountSetup: AccountSetup
+    @Volatile lateinit var accountSetup: AccountSetup
+        private set
+    var accountSelectionDamaged: Boolean = false
         private set
     val pendingSecret = PendingSecret()
+    lateinit var accountRoots: AccountRoots
+        private set
+    private val revision = MutableStateFlow(0L)
+    val accountRevision = revision.asStateFlow()
+    private val pull = AtomicReference<FirstPullAttempt?>()
+    @VisibleForTesting var firstPullFactory: () -> FirstPullAttempt = ::FirstPullAttempt
+
+    fun cancelFirstPull() { pull.getAndSet(null)?.close() }
+
+    /** IO-thread only. Existing account data is never overwritten, including on failure/cancellation. */
+    fun firstPull(selection: RepositorySelection, token: String, password: String, secret: String, epoch: Long) {
+        if (accountSelectionDamaged) throw FirstPullFailure("Account selection cannot be read; existing data was preserved")
+        val previous = session
+        if (pendingSecret.present.value || accountSetup.state.value == AccountSetup.State.Creating) throw FirstPullFailure("Finish account creation first")
+        previous.atLockedEpoch(epoch) { Unit }
+        val attempt = firstPullFactory()
+        if (!pull.compareAndSet(null, attempt)) { attempt.close(); throw FirstPullFailure("First pull already running") }
+        try {
+            previous.atLockedEpoch(epoch) { attempt.checkpoint() }
+            attempt.stageAndVerify(accountRoots, selection, token, password, secret).use { copy ->
+                previous.atLockedEpoch(epoch) {
+                    attempt.checkpoint()
+                    if (session !== previous) throw FirstPullFailure("Account changed; first pull cancelled")
+                    val selected = accountRoots.promote(copy, attempt::checkpoint)
+                    previous.lock() // invalidate every stale callback before installing the new account
+                    install(FfiVaultGateway(), selected, VaultSession.ELAPSED_REALTIME)
+                    revision.value += 1
+                }
+            }
+        } finally {
+            pull.compareAndSet(attempt, null)
+            attempt.close()
+        }
+    }
+
+    fun selectLocalAccount(name: String, epoch: Long) {
+        if (accountSelectionDamaged) throw FirstPullFailure("Account selection cannot be read; existing data was preserved")
+        if (pendingSecret.present.value || accountSetup.state.value == AccountSetup.State.Creating) throw FirstPullFailure("Finish account creation first")
+        val previous = session
+        previous.atLockedEpoch(epoch) {
+            if (session !== previous) throw FirstPullFailure("Account changed")
+            cancelFirstPull()
+            val selected = accountRoots.select(name)
+            previous.lock()
+            install(FfiVaultGateway(), selected, VaultSession.ELAPSED_REALTIME)
+            revision.value += 1
+        }
+    }
 
     /** Outlives every Activity; used for work that must not die with the UI. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
+        accountRoots = AccountRoots(noBackupFilesDir)
+        // Fail closed on a damaged selection journal: preserve every account and do not clean imports.
+        val selected = runCatching {
+            accountRoots.startupCleanup()
+            accountRoots.selectedRoot()
+        }.getOrElse {
+            accountSelectionDamaged = true
+            File(noBackupFilesDir, "vault") // UI remains blocked; this is not silent account selection.
+        }
         install(
             gateway = FfiVaultGateway(),
-            root = File(noBackupFilesDir, "vault"),
+            root = selected,
             nowMs = VaultSession.ELAPSED_REALTIME,
         )
         ProcessLifecycleOwner.get().lifecycle.addObserver(object : DefaultLifecycleObserver {
@@ -55,12 +121,16 @@ class GitpassApplication : Application() {
     fun installForTest(gateway: VaultGateway, root: File, nowMs: () -> Long, secretTools: SecretTools = NativeSecretTools) {
         if (this::session.isInitialized) session.lock()
         pendingSecret.clear()
+        accountSelectionDamaged = false
+        accountRoots = AccountRoots(File(root.parentFile, "first-pull-test-${root.name}"), root)
+        firstPullFactory = ::FirstPullAttempt
         install(gateway, root, nowMs, secretTools)
+        revision.value += 1
     }
 
     private fun install(gateway: VaultGateway, root: File, nowMs: () -> Long, secretTools: SecretTools = NativeSecretTools) {
         vaultRoot = root
-        val fresh = VaultSession(gateway, nowMs = nowMs, secretTools = secretTools)
+        val fresh = VaultSession(gateway, nowMs = nowMs, secretTools = secretTools, onLock = ::cancelFirstPull)
         session = fresh
         accountSetup = AccountSetup(
             session = fresh,

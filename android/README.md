@@ -170,3 +170,55 @@ are no fake production algorithms or new crypto/format/Swift API changes.
 Tests separate native RFC6238 vectors and generator lengths, fake-clock/session
 validation, and actual Compose apply/cancel/lock and live-code/invalid-config UI.
 All fixtures are fake/cache-only; no physical-device runner or data wipe is used.
+
+## Selected-repository first pull (#447) — NOT TWO-WAY SYNC
+
+The locked screen's **First pull** form requires an explicit owner, repository,
+branch, dedicated PAT, Master Password and Secret Key. No repository defaults or
+maintainer credentials are used. Restrict a fine-grained PAT to the selected
+repository and **Contents: read-only**. PAT/password/key are memory-only, masked,
+not saveable, and cleared on submit, cancel, disposal and lock/background. They
+must be re-entered for another attempt. JVM strings/native call arguments cannot
+be reliably wiped; cancellation cannot interrupt an Argon2 call already running.
+There is no credential persistence, clipboard operation or hidden write API.
+
+Production transport uses only `https://api.github.com`, disables redirects and
+HTTP caching, and resolves the branch once before reading a pinned commit's tree
+and blobs. Per-connection timeouts are 15s; the attempt deadline is five minutes
+(checked before/after reads, so a blocked read may take up to 15s more). Responses,
+requests, tree count (10000), files (4 MiB), and aggregate bytes (64 MiB) are bounded.
+Paths/modes are allowlisted; symlinks, traversal, duplicate paths, truncated trees,
+submodules and executables are rejected. Blob lengths and Git object hashes must
+match. HTTP/parser errors never surface credential-bearing bodies or headers.
+Only fake connections/typed fixture transports are used by tests, not real repos.
+
+Before Argon2 allocation, an additive UniFFI import gate bounds `format.json` and
+rejects unsupported downloaded KDF settings: Argon2id memory **8192..262144 KiB**,
+iterations **1..6**, lanes **1..4**. These are acceptance floor/ceilings, NOT target
+settings: no vault/KDF rewrite or clamping occurs. The normal production default
+262144 KiB/t3/p4 is accepted on a capable device; costly unsupported vaults require
+a different capable client, not weakened security. The existing global format,
+crypto defaults and Swift entry points are unchanged.
+
+`Session::reopen_verify(..., false)` authenticates the keyset, manifest and every
+referenced hash (including attachments), checks rollback and rejects unexpected
+encrypted entries. Every vault/item is additionally decrypted, including Trash.
+Unlike ordinary unlock, this does not register devices, upgrade KDF, purge Trash
+or repair/reseal integrity failures. Core writes only local throttle/epoch state
+inside the staging copy. A keyset-only unlock is NEVER sufficient for activation.
+
+Only the completed authenticated, fsynced copy is atomically renamed into a NEW
+UUID account root. A separate non-secret, atomically replaced account-selection
+journal records the selection and prior roots; the original legacy `vault` root
+is retained and selectable. A session-mutex/locked-epoch gate serializes commit
+with all lock paths; stale callbacks cannot activate after lock/account changes.
+Cancellation/errors remove staging and unregistered imports, not old accounts.
+Process startup cleans owned orphan stages and unregistered UUID imports; a
+corrupt journal never authorizes cleanup. Registered account data is never deleted.
+No automatic refresh, push, merge or bidirectional sync is implemented. First pull
+creates a separate local snapshot; editing it does not update the GitHub repository.
+
+This does NOT mean the owner's sync is configured: actual owner/repo/branch and
+a dedicated read-only credential must be supplied by the owner inside the app.
+The development GitHub token is never a data-plane credential. No real vault,
+physical-device runner, uninstall or app-data wipe is used by this milestone.

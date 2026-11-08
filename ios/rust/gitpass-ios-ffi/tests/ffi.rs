@@ -341,3 +341,65 @@ fn android_tools_use_core_rfc6238_rollover_and_supported_generator_lengths() {
         assert!(!generated.chars().any(char::is_whitespace));
     }
 }
+
+#[test]
+fn first_pull_authenticates_whole_fixture_without_rewriting_encrypted_files() {
+    use gitpass_ios_ffi::validate_first_pull_snapshot;
+    use std::{collections::BTreeMap, fs, path::Path};
+    fn encrypted_files(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() { encrypted_files(root, &path, out); }
+            else {
+                let name = path.strip_prefix(root).unwrap().to_string_lossy().to_string();
+                if name.ends_with(".enc") || name == "format.json" || name == "identity.pub" {
+                    out.insert(name, fs::read(path).unwrap());
+                }
+            }
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("source");
+    let password = "FAKE first pull fixture password".to_string();
+    let secret = create_account(source.to_str().unwrap().into(), password.clone()).unwrap();
+    let vault = open_vault(source.to_str().unwrap().into(), password.clone(), secret.clone()).unwrap();
+    let vid = vault.create_vault("FAKE Personal".into(), None).unwrap();
+    let iid = vault.create_item(vid.clone(), empty_input("FAKE imported item")).unwrap();
+    vault.delete_item(vid.clone(), iid.clone()).unwrap(); // Trash must also authenticate.
+    drop(vault);
+    let mut original = BTreeMap::new();
+    encrypted_files(&source, &source, &mut original);
+    for variant in ["valid", "wrong-password", "wrong-secret", "keyset", "manifest", "item", "missing-item", "excessive-budget"] {
+        let staging = dir.path().join(variant);
+        for (name, bytes) in &original {
+            let target = staging.join(name);
+            fs::create_dir_all(target.parent().unwrap()).unwrap();
+            fs::write(target, bytes).unwrap();
+        }
+        match variant {
+            "keyset" => fs::write(staging.join("keyset.enc"), b"FAKE tampered").unwrap(),
+            "manifest" => fs::write(staging.join("manifest.enc"), b"FAKE tampered").unwrap(),
+            "item" => fs::write(staging.join(format!("vaults/{vid}/items/{iid}.enc")), b"FAKE tampered").unwrap(),
+            "missing-item" => fs::remove_file(staging.join(format!("vaults/{vid}/items/{iid}.enc"))).unwrap(),
+            "excessive-budget" => {
+                let path = staging.join("format.json");
+                let mut value: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+                value["kdf"]["m_kib"] = serde_json::json!(u32::MAX);
+                fs::write(path, serde_json::to_vec(&value).unwrap()).unwrap();
+            }
+            _ => (),
+        }
+        let result = validate_first_pull_snapshot(staging.to_str().unwrap().into(),
+            if variant == "wrong-password" { "FAKE wrong password".into() } else { password.clone() },
+            if variant == "wrong-secret" { "FAKE invalid Secret Key".into() } else { secret.clone() });
+        assert_eq!(result.is_ok(), variant == "valid", "fixture variant {variant}");
+        if variant == "valid" {
+            let mut after = BTreeMap::new();
+            encrypted_files(&staging, &staging, &mut after);
+            assert_eq!(original, after, "validation must not rewrite encrypted data");
+        }
+        let mut preserved = BTreeMap::new();
+        encrypted_files(&source, &source, &mut preserved);
+        assert_eq!(original, preserved, "existing account must never be touched");
+    }
+}
