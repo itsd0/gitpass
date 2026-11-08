@@ -748,6 +748,8 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -772,6 +774,8 @@ fun uniffi_gitpass_ios_ffi_checksum_func_merge_item_records(
 fun uniffi_gitpass_ios_ffi_checksum_func_open_vault(
 ): Short
 fun uniffi_gitpass_ios_ffi_checksum_func_totp_code(
+): Short
+fun uniffi_gitpass_ios_ffi_checksum_func_validate_first_pull_snapshot(
 ): Short
 fun uniffi_gitpass_ios_ffi_checksum_method_vault_create_item(
 ): Short
@@ -884,6 +888,8 @@ fun uniffi_gitpass_ios_ffi_fn_func_open_vault(`root`: RustBuffer.ByValue,`passwo
 ): Pointer
 fun uniffi_gitpass_ios_ffi_fn_func_totp_code(`secret`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_gitpass_ios_ffi_fn_func_validate_first_pull_snapshot(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
 fun ffi_gitpass_ios_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun ffi_gitpass_ios_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1023,6 +1029,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_ios_ffi_checksum_func_totp_code() != 45554.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_ios_ffi_checksum_func_validate_first_pull_snapshot() != 57379.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_create_item() != 43521.toShort()) {
@@ -2384,6 +2393,21 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
 }
     )
     }
+    
+
+        /**
+         * Authenticate a PRIVATE, completed staging root before selecting it as an account.
+         * Does not register a device, upgrade KDF parameters, repair rollback, or re-seal data.
+         * Core may write local throttle/epoch bookkeeping inside staging; encrypted files are unchanged.
+         * Caller owns path allowlisting, cancellation/epoch checks and atomic activation.
+         */
+    @Throws(GitpassException::class) fun `validateFirstPullSnapshot`(`root`: kotlin.String, `password`: kotlin.String, `secretKey`: kotlin.String)
+        = 
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_func_validate_first_pull_snapshot(
+        FfiConverterString.lower(`root`),FfiConverterString.lower(`password`),FfiConverterString.lower(`secretKey`),_status)
+}
+    
     
 
 

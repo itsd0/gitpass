@@ -28,6 +28,7 @@ class VaultSession(
     private val nowMs: () -> Long = ELAPSED_REALTIME,
     private val autoLockMs: Long = DEFAULT_AUTO_LOCK_MS,
     private val secretTools: SecretTools = NativeSecretTools,
+    private val onLock: () -> Unit = {},
 ) {
     private val mutex = ReentrantLock()
     private var generation: Long = 0
@@ -45,6 +46,12 @@ class VaultSession(
     val state: StateFlow<VaultSnapshot> = mutableState.asStateFlow()
 
     fun isUnlocked(): Boolean = mutex.withLock { opened != null }
+
+    /** Serializes import selection with every lock path; never authenticate or download inside this gate. */
+    fun <T> atLockedEpoch(epoch: Long, action: () -> T): T = mutex.withLock {
+        if (opened != null || generation != epoch) throw UnlockCancelledException()
+        action()
+    }
 
     fun unlock(root: String, password: String, secretKey: String) {
         val attempt = mutex.withLock {
@@ -308,6 +315,7 @@ class VaultSession(
     private fun lockLocked() {
         check(mutex.isHeldByCurrentThread)
         generation += 1
+        onLock()
         val current = opened
         opened = null
         vaults = emptyList()

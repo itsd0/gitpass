@@ -54,4 +54,17 @@
     <string name="generator_failed">Password generation failed</string>
     <string name="invalid_totp">Invalid TOTP configuration</string>
     <string name="totp_remaining">%1$d seconds remaining</string>
+    <string name="first_pull">First pull</string>
+    <string name="first_pull_scope">Download and verify one encrypted snapshot into a separate local account. This is NOT two-way sync. Your current account is preserved. Imported data does not refresh automatically.</string>
+    <string name="first_pull_permission">Select your own repository and branch. Use a dedicated fine-grained PAT restricted to this repository with Contents: read-only. The PAT stays in memory only and must be re-entered after lock or cancel.</string>
+    <string name="repository_owner">Repository owner</string>
+    <string name="repository_name">Repository name</string>
+    <string name="repository_branch">Branch</string>
+    <string name="dedicated_pat">Dedicated read-only PAT</string>
+    <string name="first_pull_start">Download, verify and select account</string>
+    <string name="first_pull_error">First pull failed. Check repository, Contents permission, Master Password and Secret Key, and snapshot integrity. Existing accounts are preserved. Re-enter credentials to retry.</string>
+    <string name="first_pull_budget_error">This vault exceeds the Android import KDF budget (8192–262144 KiB, iterations 1–6, lanes 1–4). No parameters were changed. Use a capable supported client; do not weaken your vault.</string>
+    <string name="local_accounts">Existing local accounts</string>
+    <string name="legacy_account">Original local account</string>
+    <string name="imported_account">Imported local account %1$d</string>
 </resources>

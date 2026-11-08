@@ -34,6 +34,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -89,6 +90,12 @@ private sealed interface Screen {
 
 @Composable
 fun GitpassRoot(app: GitpassApplication) {
+    val revision by app.accountRevision.collectAsState()
+    key(revision) { AccountRoot(app) }
+}
+
+@Composable
+private fun AccountRoot(app: GitpassApplication) {
     val session = app.session
     val setup = app.accountSetup
     val scope = rememberCoroutineScope()
@@ -109,6 +116,7 @@ fun GitpassRoot(app: GitpassApplication) {
     var screen by remember(snapshot.epoch) { mutableStateOf<Screen>(Screen.List) }
     var revealedKeys by remember(snapshot.epoch) { mutableStateOf(setOf<String>()) }
     var queryText by remember(snapshot.epoch) { mutableStateOf("") }
+    var importing by remember(snapshot.epoch) { mutableStateOf(false) }
     var writing by remember(snapshot.epoch) { mutableStateOf(false) }
 
     val tooShort = stringResource(R.string.password_too_short)
@@ -128,7 +136,7 @@ fun GitpassRoot(app: GitpassApplication) {
         }
     }
 
-    LaunchedEffect(snapshot.unlocked) {
+    LaunchedEffect(snapshot.unlocked, snapshot.epoch) {
         if (!snapshot.unlocked) {
             password = ""
             confirmPassword = ""
@@ -185,7 +193,11 @@ fun GitpassRoot(app: GitpassApplication) {
             },
         containerColor = GitpassBackground,
     ) { padding ->
-        if (!snapshot.unlocked) {
+        if (importing && !snapshot.unlocked) {
+            FirstPullScreen(app, snapshot.epoch, padding) { importing = false }
+        } else if (!snapshot.unlocked) {
+            Column {
+            TextButton(onClick = { password = ""; secretKey = ""; importing = true }, enabled = !busy, modifier = Modifier.testTag("first-pull")) { Text(stringResource(R.string.first_pull)) }
             UnlockScreen(
                 padding = padding,
                 vaultExists = vaultExists,
@@ -239,6 +251,7 @@ fun GitpassRoot(app: GitpassApplication) {
                     confirmPassword = ""
                 },
             )
+            }
         } else when (val current = screen) {
             Screen.List -> Column {
                 Row {

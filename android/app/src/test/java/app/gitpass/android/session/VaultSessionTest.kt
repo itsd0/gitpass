@@ -19,6 +19,21 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 
 class VaultSessionTest {
+    @Test fun importSelectionGateRejectsStaleAndUnlockedEpochsAndLockCancelsImmediately() {
+        var cancellations = 0
+        val session = VaultSession(readyGateway(), nowMs = { 1000L }, onLock = { cancellations++ })
+        val epoch = session.state.value.epoch
+        assertEquals("FAKE permitted", session.atLockedEpoch(epoch) { "FAKE permitted" })
+        session.onHostBackground()
+        assertEquals(1, cancellations)
+        assertThrows(UnlockCancelledException::class.java) { session.atLockedEpoch(epoch) { error("must not activate") } }
+        val lockedEpoch = session.state.value.epoch
+        session.unlock("root", "right-password", "A3-RIGHT")
+        assertThrows(UnlockCancelledException::class.java) { session.atLockedEpoch(lockedEpoch) { error("must not activate") } }
+        session.lock()
+        assertEquals(2, cancellations)
+    }
+
     @Test
     fun wrongCredentialsStayLocked() {
         val gateway = readyGateway()

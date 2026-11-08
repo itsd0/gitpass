@@ -54,4 +54,17 @@
     <string name="generator_failed">စကားဝှက် ထုတ်မရပါ</string>
     <string name="invalid_totp">TOTP သတ်မှတ်ချက် မမှန်ပါ</string>
     <string name="totp_remaining">%1$d စက္ကန့် ကျန်သည်</string>
+    <string name="first_pull">First pull — ပထမအကြိမ် ရယူခြင်း</string>
+    <string name="first_pull_scope">Encrypted snapshot တစ်ခုကို စစ်ဆေးပြီး သီးခြား local account အဖြစ် ရယူမည်။ Two-way sync မဟုတ်ပါ။ မူလ account ကို မပြောင်းလဲပါ။ အလိုအလျောက် update မလုပ်ပါ။</string>
+    <string name="first_pull_permission">မိမိ repository နှင့် branch ကို ရွေးပါ။ ထို repository အတွက်သာ Contents: read-only ရှိသော သီးခြား fine-grained PAT သုံးပါ။ PAT ကို memory ထဲတွင်သာ ထားပြီး lock သို့မဟုတ် cancel နောက် ပြန်ထည့်ရမည်။</string>
+    <string name="repository_owner">Repository ပိုင်ရှင်</string>
+    <string name="repository_name">Repository အမည်</string>
+    <string name="repository_branch">Branch</string>
+    <string name="dedicated_pat">သီးခြား read-only PAT</string>
+    <string name="first_pull_start">ရယူ၊ စစ်ဆေးပြီး account ရွေးမည်</string>
+    <string name="first_pull_error">First pull မအောင်မြင်ပါ။ Repository၊ Contents permission၊ Master Password၊ Secret Key နှင့် snapshot integrity စစ်ပါ။ မူလ account များ မပြောင်းလဲပါ။ ပြန်ကြိုးစားရန် credentials ပြန်ထည့်ပါ။</string>
+    <string name="first_pull_budget_error">ဤ vault သည် Android import KDF budget (8192–262144 KiB၊ iterations 1–6၊ lanes 1–4) ထက် ကျော်နေသည်။ Parameters မပြောင်းပါ။ ပိုစွမ်းဆောင်နိုင်သော supported client သုံးပါ။ Vault လုံခြုံရေးကို မလျှော့ပါနှင့်။</string>
+    <string name="local_accounts">ရှိပြီးသား local account များ</string>
+    <string name="legacy_account">မူလ local account</string>
+    <string name="imported_account">ရယူထားသော local account %1$d</string>
 </resources>

@@ -20,6 +20,9 @@ use gitpass_core::{crypto, totp};
 use std::path::Path;
 use std::sync::Mutex;
 
+mod first_pull;
+pub use first_pull::validate_first_pull_snapshot;
+
 uniffi::setup_scaffolding!();
 
 #[derive(Debug, thiserror::Error, uniffi::Error)]

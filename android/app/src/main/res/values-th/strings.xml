@@ -54,4 +54,17 @@
     <string name="generator_failed">สร้างรหัสผ่านไม่สำเร็จ</string>
     <string name="invalid_totp">การตั้งค่า TOTP ไม่ถูกต้อง</string>
     <string name="totp_remaining">เหลือ %1$d วินาที</string>
+    <string name="first_pull">First pull — ดึงครั้งแรก</string>
+    <string name="first_pull_scope">ดาวน์โหลดและตรวจสอบ encrypted snapshot ไปยังบัญชีในเครื่องแยกต่างหาก ไม่ใช่ two-way sync บัญชีเดิมยังอยู่และข้อมูลไม่อัปเดตอัตโนมัติ</string>
+    <string name="first_pull_permission">เลือก repository และ branch ของคุณ ใช้ fine-grained PAT แยกเฉพาะ repository นี้ โดยให้ Contents: read-only เท่านั้น เก็บ PAT ในหน่วยความจำและต้องกรอกใหม่หลังล็อกหรือยกเลิก</string>
+    <string name="repository_owner">เจ้าของ repository</string>
+    <string name="repository_name">ชื่อ repository</string>
+    <string name="repository_branch">Branch</string>
+    <string name="dedicated_pat">PAT แยกแบบ read-only</string>
+    <string name="first_pull_start">ดาวน์โหลด ตรวจสอบ และเลือกบัญชี</string>
+    <string name="first_pull_error">First pull ล้มเหลว ตรวจสอบ repository สิทธิ์ Contents รหัสผ่านหลัก Secret Key และความสมบูรณ์ของ snapshot บัญชีเดิมไม่เปลี่ยนแปลง กรอกข้อมูลใหม่เพื่อลองอีกครั้ง</string>
+    <string name="first_pull_budget_error">Vault นี้เกินงบ KDF สำหรับ Android (8192–262144 KiB, iterations 1–6, lanes 1–4) ไม่มีการเปลี่ยนพารามิเตอร์ ใช้ client ที่รองรับและมีทรัพยากรเพียงพอ อย่าลดความปลอดภัยของ vault</string>
+    <string name="local_accounts">บัญชีในเครื่องที่มีอยู่</string>
+    <string name="legacy_account">บัญชีในเครื่องเดิม</string>
+    <string name="imported_account">บัญชีที่นำเข้า %1$d</string>
 </resources>
