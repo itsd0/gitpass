@@ -170,3 +170,26 @@ are no fake production algorithms or new crypto/format/Swift API changes.
 Tests separate native RFC6238 vectors and generator lengths, fake-clock/session
 validation, and actual Compose apply/cancel/lock and live-code/invalid-config UI.
 All fixtures are fake/cache-only; no physical-device runner or data wipe is used.
+
+## First-pull staging groundwork (#447) — NOT SYNC SETUP
+
+`firstpull/EncryptedFirstPull` is an unconnected staging primitive, not a live
+GitHub client or import flow. Explicit repository selection has no defaults.
+Typed transport results are pinned to one commit; incomplete/oversized trees,
+unsafe paths, symlinks/submodules/executable files, duplicates and unsupported
+files fail closed. Blob size and Git SHA-1 identity are checked before writing.
+Failures and close remove only the new encrypted staging copy; an existing
+account is never touched. A cleanup helper removes UUID-named orphan stages only.
+
+Do not expose an import/activation button yet. Missing integration gates:
+- bounded HTTPS GitHub transport and redirect/credential-forwarding tests;
+- session-memory PAT configuration UI cleared on lock (no maintainer token use);
+- native authentication of the entire staged manifest and referenced files,
+  with wrong-password and tamper regressions through the actual import path;
+- atomic separate-account promotion/selection and restart/crash/cancel/lock tests,
+  preserving the existing local account and cleaning orphan stages on startup.
+
+There is deliberately no activation method or trusted/authenticated flag on the
+staged-copy type. Downloaded encrypted bytes are not authenticated vault contents.
+No real repository/token is configured and no network permission is added by this
+partial groundwork. No two-way sync, remote writes, or destructive fallback.
