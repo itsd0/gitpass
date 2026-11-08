@@ -18,7 +18,7 @@ class GitHubFirstPullTransportTest {
         var disconnected = false
         override fun getResponseCode() = status
         override fun getContentLengthLong() = length
-        override fun getInputStream() = ByteArrayInputStream(body)
+        override fun getInputStream(): java.io.InputStream = ByteArrayInputStream(body)
         override fun disconnect() { disconnected = true }
         override fun connect() {}
         override fun usingProxy() = false
