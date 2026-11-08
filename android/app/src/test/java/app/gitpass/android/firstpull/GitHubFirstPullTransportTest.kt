@@ -14,7 +14,7 @@ class GitHubFirstPullTransportTest {
     private val selection = RepositorySelection("FAKE-owner", "FAKE-repo", "feature/first-pull")
     private val commit = "a".repeat(40)
     private val tree = "b".repeat(40)
-    private class Fake(url: URL, val body: ByteArray, val status: Int = 200, val length: Long = body.size.toLong()) : HttpsURLConnection(url) {
+    private open class Fake(url: URL, val body: ByteArray, val status: Int = 200, val length: Long = body.size.toLong()) : HttpsURLConnection(url) {
         var disconnected = false
         override fun getResponseCode() = status
         override fun getContentLengthLong() = length
@@ -134,6 +134,40 @@ class GitHubFirstPullTransportTest {
             })
             failure { transport.tree(selection, commit) }
             transport.close()
+        }
+    }
+
+
+    @Test fun closeClearsCredentialWithoutBlockingSessionLockOnHttpTeardown() {
+        val reading = java.util.concurrent.CountDownLatch(1)
+        val releaseRead = java.util.concurrent.CountDownLatch(1)
+        val disconnecting = java.util.concurrent.CountDownLatch(1)
+        val releaseDisconnect = java.util.concurrent.CountDownLatch(1)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(2)
+        val transport = GitHubFirstPullTransport.forTest("FAKE-PAT", connect = { url ->
+            object : Fake(url, "{}".toByteArray()) {
+                override fun getInputStream(): java.io.InputStream {
+                    reading.countDown()
+                    releaseRead.await(5, java.util.concurrent.TimeUnit.SECONDS)
+                    return super.getInputStream()
+                }
+                override fun disconnect() {
+                    disconnecting.countDown()
+                    releaseDisconnect.await(5, java.util.concurrent.TimeUnit.SECONDS)
+                    super.disconnect()
+                }
+            }
+        })
+        try {
+            val reader = pool.submit { runCatching { transport.resolve(selection) } }
+            assertTrue(reading.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            pool.submit { transport.close() }.get(1, java.util.concurrent.TimeUnit.SECONDS)
+            assertTrue(disconnecting.await(2, java.util.concurrent.TimeUnit.SECONDS))
+            failure { transport.resolve(selection) }
+            releaseRead.countDown(); releaseDisconnect.countDown()
+            reader.get(2, java.util.concurrent.TimeUnit.SECONDS)
+        } finally {
+            releaseRead.countDown(); releaseDisconnect.countDown(); transport.close(); pool.shutdownNow()
         }
     }
 

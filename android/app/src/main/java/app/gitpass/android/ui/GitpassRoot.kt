@@ -90,6 +90,10 @@ private sealed interface Screen {
 
 @Composable
 fun GitpassRoot(app: GitpassApplication) {
+    if (app.accountSelectionDamaged) {
+        Box(Modifier.fillMaxSize().padding(24.dp)) { Text(stringResource(R.string.account_selection_damaged)) }
+        return
+    }
     val revision by app.accountRevision.collectAsState()
     key(revision) { AccountRoot(app) }
 }

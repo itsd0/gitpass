@@ -31,6 +31,8 @@ class GitpassApplication : Application() {
         private set
     @Volatile lateinit var accountSetup: AccountSetup
         private set
+    var accountSelectionDamaged: Boolean = false
+        private set
     val pendingSecret = PendingSecret()
     lateinit var accountRoots: AccountRoots
         private set
@@ -43,6 +45,7 @@ class GitpassApplication : Application() {
 
     /** IO-thread only. Existing account data is never overwritten, including on failure/cancellation. */
     fun firstPull(selection: RepositorySelection, token: String, password: String, secret: String, epoch: Long) {
+        if (accountSelectionDamaged) throw FirstPullFailure("Account selection cannot be read; existing data was preserved")
         val previous = session
         if (pendingSecret.present.value || accountSetup.state.value == AccountSetup.State.Creating) throw FirstPullFailure("Finish account creation first")
         previous.atLockedEpoch(epoch) { Unit }
@@ -67,6 +70,7 @@ class GitpassApplication : Application() {
     }
 
     fun selectLocalAccount(name: String, epoch: Long) {
+        if (accountSelectionDamaged) throw FirstPullFailure("Account selection cannot be read; existing data was preserved")
         if (pendingSecret.present.value || accountSetup.state.value == AccountSetup.State.Creating) throw FirstPullFailure("Finish account creation first")
         val previous = session
         previous.atLockedEpoch(epoch) {
@@ -89,7 +93,10 @@ class GitpassApplication : Application() {
         val selected = runCatching {
             accountRoots.startupCleanup()
             accountRoots.selectedRoot()
-        }.getOrElse { File(noBackupFilesDir, "vault") }
+        }.getOrElse {
+            accountSelectionDamaged = true
+            File(noBackupFilesDir, "vault") // UI remains blocked; this is not silent account selection.
+        }
         install(
             gateway = FfiVaultGateway(),
             root = selected,
@@ -114,6 +121,7 @@ class GitpassApplication : Application() {
     fun installForTest(gateway: VaultGateway, root: File, nowMs: () -> Long, secretTools: SecretTools = NativeSecretTools) {
         if (this::session.isInitialized) session.lock()
         pendingSecret.clear()
+        accountSelectionDamaged = false
         accountRoots = AccountRoots(File(root.parentFile, "first-pull-test-${root.name}"), root)
         firstPullFactory = ::FirstPullAttempt
         install(gateway, root, nowMs, secretTools)

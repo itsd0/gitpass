@@ -30,8 +30,8 @@ class FirstPullFailure(message: String) : Exception(message)
 
 /**
  * Encrypted staging ONLY. Not an active account and never promoted by this component.
- * No production HTTP/PAT/UI is wired until full native authentication and atomic,
- * non-destructive account selection are independently verified together.
+ * Production integration must authenticate this complete copy natively, then commit
+ * separate-account selection under the locked session epoch gate. Staging alone is never trusted.
  */
 class EncryptedFirstPull(private val stagingParent: File, private val transport: FirstPullTransport) {
     fun stage(selection: RepositorySelection, cancelled: () -> Boolean = { false }): StagedEncryptedCopy {

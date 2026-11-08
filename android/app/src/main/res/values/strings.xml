@@ -67,4 +67,5 @@
     <string name="local_accounts">Existing local accounts</string>
     <string name="legacy_account">Original local account</string>
     <string name="imported_account">Imported local account %1$d</string>
+    <string name="account_selection_damaged">Local account selection is damaged. All account data was preserved, but account access is blocked to avoid selecting the wrong account. Do not uninstall or clear app data. Restore the non-secret account selection index before continuing.</string>
 </resources>

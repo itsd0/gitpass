@@ -67,4 +67,5 @@
     <string name="local_accounts">ရှိပြီးသား local account များ</string>
     <string name="legacy_account">မူလ local account</string>
     <string name="imported_account">ရယူထားသော local account %1$d</string>
+    <string name="account_selection_damaged">Local account ရွေးချယ်မှု index ပျက်နေသည်။ Account data အားလုံး မပြောင်းလဲပါ။ Account မှားမရွေးမိစေရန် အသုံးပြုမှု ပိတ်ထားသည်။ App uninstall သို့မဟုတ် data clear မလုပ်ပါနှင့်။ ဆက်ရန် non-secret account selection index ကို ပြန်ပြင်ရန် လိုသည်။</string>
 </resources>

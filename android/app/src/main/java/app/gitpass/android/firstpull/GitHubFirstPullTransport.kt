@@ -120,11 +120,18 @@ class GitHubFirstPullTransport private constructor(
 
     override fun close() {
         credential.set(null)
-        active.getAndSet(null)?.disconnect()
+        active.getAndSet(null)?.let { connection ->
+            // disconnect() may acquire platform HTTP locks. Never block a UI/session lock
+            // on network teardown: credentials and cancellation state clear synchronously.
+            runCatching { cancelExecutor.execute { runCatching { connection.disconnect() } } }
+        }
     }
     override fun toString() = "GitHubFirstPullTransport([redacted])"
 
     companion object {
+        private val cancelExecutor = java.util.concurrent.Executors.newSingleThreadExecutor { task ->
+            Thread(task, "first-pull-cancel").apply { isDaemon = true }
+        }
         private const val META_LIMIT = 64 * 1024
         private const val TREE_LIMIT = 4 * 1024 * 1024
         private const val BLOB_JSON_LIMIT = 6 * 1024 * 1024

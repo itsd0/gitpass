@@ -12,6 +12,9 @@ import app.gitpass.android.firstpull.*
 import app.gitpass.android.session.FfiVaultGateway
 import app.gitpass.android.session.VaultSession
 import app.gitpass.core.createAccount
+import app.gitpass.core.openVault
+import app.gitpass.core.ItemInput
+import app.gitpass.android.ui.TestTags
 import java.io.File
 import java.util.UUID
 import org.junit.Assert.*
@@ -66,6 +69,10 @@ class FirstPullUiTest {
         val password = "FAKE import fixture password"
         try {
             val secret = createAccount(legacy.absolutePath, password)
+            openVault(legacy.absolutePath, password, secret).use { native ->
+                val vault = native.createVault("FAKE imported vault", null)
+                native.createItem(vault, ItemInput("FAKE imported login", "FAKE-user", "FAKE-password", null, null, null, "login", emptyList(), false, emptyList()))
+            }
             val files = legacy.walkTopDown().filter { it.isFile && (it.extension == "enc" || it.name == "format.json" || it.name == "identity.pub") }
                 .associate { it.relativeTo(legacy).invariantSeparatorsPath to it.readBytes() }
             val blobs = files.values.associateBy { EncryptedFirstPull.gitBlobSha(it) }
@@ -95,6 +102,12 @@ class FirstPullUiTest {
                 assertEquals(app.vaultRoot, app.accountRoots.selectedRoot())
                 files.forEach { (path, bytes) -> assertArrayEquals(bytes, File(legacy, path).readBytes()) }
                 compose.onNodeWithTag("pull-token").assertDoesNotExist()
+                compose.onNodeWithTag(TestTags.MASTER_PASSWORD).performScrollTo().performTextInput(password)
+                compose.onNodeWithTag(TestTags.SECRET_KEY).performScrollTo().performTextInput(secret)
+                compose.onNodeWithTag(TestTags.UNLOCK).performScrollTo().performClick()
+                compose.waitUntil(60_000) { compose.onAllNodesWithText("FAKE imported login").fetchSemanticsNodes().isNotEmpty() }
+                compose.onNodeWithText("FAKE imported login").assertIsDisplayed()
+                compose.onNodeWithTag(TestTags.LOCK).performClick()
                 compose.onNodeWithTag("first-pull").performClick()
                 compose.onNodeWithTag("pull-account-0").performScrollTo().performClick()
                 compose.waitUntil(10_000) { app.vaultRoot == legacy }
