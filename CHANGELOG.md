@@ -12,6 +12,15 @@
 ### Desktop
 - Removed the "Recently used" section, sort option and command palette heading (#409).
 
+### Mobile (iOS + Android)
+- The shared UniFFI bridge moved from `ios/rust/gitpass-ios-ffi` to `crates/gitpass-mobile-ffi`
+  (crate `gitpass-mobile-ffi`, library `gitpass_mobile_ffi`, version = workspace) (#450).
+- Version handshake: `ffi_version()` / `format_version()`; both apps check them at startup and block
+  the UI (no vault opened) on a mismatch (#450).
+- Mobile unlock is side-effect free by default: no `devices.enc` write, no trash purge, no KDF
+  upgrade (`open_vault_with` + `UnlockOptions` to opt in). Throttling and integrity/rollback checks
+  still run. Core: `Session::unlock_with_effects` + `UnlockEffects` (#450).
+
 ### Extension
 - Removed the popup's "Recently used" section (#409).
 

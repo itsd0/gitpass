@@ -110,6 +110,34 @@ pub struct UnlockOpts {
     pub target_kdf: KdfParams,
 }
 
+/// Write side effects a successful unlock is allowed to perform.
+///
+/// The unlock throttle, the integrity/rollback check (and recording the last-seen manifest epoch in the
+/// local, untracked `.gitpass-state.json`) and crash recovery of an interrupted keyset rewrap always run,
+/// whatever these flags say. Only the optional writes below are switchable. Turning a flag off never
+/// weakens anything: it only skips a write (no KDF parameter is lowered or clamped).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct UnlockEffects {
+    /// Register/refresh this device in `devices.enc` and roll forward an interrupted `device revoke`
+    /// started on another device (key rotation).
+    pub touch_device: bool,
+    /// Permanently purge soft-deleted items older than 30 days.
+    pub purge_expired: bool,
+    /// Re-wrap the keyset when the stored KDF parameters are below `UnlockOpts::target_kdf`.
+    pub upgrade_kdf: bool,
+}
+
+impl UnlockEffects {
+    /// Desktop/CLI unlock: every maintenance write enabled (the long-standing `Session::unlock` behaviour).
+    pub const ALL: UnlockEffects = UnlockEffects { touch_device: true, purge_expired: true, upgrade_kdf: true };
+    /// Side-effect-free unlock: no tracked vault file is written on a normal unlock.
+    pub const NONE: UnlockEffects = UnlockEffects { touch_device: false, purge_expired: false, upgrade_kdf: false };
+}
+
+impl Default for UnlockEffects {
+    fn default() -> Self { Self::ALL }
+}
+
 /// Unlocked session holding the Account Key.
 pub struct Session {
     pub root: PathBuf,

@@ -68,4 +68,5 @@
     <string name="legacy_account">Original local account</string>
     <string name="imported_account">Imported local account %1$d</string>
     <string name="account_selection_damaged">Local account selection is damaged. All account data was preserved, but account access is blocked to avoid selecting the wrong account. Do not uninstall or clear app data. Restore the non-secret account selection index before continuing.</string>
+    <string name="bridge_incompatible">This build of gitpass has a native core that does not match the app. The vault was not opened and nothing was changed. Install a complete, matching build of the app.</string>
 </resources>

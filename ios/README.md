@@ -106,7 +106,6 @@ signs, never needs a team, and never touches a vault repository.
 
 ```
 ios/
-  rust/gitpass-ios-ffi/   UniFFI crate (thin wrapper over gitpass-core)
   Sources/GitpassApp/     SwiftUI app
   Sources/AutoFill/       ASCredentialProviderViewController extension
   Tests/                  XCTest: FFI round-trip, Keychain, sync requests

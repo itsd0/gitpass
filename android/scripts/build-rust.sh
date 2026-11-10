@@ -11,9 +11,9 @@
 #  - x86_64 (x86_64-linux-android)
 #
 # Outputs:
-#  - android/app/src/main/jniLibs/arm64-v8a/libgitpass_ios_ffi.so
-#  - android/app/src/main/jniLibs/x86_64/libgitpass_ios_ffi.so
-#  - android/app/src/main/java/app/gitpass/core/gitpass_ios_ffi.kt
+#  - android/app/src/main/jniLibs/arm64-v8a/libgitpass_mobile_ffi.so
+#  - android/app/src/main/jniLibs/x86_64/libgitpass_mobile_ffi.so
+#  - android/app/src/main/java/app/gitpass/core/gitpass_mobile_ffi.kt
 set -euo pipefail
 
 REQUIRED_RUST_VERSION="1.90.0"
@@ -23,7 +23,7 @@ REQUIRED_CARGO_NDK_VERSION="4.1.2"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ANDROID_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 REPO_ROOT="$(cd "$ANDROID_DIR/.." && pwd)"
-FFI_DIR="$REPO_ROOT/ios/rust/gitpass-ios-ffi"
+FFI_DIR="$REPO_ROOT/crates/gitpass-mobile-ffi"
 JNILIBS_DIR="$ANDROID_DIR/app/src/main/jniLibs"
 JAVA_SRC_DIR="$ANDROID_DIR/app/src/main/java"
 
@@ -92,6 +92,8 @@ rustup target add aarch64-linux-android x86_64-linux-android ${TOOLCHAIN_ARG:+--
 # 5. Build native shared libraries for arm64-v8a and x86_64 with 16KB max-page-size ELF alignment
 echo "==> Building native shared libraries (arm64-v8a, x86_64) with 16-KB page alignment"
 mkdir -p "$JNILIBS_DIR"
+# Drop native libraries left over from an earlier bridge name so they are never packaged.
+find "$JNILIBS_DIR" -name 'libgitpass_*ffi.so' -delete
 RUSTFLAGS="-C link-arg=-Wl,-z,max-page-size=16384" \
 cargo $TOOLCHAIN_ARG ndk \
     --target arm64-v8a \
@@ -111,7 +113,7 @@ cargo $TOOLCHAIN_ARG run --release --locked \
     --manifest-path "$FFI_DIR/Cargo.toml" \
     --bin uniffi-bindgen -- \
     generate \
-    --library "$JNILIBS_DIR/arm64-v8a/libgitpass_ios_ffi.so" \
+    --library "$JNILIBS_DIR/arm64-v8a/libgitpass_mobile_ffi.so" \
     --config "$FFI_DIR/uniffi.toml" \
     --language kotlin \
     --out-dir "$BINDINGS_TMP" \
@@ -126,4 +128,4 @@ cp -R "$BINDINGS_TMP/app/gitpass/core/"* "$JAVA_SRC_DIR/app/gitpass/core/"
 
 echo "==> Build complete"
 echo "Native libraries in: $JNILIBS_DIR"
-echo "Generated bindings in: $JAVA_SRC_DIR/app/gitpass/core/gitpass_ios_ffi.kt"
+echo "Generated bindings in: $JAVA_SRC_DIR/app/gitpass/core/gitpass_mobile_ffi.kt"

@@ -50,7 +50,7 @@ container, or GitHub only (no shell, e.g. a GitHub App).
 
 | Command | macOS (owner's Mac) | Linux VM / container | GitHub-only |
 |---|---|---|---|
-| `cargo test --workspace --locked` (core, cli, host, gui-core, ios-ffi) | ✅ | ✅ verified | ❌ → CI |
+| `cargo test --workspace --locked` (core, cli, host, gui-core, mobile-ffi) | ✅ | ✅ verified | ❌ → CI |
 | `cargo clippy --workspace --locked --all-targets -- -D warnings` | ✅ | ✅ verified (Rust **1.90.0**) | ❌ → CI |
 | `apps/desktop`: `npm ci && npm test`, `npx tsc --noEmit`, `npm run build` | ✅ | ✅ verified | ❌ → CI |
 | `extension`: `npm ci && npm test`, `npm run check` | ✅ | ✅ verified | ❌ → CI |
@@ -84,7 +84,8 @@ They also cannot edit `.github/workflows` (and must not anyway).
 | `apps/desktop/src-tauri` | Tauri shell (**excluded from the workspace**, own `Cargo.lock`) |
 | `apps/desktop/src` | React/TypeScript UI (Vite, zustand, vitest). Browser mock in `src/api/mock.ts` |
 | `extension/` | Chromium MV3 extension (plain JS, `node --test`) |
-| `ios/` | SwiftUI app + `ios/rust/gitpass-ios-ffi` (uniffi), XcodeGen `project.yml` |
+| `crates/gitpass-mobile-ffi` | UniFFI bridge shared by the iOS and Android apps (`ffi_version`/`format_version` handshake, side-effect-free unlock) |
+| `ios/` | SwiftUI app (uses `crates/gitpass-mobile-ffi`), XcodeGen `project.yml` |
 | `android/` (planned) | Owner-approved staged Kotlin/Jetpack Compose companion, reusing the Rust UniFFI bridge; no production-support claim |
 | `.github/workflows` | All workflows run on GitHub-hosted runners; `release.yml` (v* tags, owner only, `release` environment) — **owner only, do not edit unless an issue asks for it** |
 | `docs/RELEASE.md`, `scripts/` | Release notes/process, helper scripts |
@@ -105,7 +106,7 @@ Always run tests with a throwaway `HOME` so nothing touches a real vault:
 ```sh
 export HOME=$(mktemp -d)   # in a subshell, or prefix each command with HOME=$(mktemp -d)
 
-# Rust workspace (core, cli, host, gui-core, ios ffi)
+# Rust workspace (core, cli, host, gui-core, mobile ffi)
 cargo test --workspace --locked
 cargo clippy --workspace --locked --all-targets -- -D warnings
 
@@ -125,7 +126,7 @@ npm run check              # syntax check + locale keys must match across en/my/
 cargo deny --locked check
 
 # iOS (Mac only)
-cargo test -p gitpass-ios-ffi --locked
+cargo test -p gitpass-mobile-ffi --locked
 ./ios/scripts/build-xcframework.sh && (cd ios && xcodegen generate)
 ```
 
@@ -162,7 +163,7 @@ The owner explicitly authorized this Android scope update. This is not a blanket
 **one issue = one branch = one small PR**, owner review/merge, secret handling and real-vault restrictions all remain.
 
 - **First milestone:** buildable Kotlin/Jetpack Compose shell in `android/`, `en`/`my`/`th` strings, and a
-  shared Rust UniFFI bridge. Reuse `ios/rust/gitpass-ios-ffi` where feasible; preserve existing Swift APIs
+  shared Rust UniFFI bridge. Reuse `crates/gitpass-mobile-ffi` where feasible; preserve existing Swift APIs
   and iOS builds rather than duplicating crypto or assuming full mobile feature parity.
 - **Later milestones, separate issues/PRs:** read-only local test vault with manual unlock/lock first;
   then CRUD/TOTP; reviewed sync; Autofill; and passkeys as a separate security-reviewed integration.

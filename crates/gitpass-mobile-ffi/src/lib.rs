@@ -1,22 +1,30 @@
-//! UniFFI surface for the gitpass iOS app.
+//! UniFFI surface shared by the gitpass iOS and Android companion apps.
 //!
 //! Every secret operation delegates to `gitpass-core`: Argon2id key
-//! derivation (256 MiB, from the vault's stored KDF parameters), the
+//! derivation (from the vault's stored KDF parameters), the
 //! XChaCha20-Poly1305 envelopes, the v5 item records, field-level merge
-//! and RFC 6238 TOTP. No crypto is re-implemented in Swift, and no
-//! crypto is re-implemented here either — this crate is a thin,
-//! Swift-shaped wrapper around the same `Session` API the desktop
-//! app (via gui-core) and the CLI use.
+//! and RFC 6238 TOTP. No crypto is re-implemented in Swift or Kotlin,
+//! and no crypto is re-implemented here either — this crate is a thin
+//! wrapper around the same `Session` API the desktop app (via gui-core)
+//! and the CLI use.
 //!
-//! Unlock semantics match the desktop: `open_vault` performs a full
-//! unlock (device registration, KDF upgrade, soft-delete purge), the
-//! same as `Session::unlock`. The unlocked session is held in memory
-//! for the lifetime of the `Vault` object; locking is dropping it.
+//! Unlock semantics: a plain mobile unlock (`open_vault`, or
+//! `open_vault_with(default_unlock_options())`) is side-effect free. It
+//! does not register/refresh the device in `devices.enc`, does not purge
+//! expired trash and does not upgrade the KDF, so unlocking never changes
+//! a synced vault file. The unlock throttle and the integrity/rollback
+//! checks still run. Each maintenance write can be opted into with
+//! `UnlockOptions`. The unlocked session is held in memory for the
+//! lifetime of the `Vault` object; locking is dropping it.
+//!
+//! Version handshake: `ffi_version()` and `format_version()` let the apps
+//! check at startup that the native library they load is the one their
+//! generated bindings and app code were written against.
 
 use gitpass_core::item::{Category, Field, FieldKind, Section};
 use gitpass_core::merge::ItemRecord;
-use gitpass_core::store::{Item, Session};
-use gitpass_core::{crypto, totp};
+use gitpass_core::store::{Item, Session, UnlockEffects, UnlockOpts};
+use gitpass_core::{crypto, totp, FORMAT_VERSION, MIN_READ_FORMAT};
 use std::path::Path;
 use std::sync::Mutex;
 
@@ -363,10 +371,94 @@ impl Vault {
     }
 }
 
+/// API level of this bridge. Bump it whenever an exported function,
+/// record or behaviour changes in a way the apps must know about; the
+/// apps compare it with the level they were written against at startup.
+pub const FFI_API_LEVEL: u32 = 1;
+
+/// Bridge version: the crate (= workspace) version plus the API level.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FfiVersion {
+    /// Semver of this bridge crate; always the workspace version.
+    pub crate_version: String,
+    /// See [`FFI_API_LEVEL`].
+    pub api_level: u32,
+}
+
+/// Vault format range of the linked `gitpass-core`.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct FormatVersion {
+    /// Oldest on-disk format this build can still open (`MIN_READ_FORMAT`).
+    pub min_read: u32,
+    /// Format this build writes (`FORMAT_VERSION`).
+    pub current_write: u32,
+}
+
+#[uniffi::export]
+pub fn ffi_version() -> FfiVersion {
+    FfiVersion { crate_version: env!("CARGO_PKG_VERSION").to_string(), api_level: FFI_API_LEVEL }
+}
+
+#[uniffi::export]
+pub fn format_version() -> FormatVersion {
+    FormatVersion { min_read: MIN_READ_FORMAT, current_write: FORMAT_VERSION }
+}
+
+/// Optional write side effects of an unlock. All `false` (see
+/// `default_unlock_options`) is the mobile default: unlocking leaves every
+/// tracked vault file byte-identical. Throttling and integrity/rollback
+/// checks always run, whatever is set here.
+#[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Record)]
+pub struct UnlockOptions {
+    /// Register/refresh this device in `devices.enc` (and roll forward an
+    /// interrupted device revoke started elsewhere).
+    pub register_device: bool,
+    /// Device name used when `register_device` is set; `None` = core default.
+    pub device_name: Option<String>,
+    /// Permanently purge items that have been in the trash for over 30 days.
+    pub purge_expired_trash: bool,
+    /// Re-wrap the keyset with the current default KDF parameters when the
+    /// stored ones are weaker. Never lowers or clamps KDF parameters.
+    pub upgrade_kdf: bool,
+}
+
+/// The mobile default: no device registration, no trash purge, no KDF upgrade.
+#[uniffi::export]
+pub fn default_unlock_options() -> UnlockOptions {
+    UnlockOptions::default()
+}
+
+/// Side-effect-free unlock; same as `open_vault_with(.., default_unlock_options())`.
 #[uniffi::export]
 pub fn open_vault(root: String, password: String, secret_key: String) -> Result<std::sync::Arc<Vault>, GitpassError> {
+    open_vault_with(root, password, secret_key, UnlockOptions::default())
+}
+
+/// Unlock with explicit side-effect options (see [`UnlockOptions`]).
+#[uniffi::export]
+pub fn open_vault_with(
+    root: String,
+    password: String,
+    secret_key: String,
+    options: UnlockOptions,
+) -> Result<std::sync::Arc<Vault>, GitpassError> {
     let secret = err(crypto::SecretKey::parse(&secret_key))?;
-    let session = err(Session::unlock(Path::new(&root), &password, &secret))?;
+    let effects = UnlockEffects {
+        touch_device: options.register_device,
+        purge_expired: options.purge_expired_trash,
+        upgrade_kdf: options.upgrade_kdf,
+    };
+    // Default target KDF = gitpass-core's default; only consulted when
+    // `upgrade_kdf` is set. Rollback is never auto-accepted here.
+    let opts = UnlockOpts::default();
+    let session = err(Session::unlock_with_effects(
+        Path::new(&root),
+        &password,
+        &secret,
+        &opts,
+        options.device_name.as_deref(),
+        effects,
+    ))?;
     Ok(std::sync::Arc::new(Vault { session: Mutex::new(session) }))
 }
 

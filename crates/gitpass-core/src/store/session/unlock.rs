@@ -16,11 +16,18 @@ impl Session {
 
     /// Unlock and register/refresh this device in the registry (`device_name` None => env/hostname).
     pub fn unlock_device(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>) -> Result<Self> {
-        Self::unlock_device_inner(root, password, secret, opts, device_name, true, false)
+        Self::unlock_device_inner(root, password, secret, opts, device_name, UnlockEffects::ALL, false)
+    }
+    /// Unlock with an explicit set of optional write side effects (see [`UnlockEffects`]). With
+    /// [`UnlockEffects::NONE`] a successful unlock leaves every tracked vault file untouched; only the local,
+    /// untracked state (unlock throttle, last-seen epoch, local device id) may be written. Throttling and the
+    /// integrity/rollback checks run exactly as in [`Session::unlock_with`].
+    pub fn unlock_with_effects(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>, effects: UnlockEffects) -> Result<Self> {
+        Self::unlock_device_inner(root, password, secret, opts, device_name, effects, false)
     }
     /// Unlock via biometric authentication: bypasses password failure throttling, but resets it on success.
     pub fn unlock_device_biometric(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>) -> Result<Self> {
-        Self::unlock_device_inner(root, password, secret, opts, device_name, true, true)
+        Self::unlock_device_inner(root, password, secret, opts, device_name, UnlockEffects::ALL, true)
     }
     /// Read-only unlock for `gitpass doctor`: opens the keyset and loads the Account Key without touching the
     /// device registry, resealing the manifest, finishing a pending rewrap or upgrading the KDF. The only file
@@ -50,9 +57,10 @@ impl Session {
     pub fn reopen_verify(root: &Path, password: &str, secret: &SecretKey, accept_rollback: bool) -> Result<Self> {
         let fmt = read_format(root)?;
         let opts = UnlockOpts { accept_rollback, target_kdf: fmt.kdf.clone() };
-        Self::unlock_device_inner(root, password, secret, &opts, None, false, false)
+        Self::unlock_device_inner(root, password, secret, &opts, None, UnlockEffects::NONE, false)
     }
-    fn unlock_device_inner(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>, touch: bool, is_biometric: bool) -> Result<Self> {
+    fn unlock_device_inner(root: &Path, password: &str, secret: &SecretKey, opts: &UnlockOpts, device_name: Option<&str>, effects: UnlockEffects, is_biometric: bool) -> Result<Self> {
+        let touch = effects.touch_device;
         if !is_biometric {
             crate::unlock_throttle::check_throttle(root)?;
         }
@@ -95,7 +103,7 @@ impl Session {
         } else {
             save_epoch(root, &s.fmt.account_id, m.epoch)?;
         }
-        if s.fmt.kdf.below(&opts.target_kdf) {
+        if effects.upgrade_kdf && s.fmt.kdf.below(&opts.target_kdf) {
             let k = s.fmt.kdf.max_with(&opts.target_kdf);
             s.rewrap_keyset(password, secret, k)?;
             s.kdf_upgraded = true;
@@ -107,7 +115,7 @@ impl Session {
             if d.revoked { s.device_revoked = true; }
         }
         // v5: purge soft-deleted items older than 30 days (best effort; never blocks unlock). Skipped on verify-only reopen.
-        if touch && !s.device_revoked { let _ = s.purge_expired(now_secs()); }
+        if effects.purge_expired && !s.device_revoked { let _ = s.purge_expired(now_secs()); }
         // Roll forward an interrupted `device revoke` (marker + key rotation) from this device.
         if let Ok(p) = read_json::<RevokePending>(&root.join(REVOKE_PENDING_FILE)) {
             if touch && !s.device_revoked && p.device_id != s.device_id {

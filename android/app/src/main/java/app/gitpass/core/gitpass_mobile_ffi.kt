@@ -59,7 +59,7 @@ open class RustBuffer : Structure() {
     companion object {
         internal fun alloc(size: ULong = 0UL) = uniffiRustCall() { status ->
             // Note: need to convert the size to a `Long` value to make this work with JVM.
-            UniffiLib.INSTANCE.ffi_gitpass_ios_ffi_rustbuffer_alloc(size.toLong(), status)
+            UniffiLib.INSTANCE.ffi_gitpass_mobile_ffi_rustbuffer_alloc(size.toLong(), status)
         }.also {
             if(it.data == null) {
                throw RuntimeException("RustBuffer.alloc() returned null data pointer (size=${size})")
@@ -75,7 +75,7 @@ open class RustBuffer : Structure() {
         }
 
         internal fun free(buf: RustBuffer.ByValue) = uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.ffi_gitpass_ios_ffi_rustbuffer_free(buf, status)
+            UniffiLib.INSTANCE.ffi_gitpass_mobile_ffi_rustbuffer_free(buf, status)
         }
     }
 
@@ -375,7 +375,7 @@ private fun findLibraryName(componentName: String): String {
     if (libOverride != null) {
         return libOverride
     }
-    return "gitpass_ios_ffi"
+    return "gitpass_mobile_ffi"
 }
 
 private inline fun <reified Lib : Library> loadIndirect(
@@ -750,6 +750,14 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -765,43 +773,51 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 // when the library is loaded.
 internal interface IntegrityCheckingUniffiLib : Library {
     // Integrity check functions only
-    fun uniffi_gitpass_ios_ffi_checksum_func_create_account(
+    fun uniffi_gitpass_mobile_ffi_checksum_func_create_account(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_func_generate_password(
+fun uniffi_gitpass_mobile_ffi_checksum_func_default_unlock_options(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_func_merge_item_records(
+fun uniffi_gitpass_mobile_ffi_checksum_func_ffi_version(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_func_open_vault(
+fun uniffi_gitpass_mobile_ffi_checksum_func_format_version(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_func_totp_code(
+fun uniffi_gitpass_mobile_ffi_checksum_func_generate_password(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_func_validate_first_pull_snapshot(
+fun uniffi_gitpass_mobile_ffi_checksum_func_merge_item_records(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_create_item(
+fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_create_vault(
+fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_delete_item(
+fun uniffi_gitpass_mobile_ffi_checksum_func_totp_code(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_get_item(
+fun uniffi_gitpass_mobile_ffi_checksum_func_validate_first_pull_snapshot(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_list_items(
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_create_item(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_list_vaults(
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_create_vault(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_put_record_json(
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_delete_item(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_record_json(
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_get_item(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_restore_item(
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_list_items(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_set_archived(
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_list_vaults(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_set_favorite(
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_put_record_json(
 ): Short
-fun uniffi_gitpass_ios_ffi_checksum_method_vault_update_item(
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_record_json(
 ): Short
-fun ffi_gitpass_ios_ffi_uniffi_contract_version(
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_restore_item(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_set_archived(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_set_favorite(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_update_item(
+): Short
+fun ffi_gitpass_mobile_ffi_uniffi_contract_version(
 ): Int
 
 }
@@ -811,7 +827,7 @@ fun ffi_gitpass_ios_ffi_uniffi_contract_version(
 internal interface UniffiLib : Library {
     companion object {
         internal val INSTANCE: UniffiLib by lazy {
-            val componentName = "gitpass_ios_ffi"
+            val componentName = "gitpass_mobile_ffi"
             // For large crates we prevent `MethodTooLargeException` (see #2340)
             // N.B. the name of the extension is very misleading, since it is 
             // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -850,157 +866,165 @@ internal interface UniffiLib : Library {
     }
 
     // FFI functions
-    fun uniffi_gitpass_ios_ffi_fn_clone_vault(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+    fun uniffi_gitpass_mobile_ffi_fn_clone_vault(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
-fun uniffi_gitpass_ios_ffi_fn_free_vault(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_free_vault(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_gitpass_ios_ffi_fn_method_vault_create_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_create_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_ios_ffi_fn_method_vault_create_vault(`ptr`: Pointer,`name`: RustBuffer.ByValue,`description`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_create_vault(`ptr`: Pointer,`name`: RustBuffer.ByValue,`description`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_ios_ffi_fn_method_vault_delete_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_delete_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_gitpass_ios_ffi_fn_method_vault_get_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_get_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_ios_ffi_fn_method_vault_list_items(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_list_items(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_ios_ffi_fn_method_vault_list_vaults(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_list_vaults(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_ios_ffi_fn_method_vault_put_record_json(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`recordJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_put_record_json(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`recordJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_gitpass_ios_ffi_fn_method_vault_record_json(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_record_json(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_ios_ffi_fn_method_vault_restore_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_restore_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_gitpass_ios_ffi_fn_method_vault_set_archived(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`archived`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_set_archived(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`archived`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_gitpass_ios_ffi_fn_method_vault_set_favorite(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`favorite`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_set_favorite(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`favorite`: Byte,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_gitpass_ios_ffi_fn_method_vault_update_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_update_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_gitpass_ios_ffi_fn_func_create_account(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_create_account(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_ios_ffi_fn_func_generate_password(`length`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_default_unlock_options(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_ios_ffi_fn_func_merge_item_records(`localJson`: RustBuffer.ByValue,`remoteJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_ffi_version(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_ios_ffi_fn_func_open_vault(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_format_version(uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_generate_password(`length`: Long,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_merge_item_records(`localJson`: RustBuffer.ByValue,`remoteJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_open_vault(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
-fun uniffi_gitpass_ios_ffi_fn_func_totp_code(`secret`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_open_vault_with(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
+fun uniffi_gitpass_mobile_ffi_fn_func_totp_code(`secret`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_ios_ffi_fn_func_validate_first_pull_snapshot(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_validate_first_pull_snapshot(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun ffi_gitpass_ios_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rustbuffer_alloc(`size`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_gitpass_ios_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rustbuffer_from_bytes(`bytes`: ForeignBytes.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_gitpass_ios_ffi_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rustbuffer_free(`buf`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun ffi_gitpass_ios_ffi_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rustbuffer_reserve(`buf`: RustBuffer.ByValue,`additional`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_gitpass_ios_ffi_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_u8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_u8(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_u8(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_u8(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_u8(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_u8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun ffi_gitpass_ios_ffi_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_i8(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_i8(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_i8(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_i8(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_i8(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_i8(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Byte
-fun ffi_gitpass_ios_ffi_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_u16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_u16(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_u16(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_u16(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_u16(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_u16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
-fun ffi_gitpass_ios_ffi_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_i16(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_i16(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_i16(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_i16(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_i16(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_i16(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Short
-fun ffi_gitpass_ios_ffi_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_u32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_u32(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_u32(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_u32(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_u32(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_u32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun ffi_gitpass_ios_ffi_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_i32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_i32(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_i32(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_i32(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_i32(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_i32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Int
-fun ffi_gitpass_ios_ffi_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_u64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_u64(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_u64(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_u64(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_u64(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_u64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun ffi_gitpass_ios_ffi_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_i64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_i64(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_i64(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_i64(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_i64(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_i64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Long
-fun ffi_gitpass_ios_ffi_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_f32(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_f32(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_f32(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_f32(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_f32(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_f32(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Float
-fun ffi_gitpass_ios_ffi_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_f64(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_f64(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_f64(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_f64(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_f64(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_f64(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Double
-fun ffi_gitpass_ios_ffi_rust_future_poll_pointer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_pointer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_pointer(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_pointer(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_pointer(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_pointer(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_pointer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_pointer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
-fun ffi_gitpass_ios_ffi_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_rust_buffer(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_rust_buffer(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_rust_buffer(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_rust_buffer(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_rust_buffer(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_rust_buffer(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun ffi_gitpass_ios_ffi_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_poll_void(`handle`: Long,`callback`: UniffiRustFutureContinuationCallback,`callbackData`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_cancel_void(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_cancel_void(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_free_void(`handle`: Long,
+fun ffi_gitpass_mobile_ffi_rust_future_free_void(`handle`: Long,
 ): Unit
-fun ffi_gitpass_ios_ffi_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
+fun ffi_gitpass_mobile_ffi_rust_future_complete_void(`handle`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 
 }
@@ -1009,65 +1033,77 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
     // Get the bindings contract version from our ComponentInterface
     val bindings_contract_version = 29
     // Get the scaffolding contract version by calling the into the dylib
-    val scaffolding_contract_version = lib.ffi_gitpass_ios_ffi_uniffi_contract_version()
+    val scaffolding_contract_version = lib.ffi_gitpass_mobile_ffi_uniffi_contract_version()
     if (bindings_contract_version != scaffolding_contract_version) {
         throw RuntimeException("UniFFI contract version mismatch: try cleaning and rebuilding your project")
     }
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
-    if (lib.uniffi_gitpass_ios_ffi_checksum_func_create_account() != 35385.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_create_account() != 36389.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_func_generate_password() != 53242.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_default_unlock_options() != 8485.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_func_merge_item_records() != 45495.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_ffi_version() != 63213.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_func_open_vault() != 40792.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_format_version() != 52460.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_func_totp_code() != 45554.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_generate_password() != 14329.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_func_validate_first_pull_snapshot() != 57379.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_merge_item_records() != 54500.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_create_item() != 43521.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_open_vault() != 4391.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_create_vault() != 6714.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with() != 39303.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_delete_item() != 26971.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_totp_code() != 28435.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_get_item() != 18217.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_validate_first_pull_snapshot() != 54540.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_list_items() != 38828.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_create_item() != 5558.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_list_vaults() != 6897.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_create_vault() != 64286.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_put_record_json() != 31922.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_delete_item() != 65469.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_record_json() != 29984.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_get_item() != 10570.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_restore_item() != 38495.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_list_items() != 38314.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_set_archived() != 7795.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_list_vaults() != 43376.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_set_favorite() != 56233.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_put_record_json() != 39521.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_ios_ffi_checksum_method_vault_update_item() != 5800.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_record_json() != 22476.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_restore_item() != 29803.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_set_archived() != 22121.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_set_favorite() != 52982.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_update_item() != 43322.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
 }
@@ -1211,6 +1247,29 @@ private class JavaLangRefCleanable(
     val cleanable: java.lang.ref.Cleaner.Cleanable
 ) : UniffiCleaner.Cleanable {
     override fun clean() = cleanable.clean()
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterUInt: FfiConverter<UInt, Int> {
+    override fun lift(value: Int): UInt {
+        return value.toUInt()
+    }
+
+    override fun read(buf: ByteBuffer): UInt {
+        return lift(buf.getInt())
+    }
+
+    override fun lower(value: UInt): Int {
+        return value.toInt()
+    }
+
+    override fun allocationSize(value: UInt) = 4UL
+
+    override fun write(value: UInt, buf: ByteBuffer) {
+        buf.putInt(value.toInt())
+    }
 }
 
 /**
@@ -1526,7 +1585,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         override fun run() {
             pointer?.let { ptr ->
                 uniffiRustCall { status ->
-                    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_free_vault(ptr, status)
+                    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_free_vault(ptr, status)
                 }
             }
         }
@@ -1534,7 +1593,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
 
     fun uniffiClonePointer(): Pointer {
         return uniffiRustCall() { status ->
-            UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_clone_vault(pointer!!, status)
+            UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_clone_vault(pointer!!, status)
         }
     }
 
@@ -1543,7 +1602,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
             return FfiConverterString.lift(
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_create_item(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_create_item(
         it, FfiConverterString.lower(`vaultId`),FfiConverterTypeItemInput.lower(`input`),_status)
 }
     }
@@ -1556,7 +1615,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
             return FfiConverterString.lift(
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_create_vault(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_create_vault(
         it, FfiConverterString.lower(`name`),FfiConverterOptionalString.lower(`description`),_status)
 }
     }
@@ -1569,7 +1628,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         = 
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_delete_item(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_delete_item(
         it, FfiConverterString.lower(`vaultId`),FfiConverterString.lower(`itemId`),_status)
 }
     }
@@ -1581,7 +1640,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
             return FfiConverterTypeItemDetail.lift(
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_get_item(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_get_item(
         it, FfiConverterString.lower(`vaultId`),FfiConverterString.lower(`itemId`),_status)
 }
     }
@@ -1594,7 +1653,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
             return FfiConverterSequenceTypeItemSummary.lift(
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_list_items(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_list_items(
         it, FfiConverterString.lower(`vaultId`),_status)
 }
     }
@@ -1607,7 +1666,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
             return FfiConverterSequenceTypeVaultInfo.lift(
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_list_vaults(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_list_vaults(
         it, _status)
 }
     }
@@ -1625,7 +1684,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         = 
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_put_record_json(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_put_record_json(
         it, FfiConverterString.lower(`vaultId`),FfiConverterString.lower(`itemId`),FfiConverterString.lower(`recordJson`),_status)
 }
     }
@@ -1644,7 +1703,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
             return FfiConverterString.lift(
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_record_json(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_record_json(
         it, FfiConverterString.lower(`vaultId`),FfiConverterString.lower(`itemId`),_status)
 }
     }
@@ -1657,7 +1716,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         = 
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_restore_item(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_restore_item(
         it, FfiConverterString.lower(`vaultId`),FfiConverterString.lower(`itemId`),_status)
 }
     }
@@ -1669,7 +1728,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         = 
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_set_archived(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_set_archived(
         it, FfiConverterString.lower(`vaultId`),FfiConverterString.lower(`itemId`),FfiConverterBoolean.lower(`archived`),_status)
 }
     }
@@ -1681,7 +1740,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         = 
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_set_favorite(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_set_favorite(
         it, FfiConverterString.lower(`vaultId`),FfiConverterString.lower(`itemId`),FfiConverterBoolean.lower(`favorite`),_status)
 }
     }
@@ -1693,7 +1752,7 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
         = 
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_method_vault_update_item(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_update_item(
         it, FfiConverterString.lower(`vaultId`),FfiConverterString.lower(`itemId`),FfiConverterTypeItemInput.lower(`input`),_status)
 }
     }
@@ -1809,6 +1868,88 @@ public object FfiConverterTypeFfiSection: FfiConverterRustBuffer<FfiSection> {
             FfiConverterString.write(value.`id`, buf)
             FfiConverterOptionalString.write(value.`title`, buf)
             FfiConverterSequenceTypeFfiField.write(value.`fields`, buf)
+    }
+}
+
+
+
+/**
+ * Bridge version: the crate (= workspace) version plus the API level.
+ */
+data class FfiVersion (
+    /**
+     * Semver of this bridge crate; always the workspace version.
+     */
+    var `crateVersion`: kotlin.String, 
+    /**
+     * See [`FFI_API_LEVEL`].
+     */
+    var `apiLevel`: kotlin.UInt
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFfiVersion: FfiConverterRustBuffer<FfiVersion> {
+    override fun read(buf: ByteBuffer): FfiVersion {
+        return FfiVersion(
+            FfiConverterString.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FfiVersion) = (
+            FfiConverterString.allocationSize(value.`crateVersion`) +
+            FfiConverterUInt.allocationSize(value.`apiLevel`)
+    )
+
+    override fun write(value: FfiVersion, buf: ByteBuffer) {
+            FfiConverterString.write(value.`crateVersion`, buf)
+            FfiConverterUInt.write(value.`apiLevel`, buf)
+    }
+}
+
+
+
+/**
+ * Vault format range of the linked `gitpass-core`.
+ */
+data class FormatVersion (
+    /**
+     * Oldest on-disk format this build can still open (`MIN_READ_FORMAT`).
+     */
+    var `minRead`: kotlin.UInt, 
+    /**
+     * Format this build writes (`FORMAT_VERSION`).
+     */
+    var `currentWrite`: kotlin.UInt
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeFormatVersion: FfiConverterRustBuffer<FormatVersion> {
+    override fun read(buf: ByteBuffer): FormatVersion {
+        return FormatVersion(
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: FormatVersion) = (
+            FfiConverterUInt.allocationSize(value.`minRead`) +
+            FfiConverterUInt.allocationSize(value.`currentWrite`)
+    )
+
+    override fun write(value: FormatVersion, buf: ByteBuffer) {
+            FfiConverterUInt.write(value.`minRead`, buf)
+            FfiConverterUInt.write(value.`currentWrite`, buf)
     }
 }
 
@@ -2061,6 +2202,66 @@ public object FfiConverterTypeTotpCode: FfiConverterRustBuffer<TotpCode> {
     override fun write(value: TotpCode, buf: ByteBuffer) {
             FfiConverterString.write(value.`code`, buf)
             FfiConverterULong.write(value.`secondsRemaining`, buf)
+    }
+}
+
+
+
+/**
+ * Optional write side effects of an unlock. All `false` (see
+ * `default_unlock_options`) is the mobile default: unlocking leaves every
+ * tracked vault file byte-identical. Throttling and integrity/rollback
+ * checks always run, whatever is set here.
+ */
+data class UnlockOptions (
+    /**
+     * Register/refresh this device in `devices.enc` (and roll forward an
+     * interrupted device revoke started elsewhere).
+     */
+    var `registerDevice`: kotlin.Boolean, 
+    /**
+     * Device name used when `register_device` is set; `None` = core default.
+     */
+    var `deviceName`: kotlin.String?, 
+    /**
+     * Permanently purge items that have been in the trash for over 30 days.
+     */
+    var `purgeExpiredTrash`: kotlin.Boolean, 
+    /**
+     * Re-wrap the keyset with the current default KDF parameters when the
+     * stored ones are weaker. Never lowers or clamps KDF parameters.
+     */
+    var `upgradeKdf`: kotlin.Boolean
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeUnlockOptions: FfiConverterRustBuffer<UnlockOptions> {
+    override fun read(buf: ByteBuffer): UnlockOptions {
+        return UnlockOptions(
+            FfiConverterBoolean.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: UnlockOptions) = (
+            FfiConverterBoolean.allocationSize(value.`registerDevice`) +
+            FfiConverterOptionalString.allocationSize(value.`deviceName`) +
+            FfiConverterBoolean.allocationSize(value.`purgeExpiredTrash`) +
+            FfiConverterBoolean.allocationSize(value.`upgradeKdf`)
+    )
+
+    override fun write(value: UnlockOptions, buf: ByteBuffer) {
+            FfiConverterBoolean.write(value.`registerDevice`, buf)
+            FfiConverterOptionalString.write(value.`deviceName`, buf)
+            FfiConverterBoolean.write(value.`purgeExpiredTrash`, buf)
+            FfiConverterBoolean.write(value.`upgradeKdf`, buf)
     }
 }
 
@@ -2349,8 +2550,38 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     @Throws(GitpassException::class) fun `createAccount`(`root`: kotlin.String, `password`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_func_create_account(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_create_account(
         FfiConverterString.lower(`root`),FfiConverterString.lower(`password`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The mobile default: no device registration, no trash purge, no KDF upgrade.
+         */ fun `defaultUnlockOptions`(): UnlockOptions {
+            return FfiConverterTypeUnlockOptions.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_default_unlock_options(
+        _status)
+}
+    )
+    }
+    
+ fun `ffiVersion`(): FfiVersion {
+            return FfiConverterTypeFfiVersion.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_ffi_version(
+        _status)
+}
+    )
+    }
+    
+ fun `formatVersion`(): FormatVersion {
+            return FfiConverterTypeFormatVersion.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_format_version(
+        _status)
 }
     )
     }
@@ -2358,7 +2589,7 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
  fun `generatePassword`(`length`: kotlin.ULong): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_func_generate_password(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_generate_password(
         FfiConverterULong.lower(`length`),_status)
 }
     )
@@ -2368,18 +2599,34 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     @Throws(GitpassException::class) fun `mergeItemRecords`(`localJson`: kotlin.String, `remoteJson`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_func_merge_item_records(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_merge_item_records(
         FfiConverterString.lower(`localJson`),FfiConverterString.lower(`remoteJson`),_status)
 }
     )
     }
     
 
+        /**
+         * Side-effect-free unlock; same as `open_vault_with(.., default_unlock_options())`.
+         */
     @Throws(GitpassException::class) fun `openVault`(`root`: kotlin.String, `password`: kotlin.String, `secretKey`: kotlin.String): Vault {
             return FfiConverterTypeVault.lift(
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_func_open_vault(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_open_vault(
         FfiConverterString.lower(`root`),FfiConverterString.lower(`password`),FfiConverterString.lower(`secretKey`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Unlock with explicit side-effect options (see [`UnlockOptions`]).
+         */
+    @Throws(GitpassException::class) fun `openVaultWith`(`root`: kotlin.String, `password`: kotlin.String, `secretKey`: kotlin.String, `options`: UnlockOptions): Vault {
+            return FfiConverterTypeVault.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_open_vault_with(
+        FfiConverterString.lower(`root`),FfiConverterString.lower(`password`),FfiConverterString.lower(`secretKey`),FfiConverterTypeUnlockOptions.lower(`options`),_status)
 }
     )
     }
@@ -2388,7 +2635,7 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     @Throws(GitpassException::class) fun `totpCode`(`secret`: kotlin.String): TotpCode {
             return FfiConverterTypeTotpCode.lift(
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_func_totp_code(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_totp_code(
         FfiConverterString.lower(`secret`),_status)
 }
     )
@@ -2404,7 +2651,7 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     @Throws(GitpassException::class) fun `validateFirstPullSnapshot`(`root`: kotlin.String, `password`: kotlin.String, `secretKey`: kotlin.String)
         = 
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_func_validate_first_pull_snapshot(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_validate_first_pull_snapshot(
         FfiConverterString.lower(`root`),FfiConverterString.lower(`password`),FfiConverterString.lower(`secretKey`),_status)
 }
     

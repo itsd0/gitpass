@@ -16,7 +16,7 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 | **native-host** | `crates/gitpass-host` | Native-messaging host for the extension; origin matching (`origin.rs`), request handler (`handler.rs`), install manifests (`install.rs`), bridge to desktop agent |
 | **extension** | `extension/` | MV3 service worker (`background.js`, `bg-*.js`), content scripts on all https pages (`content.js`, `lib/forms.js`, `lib/passkey-main.js` in MAIN world, `lib/passkey-bridge.js`), popup, options |
 | **desktop** | `apps/desktop/gui-core`, `apps/desktop/src-tauri`, `apps/desktop/src` | Tauri app: Rust API (`api/`), browser agent UNIX socket (`agent.rs`), ssh-agent (`ssh_agent.rs`), favicon fetcher (`favicon.rs`), Touch ID/Keychain (`biometric.rs`), updater, React UI |
-| **ios** | `ios/`, `ios/rust/gitpass-ios-ffi` | SwiftUI app + AutoFill credential provider via UniFFI |
+| **ios** | `ios/`, `crates/gitpass-mobile-ffi` | SwiftUI app + AutoFill credential provider via UniFFI |
 | **release** | `.github/workflows`, `docs/RELEASE.md`, `scripts/`, `tauri.conf.json` updater | Build, signing, minisign-verified auto-update from `itsd0/gitpass` releases |
 
 ## Trust boundaries and entry points

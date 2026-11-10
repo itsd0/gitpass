@@ -90,6 +90,10 @@ private sealed interface Screen {
 
 @Composable
 fun GitpassRoot(app: GitpassApplication) {
+    if (app.bridgeIncompatible) {
+        Box(Modifier.fillMaxSize().padding(24.dp)) { Text(stringResource(R.string.bridge_incompatible)) }
+        return
+    }
     if (app.accountSelectionDamaged) {
         Box(Modifier.fillMaxSize().padding(24.dp)) { Text(stringResource(R.string.account_selection_damaged)) }
         return

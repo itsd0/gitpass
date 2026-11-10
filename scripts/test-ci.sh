@@ -43,7 +43,7 @@ assert_eq "iOS-only: frontend" "$(echo "$out" | grep '^frontend=' | cut -d= -f2)
 assert_eq "iOS-only: supply_chain" "$(echo "$out" | grep '^supply_chain=' | cut -d= -f2)" "false"
 
 # Test 3: Shared mobile UniFFI bridge (via --stdin)
-out=$(echo "ios/rust/gitpass-ios-ffi/src/lib.rs" | "$DETECT_SCRIPT" --stdin)
+out=$(echo "crates/gitpass-mobile-ffi/src/lib.rs" | "$DETECT_SCRIPT" --stdin)
 assert_eq "Shared FFI: code" "$(echo "$out" | grep '^code=' | cut -d= -f2)" "true"
 assert_eq "Shared FFI: android" "$(echo "$out" | grep '^android=' | cut -d= -f2)" "true"
 assert_eq "Shared FFI: rust" "$(echo "$out" | grep '^rust=' | cut -d= -f2)" "true"

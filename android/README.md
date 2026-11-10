@@ -21,12 +21,12 @@ This directory contains the first approved Android milestone for the `gitpass` c
 | NDK | 27.1.12297006 (r27b) | NDK r26+ | Pinned exact release; enforced by `android/scripts/build-rust.sh` |
 | Rust Toolchain | 1.90.0 | 1.85+ (`Cargo.toml`) | Deliberate project choice: matches repository CI toolchain |
 | cargo-ndk | 4.1.2 | cargo-ndk 3.x+ | Installed with `cargo install --version 4.1.2 --locked cargo-ndk` |
-| UniFFI | 0.29.5 | 0.29+ | Shared crate reuse of `ios/rust/gitpass-ios-ffi` |
+| UniFFI | 0.29.5 | 0.29+ | Shared crate reuse of `crates/gitpass-mobile-ffi` |
 | JNA (Android AAR) | 5.17.0 | JNA 5.17.0+ | Exact compatible release containing Android 16-KB page fixes (#1647, #1624) |
 
 ## UniFFI Kotlin Generation & Namespace
 
-The Kotlin FFI bridge reuses the `ios/rust/gitpass-ios-ffi` crate. Kotlin bindings are configured via `ios/rust/gitpass-ios-ffi/uniffi.toml`:
+The Kotlin FFI bridge reuses the `crates/gitpass-mobile-ffi` crate. Kotlin bindings are configured via `crates/gitpass-mobile-ffi/uniffi.toml`:
 
 ```toml
 [bindings.swift]
@@ -34,12 +34,12 @@ ffi_module_name = "GitpassCore"
 
 [bindings.kotlin]
 package_name = "app.gitpass.core"
-cdylib_name = "gitpass_ios_ffi"
+cdylib_name = "gitpass_mobile_ffi"
 ```
 
-- **Generated Source Location:** `android/app/src/main/java/app/gitpass/core/gitpass_ios_ffi.kt`.
+- **Generated Source Location:** `android/app/src/main/java/app/gitpass/core/gitpass_mobile_ffi.kt`.
 - **Package:** `app.gitpass.core`.
-- **Regeneration:** `android/scripts/build-rust.sh` runs `uniffi-bindgen generate --library ... --config ios/rust/gitpass-ios-ffi/uniffi.toml --language kotlin` and cleanly refreshes `app/gitpass/core/`, preventing namespace drift or duplicate stale files.
+- **Regeneration:** `android/scripts/build-rust.sh` runs `uniffi-bindgen generate --library ... --config crates/gitpass-mobile-ffi/uniffi.toml --language kotlin` and cleanly refreshes `app/gitpass/core/`, preventing namespace drift or duplicate stale files.
 - **iOS Compatibility:** Preserves existing Swift module name (`GitpassCore`), Swift binding generation, and xcframework builds without modification.
 
 ## Android 16-KB Page Size Compatibility
@@ -80,7 +80,7 @@ All `LOAD` segment lines must indicate `Align 0x4000` (16,384).
 ### 16-KB Runtime Testing Status
 
 - **Tested Runtime Environments:** Android emulator API 34 (`arm64-v8a`) and API 36 (`arm64-v8a`) running standard 4-KB kernel page size (`getconf PAGE_SIZE` = 4096). All instrumentation smoke tests passed (2/2).
-- **16-KB Kernel Status:** **Incomplete / Untested at Runtime.** The local development machine does not have a 16-KB page size kernel system image installed (`PAGE_SIZE=16384`). ELF load segment alignment is verified at 16-KB for all packaged binaries (`libgitpass_ios_ffi.so` and `libjnidispatch.so`), but runtime execution on a true 16-KB kernel remains to be verified when an API 35+ 16-KB emulator image is provisioned.
+- **16-KB Kernel Status:** **Incomplete / Untested at Runtime.** The local development machine does not have a 16-KB page size kernel system image installed (`PAGE_SIZE=16384`). ELF load segment alignment is verified at 16-KB for all packaged binaries (`libgitpass_mobile_ffi.so` and `libjnidispatch.so`), but runtime execution on a true 16-KB kernel remains to be verified when an API 35+ 16-KB emulator image is provisioned.
 
 ## Build Instructions
 
@@ -112,7 +112,7 @@ export PATH="$JAVA_HOME/bin:$HOME/.cargo/bin:$PATH"
 ./android/scripts/build-rust.sh
 ```
 
-Validates toolchain versions, compiles `libgitpass_ios_ffi.so` with 16-KB page alignment for `arm64-v8a` and `x86_64`, and generates `app.gitpass.core` Kotlin bindings into `android/app/src/main/java/app/gitpass/core/gitpass_ios_ffi.kt`.
+Validates toolchain versions, compiles `libgitpass_mobile_ffi.so` with 16-KB page alignment for `arm64-v8a` and `x86_64`, and generates `app.gitpass.core` Kotlin bindings into `android/app/src/main/java/app/gitpass/core/gitpass_mobile_ffi.kt`.
 
 ### 3. Assemble Debug APK
 

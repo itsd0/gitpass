@@ -33,5 +33,5 @@ pub use gen_history::{GeneratorHistory, GeneratorHistoryEntry};
 pub use item::{Category, FieldKind, PasswordHistoryEntry};
 pub use item_merge::{merge_duplicate_records, DuplicateMergeOutcome, DuplicateMergeReport};
 pub use mask::{api_credential_secret, secret_hint};
-pub use store::{Item, Session, UnlockOpts, FORMAT_VERSION, MIN_READ_FORMAT};
+pub use store::{Item, Session, UnlockEffects, UnlockOpts, FORMAT_VERSION, MIN_READ_FORMAT};
 pub use totp::code_now as totp_now;
