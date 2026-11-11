@@ -65,13 +65,16 @@
 //! before writing. The table in `tests/fixtures/shared/allowed_paths.json` is
 //! checked by the core, bridge, Android and iOS tests. Migrating the Swift
 //! (`SyncService.isSyncable`) and Kotlin (`EncryptedFirstPull.allowedFile`)
-//! call sites to the bridge export belongs with the transport work (#453).
+//! call sites to the bridge export is left to the mobile adoption of the
+//! API transport ([`crate::github_api`], #453), which does not change the
+//! mobile apps yet.
 //!
 //! # What this module does NOT do
 //!
 //! No I/O, no secrets in logs or errors, no transport, no UI. Applying a plan
 //! to a live vault is [`Session::apply_sync_plan`](crate::store::Session::apply_sync_plan);
-//! resolving a remote tree into a snapshot is the transport's job (#453).
+//! resolving a remote tree into a snapshot and driving a whole sync over an
+//! API remote is [`crate::sync_remote`] (#453).
 
 use crate::device::{DeviceRegistry, UNKNOWN_DEVICE};
 use crate::gen_history::GeneratorHistory;
@@ -872,6 +875,87 @@ pub trait RemoteRepo {
     fn update_ref(&mut self, new_head: &str, expected_old: Option<&str>) -> Result<()>;
 }
 
+/// Returned (inside `anyhow::Error`) by [`RemoteRepo::update_ref`] when the
+/// remote head is no longer the expected one: another writer pushed first.
+/// Sync drivers detect it with `err.downcast_ref::<RefUpdateConflict>()`,
+/// re-fetch and re-plan (bounded), and never force-push.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RefUpdateConflict;
+
+impl std::fmt::Display for RefUpdateConflict {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ref update refused: the remote moved since it was fetched (never force-push); re-fetch and retry")
+    }
+}
+
+impl std::error::Error for RefUpdateConflict {}
+
+/// Real git tree id of the (nested) tree holding `entries` — (repo-relative
+/// path, blob id) pairs, every blob mode `100644`, sub-trees implied by the
+/// paths. Equals what `git write-tree` / the GitHub Git Data API produce for
+/// the same files, so API transports can verify trees the server returns or
+/// lists. Errors on malformed ids or paths (empty components, a path that is
+/// both a file and a directory).
+pub fn git_tree_id(entries: &[(String, String)]) -> Result<String> {
+    #[derive(Default)]
+    struct Dir {
+        files: BTreeMap<String, [u8; 20]>,
+        dirs: BTreeMap<String, Dir>,
+    }
+    fn raw(sha: &str) -> Result<[u8; 20]> {
+        if sha.len() != 40 || !sha.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+            bail!("invalid object id");
+        }
+        let mut out = [0u8; 20];
+        for (i, o) in out.iter_mut().enumerate() {
+            *o = u8::from_str_radix(&sha[2 * i..2 * i + 2], 16)?;
+        }
+        Ok(out)
+    }
+    fn hash(d: &Dir) -> [u8; 20] {
+        use sha1::Digest;
+        // Git orders tree entries by name, comparing directories as `name/`.
+        let mut names: Vec<(Vec<u8>, Vec<u8>)> = vec![];
+        for (n, sha) in &d.files {
+            let mut e = format!("100644 {n}\0").into_bytes();
+            e.extend_from_slice(sha);
+            names.push((n.as_bytes().to_vec(), e));
+        }
+        for (n, sub) in &d.dirs {
+            let mut e = format!("40000 {n}\0").into_bytes();
+            e.extend_from_slice(&hash(sub));
+            let mut key = n.as_bytes().to_vec();
+            key.push(b'/');
+            names.push((key, e));
+        }
+        names.sort();
+        let body: Vec<u8> = names.into_iter().flat_map(|(_, e)| e).collect();
+        let mut h = sha1::Sha1::new();
+        h.update(format!("tree {}\0", body.len()).as_bytes());
+        h.update(&body);
+        h.finalize().into()
+    }
+    let mut root = Dir::default();
+    for (path, sha) in entries {
+        let comps: Vec<&str> = path.split('/').collect();
+        if comps.iter().any(|c| c.is_empty()) {
+            bail!("invalid tree path");
+        }
+        let mut d = &mut root;
+        for c in &comps[..comps.len() - 1] {
+            if d.files.contains_key(*c) {
+                bail!("invalid tree: a path is both a file and a directory");
+            }
+            d = d.dirs.entry(c.to_string()).or_default();
+        }
+        let name = comps[comps.len() - 1];
+        if d.dirs.contains_key(name) || d.files.insert(name.to_string(), raw(sha)?).is_some() {
+            bail!("invalid tree: duplicate path");
+        }
+    }
+    Ok(hash(&root).iter().map(|b| format!("{b:02x}")).collect())
+}
+
 /// Git blob id: sha1 of `blob <len>\0<bytes>`. Same function the Android
 /// first-pull client uses (`gitBlobSha`); transports verify every fetched
 /// blob against the id the tree advertised.
@@ -987,11 +1071,7 @@ impl RemoteRepo for MemoryRemoteRepo {
             bail!("unknown commit {new_head}");
         }
         if self.head.as_deref() != expected_old {
-            bail!(
-                "ref update refused: head is {:?}, expected {:?}; another writer moved the ref (never force-push)",
-                self.head,
-                expected_old
-            );
+            return Err(RefUpdateConflict.into());
         }
         self.head = Some(new_head.to_string());
         Ok(())

@@ -25,6 +25,8 @@ pub mod passkey;
 pub mod store;
 pub mod sync;
 pub mod sync_engine;
+pub mod sync_remote;
+pub mod github_api;
 /// Shared encrypted test-vault fixtures (#451). Test support only: compiled solely with the
 /// `test-fixtures` feature, which no shipped binary enables.
 #[cfg(feature = "test-fixtures")]

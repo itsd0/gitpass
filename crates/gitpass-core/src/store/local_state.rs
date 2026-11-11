@@ -15,6 +15,26 @@ struct LocalState {
     epoch: u64,
     #[serde(default)]
     last_used: BTreeMap<String, u64>,
+    /// Last-synced remote state for API transports (issue #453); absent until the first sync.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    sync_base: Option<SyncBase>,
+}
+
+/// What this device last synced with an API remote (GitHub has no merge-base,
+/// so the base is tracked locally, issue #453). Stored in the local-only,
+/// git-ignored `.gitpass-state.json`; never pushed. Holds only public ids:
+/// no paths, tokens or decrypted data.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub struct SyncBase {
+    /// Opaque remote identity (e.g. `github:owner/repo#branch`): a base is
+    /// only used against the remote it was recorded for.
+    pub remote: String,
+    /// Commit id both sides last agreed on: the merge base of the next sync.
+    pub commit: String,
+    /// Git tree id of that commit, re-verified when the base is fetched again.
+    pub tree: String,
+    /// Manifest epoch of that commit: the remote must never go below it.
+    pub epoch: u64,
 }
 fn state_path(root: &Path) -> PathBuf { root.join(".gitpass-state.json") }
 /// Last manifest epoch this device has seen for `account_id` (None = first use on this device: TOFU).
@@ -55,9 +75,47 @@ fn write_epoch(root: &Path, account_id: &str, epoch: u64, allow_lower: bool) -> 
         } else {
             s.account_id = account_id.into();
             s.epoch = epoch;
+            s.sync_base = None; // another account's base is meaningless here
         }
         Some(s)
     })
+}
+
+/// This device's last-synced base for `remote` (None: never synced with it, another account, or unreadable).
+pub fn sync_base(root: &Path, account_id: &str, remote: &str) -> Option<SyncBase> {
+    let s: LocalState = read_json(&state_path(root)).ok()?;
+    if s.account_id != account_id {
+        return None;
+    }
+    s.sync_base.filter(|b| b.remote == remote)
+}
+
+/// Record the last-synced base. Refuses to lower the base epoch for the same
+/// remote (that would re-open a rollback window) and never touches the
+/// anti-rollback epoch or usage data.
+pub fn set_sync_base(root: &Path, account_id: &str, base: &SyncBase) -> Result<()> {
+    let mut refused = false;
+    update_state(root, |cur| {
+        let mut s = cur.unwrap_or_default();
+        if s.account_id.is_empty() {
+            s.account_id = account_id.into();
+        } else if s.account_id != account_id {
+            refused = true;
+            return None;
+        }
+        if let Some(old) = &s.sync_base {
+            if old.remote == base.remote && base.epoch < old.epoch {
+                refused = true;
+                return None;
+            }
+        }
+        s.sync_base = Some(base.clone());
+        Some(s)
+    })?;
+    if refused {
+        anyhow::bail!("refusing to record a sync base below the last-synced epoch or for another account");
+    }
+    Ok(())
 }
 
 /// Record that an item was used at timestamp `ts` (seconds since unix epoch).
@@ -100,6 +158,28 @@ pub fn set_last_epoch(root: &Path, account_id: &str, epoch: u64) -> Result<()> {
 #[cfg(test)]
 mod local_state_tests {
     use super::*;
+
+    #[test]
+    fn sync_base_is_per_remote_and_never_lowered() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        save_epoch(root, "acct", 5).unwrap();
+        let b = |remote: &str, epoch| SyncBase { remote: remote.into(), commit: "c".repeat(40), tree: "t".repeat(40), epoch };
+        assert_eq!(sync_base(root, "acct", "r1"), None);
+        set_sync_base(root, "acct", &b("r1", 5)).unwrap();
+        assert_eq!(sync_base(root, "acct", "r1"), Some(b("r1", 5)));
+        assert_eq!(sync_base(root, "acct", "r2"), None, "only for the remote it was recorded for");
+        assert_eq!(sync_base(root, "other", "r1"), None);
+        assert!(set_sync_base(root, "acct", &b("r1", 4)).is_err(), "never lowered");
+        assert!(set_sync_base(root, "other", &b("r1", 9)).is_err(), "other account");
+        set_sync_base(root, "acct", &b("r2", 1)).unwrap(); // a different remote starts over
+        touch_item_used(root, "item", 1).unwrap();
+        save_epoch(root, "acct", 7).unwrap();
+        assert_eq!(sync_base(root, "acct", "r2"), Some(b("r2", 1)), "other writers keep the base");
+        assert_eq!(last_epoch(root, "acct"), Some(7));
+        save_epoch(root, "new-acct", 1).unwrap();
+        assert_eq!(sync_base(root, "new-acct", "r2"), None, "account switch drops the base");
+    }
 
     #[test]
     fn usage_writes_never_lower_the_epoch() {

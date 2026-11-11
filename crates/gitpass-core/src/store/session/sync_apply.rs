@@ -82,6 +82,118 @@ impl Session {
         })
     }
 
+    /// Decrypted snapshot of a REMOTE tree (issue #453): `files` are
+    /// (repo-relative path, bytes) as fetched by a transport. They are written
+    /// to a private temp dir and opened with THIS session's account key — no
+    /// key derivation runs on remote data, so a hostile `format.json` cannot
+    /// make this device allocate Argon2 memory. The remote must be the same
+    /// account and pass the full integrity check (manifest authenticated,
+    /// every referenced hash matches, no unreferenced encrypted files);
+    /// anything else is refused with a generic error (no paths, no details
+    /// from the remote). Rollback checks against the device's last-synced
+    /// epoch are the caller's job (see [`crate::sync_remote`]).
+    pub fn snapshot_from_files(&self, files: &[(String, Vec<u8>)]) -> Result<VaultSnapshot> {
+        let dir = tempfile::Builder::new().prefix(".gitpass-sync-").tempdir()?;
+        let root = dir.path();
+        for (path, bytes) in files {
+            if !crate::remote::is_allowed_path(path) || (path.ends_with("/.keep") && !bytes.is_empty()) {
+                bail!("remote tree contains a file outside the vault allowlist; refusing to sync");
+            }
+            let dst = root.join(path);
+            if let Some(parent) = dst.parent() {
+                fs::create_dir_all(parent)?;
+            }
+            fs::write(&dst, bytes)?;
+        }
+        let fmt = read_format(root).map_err(|_| anyhow!("remote snapshot has no readable format.json; refusing to sync"))?;
+        if fmt.account_id != self.fmt.account_id {
+            bail!("remote vault belongs to a different account; refusing to sync");
+        }
+        if !(MIN_READ_FORMAT..=FORMAT_VERSION).contains(&fmt.version) {
+            bail!("remote vault format is not supported by this version; refusing to sync");
+        }
+        let remote = Session {
+            root: root.to_path_buf(),
+            fmt,
+            account_key: self.account_key.clone(),
+            kdf_upgraded: false,
+            accepted_problems: vec![],
+            device_id: self.device_id.clone(),
+            device_revoked: false,
+            device_kek: self.device_kek.clone(),
+        };
+        let m = remote
+            .load_manifest()
+            .map_err(|_| anyhow!("remote manifest failed authentication; refusing to sync"))?;
+        if m.account_id != self.fmt.account_id || !(MIN_READ_FORMAT..=FORMAT_VERSION).contains(&m.format) {
+            bail!("remote manifest does not belong to this account/format; refusing to sync");
+        }
+        if !verify(root, &m).is_empty() {
+            // The problem list names temp paths; never surface it.
+            bail!("remote snapshot failed the integrity check; refusing to sync");
+        }
+        let snap = remote.snapshot_sync().map_err(|_| anyhow!("remote snapshot could not be decrypted; refusing to sync"))?;
+        drop(remote);
+        drop(dir);
+        Ok(snap)
+    }
+
+    /// Fast-forward (issue #453): replace this vault's committed files with a
+    /// verified remote tree whose content this side already has or has not
+    /// touched since the last sync, at the remote's epoch (never lower than
+    /// the local one). Only [`crate::sync_remote`] calls this, after
+    /// [`Self::snapshot_from_files`] authenticated the same `files`. Writes
+    /// changed files first and `manifest.enc` last, removes committed files
+    /// the remote no longer has, then re-runs the integrity check.
+    pub(crate) fn adopt_remote_files(&self, files: &[(String, Vec<u8>)], epoch: u64) -> Result<()> {
+        self.ensure_not_revoked()?;
+        let _g = fsutil::lock(&self.root)?;
+        if epoch < self.load_manifest()?.epoch {
+            bail!("refusing to adopt a remote state below the local epoch");
+        }
+        let wanted: std::collections::BTreeSet<&str> = files.iter().map(|(p, _)| p.as_str()).collect();
+        let mut manifest = None;
+        for (path, bytes) in files {
+            if !crate::remote::is_allowed_path(path) {
+                bail!("remote tree contains a file outside the vault allowlist; refusing to sync");
+            }
+            if path == "manifest.enc" {
+                manifest = Some(bytes);
+                continue;
+            }
+            let dst = self.root.join(path);
+            if fs::read(&dst).ok().as_deref() != Some(bytes.as_slice()) {
+                if let Some(parent) = dst.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                atomic_write(&dst, bytes)?;
+            }
+        }
+        let manifest = manifest.ok_or_else(|| anyhow!("remote snapshot has no manifest; refusing to sync"))?;
+        atomic_write(&self.root.join("manifest.enc"), manifest)?;
+        for (path, _) in crate::sync_remote::local_vault_files(&self.root)? {
+            if wanted.contains(path.as_str()) {
+                continue;
+            }
+            let p = self.root.join(&path);
+            fs::remove_file(&p)?;
+            // Drop now-empty directories (a stale vault dir fails `verify`).
+            let mut dir = p.parent().map(Path::to_path_buf);
+            while let Some(d) = dir {
+                if d == self.root || fs::remove_dir(&d).is_err() {
+                    break;
+                }
+                dir = d.parent().map(Path::to_path_buf);
+            }
+        }
+        let m = self.load_manifest()?;
+        if m.epoch != epoch || !verify(&self.root, &m).is_empty() {
+            bail!("vault failed the integrity check after adopting the remote state; restore from backup and sync again");
+        }
+        save_epoch(&self.root, &self.fmt.account_id, epoch)?;
+        Ok(())
+    }
+
     /// Apply a plan computed by [`crate::sync_engine::plan_sync`] from this
     /// vault's current state. Refuses stale plans (local epoch moved on) and
     /// plans for another account. A no-change plan is a no-op: the epoch is

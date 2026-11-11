@@ -36,6 +36,8 @@ ed25519-dalek = { version = "2", features = ["rand_core", "zeroize"] }
 ssh-encoding = { version = "0.2", features = ["alloc"] }
 signature = "2"
 rsa = { version = "0.9", features = ["sha2"] }
+# GitHub API sync transport HTTP client (issue #453); only with feature `github-ureq`.
+ureq = { version = "2.12", default-features = false, features = ["tls"], optional = true }
 
 [features]
 # Test support only: builds/reads the shared encrypted fixtures under
@@ -43,13 +45,17 @@ rsa = { version = "0.9", features = ["sha2"] }
 # enabled for this crate's own tests/examples via the self dev-dependency
 # below and for the mobile bridge's tests via its dev-dependency.
 test-fixtures = []
+# Bundled HTTPS client (`github_api::UreqHttpClient`) for the GitHub API sync
+# transport (issue #453). Off by default: core has no network code unless a
+# host opts in; hosts may supply their own `github_api::HttpClient` instead.
+github-ureq = ["dep:ureq"]
 
 [[example]]
 name = "gen_shared_fixtures"
 required-features = ["test-fixtures"]
 
 [dev-dependencies]
-gitpass-core = { path = ".", features = ["test-fixtures"] }
+gitpass-core = { path = ".", features = ["test-fixtures", "github-ureq"] }
 hex = "0.4.3"
 proptest = "1.11.0"
 tempfile = "3"
