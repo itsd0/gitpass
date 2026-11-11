@@ -407,6 +407,7 @@ jobs:
           "$ANDROID_HOME/emulator/emulator" \
             -avd test_api35_16k \
             -no-window \
+            -memory 4096 \
             -no-audio \
             -no-boot-anim \
             -gpu swiftshader_indirect \
@@ -473,6 +474,7 @@ jobs:
           echo "ABI:       $(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
           echo "Model:     $(adb shell getprop ro.product.model | tr -d '\r')"
           echo "Kernel:    $(adb shell uname -a | tr -d '\r')"
+          echo "MemTotal:  $(adb shell grep MemTotal /proc/meminfo | tr -d '\r')"
           PAGE_SIZE=$(adb shell getconf PAGE_SIZE | tr -d '\r')
           echo "PAGE_SIZE: $PAGE_SIZE"
 
