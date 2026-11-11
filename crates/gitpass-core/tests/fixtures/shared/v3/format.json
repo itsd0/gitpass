@@ -1,0 +1,11 @@
+{
+  "version": 3,
+  "kdf": {
+    "alg": "argon2id",
+    "m_kib": 8192,
+    "t": 1,
+    "p": 1
+  },
+  "salt": "o5j0ganS+H9izGvkIUk/cQ==",
+  "account_id": "53077853-d554-45f3-b47b-fabb181b5650"
+}

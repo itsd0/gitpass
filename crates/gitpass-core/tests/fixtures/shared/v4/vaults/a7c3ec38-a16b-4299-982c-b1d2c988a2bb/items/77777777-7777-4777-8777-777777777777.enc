@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "envelope": {
+    "alg": "xchacha20poly1305",
+    "nonce": "00F90TeA99i5dbxDy88BgVuZULT+GE5c",
+    "ct": "Jygo0F7zaERlrLqocRiVUWDXtszWUpyHhbkWeBwJaZ5J7ZGpaXMr9qubaBzM+GHftZAFJ6Z3jVALDzdu56dIWeboMw5lbfHhKcKxWdihHQMUVNDzWcE88hS6wYhDff05DyNTIqw+GqRo63VB9axkF2WvYt867UPAg9u9vbFUzrpfGAwJYQY0xVKVITZtUkWXNv1aNMNJ4P0lBAEphWDgMEz9VypB5+n4OFQY0FecXLPPEARb/5vdanbIMbJMT8xmNQYtjlKtdcnZxLI9nQxOdpWLbKVUpDjqDNh3lLh/pCdVLXp0+fsdfv3fjA1lqdYZHqio9QkFOGSnCMhcT2z+QaEYdi3Qx53yLCEuQfC+hUoG9jevSqLPhZfPr/8XTd80P+jM1B+/9T27m/OQ9tCTcReJI1IZHrghtT2GLmljZVxQ1qkfO7ugEkvn+eGqG5fjD+Q81YIJ+E0TfuPX6zbt9EGqFcP0clhQ05k2IXeVnUF6fqz8K7iz95PNMmESyBlpWyKqJ18M9lgvAgwxYRILfqmntecb5OTgi2pnECUKoDaalyygRwEeEipB35VR3aOvn63GVomknJ15DoVgxzVq4TkgGmjhLO5hJL/yPWJOQb0AIj9V0EX2eovpzB/gWLFtoWWzqCRqICjNWxo3XfhI0P5C8fLkeYZADJXNufW34e98KpCZJevwrHMtjPiOo7ev"
+  }
+}

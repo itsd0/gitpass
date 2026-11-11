@@ -47,6 +47,13 @@ android {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
         }
+        getByName("androidTest") {
+            // Shared encrypted fixtures (issue #451): single canonical copy
+            // under crates/gitpass-core/tests/fixtures/shared, packaged as
+            // test assets so instrumented tests can open them (see
+            // SharedFixturesTest). No copies are kept under android/.
+            assets.srcDir("../../crates/gitpass-core/tests/fixtures/shared")
+        }
     }
     packaging {
         resources {
