@@ -51,6 +51,23 @@ class NativeBridgeSmokeTest {
     }
 
     @Test
+    fun testPairingVectorRoundTrip() {
+        val opened = pairingTestVectorOpen()
+        assertEquals("fake-owner", opened.repoOwner)
+        assertEquals("fake-vault", opened.repoName)
+        assertEquals("main", opened.branch)
+        assertEquals("00000000-0000-4000-8000-000000000001", opened.accountId)
+        assertEquals("FAKE-github-pat-pairing-test-vector", opened.syncToken)
+        assertTrue(opened.secretKey.startsWith("A3-"))
+        assertFalse(opened.syncToken.lowercase().contains("password"))
+        val vector = pairingTestVector()
+        assertTrue(vector.contains("gitpass-pair:1:offer:"))
+        assertTrue(vector.contains("gitpass-pair:1:grant:"))
+        assertFalse(vector.contains("FAKE-master-password"))
+        assertFalse(vector.contains("password"))
+    }
+
+    @Test
     fun testDefaultUnlockOptionsAreSideEffectFree() {
         val options = defaultUnlockOptions()
         assertFalse(options.registerDevice)

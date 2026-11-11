@@ -69,6 +69,7 @@ impl BiometricStore for MemBio {
 }
 
 mod account;
+mod pairing;
 mod cards;
 mod clipboard;
 mod favicon;

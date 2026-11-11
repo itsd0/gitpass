@@ -4,6 +4,7 @@
 mod import_export;
 mod items;
 mod kit_pdf;
+mod pairing;
 mod qr;
 mod settings;
 mod sharing;
@@ -44,6 +45,9 @@ pub struct App {
     /// "Linked from" reverse index, keyed by the manifest change stamp (any write re-seals the manifest,
     /// so a stale index is never served); cleared by every lock path.
     pub(crate) backlink_cache: Arc<Mutex<Option<BacklinkIndex>>>,
+    /// In-progress QR pairing (host). Cleared on every lock path; the Secret Key and sync token
+    /// live only inside this session until the grant is released.
+    pairing: Arc<Mutex<pairing::PairingHold>>,
 }
 
 /// Same hash as `GuiState::change_stamp`, computed from a session root (the state lock is already held here).
@@ -65,11 +69,13 @@ pub(crate) struct BacklinkIndex {
 impl App {
     /// `settings_dir`: where `.gitpass-settings.json` lives (the desktop app uses the default vault dir).
     pub fn new(settings_dir: PathBuf, clipboard: Arc<dyn Clipboard>) -> Self {
+        let pairing = Arc::new(Mutex::new(pairing::PairingHold::default()));
         let app = App { state: GuiState::new(5), settings_dir, clipboard, clip_gen: Arc::new(AtomicU64::new(0)), last_copied: Arc::new(Mutex::new(None)), hibp: Box::new(UreqHibp),
             unlock_opts: Mutex::new(UnlockOpts::default()), fresh_kit: Mutex::new(None), fresh_secret: Mutex::new(None), biometric: Box::new(NoBiometrics), file_lock: Mutex::new(()),
-            favicon_cache_dir: Mutex::new(None), ssh_activity: Default::default(), backlink_cache: Default::default() };
+            favicon_cache_dir: Mutex::new(None), ssh_activity: Default::default(), backlink_cache: Default::default(), pairing: pairing.clone() };
         app.state.on_lock({ let log = app.ssh_activity.clone(); Arc::new(move || log.clear()) });
         app.state.on_lock({ let bl = app.backlink_cache.clone(); Arc::new(move || { if let Ok(mut g) = bl.lock() { *g = None; } }) });
+        app.state.on_lock({ let dir = app.settings_dir.clone(); Arc::new(move || pairing::clear_host_on_lock(&pairing, &dir)) });
         let s = app.get_settings();
         app.state.set_auto_lock_minutes(s.auto_lock_minutes);
         app

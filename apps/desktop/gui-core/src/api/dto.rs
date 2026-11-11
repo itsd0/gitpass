@@ -262,6 +262,12 @@ pub struct WatchtowerReport {
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceInfo { pub id: String, pub name: String, pub last_seen: String, pub revoked: bool, pub current: bool }
+/// Desktop side of QR pairing after the phone's offer is accepted. No secrets: the 6-digit
+/// `code` is the short authentication string both screens show, and `announce` is the QR the
+/// phone scans before the ciphertext exists.
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingHostPrepared { pub code: String, pub announce: String, pub expires_at: i64 }
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme { Dark, Light, System }
