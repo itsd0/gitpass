@@ -14,6 +14,12 @@ by four consumers, each through its own stack:
 - iOS XCTest: `ios/Tests/GitpassTests.swift` (`testSharedFixtures`,
   fixtures ship as test-bundle resources)
 
+`allowed_paths.json` (issue #452) is the shared allowed-path table: paths
+core's single rule (`gitpass_core::remote::is_allowed_path`, bridge
+`isAllowedPath`) must accept or reject. It is checked by the core
+(`shared_fixtures.rs`), bridge (`ffi.rs`), Android (`SharedAllowedPathsTest`)
+and iOS (`testSharedAllowedPathTable`) tests. Test data only.
+
 ## Test-only credentials
 
 - Master password: `fixture-password-451`

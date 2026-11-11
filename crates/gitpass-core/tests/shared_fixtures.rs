@@ -68,3 +68,22 @@ fn fixtures_are_self_describing() {
         }
     }
 }
+
+/// The shared allowed-path table (#452) matches core's single rule; the
+/// bridge, Android and iOS tests check the same table through the bridge.
+#[test]
+fn shared_allowed_path_table_matches_core_rule() {
+    let table: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(shared_dir().join("allowed_paths.json")).unwrap()).unwrap();
+    let allowed = table["allowed"].as_array().unwrap();
+    let rejected = table["rejected"].as_array().unwrap();
+    assert!(allowed.len() >= 10 && rejected.len() >= 20);
+    for p in allowed {
+        let p = p.as_str().unwrap();
+        assert!(gitpass_core::remote::is_allowed_path(p), "must allow {p:?}");
+    }
+    for p in rejected {
+        let p = p.as_str().unwrap();
+        assert!(!gitpass_core::remote::is_allowed_path(p), "must reject {p:?}");
+    }
+}

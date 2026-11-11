@@ -17,6 +17,7 @@ mod devices;
 mod items;
 mod keys;
 mod records;
+mod sync_apply;
 mod unlock;
 mod vaults;
 

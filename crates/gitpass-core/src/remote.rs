@@ -106,9 +106,28 @@ pub fn ensure_gitattributes(root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Is `path` (repo-relative, `/`-separated) allowed to be committed?
+/// Is `path` (repo-relative, `/`-separated) allowed to be committed, or accepted from an untrusted
+/// remote tree? The single rule set every platform uses (exported through the mobile bridge; table in
+/// `tests/fixtures/shared/allowed_paths.json`).
+///
+/// Structural rules first (remote paths are untrusted): 1..=512 bytes of printable ASCII without spaces
+/// or backslashes, no leading `/`, no empty, `.` or `..` component, and no hidden component (`.git/…`,
+/// `vaults/a/.x/…`) other than the root `.gitignore`/`.gitattributes` and a final `.keep` under `vaults/`.
 pub fn is_allowed_path(path: &str) -> bool {
-    let name = path.rsplit('/').next().unwrap_or(path);
+    if path.is_empty() || path.len() > 512 || !path.bytes().all(|c| (33..=126).contains(&c) && c != b'\\') {
+        return false;
+    }
+    let comps: Vec<&str> = path.split('/').collect();
+    let last = comps.len() - 1;
+    for (i, c) in comps.iter().enumerate() {
+        if c.is_empty() || *c == "." || *c == ".." { return false; }
+        if c.starts_with('.') {
+            let root_dotfile = comps.len() == 1 && (*c == ".gitignore" || *c == ".gitattributes");
+            let keep = i == last && *c == ".keep";
+            if !root_dotfile && !keep { return false; }
+        }
+    }
+    let name = comps[last];
     if path.split('/').any(|c| c.starts_with(".gitpass-") || c == ".gitpass.lock" || c == "secret.key") { return false; }
     match path {
         ".gitignore" | ".gitattributes" | "format.json" | "identity.pub" => true,
@@ -381,7 +400,9 @@ mod tests {
             assert!(is_allowed_path(p), "{p}");
         }
         for p in ["secret.key", ".gitpass-device-key.json", ".gitpass-device.json", ".gitpass-state.json", ".gitpass-throttle.json", ".gitpass.lock", ".gitpass-settings.json",
-                  ".gitpass-backup-1/keyset.enc", "notes.txt", "export.csv", "vaults/a/items/b.json", "x.enc.tmp", ".hidden.enc", ".keep", "x/.keep"] {
+                  ".gitpass-backup-1/keyset.enc", "notes.txt", "export.csv", "vaults/a/items/b.json", "x.enc.tmp", ".hidden.enc", ".keep", "x/.keep",
+                  "", "/keyset.enc", "vaults//a/b.enc", "vaults/./a/b.enc", "vaults/a/../b.enc", ".git/hooks/pre-commit.enc",
+                  "vaults/a/.x/b.enc", "vaults\\a\\b.enc", "vaults/a/items/b c.enc", "vaults/a/items/b\u{0}.enc", "vaults/a/items/\u{e9}.enc"] {
             assert!(!is_allowed_path(p), "{p}");
         }
     }

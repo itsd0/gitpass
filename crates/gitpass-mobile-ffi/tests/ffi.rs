@@ -467,3 +467,19 @@ fn shared_fixtures_match_expected() {
         assert_eq!(got, want_subset, "v{v} decrypted content via the bridge");
     }
 }
+
+/// Shared allowed-path table (#452): the bridge export is core's single rule.
+#[test]
+fn shared_allowed_path_table_via_bridge() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../gitpass-core/tests/fixtures/shared/allowed_paths.json");
+    let table: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    for p in table["allowed"].as_array().unwrap() {
+        let p = p.as_str().unwrap();
+        assert!(gitpass_mobile_ffi::is_allowed_path(p.to_string()), "must allow {p:?}");
+    }
+    for p in table["rejected"].as_array().unwrap() {
+        let p = p.as_str().unwrap();
+        assert!(!gitpass_mobile_ffi::is_allowed_path(p.to_string()), "must reject {p:?}");
+    }
+}
