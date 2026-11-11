@@ -118,6 +118,78 @@ final class GitpassTests: XCTestCase {
         XCTAssertTrue(merged.contains("\"title\":\"Local\""), merged)
     }
 
+    // MARK: - Shared fixtures (issue #451)
+
+    func testSharedFixtures() throws {
+        // Fixtures ship as test-bundle resources (see project.yml).
+        // XcodeGen adds the directory as a folder reference, so the
+        // bundle holds a `shared/v2…v5` tree; fall back to a flat
+        // layout (fixtures copied straight into the bundle root).
+        let bundle = Bundle(for: GitpassTests.self)
+        let fm = FileManager.default
+        let candidates = [
+            bundle.url(forResource: "shared", withExtension: nil),
+            bundle.resourceURL,
+        ].compactMap { $0 }
+        guard let fixturesURL = candidates.first(where: {
+            fm.fileExists(atPath: $0.appendingPathComponent("v2").path)
+        }) else {
+            XCTFail("shared fixtures missing from test bundle resources")
+            return
+        }
+        for version in [2, 3, 4, 5] {
+            let dir = fixturesURL.appendingPathComponent("v\(version)")
+            let work = fm.temporaryDirectory
+                .appendingPathComponent("gitpass-fixture-v\(version)-\(UUID().uuidString)")
+            try fm.copyItem(at: dir, to: work)
+            defer { try? fm.removeItem(at: work) }
+            let expectedData = try Data(contentsOf: work.appendingPathComponent("expected.json"))
+            let expected = try JSONSerialization.jsonObject(with: expectedData) as! [String: Any]
+            // Version is read BEFORE opening: openVault is side-effect-free
+            // since #450, but a normal unlock may re-wrap the keyset to the
+            // production KDF and bump format.json.
+            let formatData = try Data(contentsOf: work.appendingPathComponent("format.json"))
+            let format = try JSONSerialization.jsonObject(with: formatData) as! [String: Any]
+            XCTAssertEqual(format["version"] as? Int, version)
+            let secret = try String(
+                contentsOf: work.appendingPathComponent("secret.key.txt"), encoding: .utf8
+            ).trimmingCharacters(in: .whitespacesAndNewlines)
+            let vault = try openVault(
+                root: work.path, password: "fixture-password-451", secretKey: secret
+            )
+            var vaults: [[String: Any]] = []
+            for info in try vault.listVaults() {
+                var items: [[String: Any]] = []
+                for summary in try vault.listItems(vaultId: info.id) {
+                    let recordJSON = try vault.recordJson(vaultId: info.id, itemId: summary.id)
+                    var record = try JSONSerialization.jsonObject(
+                        with: Data(recordJSON.utf8)) as! [String: Any]
+                    stripSharedFixtureRecord(&record)
+                    items.append(record)
+                }
+                items.sort { ($0["title"] as? String ?? "") < ($1["title"] as? String ?? "") }
+                var v: [String: Any] = [
+                    "name": info.name,
+                    "description": info.description ?? NSNull(),
+                    "items": items,
+                ]
+                if let icon = info.icon { v["icon"] = icon }
+                if let color = info.color { v["color"] = color }
+                vaults.append(v)
+            }
+            vaults.sort { ($0["name"] as? String ?? "") < ($1["name"] as? String ?? "") }
+            // The bridge has no generator-history export, so that
+            // section is covered by the core test only.
+            var want = expected
+            want.removeValue(forKey: "generator_history")
+            let got: [String: Any] = ["format_version": format["version"] as Any, "vaults": vaults]
+            XCTAssertEqual(
+                try canonicalJSON(got), try canonicalJSON(want),
+                "v\(version) decrypted content via the bridge"
+            )
+        }
+    }
+
     // MARK: - Keychain (simulator-safe, no biometry)
 
     func testKeychainTokenRoundTrip() throws {
@@ -178,4 +250,47 @@ final class GitpassTests: XCTestCase {
         XCTAssertTrue(GitHubSyncService.isSyncable(path: "format.json"))
         XCTAssertTrue(GitHubSyncService.isSyncable(path: "vaults/abc/items/xyz.enc"))
     }
+}
+
+// MARK: - Shared fixture helpers (issue #451)
+
+/// Recursively drop every volatile field from a parsed JSON value,
+/// mirroring `gitpass_core::test_fixtures::semantic_record`: wall-clock
+/// timestamps, merge clocks, random attachment ids; `deleted_at`
+/// becomes an explicit `deleted` boolean.
+private func stripSharedFixtureVolatile(_ value: inout Any) {
+    if var obj = value as? [String: Any] {
+        for key in ["updated_at", "created_at", "clocks", "xclocks", "replaced_at"] {
+            obj.removeValue(forKey: key)
+        }
+        if let deletedAt = obj.removeValue(forKey: "deleted_at") {
+            obj["deleted"] = !(deletedAt is NSNull)
+        }
+        if var atts = obj["attachments"] as? [[String: Any]] {
+            for i in atts.indices { atts[i].removeValue(forKey: "id") }
+            obj["attachments"] = atts
+        }
+        for k in Array(obj.keys) {
+            if var v = obj[k] {
+                stripSharedFixtureVolatile(&v)
+                obj[k] = v
+            }
+        }
+        value = obj
+    } else if var arr = value as? [Any] {
+        for i in arr.indices { stripSharedFixtureVolatile(&arr[i]) }
+        value = arr
+    }
+}
+
+private func stripSharedFixtureRecord(_ record: inout [String: Any]) {
+    var any: Any = record
+    stripSharedFixtureVolatile(&any)
+    record = any as! [String: Any]
+    if record["deleted"] == nil { record["deleted"] = false }
+}
+
+/// Canonical JSON bytes: object keys sorted, arrays in order.
+private func canonicalJSON(_ value: Any) throws -> Data {
+    try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys])
 }

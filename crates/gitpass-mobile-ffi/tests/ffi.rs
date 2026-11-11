@@ -403,3 +403,67 @@ fn first_pull_authenticates_whole_fixture_without_rewriting_encrypted_files() {
         assert_eq!(original, preserved, "existing account must never be touched");
     }
 }
+
+/// Shared encrypted fixtures (issue #451): every committed fixture must
+/// open through the exported bridge API and decrypt to its committed
+/// `expected.json`. The bridge has no generator-history export, so that
+/// section is covered by the core test only; everything else must match.
+#[test]
+fn shared_fixtures_match_expected() {
+    use gitpass_core::merge::ItemRecord;
+    use gitpass_core::test_fixtures;
+    use std::path::Path;
+    let base = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../gitpass-core/tests/fixtures/shared");
+    for v in test_fixtures::VERSIONS {
+        let dir = base.join(test_fixtures::dir_name(v));
+        let want: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(dir.join("expected.json")).unwrap())
+                .unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let copy = tmp.path().join(test_fixtures::dir_name(v));
+        test_fixtures::copy_fixture(&dir, &copy).unwrap();
+        // Read the version BEFORE opening. The bridge's `open_vault` is
+        // side-effect-free since #450, but a normal core unlock re-wraps
+        // the keyset to the production KDF and bumps format.json to v5.
+        let fmt: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(copy.join("format.json")).unwrap())
+                .unwrap();
+        assert_eq!(fmt["version"].as_u64(), Some(v as u64), "v{v} format.json version");
+        let secret = std::fs::read_to_string(copy.join("secret.key.txt")).unwrap();
+        let vault = open_vault(
+            copy.to_str().unwrap().to_string(),
+            test_fixtures::FIXTURE_PASSWORD.to_string(),
+            secret.trim().to_string(),
+        )
+        .unwrap();
+        // #450 contract: open_vault must not upgrade the copy's format.
+        let fmt_after: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(copy.join("format.json")).unwrap())
+                .unwrap();
+        assert_eq!(fmt_after["version"], fmt["version"], "v{v} open_vault rewrote format.json");
+        let mut vaults = vec![];
+        for info in vault.list_vaults().unwrap() {
+            let mut items = vec![];
+            for sum in vault.list_items(info.id.clone()).unwrap() {
+                let rec: ItemRecord = serde_json::from_str(
+                    &vault.record_json(info.id.clone(), sum.id.clone()).unwrap(),
+                )
+                .unwrap();
+                items.push(test_fixtures::semantic_record(&rec));
+            }
+            vaults.push(test_fixtures::vault_json(
+                &info.name,
+                info.description.as_deref(),
+                info.icon.as_deref(),
+                info.color.as_deref(),
+                items,
+            ));
+        }
+        vaults.sort_by(|a, b| a["name"].as_str().cmp(&b["name"].as_str()));
+        let got = serde_json::json!({"format_version": fmt["version"], "vaults": vaults});
+        let mut want_subset = want.clone();
+        want_subset.as_object_mut().unwrap().remove("generator_history");
+        assert_eq!(got, want_subset, "v{v} decrypted content via the bridge");
+    }
+}

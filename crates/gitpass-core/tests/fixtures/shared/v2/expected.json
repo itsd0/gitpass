@@ -1,0 +1,556 @@
+{
+  "format_version": 2,
+  "generator_history": [
+    {
+      "host": "example.invalid",
+      "source": "generator",
+      "value": "FAKE-generated-password-1"
+    },
+    {
+      "host": null,
+      "source": "cli",
+      "value": "FAKE-generated-password-2"
+    }
+  ],
+  "vaults": [
+    {
+      "description": "Fake personal vault for cross-platform fixture tests",
+      "items": [
+        {
+          "archived": true,
+          "deleted": false,
+          "notes": null,
+          "password": "FAKE-archived-password",
+          "title": "Archived Login",
+          "totp": null,
+          "url": null,
+          "username": "archived@example.invalid"
+        },
+        {
+          "deleted": false,
+          "history": [
+            {
+              "snapshot": {
+                "category": "login",
+                "item": {
+                  "notes": "First version note",
+                  "password": "FAKE-edited-v1",
+                  "title": "Edited Login",
+                  "totp": null,
+                  "url": null,
+                  "username": "edited@example.invalid"
+                },
+                "sections": [],
+                "tags": []
+              },
+              "version": 1
+            },
+            {
+              "snapshot": {
+                "category": "login",
+                "item": {
+                  "notes": "Second version note",
+                  "password": "FAKE-edited-v2",
+                  "title": "Edited Login",
+                  "totp": null,
+                  "url": null,
+                  "username": "edited@example.invalid"
+                },
+                "sections": [],
+                "tags": []
+              },
+              "version": 2
+            }
+          ],
+          "notes": "Third version note",
+          "password": "FAKE-edited-v3",
+          "password_history": [
+            {
+              "value": "FAKE-edited-v2"
+            },
+            {
+              "value": "FAKE-edited-v1"
+            }
+          ],
+          "title": "Edited Login",
+          "totp": null,
+          "url": null,
+          "username": "edited@example.invalid"
+        },
+        {
+          "category": "api_credential",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "key",
+                  "kind": "concealed",
+                  "label": "key",
+                  "value": "FAKE-api-key-1"
+                },
+                {
+                  "id": "host",
+                  "kind": "url",
+                  "label": "host",
+                  "value": "https://api.example.invalid"
+                }
+              ],
+              "id": "api",
+              "title": "api"
+            }
+          ],
+          "title": "Example API",
+          "totp": null,
+          "url": null,
+          "username": null
+        },
+        {
+          "category": "bank_account",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "bank_name",
+                  "kind": "text",
+                  "label": "bank_name",
+                  "value": "Example Bank"
+                },
+                {
+                  "id": "account_number",
+                  "kind": "concealed",
+                  "label": "account_number",
+                  "value": "1234567890"
+                },
+                {
+                  "id": "pin",
+                  "kind": "concealed",
+                  "label": "pin",
+                  "value": "1234"
+                }
+              ],
+              "id": "main",
+              "title": "main"
+            }
+          ],
+          "title": "Example Bank",
+          "totp": null,
+          "url": null,
+          "username": null
+        },
+        {
+          "category": "document",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "desc",
+                  "kind": "text",
+                  "label": "desc",
+                  "value": "Fake scan of a document"
+                }
+              ],
+              "id": "doc",
+              "title": "doc"
+            }
+          ],
+          "title": "Example Document",
+          "totp": null,
+          "url": null,
+          "username": null
+        },
+        {
+          "deleted": false,
+          "favorite": true,
+          "notes": "Fake login note",
+          "password": "FAKE-login-password-1",
+          "related_item_ids": [
+            "66666666-6666-4666-8666-666666666666"
+          ],
+          "rotate_every_days": 90,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "recovery-code",
+                  "kind": "concealed",
+                  "label": "recovery-code",
+                  "value": "FAKE-recovery-123456"
+                },
+                {
+                  "id": "security-question",
+                  "kind": "text",
+                  "label": "security-question",
+                  "value": "Fake answer"
+                }
+              ],
+              "id": "recovery",
+              "title": "recovery"
+            }
+          ],
+          "tags": [
+            "personal",
+            "2fa"
+          ],
+          "title": "Example Login",
+          "totp": "JBSWY3DPEHPK3PXP",
+          "url": "https://example.invalid/login",
+          "username": "alice@example.invalid"
+        },
+        {
+          "category": "secure_note",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "body",
+                  "kind": "multiline",
+                  "label": "body",
+                  "value": "line1\nline2\nFake note body"
+                }
+              ],
+              "id": "note",
+              "title": "note"
+            }
+          ],
+          "title": "Example Note",
+          "totp": null,
+          "url": null,
+          "username": null
+        },
+        {
+          "category": "passkey",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "rp_id",
+                  "kind": "text",
+                  "label": "rp_id",
+                  "value": "example.invalid"
+                },
+                {
+                  "id": "credential_id",
+                  "kind": "text",
+                  "label": "credential_id",
+                  "value": "AAAAFAKECREDENTIALID"
+                },
+                {
+                  "id": "private_key",
+                  "kind": "concealed",
+                  "label": "private_key",
+                  "value": "FAKE-passkey-private-key"
+                }
+              ],
+              "id": "main",
+              "title": "main"
+            }
+          ],
+          "title": "Example Passkey",
+          "totp": null,
+          "url": null,
+          "username": null
+        },
+        {
+          "category": "identity",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "first",
+                  "kind": "text",
+                  "label": "first",
+                  "value": "Test"
+                },
+                {
+                  "id": "last",
+                  "kind": "text",
+                  "label": "last",
+                  "value": "Person"
+                },
+                {
+                  "id": "birth",
+                  "kind": "date",
+                  "label": "birth",
+                  "value": "2000-01-01"
+                }
+              ],
+              "id": "name",
+              "title": "name"
+            },
+            {
+              "fields": [
+                {
+                  "id": "email",
+                  "kind": "email",
+                  "label": "email",
+                  "value": "test@example.invalid"
+                },
+                {
+                  "id": "phone",
+                  "kind": "phone",
+                  "label": "phone",
+                  "value": "+1 555 0100"
+                }
+              ],
+              "id": "contact",
+              "title": "contact"
+            }
+          ],
+          "title": "Example Person",
+          "totp": null,
+          "url": null,
+          "username": null
+        },
+        {
+          "category": "ssh_key",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "private",
+                  "kind": "concealed",
+                  "label": "private",
+                  "value": "-----BEGIN FAKE OPENSSH PRIVATE KEY-----\nFAKE\n-----END FAKE OPENSSH PRIVATE KEY-----"
+                },
+                {
+                  "id": "public",
+                  "kind": "text",
+                  "label": "public",
+                  "value": "ssh-ed25519 AAAAFAKE example.invalid"
+                }
+              ],
+              "id": "main",
+              "title": "main"
+            }
+          ],
+          "title": "Example SSH",
+          "totp": null,
+          "url": null,
+          "username": null
+        },
+        {
+          "category": "server",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "url",
+                  "kind": "url",
+                  "label": "url",
+                  "value": "https://srv.example.invalid"
+                },
+                {
+                  "id": "username",
+                  "kind": "text",
+                  "label": "username",
+                  "value": "root"
+                },
+                {
+                  "id": "password",
+                  "kind": "concealed",
+                  "label": "password",
+                  "value": "FAKE-server-password"
+                }
+              ],
+              "id": "main",
+              "title": "main"
+            }
+          ],
+          "title": "Example Server",
+          "totp": null,
+          "url": null,
+          "username": null
+        },
+        {
+          "category": "credit_card",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "number",
+                  "kind": "concealed",
+                  "label": "number",
+                  "value": "4111111111111111"
+                },
+                {
+                  "id": "expiry",
+                  "kind": "month_year",
+                  "label": "expiry",
+                  "value": "12/30"
+                },
+                {
+                  "id": "cvv",
+                  "kind": "concealed",
+                  "label": "cvv",
+                  "value": "123"
+                },
+                {
+                  "id": "holder",
+                  "kind": "text",
+                  "label": "holder",
+                  "value": "Test Person"
+                }
+              ],
+              "id": "card",
+              "title": "card"
+            }
+          ],
+          "title": "Example Visa",
+          "totp": null,
+          "url": null,
+          "username": null
+        },
+        {
+          "category": "wifi",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "ssid",
+                  "kind": "text",
+                  "label": "ssid",
+                  "value": "FakeNet"
+                },
+                {
+                  "id": "wifi_password",
+                  "kind": "concealed",
+                  "label": "wifi_password",
+                  "value": "FAKE-wifi-password"
+                }
+              ],
+              "id": "wifi",
+              "title": "wifi"
+            }
+          ],
+          "title": "Example Wifi",
+          "totp": null,
+          "url": null,
+          "username": null
+        },
+        {
+          "deleted": false,
+          "ignored_findings": [
+            "reused"
+          ],
+          "notes": null,
+          "password": "FAKE-ignored-password",
+          "title": "Ignored Finding Login",
+          "totp": null,
+          "url": null,
+          "username": "ignored@example.invalid"
+        },
+        {
+          "deleted": false,
+          "history": [
+            {
+              "snapshot": {
+                "category": "login",
+                "item": {
+                  "notes": null,
+                  "password": "FAKE-rotated-password-1",
+                  "title": "Rotated Login",
+                  "totp": null,
+                  "url": null,
+                  "username": "bob@example.invalid"
+                },
+                "sections": [],
+                "tags": []
+              },
+              "version": 1
+            }
+          ],
+          "notes": null,
+          "password": "FAKE-rotated-password-2",
+          "password_history": [
+            {
+              "value": "FAKE-rotated-password-1"
+            }
+          ],
+          "title": "Rotated Login",
+          "totp": null,
+          "url": null,
+          "username": "bob@example.invalid"
+        },
+        {
+          "deleted": true,
+          "notes": null,
+          "password": "FAKE-trashed-password",
+          "title": "Trashed Login",
+          "totp": null,
+          "url": null,
+          "username": "trashed@example.invalid"
+        }
+      ],
+      "name": "Personal"
+    },
+    {
+      "description": "Fake work vault for cross-platform fixture tests",
+      "items": [
+        {
+          "deleted": false,
+          "notes": null,
+          "password": "FAKE-work-password",
+          "title": "Work Login",
+          "totp": null,
+          "url": "https://work.example.invalid",
+          "username": "workuser@example.invalid"
+        },
+        {
+          "category": "secure_note",
+          "deleted": false,
+          "notes": null,
+          "password": null,
+          "sections": [
+            {
+              "fields": [
+                {
+                  "id": "body",
+                  "kind": "multiline",
+                  "label": "body",
+                  "value": "Fake work note"
+                }
+              ],
+              "id": "note",
+              "title": "note"
+            }
+          ],
+          "title": "Work Note",
+          "totp": null,
+          "url": null,
+          "username": null
+        }
+      ],
+      "name": "Work"
+    }
+  ]
+}

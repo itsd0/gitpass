@@ -101,6 +101,14 @@ targets:
       - path: Sources/GitpassApp/Keychain.swift
       - path: Sources/GitpassApp/SyncService.swift
       - path: Sources/GitpassApp/BridgeCompat.swift
+      # Shared encrypted fixtures (issue #451): single canonical copy under
+      # crates/gitpass-core/tests/fixtures/shared, copied into the test
+      # bundle as a folder reference (`shared/v2…v5`, see
+      # testSharedFixtures). XcodeGen has no target-level `resources:`
+      # key, so it must be a source with the resources build phase.
+      - path: ../crates/gitpass-core/tests/fixtures/shared
+        type: folder
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gitpass.ios.tests

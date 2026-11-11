@@ -37,7 +37,19 @@ ssh-encoding = { version = "0.2", features = ["alloc"] }
 signature = "2"
 rsa = { version = "0.9", features = ["sha2"] }
 
+[features]
+# Test support only: builds/reads the shared encrypted fixtures under
+# tests/fixtures/shared (issue #451). Never enabled by any shipped binary;
+# enabled for this crate's own tests/examples via the self dev-dependency
+# below and for the mobile bridge's tests via its dev-dependency.
+test-fixtures = []
+
+[[example]]
+name = "gen_shared_fixtures"
+required-features = ["test-fixtures"]
+
 [dev-dependencies]
+gitpass-core = { path = ".", features = ["test-fixtures"] }
 hex = "0.4.3"
 proptest = "1.11.0"
 tempfile = "3"

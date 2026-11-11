@@ -19,4 +19,4 @@ thiserror = "1"
 
 [dev-dependencies]
 tempfile = "3"
-gitpass-core = { version = "0.6.8", path = "../gitpass-core" }
+gitpass-core = { version = "0.6.8", path = "../gitpass-core", features = ["test-fixtures"] }
