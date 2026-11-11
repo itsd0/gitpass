@@ -31,34 +31,34 @@ echo "==> Rust targets"
 rustup target add aarch64-apple-ios aarch64-apple-ios-sim x86_64-apple-ios
 
 echo "==> Static libraries (device + simulator)"
-cargo build --release --lib -p gitpass-ios-ffi --target aarch64-apple-ios
-cargo build --release --lib -p gitpass-ios-ffi --target aarch64-apple-ios-sim
+cargo build --release --lib -p gitpass-mobile-ffi --target aarch64-apple-ios
+cargo build --release --lib -p gitpass-mobile-ffi --target aarch64-apple-ios-sim
 # Intel simulator slice: `generic/platform=iOS Simulator` builds
 # arm64 + x86_64, so the simulator library must carry both.
-cargo build --release --lib -p gitpass-ios-ffi --target x86_64-apple-ios
+cargo build --release --lib -p gitpass-mobile-ffi --target x86_64-apple-ios
 SIM_LIB_DIR="$ROOT/target/ios-sim-universal/release"
 mkdir -p "$SIM_LIB_DIR"
 lipo -create \
-    "$ROOT/target/aarch64-apple-ios-sim/release/libgitpass_ios_ffi.a" \
-    "$ROOT/target/x86_64-apple-ios/release/libgitpass_ios_ffi.a" \
-    -output "$SIM_LIB_DIR/libgitpass_ios_ffi.a"
+    "$ROOT/target/aarch64-apple-ios-sim/release/libgitpass_mobile_ffi.a" \
+    "$ROOT/target/x86_64-apple-ios/release/libgitpass_mobile_ffi.a" \
+    -output "$SIM_LIB_DIR/libgitpass_mobile_ffi.a"
 
 echo "==> Host library for binding generation"
-cargo build --release --lib -p gitpass-ios-ffi
-HOST_LIB="$(find "$ROOT/target/release" -maxdepth 1 -name 'libgitpass_ios_ffi.dylib' | head -1)"
+cargo build --release --lib -p gitpass-mobile-ffi
+HOST_LIB="$(find "$ROOT/target/release" -maxdepth 1 -name 'libgitpass_mobile_ffi.dylib' | head -1)"
 if [ -z "$HOST_LIB" ]; then
-    echo "error: host cdylib not found (expected target/release/libgitpass_ios_ffi.dylib)" >&2
+    echo "error: host cdylib not found (expected target/release/libgitpass_mobile_ffi.dylib)" >&2
     exit 1
 fi
 
 echo "==> Swift bindings (GitpassCore module)"
-cargo run --release -p gitpass-ios-ffi --bin uniffi-bindgen-swift -- \
+cargo run --release -p gitpass-mobile-ffi --bin uniffi-bindgen-swift -- \
     "$HOST_LIB" "$BINDINGS_DIR" \
     --swift-sources --headers --modulemap \
     --module-name GitpassCore --modulemap-filename module.modulemap
 
 mkdir -p "$GENERATED_DIR" "$FRAMEWORK_DIR"
-cp "$BINDINGS_DIR/gitpass_ios_ffi.swift" "$GENERATED_DIR/gitpass_ios_ffi.swift"
+cp "$BINDINGS_DIR/gitpass_mobile_ffi.swift" "$GENERATED_DIR/gitpass_mobile_ffi.swift"
 
 # Headers for the XCFramework: the generated header + modulemap.
 # The XCFramework wraps plain static libraries (-library), so the
@@ -76,12 +76,12 @@ cp "$BINDINGS_DIR/module.modulemap" "$HEADERS_DIR/"
 echo "==> XCFramework"
 rm -rf "$FRAMEWORK_DIR/GitpassCore.xcframework"
 xcodebuild -create-xcframework \
-    -library "$ROOT/target/aarch64-apple-ios/release/libgitpass_ios_ffi.a" \
+    -library "$ROOT/target/aarch64-apple-ios/release/libgitpass_mobile_ffi.a" \
     -headers "$HEADERS_ROOT" \
-    -library "$SIM_LIB_DIR/libgitpass_ios_ffi.a" \
+    -library "$SIM_LIB_DIR/libgitpass_mobile_ffi.a" \
     -headers "$HEADERS_ROOT" \
     -output "$FRAMEWORK_DIR/GitpassCore.xcframework"
 rm -rf "$HEADERS_ROOT"
 
 echo "Done: $FRAMEWORK_DIR/GitpassCore.xcframework"
-echo "Bindings: $GENERATED_DIR/gitpass_ios_ffi.swift"
+echo "Bindings: $GENERATED_DIR/gitpass_mobile_ffi.swift"

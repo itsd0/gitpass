@@ -24,6 +24,43 @@ final class GitpassTests: XCTestCase {
 
     // MARK: - Rust FFI (real vault, real crypto)
 
+    func testBridgeHandshakeMatchesApp() {
+        let ffi = ffiVersion()
+        let format = formatVersion()
+        XCTAssertEqual(ffi.apiLevel, BridgeCompat.expectedApiLevel)
+        XCTAssertFalse(ffi.crateVersion.isEmpty)
+        XCTAssertEqual(format.currentWrite, BridgeCompat.expectedFormat)
+        XCTAssertLessThanOrEqual(format.minRead, format.currentWrite)
+        XCTAssertTrue(BridgeCompat.checkNative())
+        XCTAssertFalse(BridgeCompat.isCompatible(apiLevel: BridgeCompat.expectedApiLevel + 1, minRead: 2, currentWrite: BridgeCompat.expectedFormat))
+        XCTAssertFalse(BridgeCompat.isCompatible(apiLevel: BridgeCompat.expectedApiLevel, minRead: 2, currentWrite: BridgeCompat.expectedFormat + 1))
+    }
+
+    func testDefaultUnlockDoesNotRewriteSyncedFiles() throws {
+        let options = defaultUnlockOptions()
+        XCTAssertFalse(options.registerDevice)
+        XCTAssertFalse(options.purgeExpiredTrash)
+        XCTAssertFalse(options.upgradeKdf)
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("gitpass-test-\(UUID().uuidString)")
+            .appendingPathComponent("vault")
+        let password = "FAKE correct horse battery staple"
+        let secret = try createAccount(root: root.path, password: password)
+        _ = try openVaultWith(root: root.path, password: password, secretKey: secret, options: options)
+        let synced = ["format.json", "keyset.enc", "manifest.enc", "devices.enc"]
+        func read() -> [String: Data] {
+            var out: [String: Data] = [:]
+            for name in synced {
+                out[name] = try? Data(contentsOf: root.appendingPathComponent(name))
+            }
+            return out
+        }
+        let before = read()
+        _ = try openVaultWith(root: root.path, password: password, secretKey: secret, options: options)
+        _ = try openVault(root: root.path, password: password, secretKey: secret)
+        XCTAssertEqual(before, read())
+    }
+
     func testVaultRoundTrip() throws {
         let root = FileManager.default.temporaryDirectory
             .appendingPathComponent("gitpass-test-\(UUID().uuidString)")

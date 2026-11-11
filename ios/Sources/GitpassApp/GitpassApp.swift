@@ -37,7 +37,11 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            if store.isUnlocked {
+            if store.bridgeIncompatible {
+                Text(BridgeCompat.incompatibleMessage)
+                    .foregroundStyle(.white)
+                    .padding(24)
+            } else if store.isUnlocked {
                 MainView(showingSettings: $showingSettings)
             } else {
                 UnlockView()

@@ -1206,8 +1206,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "gitpass-ios-ffi"
-version = "0.1.0"
+name = "gitpass-mobile-ffi"
+version = "0.6.8"
 dependencies = [
  "anyhow",
  "gitpass-core",

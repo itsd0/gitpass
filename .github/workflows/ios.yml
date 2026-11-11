@@ -11,6 +11,7 @@ on:
     paths:
       - "ios/**"
       - "crates/gitpass-core/**"
+      - "crates/gitpass-mobile-ffi/**"
       - "Cargo.lock"
       - "Cargo.toml"
       - ".github/workflows/ios.yml"
@@ -18,6 +19,7 @@ on:
     paths:
       - "ios/**"
       - "crates/gitpass-core/**"
+      - "crates/gitpass-mobile-ffi/**"
       - "Cargo.lock"
       - "Cargo.toml"
       - ".github/workflows/ios.yml"
@@ -52,7 +54,7 @@ jobs:
           export RUNNER_HOME_CARGO="${CARGO_HOME:-$HOME/.cargo}" RUNNER_HOME_RUSTUP="${RUSTUP_HOME:-$HOME/.rustup}"
           export HOME="$RUNNER_TEMP/home"; rm -rf "$HOME"; mkdir -p "$HOME"
           export CARGO_HOME="$RUNNER_HOME_CARGO" RUSTUP_HOME="$RUNNER_HOME_RUSTUP"
-          cargo test -p gitpass-ios-ffi --locked
+          cargo test -p gitpass-mobile-ffi --locked
 
   ios:
     name: iOS simulator build + test

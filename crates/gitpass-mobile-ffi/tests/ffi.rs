@@ -1,4 +1,4 @@
-use gitpass_ios_ffi::{
+use gitpass_mobile_ffi::{
     create_account, generate_password, merge_item_records, open_vault, totp_code, ItemInput,
 };
 
@@ -71,7 +71,7 @@ fn vault_round_trip() {
 
 #[test]
 fn update_with_extra_sections_keeps_login_fields() {
-    use gitpass_ios_ffi::{FfiField, FfiSection};
+    use gitpass_mobile_ffi::{FfiField, FfiSection};
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("vault");
     let secret = create_account(root.to_str().unwrap().to_string(), "correct horse battery staple".to_string()).unwrap();
@@ -251,7 +251,7 @@ fn concurrent_reads_stay_stable() {
 
 #[test]
 fn android_login_edit_and_trash_preserve_extra_fields() {
-    use gitpass_ios_ffi::{FfiField, FfiSection};
+    use gitpass_mobile_ffi::{FfiField, FfiSection};
     let dir = tempfile::tempdir().unwrap();
     let root = dir.path().join("fake-vault").to_str().unwrap().to_string();
     let password = "FAKE-test-password-only".to_string();
@@ -344,7 +344,7 @@ fn android_tools_use_core_rfc6238_rollover_and_supported_generator_lengths() {
 
 #[test]
 fn first_pull_authenticates_whole_fixture_without_rewriting_encrypted_files() {
-    use gitpass_ios_ffi::validate_first_pull_snapshot;
+    use gitpass_mobile_ffi::validate_first_pull_snapshot;
     use std::{collections::BTreeMap, fs, path::Path};
     fn encrypted_files(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) {
         for entry in fs::read_dir(dir).unwrap() {

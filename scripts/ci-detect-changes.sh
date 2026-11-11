@@ -96,7 +96,7 @@ while IFS= read -r file; do
       ;;
 
     # Shared mobile UniFFI Rust bridge (used by Android & iOS companions)
-    ios/rust/gitpass-ios-ffi/*)
+    crates/gitpass-mobile-ffi/*)
       code=true; rust=true; android=true; supply_chain=true
       ;;
 

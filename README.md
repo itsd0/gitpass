@@ -16,7 +16,7 @@ apps/desktop/gui-core/     # Tauri-free GUI command layer (root workspace member
 apps/desktop/src-tauri/    # Tauri 2 app (own Cargo.lock + .cargo/config.toml; NOT in root workspace)
 apps/desktop/src/          # React + TypeScript frontend (Vite)
 extension/                 # MV3 browser extension (plain JS, `npm test`)
-ios/rust/gitpass-ios-ffi/  # UniFFI bridge between gitpass-core and the Swift iOS app
+crates/gitpass-mobile-ffi/ # UniFFI bridge between gitpass-core and the iOS + Android apps
 ios/                       # iOS SwiftUI app and AutoFill credential provider extension
 ```
 

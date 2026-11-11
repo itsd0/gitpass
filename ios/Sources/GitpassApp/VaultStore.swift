@@ -50,6 +50,10 @@ final class VaultStore: ObservableObject {
 
     var isUnlocked: Bool { vault != nil }
 
+    /// Native bridge handshake result, checked once at startup. When it
+    /// fails, the UI stays blocked and no vault is ever opened.
+    let bridgeIncompatible = !BridgeCompat.checkNative()
+
     // MARK: - Unlock / lock
 
     /// Shown instead of core's desktop hint ("run `gitpass init`"),
@@ -57,8 +61,14 @@ final class VaultStore: ObservableObject {
     static let noVaultMessage = String(localized: "No vault on this device yet. Open GitHub Sync and pull your vault first.")
 
     func unlock(password: String, secretKey: String) throws {
+        guard !bridgeIncompatible else { throw GitpassError.Generic(BridgeCompat.incompatibleMessage) }
         guard vaultExists else { throw GitpassError.Generic(Self.noVaultMessage) }
-        let opened = try openVault(root: vaultRoot.path, password: password, secretKey: secretKey)
+        // Side-effect-free unlock (no device registration, trash purge or
+        // KDF upgrade): unlocking never changes a synced vault file.
+        let opened = try openVaultWith(
+            root: vaultRoot.path, password: password, secretKey: secretKey,
+            options: defaultUnlockOptions()
+        )
         vault = opened
         sessionPassword = password
         sessionSecretKey = secretKey

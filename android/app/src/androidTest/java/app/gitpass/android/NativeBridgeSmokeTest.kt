@@ -38,4 +38,24 @@ class NativeBridgeSmokeTest {
             remaining in 1L..30L
         )
     }
+
+    @Test
+    fun testBridgeHandshakeMatchesApp() {
+        val ffi = ffiVersion()
+        val format = formatVersion()
+        assertEquals(app.gitpass.android.session.BridgeCompat.EXPECTED_API_LEVEL, ffi.apiLevel)
+        assertTrue("crate version must be semver", Regex("""^\d+\.\d+\.\d+.*$""").matches(ffi.crateVersion))
+        assertEquals(app.gitpass.android.session.BridgeCompat.EXPECTED_FORMAT, format.currentWrite)
+        assertTrue(format.minRead <= format.currentWrite)
+        assertTrue(app.gitpass.android.session.BridgeCompat.checkNative())
+    }
+
+    @Test
+    fun testDefaultUnlockOptionsAreSideEffectFree() {
+        val options = defaultUnlockOptions()
+        assertFalse(options.registerDevice)
+        assertFalse(options.purgeExpiredTrash)
+        assertFalse(options.upgradeKdf)
+        assertNull(options.deviceName)
+    }
 }

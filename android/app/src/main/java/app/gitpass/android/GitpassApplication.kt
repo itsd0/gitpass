@@ -8,6 +8,7 @@ import androidx.lifecycle.ProcessLifecycleOwner
 import app.gitpass.android.session.SecretTools
 import app.gitpass.android.session.NativeSecretTools
 import app.gitpass.android.session.AccountSetup
+import app.gitpass.android.session.BridgeCompat
 import app.gitpass.android.session.FfiVaultGateway
 import app.gitpass.android.session.PendingSecret
 import app.gitpass.android.session.VaultGateway
@@ -32,6 +33,9 @@ class GitpassApplication : Application() {
     @Volatile lateinit var accountSetup: AccountSetup
         private set
     var accountSelectionDamaged: Boolean = false
+        private set
+    /** Native bridge handshake failed at startup: the UI stays blocked and no vault is opened. */
+    var bridgeIncompatible: Boolean = false
         private set
     val pendingSecret = PendingSecret()
     lateinit var accountRoots: AccountRoots
@@ -88,6 +92,7 @@ class GitpassApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        bridgeIncompatible = !BridgeCompat.checkNative()
         accountRoots = AccountRoots(noBackupFilesDir)
         // Fail closed on a damaged selection journal: preserve every account and do not clean imports.
         val selected = runCatching {

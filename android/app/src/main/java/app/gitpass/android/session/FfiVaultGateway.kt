@@ -6,7 +6,8 @@ import app.gitpass.core.ItemSummary
 import app.gitpass.core.Vault
 import app.gitpass.core.VaultInfo
 import app.gitpass.core.createAccount as ffiCreateAccount
-import app.gitpass.core.openVault as ffiOpenVault
+import app.gitpass.core.defaultUnlockOptions
+import app.gitpass.core.openVaultWith as ffiOpenVaultWith
 import java.io.File
 
 /** UniFFI adapter. Crypto and the vault format stay in gitpass-core. */
@@ -15,8 +16,12 @@ class FfiVaultGateway : VaultGateway {
 
     override fun createAccount(root: String, password: String): String = ffiCreateAccount(root, password)
 
+    /**
+     * Side-effect-free unlock: no device registration, no trash purge and
+     * no KDF upgrade, so unlocking never changes a synced vault file.
+     */
     override fun open(root: String, password: String, secretKey: String): OpenVault {
-        return FfiOpenVault(ffiOpenVault(root, password, secretKey))
+        return FfiOpenVault(ffiOpenVaultWith(root, password, secretKey, defaultUnlockOptions()))
     }
 }
 

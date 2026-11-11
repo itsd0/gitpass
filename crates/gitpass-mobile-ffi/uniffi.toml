@@ -3,4 +3,4 @@ ffi_module_name = "GitpassCore"
 
 [bindings.kotlin]
 package_name = "app.gitpass.core"
-cdylib_name = "gitpass_ios_ffi"
+cdylib_name = "gitpass_mobile_ffi"

@@ -22,7 +22,7 @@ targets:
     platform: iOS
     sources:
       - Sources/GitpassApp
-      - Generated/gitpass_ios_ffi.swift
+      - Generated/gitpass_mobile_ffi.swift
     # XcodeGen rewrites these files from `properties` on every
     # `xcodegen generate`, so the keys must live here, not only in
     # the plist/entitlements files (otherwise they are wiped).
@@ -64,7 +64,7 @@ targets:
     platform: iOS
     sources:
       - Sources/AutoFill
-      - Generated/gitpass_ios_ffi.swift
+      - Generated/gitpass_mobile_ffi.swift
     info:
       path: Sources/AutoFill/Info.plist
       properties:
@@ -95,11 +95,12 @@ targets:
     platform: iOS
     sources:
       - Tests
-      - Generated/gitpass_ios_ffi.swift
+      - Generated/gitpass_mobile_ffi.swift
       # Keychain + Sync are compiled into the test bundle directly so
       # the tests do not need to import the app target as a library.
       - path: Sources/GitpassApp/Keychain.swift
       - path: Sources/GitpassApp/SyncService.swift
+      - path: Sources/GitpassApp/BridgeCompat.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.gitpass.ios.tests
