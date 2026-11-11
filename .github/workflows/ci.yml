@@ -485,8 +485,67 @@ jobs:
           echo "Verified: Accelerated x86_64 emulator running on true 16-KB page size kernel."
           echo "Coverage notice: This validates x86_64 emulated 16-KB behavior; physical ARM64 runtime execution remains unverified in hosted CI."
 
+          # sys.boot_completed=1 does not mean system services are up: installs then fail with
+          # "StorageManager.getVolumes() on a null object reference" (#467). Wait (bounded) until
+          # package manager and storage answer, then disable animations for stable Compose waits.
+          wait_system_ready() {
+            for i in $(seq 1 120); do
+              if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] \
+                && adb shell pm path android 2>/dev/null | grep -q '^package:' \
+                && adb shell sm list-volumes 2>/dev/null | grep -q . \
+                && adb shell cmd package list packages 2>/dev/null | grep -q '^package:android$'; then
+                echo "System services ready after ${i}s."
+                adb shell settings put global window_animation_scale 0 || true
+                adb shell settings put global transition_animation_scale 0 || true
+                adb shell settings put global animator_duration_scale 0 || true
+                adb shell input keyevent 82 >/dev/null 2>&1 || true
+                return 0
+              fi
+              sleep 1
+            done
+            echo "::error::Emulator system services (package manager / storage) not ready after 120s."
+            timeout 15 adb logcat -d > "$RUNNER_TEMP/android-diagnostics/logcat-services-timeout.txt" 2>&1 || true
+            return 1
+          }
+          wait_system_ready
+
+          # One automatic retry, ONLY for emulator/system-level crashes (#467). A genuine test
+          # failure (assertion, comparison, Compose wait timeout) is never retried, and the job
+          # still fails if the retry fails. Both attempts' logs and reports are kept.
+          INFRA_RE='Process crashed|System has crashed|INSTRUMENTATION_ABORTED|StorageManager\.getVolumes|Failed to install split APK|InstallException|device offline|device .* not found|FATAL EXCEPTION IN SYSTEM PROCESS|Fatal signal [0-9]+ .*system_server'
+          GENUINE_RE='java\.lang\.AssertionError|junit\.framework\.AssertionFailedError|org\.junit\.ComparisonFailure|ComposeTimeoutException|AssertionFailedError'
           cd android
-          ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace
+          for attempt in 1 2; do
+            adb logcat -c 2>/dev/null || true
+            LOG="$RUNNER_TEMP/android-diagnostics/connected-attempt-$attempt.log"
+            set +e
+            ./gradlew connectedDebugAndroidTest --no-daemon --stacktrace 2>&1 | tee "$LOG"
+            rc=${PIPESTATUS[0]}
+            set -e
+            timeout 15 adb logcat -d > "$RUNNER_TEMP/android-diagnostics/logcat-attempt-$attempt.txt" 2>&1 || true
+            if [ -d app/build/reports/androidTests/connected ]; then
+              cp -r app/build/reports/androidTests/connected "$RUNNER_TEMP/android-diagnostics/reports-attempt-$attempt" || true
+            fi
+            if [ "$rc" -eq 0 ]; then
+              [ "$attempt" -gt 1 ] && echo "::warning::Instrumented tests passed on automatic retry after an emulator-level crash (#467); see diagnostics."
+              exit 0
+            fi
+            if [ "$attempt" -eq 2 ]; then
+              echo "::error::Instrumented tests failed on the retry as well."
+              exit "$rc"
+            fi
+            if grep -Eq "$GENUINE_RE" "$LOG"; then
+              echo "::error::Genuine test failure (assertion/timeout); not retrying."
+              exit "$rc"
+            fi
+            if ! grep -Eq "$INFRA_RE" "$LOG" "$RUNNER_TEMP/android-diagnostics/logcat-attempt-1.txt"; then
+              echo "::error::Instrumented tests failed without an emulator-crash signature; not retrying."
+              exit "$rc"
+            fi
+            echo "::warning::Emulator/system-level crash detected (matched: $(grep -Eoh "$INFRA_RE" "$LOG" "$RUNNER_TEMP/android-diagnostics/logcat-attempt-1.txt" | sort -u | head -5 | tr '\n' ';')). Retrying install + instrumentation once (#467)."
+            timeout 180 adb wait-for-device || { echo "::error::Emulator did not come back for the retry."; exit "$rc"; }
+            wait_system_ready || exit "$rc"
+          done
       - name: Collect diagnostics and stop emulator
         if: always()
         run: |
