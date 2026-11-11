@@ -34,6 +34,25 @@ impl Session {
         Ok(m.epoch)
     }
 
+    /// Apply `f` to the manifest under the repo lock and re-seal with `epoch`
+    /// (which must be strictly above the current epoch). Used by the sync
+    /// engine, which computes the merged epoch from both sides instead of
+    /// bumping one step at a time.
+    pub(crate) fn commit_at_epoch<F: FnOnce(&mut Manifest) -> Result<()>>(&self, epoch: u64, f: F) -> Result<u64> {
+        let _g = fsutil::lock(&self.root)?;
+        let mut m = self.load_manifest()?;
+        if epoch <= m.epoch {
+            bail!("sync plan epoch {epoch} is not above local epoch {}", m.epoch);
+        }
+        f(&mut m)?;
+        m.format = manifest_format_for(&m);
+        m.epoch = epoch;
+        m.keyset_hash = hash_file(&self.root.join("keyset.enc"))?;
+        seal_manifest(&self.root, &self.account_key, &m)?;
+        save_epoch(&self.root, &self.fmt.account_id, m.epoch)?;
+        Ok(m.epoch)
+    }
+
     /// Rebuild the manifest from whatever on-disk files authenticate correctly (used by --accept-rollback).
     pub(crate) fn reseal(&self, prev_epoch: u64) -> Result<()> {
         let _g = fsutil::lock(&self.root)?;
