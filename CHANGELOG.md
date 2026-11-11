@@ -3,6 +3,19 @@
 ## Unreleased
 
 ### Added
+- Core sync engine (#452): a transport-independent `RemoteRepo` trait (resolve
+  head, list tree, get blob, create commit, compare-and-swap ref update) with
+  an in-memory fake using real git object ids, a pure three-way
+  `plan_sync(local, base, remote)` with base-snapshot delete propagation
+  (remote/local deletes, both-deleted, delete-vs-edit conflicts that keep the
+  edited copy), field-level merges, vault create/delete, generator-history
+  and device-registry merges, vault-key rotation adoption on clean pull, and
+  a merged manifest epoch strictly above both sides. `Session::snapshot_sync`
+  builds a decrypted snapshot and `Session::apply_sync_plan` applies a plan
+  in a single commit at the plan's epoch (stale plans refused). The
+  allowed-path rule is now the single core rule, exported to mobile through
+  the bridge as `isAllowedPath` (Swift/Kotlin call-site migration follows
+  after #450's bridge rename).
 - Watchtower `reused_old_password` finding (#382): a login whose current password matches a retired
   entry in any login's password history (another login's, or its own) is flagged in the core audit,
   `gitpass audit`, the desktop Watchtower card and item detail, and the extension popup chips. The

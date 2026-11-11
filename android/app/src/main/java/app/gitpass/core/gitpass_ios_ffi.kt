@@ -750,6 +750,8 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -768,6 +770,8 @@ internal interface IntegrityCheckingUniffiLib : Library {
     fun uniffi_gitpass_ios_ffi_checksum_func_create_account(
 ): Short
 fun uniffi_gitpass_ios_ffi_checksum_func_generate_password(
+): Short
+fun uniffi_gitpass_ios_ffi_checksum_func_is_allowed_path(
 ): Short
 fun uniffi_gitpass_ios_ffi_checksum_func_merge_item_records(
 ): Short
@@ -882,6 +886,8 @@ fun uniffi_gitpass_ios_ffi_fn_func_create_account(`root`: RustBuffer.ByValue,`pa
 ): RustBuffer.ByValue
 fun uniffi_gitpass_ios_ffi_fn_func_generate_password(`length`: Long,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_gitpass_ios_ffi_fn_func_is_allowed_path(`path`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 fun uniffi_gitpass_ios_ffi_fn_func_merge_item_records(`localJson`: RustBuffer.ByValue,`remoteJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_gitpass_ios_ffi_fn_func_open_vault(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1020,6 +1026,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_ios_ffi_checksum_func_generate_password() != 53242.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_ios_ffi_checksum_func_is_allowed_path() != 57538.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_ios_ffi_checksum_func_merge_item_records() != 45495.toShort()) {
@@ -2360,6 +2369,24 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_func_generate_password(
         FfiConverterULong.lower(`length`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Is `path` (repo-relative, `/`-separated) allowed to be committed or
+         * accepted from a remote tree? This is the single allowed-path rule set,
+         * owned by core (`gitpass_core::sync_engine::is_allowed_path`); mobile
+         * must call this instead of keeping its own copy, so a remote tree can
+         * never smuggle a path past the rule core enforces. (Issue #452; the Swift
+         * `isSyncable` / Kotlin `allowedFile` call-site migration follows after
+         * #450's bridge rename lands.)
+         */ fun `isAllowedPath`(`path`: kotlin.String): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_ios_ffi_fn_func_is_allowed_path(
+        FfiConverterString.lower(`path`),_status)
 }
     )
     }

@@ -399,6 +399,18 @@ pub fn merge_item_records(local_json: String, remote_json: String) -> Result<Str
     err(serde_json::to_string(&merged))
 }
 
+/// Is `path` (repo-relative, `/`-separated) allowed to be committed or
+/// accepted from a remote tree? This is the single allowed-path rule set,
+/// owned by core (`gitpass_core::sync_engine::is_allowed_path`); mobile
+/// must call this instead of keeping its own copy, so a remote tree can
+/// never smuggle a path past the rule core enforces. (Issue #452; the Swift
+/// `isSyncable` / Kotlin `allowedFile` call-site migration follows after
+/// #450's bridge rename lands.)
+#[uniffi::export]
+pub fn is_allowed_path(path: String) -> bool {
+    gitpass_core::sync_engine::is_allowed_path(&path)
+}
+
 #[uniffi::export]
 impl Vault {
     pub fn list_vaults(&self) -> Result<Vec<VaultInfo>, GitpassError> {
