@@ -1,0 +1,14 @@
+secret.key
+*.tmp
+.gitpass.lock
+.gitpass-state.json
+.gitpass-throttle.json
+.gitpass-device.json
+.gitpass-device-key.json
+.gitpass-revoke-pending.json
+.gitpass-backup-*/
+.gitpass-migrate-tmp/
+.gitpass-migrating
+.gitpass-settings.json
+*.new
+.DS_Store

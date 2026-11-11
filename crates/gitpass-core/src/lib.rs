@@ -24,6 +24,7 @@ pub mod ssh;
 pub mod passkey;
 pub mod store;
 pub mod sync;
+pub mod test_fixtures;
 pub mod totp;
 pub mod unlock_throttle;
 
