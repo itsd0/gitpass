@@ -28,30 +28,44 @@
 //!
 //! # Vault keys
 //!
-//! A vault-key rotation is adopted only when the adopting side made no change
-//! to that vault since `base` (clean pull, mirroring `git pull`); the merged
-//! items and blobs are then re-sealed under the new key by the applier. Any
-//! other key divergence is a [`SyncConflictKind::VaultKey`] conflict and the
-//! local key is kept — rotating on one side while editing on the other needs a
-//! sync in between, and guessing would corrupt sealed blobs.
+//! A vault-key rotation made only on the remote side (local key == base key)
+//! is always adopted, even when this side edited the vault since `base`:
+//! rotations come from revocation (`revoke_device_and_rotate`, member removal),
+//! and keeping the old key would silently undo the revocation on the next
+//! push (fail-closed). The applier re-seals the merged meta and every merged
+//! item under the new key, re-keys local-only attachments
+//! ([`SyncAction::RekeyBlob`]) and drops local-only member envelopes, which
+//! wrap the old key (reported as a [`SyncConflictKind::VaultKey`] conflict so
+//! the share can be redone). A rotation made only locally is kept. Both sides
+//! rotating differently is a [`SyncConflictKind::VaultKey`] conflict and the
+//! local key is kept.
 //!
 //! # Epochs
 //!
 //! The merged manifest's epoch is `max(local, remote, base) + 1` — strictly
 //! above both sides, so adopting it can never look like a rollback. When the
-//! plan is empty the epoch stays at the local epoch (nothing is re-sealed).
+//! plan is empty the epoch stays at the local epoch (nothing is re-sealed) —
+//! unless a push is needed and the remote epoch is not below the local one
+//! (e.g. local-ahead after the remote re-sealed without content changes);
+//! then the plan forces a re-seal so the pushed manifest never carries an
+//! epoch at or below the remote's.
+//!
+//! Rollback protection (same rule as `sync --merge`): `plan_sync` refuses a
+//! remote or local snapshot whose epoch is below the base epoch. Comparing
+//! against a rolled-back side would read every item added since `base` as a
+//! delete on that side and propagate those deletes.
 //!
 //! # Allowed paths
 //!
 //! [`is_allowed_path`] is the single rule set for what may be committed or
-//! accepted from a remote tree. It is re-exported here so the mobile bridge
-//! (`gitpass-ios-ffi`, and `gitpass-mobile-ffi` after #450) exposes exactly
-//! this function instead of each platform keeping its own copy; remote paths
-//! are untrusted and anything outside the allowlist is rejected before
-//! writing. The Swift (`SyncService.isSyncable`) and Kotlin
-//! (`EncryptedFirstPull.allowedFile`) copies are migrated to the bridge export
-//! in a follow-up, after #450's bridge rename lands, to avoid conflicting
-//! with PR #459.
+//! accepted from a remote tree. It is re-exported here and exposed by the
+//! mobile bridge (`gitpass-mobile-ffi::is_allowed_path`, Kotlin/Swift
+//! `isAllowedPath`) so platforms call core instead of keeping their own copy;
+//! remote paths are untrusted and anything outside the allowlist is rejected
+//! before writing. The table in `tests/fixtures/shared/allowed_paths.json` is
+//! checked by the core, bridge, Android and iOS tests. Migrating the Swift
+//! (`SyncService.isSyncable`) and Kotlin (`EncryptedFirstPull.allowedFile`)
+//! call sites to the bridge export belongs with the transport work (#453).
 //!
 //! # What this module does NOT do
 //!
@@ -186,6 +200,10 @@ pub enum SyncAction {
     UpsertBlob { vault_id: String, path: String, bytes: Vec<u8> },
     /// Drop a blob the other side deleted (and this side did not change).
     DeleteBlob { vault_id: String, path: String },
+    /// Re-seal a local `files/<fid>.enc` attachment from the old vault key to
+    /// the adopted one (remote-only key rotation, see module docs). The
+    /// applier decrypts with the pre-adoption key and re-seals in place.
+    RekeyBlob { vault_id: String, path: String },
     /// Adopt the remote identity (local side has none).
     SetIdentity { pub_blob: Vec<u8>, enc_blob: Vec<u8> },
 }
@@ -369,6 +387,20 @@ pub fn plan_sync(
     if remote.manifest.account_id != *acct || base.manifest.account_id != *acct {
         bail!("sync plan refuses to merge snapshots from different accounts");
     }
+    if remote.manifest.epoch < base.manifest.epoch {
+        bail!(
+            "remote epoch {} is below the last-synced epoch {}: possible rollback; refusing to sync",
+            remote.manifest.epoch,
+            base.manifest.epoch
+        );
+    }
+    if local.manifest.epoch < base.manifest.epoch {
+        bail!(
+            "local epoch {} is below the last-synced epoch {}: possible rollback; refusing to sync",
+            local.manifest.epoch,
+            base.manifest.epoch
+        );
+    }
     let mut plan = SyncPlan {
         account_id: acct.clone(),
         local_epoch: local.manifest.epoch,
@@ -397,7 +429,11 @@ pub fn plan_sync(
     }
 
     let merged_gh = local.generator_history.merge(&remote.generator_history, now_secs);
-    if merged_gh != local.generator_history {
+    // `merge` also normalizes (order, format, expiry), so compare against the
+    // normalized local history: re-sealing only because of ordering would
+    // turn every sync of an unchanged vault into a write.
+    let local_gh_norm = local.generator_history.merge(&local.generator_history, now_secs);
+    if merged_gh != local_gh_norm {
         plan.generator_history = Some(merged_gh);
     }
     let merged_dev = merge_device_registries(local.devices.as_ref(), remote.devices.as_ref());
@@ -417,8 +453,14 @@ pub fn plan_sync(
         _ => {}
     }
 
-    plan.local_changes =
-        !plan.actions.is_empty() || plan.generator_history.is_some() || plan.devices.is_some();
+    // A push of local content over a remote whose epoch is not below ours
+    // would publish a manifest that looks like a rollback to the remote's
+    // other devices: force a re-seal at the merged epoch first.
+    let reseal_for_push = plan.changed && remote.manifest.epoch >= local.manifest.epoch;
+    plan.local_changes = !plan.actions.is_empty()
+        || plan.generator_history.is_some()
+        || plan.devices.is_some()
+        || reseal_for_push;
     if !plan.local_changes {
         plan.new_epoch = local.manifest.epoch;
     }
@@ -528,9 +570,10 @@ fn plan_vault_merge(vid: &str, l: &VaultView, b: &VaultView, r: &VaultView, plan
     // --- vault key ---
     let mut key_adopted = false;
     if l.key_blob != r.key_blob {
-        if l == b {
-            // Clean pull: this side changed nothing in the vault since base,
-            // so the remote rotation (and its re-sealed files) can be adopted.
+        if l.key_blob == b.key_blob {
+            // Only the remote rotated (e.g. a revocation): always adopt, even
+            // over local edits — keeping the old key would undo the
+            // revocation on push. Everything kept is re-sealed below.
             plan.actions.push(SyncAction::SetVaultKey {
                 vault_id: vid.to_string(),
                 key_blob: r.key_blob.unwrap_or(&[]).to_vec(),
@@ -569,32 +612,70 @@ fn plan_vault_merge(vid: &str, l: &VaultView, b: &VaultView, r: &VaultView, plan
             plan.actions.push(SyncAction::UpdateVaultMeta { vault_id: vid.to_string(), meta });
         }
     }
-    // --- items ---
+    // --- items + blobs ---
     plan_items(vid, &l.items, &b.items, &r.items, plan);
-    // A key adoption re-seals every item and blob under the new key, even
-    // ones whose content did not change.
+    plan_blobs(vid, &l.blobs, &b.blobs, &r.blobs, plan);
     if key_adopted {
-        for (iid, rec) in &r.items {
-            if !plan.actions.iter().any(|a| matches!(a, SyncAction::UpsertItem { vault_id: v, item_id: i, .. } if v == vid && i == iid)) {
-                plan.actions.push(SyncAction::UpsertItem {
-                    vault_id: vid.to_string(),
-                    item_id: iid.to_string(),
-                    record: (*rec).clone(),
-                });
+        reseal_under_adopted_key(vid, l, r, plan);
+    }
+}
+
+/// After adopting a remote vault key: every item and blob the merged vault
+/// keeps must end up under the new key. Items the plan does not already
+/// write are re-written from the local copy; local attachments are re-keyed;
+/// local member envelopes (which wrap the old key) are replaced by the
+/// remote's re-sealed envelope or dropped (conflict: the share must be redone).
+fn reseal_under_adopted_key(vid: &str, l: &VaultView, r: &VaultView, plan: &mut SyncPlan) {
+    let upserted_items: BTreeSet<String> = plan
+        .actions
+        .iter()
+        .filter_map(|a| match a {
+            SyncAction::UpsertItem { vault_id, item_id, .. } | SyncAction::DeleteItem { vault_id, item_id } if vault_id == vid => {
+                Some(item_id.clone())
             }
-        }
-        for (path, bytes) in &r.blobs {
-            if !plan.actions.iter().any(|a| matches!(a, SyncAction::UpsertBlob { vault_id: v, path: p, .. } if v == vid && p == path)) {
-                plan.actions.push(SyncAction::UpsertBlob {
-                    vault_id: vid.to_string(),
-                    path: path.to_string(),
-                    bytes: bytes.to_vec(),
-                });
-            }
+            _ => None,
+        })
+        .collect();
+    for (iid, rec) in &l.items {
+        if !upserted_items.contains(*iid) {
+            plan.actions.push(SyncAction::UpsertItem {
+                vault_id: vid.to_string(),
+                item_id: iid.to_string(),
+                record: (*rec).clone(),
+            });
         }
     }
-    // --- blobs ---
-    plan_blobs(vid, &l.blobs, &b.blobs, &r.blobs, plan);
+    let touched_blobs: BTreeSet<String> = plan
+        .actions
+        .iter()
+        .filter_map(|a| match a {
+            SyncAction::UpsertBlob { vault_id, path, .. } | SyncAction::DeleteBlob { vault_id, path } if vault_id == vid => {
+                Some(path.clone())
+            }
+            _ => None,
+        })
+        .collect();
+    for path in l.blobs.keys() {
+        if touched_blobs.contains(*path) {
+            continue;
+        }
+        if path.starts_with("files/") {
+            plan.actions.push(SyncAction::RekeyBlob { vault_id: vid.to_string(), path: path.to_string() });
+        } else if let Some(rb) = r.blobs.get(path) {
+            plan.actions.push(SyncAction::UpsertBlob {
+                vault_id: vid.to_string(),
+                path: path.to_string(),
+                bytes: rb.to_vec(),
+            });
+        } else {
+            plan.actions.push(SyncAction::DeleteBlob { vault_id: vid.to_string(), path: path.to_string() });
+            plan.conflicts.push(SyncConflict {
+                vault_id: vid.to_string(),
+                item_id: None,
+                kind: SyncConflictKind::VaultKey,
+            });
+        }
+    }
 }
 
 /// Three-way per-item merge. `base` is empty for a both-created vault.
@@ -1094,6 +1175,7 @@ mod tests {
         let mut local = base.clone();
         local.items.remove(&("v1".into(), "b".into()));
         local.manifest.vaults.get_mut("v1").unwrap().items.remove("b");
+        local.manifest.epoch = 2; // the local delete bumped the epoch
         let remote = base.clone();
         let plan = plan_sync(&local, &base, &remote, 1700000000).unwrap();
         assert!(!has_delete_item(&plan, "v1", "b"));
@@ -1155,6 +1237,7 @@ mod tests {
         local.vault_meta.insert("v2".into(), meta("Second"));
         local.vault_key_blobs.insert("v2".into(), b"key-v2".to_vec());
         local.items.insert(("v2".into(), "x".into()), record_title("X", 1000));
+        local.manifest.epoch = 2; // creating the vault bumped the epoch
         let remote = base.clone();
         let plan = plan_sync(&local, &base, &remote, 1700000000).unwrap();
         // The vault already exists locally: no local action, but the push
@@ -1229,15 +1312,117 @@ mod tests {
     }
 
     #[test]
-    fn key_rotation_against_local_edits_conflicts() {
-        let base = snap(1, &[("v1", &[("a", record_title("A", 1000))])]);
+    fn remote_key_rotation_is_adopted_over_local_edits() {
+        // A remote rotation (revocation) must survive local edits: keeping the
+        // old key would undo the revocation on push (fail-closed).
+        let base = snap(1, &[("v1", &[("a", record_title("A", 1000)), ("b", record_title("B", 1000))])]);
         let mut local = base.clone();
         local.items.insert(("v1".into(), "a".into()), record("A edited", "pw", 2000));
+        local.items.insert(("v1".into(), "c".into()), record_title("C local", 2000));
+        local.manifest.vaults.get_mut("v1").unwrap().items.insert("c".into(), ItemEntry { version: 1, hash: "h".into() });
+        local.vault_blobs.insert(("v1".into(), "files/f-local.enc".into()), b"local-attachment".to_vec());
+        local.vault_blobs.insert(("v1".into(), "members/0123456789abcdef.enc".into()), b"local-share".to_vec());
         let mut remote = base.clone();
         remote.vault_key_blobs.insert("v1".into(), b"key-v1-rotated".to_vec());
         let plan = plan_sync(&local, &base, &remote, 1700000000).unwrap();
+        assert!(plan.actions.iter().any(|a| matches!(a, SyncAction::SetVaultKey { vault_id, key_blob } if vault_id == "v1" && key_blob == b"key-v1-rotated")));
+        assert!(plan.actions.iter().any(|a| matches!(a, SyncAction::UpdateVaultMeta { vault_id, .. } if vault_id == "v1")));
+        // Every kept item is re-sealed under the new key, local edit preserved.
+        let mut up = upserts(&plan);
+        up.sort();
+        assert_eq!(up, vec![("v1", "a"), ("v1", "b"), ("v1", "c")]);
+        let a = plan.actions.iter().find_map(|x| match x {
+            SyncAction::UpsertItem { item_id, record, .. } if item_id == "a" => Some(record),
+            _ => None,
+        });
+        assert_eq!(a.unwrap().item.title, "A edited");
+        // Local attachment re-keyed; local-only share (wraps the old key) dropped + reported.
+        assert!(plan.actions.iter().any(|x| matches!(x, SyncAction::RekeyBlob { path, .. } if path == "files/f-local.enc")));
+        assert!(plan.actions.iter().any(|x| matches!(x, SyncAction::DeleteBlob { path, .. } if path == "members/0123456789abcdef.enc")));
+        assert!(has_conflict(&plan, &SyncConflictKind::VaultKey));
+    }
+
+    #[test]
+    fn local_only_key_rotation_is_kept() {
+        let base = snap(1, &[("v1", &[("a", record_title("A", 1000))])]);
+        let mut local = base.clone();
+        local.vault_key_blobs.insert("v1".into(), b"key-v1-local-rotated".to_vec());
+        let remote = base.clone();
+        let plan = plan_sync(&local, &base, &remote, 1700000000).unwrap();
+        assert!(!plan.actions.iter().any(|a| matches!(a, SyncAction::SetVaultKey { .. })));
+        assert!(plan.conflicts.is_empty());
+        assert!(plan.changed);
+    }
+
+    #[test]
+    fn both_sides_rotating_differently_conflicts_and_keeps_local() {
+        let base = snap(1, &[("v1", &[("a", record_title("A", 1000))])]);
+        let mut local = base.clone();
+        local.vault_key_blobs.insert("v1".into(), b"key-v1-local".to_vec());
+        let mut remote = base.clone();
+        remote.vault_key_blobs.insert("v1".into(), b"key-v1-remote".to_vec());
+        let plan = plan_sync(&local, &base, &remote, 1700000000).unwrap();
         assert!(has_conflict(&plan, &SyncConflictKind::VaultKey));
         assert!(!plan.actions.iter().any(|a| matches!(a, SyncAction::SetVaultKey { .. })));
+    }
+
+    #[test]
+    fn rolled_back_remote_is_refused() {
+        // A remote replayed to an older state must not turn every item added
+        // since base into a "remote delete".
+        let base = snap(5, &[("v1", &[("a", record_title("A", 1000)), ("b", record_title("B", 1000))])]);
+        let local = snap(6, &[("v1", &[("a", record_title("A", 1000)), ("b", record_title("B", 1000))])]);
+        let remote = snap(3, &[("v1", &[("a", record_title("A", 1000))])]);
+        let err = plan_sync(&local, &base, &remote, 1700000000).unwrap_err().to_string();
+        assert!(err.contains("rollback"), "{err}");
+    }
+
+    #[test]
+    fn rolled_back_local_is_refused() {
+        let base = snap(5, &[("v1", &[("a", record_title("A", 1000))])]);
+        let local = snap(4, &[("v1", &[("a", record_title("A", 1000))])]);
+        let remote = snap(6, &[("v1", &[("a", record_title("A", 1000))])]);
+        assert!(plan_sync(&local, &base, &remote, 1700000000).is_err());
+    }
+
+    #[test]
+    fn local_ahead_over_higher_remote_epoch_forces_reseal() {
+        // Remote re-sealed (epoch 9) without content change; local added an
+        // item at epoch 6. Pushing local's epoch-6 manifest would look like a
+        // rollback to the remote's devices, so the plan re-seals above 9.
+        let base = snap(5, &[("v1", &[("a", record_title("A", 1000))])]);
+        let mut local = snap(6, &[("v1", &[("a", record_title("A", 1000))])]);
+        local.items.insert(("v1".into(), "b".into()), record_title("B", 1000));
+        local.manifest.vaults.get_mut("v1").unwrap().items.insert("b".into(), ItemEntry { version: 1, hash: "h".into() });
+        let remote = snap(9, &[("v1", &[("a", record_title("A", 1000))])]);
+        let plan = plan_sync(&local, &base, &remote, 1700000000).unwrap();
+        assert!(plan.actions.is_empty());
+        assert!(plan.changed);
+        assert!(plan.local_changes, "must re-seal before pushing");
+        assert_eq!(plan.new_epoch, 10);
+    }
+
+    #[test]
+    fn purged_item_is_not_resurrected_by_stale_soft_deleted_copy() {
+        // Desktop resurrect regression (sync_merge limitation): the item was
+        // soft-deleted and synced (base), then purged locally (hard delete).
+        // The remote still carries the untouched soft-deleted copy. The purge
+        // must stand and propagate; the item must not come back.
+        let mut trashed = record_title("Old", 1000);
+        trashed.deleted_at = Some(1000);
+        let base = snap(2, &[("v1", &[("a", record_title("A", 1000)), ("t", trashed.clone())])]);
+        let mut local = snap(3, &[("v1", &[("a", record_title("A", 1000))])]);
+        local.manifest.epoch = 3;
+        let remote = base.clone();
+        let plan = plan_sync(&local, &base, &remote, 1700000000).unwrap();
+        assert!(upserts(&plan).is_empty(), "purged item resurrected: {:?}", plan.actions);
+        assert!(plan.conflicts.is_empty());
+        assert!(plan.changed, "the purge must still reach the remote");
+        // Mirror: remote purged, local still has the untouched trashed copy.
+        let mut remote2 = snap(3, &[("v1", &[("a", record_title("A", 1000))])]);
+        remote2.manifest.epoch = 3;
+        let plan2 = plan_sync(&base, &base, &remote2, 1700000000).unwrap();
+        assert!(has_delete_item(&plan2, "v1", "t"));
     }
 
     #[test]

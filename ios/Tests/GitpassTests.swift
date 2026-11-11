@@ -120,6 +120,35 @@ final class GitpassTests: XCTestCase {
 
     // MARK: - Shared fixtures (issue #451)
 
+    /// Shared allowed-path table (#452): the bridge's isAllowedPath (core's
+    /// single rule) must accept/reject exactly the table's paths.
+    func testSharedAllowedPathTable() throws {
+        let bundle = Bundle(for: GitpassTests.self)
+        let fm = FileManager.default
+        let candidates = [
+            bundle.url(forResource: "shared", withExtension: nil),
+            bundle.resourceURL,
+        ].compactMap { $0 }
+        guard let dir = candidates.first(where: {
+            fm.fileExists(atPath: $0.appendingPathComponent("allowed_paths.json").path)
+        }) else {
+            XCTFail("allowed_paths.json missing from test bundle resources")
+            return
+        }
+        let data = try Data(contentsOf: dir.appendingPathComponent("allowed_paths.json"))
+        let table = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+        let allowed = table["allowed"] as! [String]
+        let rejected = table["rejected"] as! [String]
+        XCTAssertGreaterThanOrEqual(allowed.count, 10)
+        XCTAssertGreaterThanOrEqual(rejected.count, 20)
+        for path in allowed {
+            XCTAssertTrue(isAllowedPath(path: path), "must allow \(path.debugDescription)")
+        }
+        for path in rejected {
+            XCTAssertFalse(isAllowedPath(path: path), "must reject \(path.debugDescription)")
+        }
+    }
+
     func testSharedFixtures() throws {
         // Fixtures ship as test-bundle resources (see project.yml).
         // XcodeGen adds the directory as a folder reference, so the

@@ -124,6 +124,14 @@ impl Session {
                 _ => {}
             }
         }
+        // Pre-adoption vault keys, for re-keying local attachments after a
+        // remote key rotation is adopted (SetVaultKey + RekeyBlob).
+        let mut old_keys: BTreeMap<String, Key32> = BTreeMap::new();
+        for a in &plan.actions {
+            if let SyncAction::SetVaultKey { vault_id, .. } = a {
+                old_keys.insert(vault_id.clone(), self.vault_key(vault_id)?);
+            }
+        }
         let actions = plan.actions.clone();
         let gh = plan.generator_history.clone();
         let dev = plan.devices.clone();
@@ -245,6 +253,15 @@ impl Session {
                         let ve = m.vaults.get_mut(vault_id).ok_or_else(|| anyhow!("no vault {vault_id}"))?;
                         remove_vault_blob(ve, path);
                     }
+                    SyncAction::RekeyBlob { vault_id, path } => {
+                        let old_vk = old_keys
+                            .get(vault_id)
+                            .ok_or_else(|| anyhow!("re-key of {vault_id} without a key adoption"))?;
+                        let new_vk = self.vault_key(vault_id)?;
+                        let d = self.vdir(vault_id);
+                        let ve = m.vaults.get_mut(vault_id).ok_or_else(|| anyhow!("no vault {vault_id}"))?;
+                        rekey_file_blob(&d, ve, vault_id, path, old_vk, &new_vk)?;
+                    }
                     _ => {}
                 }
             }
@@ -296,6 +313,32 @@ fn write_vault_blob(d: &std::path::Path, ve: &mut VaultEntry, path: &str, bytes:
     } else {
         ve.members.insert(id, hash);
     }
+    Ok(())
+}
+
+/// Re-seal one local attachment (`files/<fid>.enc`) from `old_vk` to `new_vk`
+/// in place and record the new hash. Only attachments carry vault-key
+/// encryption that the applier can re-seal; anything else is refused.
+fn rekey_file_blob(
+    d: &std::path::Path,
+    ve: &mut VaultEntry,
+    vault_id: &str,
+    path: &str,
+    old_vk: &Key32,
+    new_vk: &Key32,
+) -> Result<()> {
+    let fid = match path.split_once('/') {
+        Some((sub, name)) if sub == FILES_DIR && name.ends_with(".enc") && !name.contains('/') && !name.contains("..") => {
+            name.trim_end_matches(".enc")
+        }
+        _ => bail!("refusing to re-key non-attachment blob {path}"),
+    };
+    let fp = d.join(path);
+    let b: FileBlob = read_json(&fp)?;
+    let pt = zeroize::Zeroizing::new(open(old_vk, &b.envelope, &file_aad(vault_id, &b.item_id, fid))?);
+    let nb = FileBlob { format: b.format, item_id: b.item_id.clone(), envelope: seal(new_vk, &pt, &file_aad(vault_id, &b.item_id, fid))? };
+    let h = write_json(&fp, &nb)?;
+    ve.files.insert(fid.to_string(), h);
     Ok(())
 }
 
