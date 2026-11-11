@@ -11,7 +11,7 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 ## Components
 | Name | Code | Notes |
 |---|---|---|
-| **core** | `crates/gitpass-core` | Vault format v5 (reads v2+; `init` writes v2, bumped to v5 on keyset re-wrap), crypto (`crypto.rs`, `keys.rs`), store/manifest/epoch (`store/`), merge/sync/remote (`merge.rs`, `sync.rs`, `remote.rs`), import, audit/HIBP, passkeys, SSH keys, TOTP, sharing (X25519 sealbox + Ed25519 share signatures) |
+| **core** | `crates/gitpass-core` | Vault format v5 (reads v2+; `init` writes v2, bumped to v5 on keyset re-wrap), crypto (`crypto.rs`, `keys.rs`), store/manifest/epoch (`store/`), merge/sync/remote (`merge.rs`, `sync.rs`, `remote.rs`), import, audit/HIBP, passkeys, SSH keys, TOTP, sharing (X25519 sealbox + Ed25519 share signatures), QR device pairing (`pairing.rs`) |
 | **cli** | `crates/gitpass-cli`, `crates/gitpass-pasteboard` | `gitpass` binary: `run`/`inject` secret injection into child env, ssh agent, import/export, clipboard |
 | **native-host** | `crates/gitpass-host` | Native-messaging host for the extension; origin matching (`origin.rs`), request handler (`handler.rs`), install manifests (`install.rs`), bridge to desktop agent |
 | **extension** | `extension/` | MV3 service worker (`background.js`, `bg-*.js`), content scripts on all https pages (`content.js`, `lib/forms.js`, `lib/passkey-main.js` in MAIN world, `lib/passkey-bridge.js`), popup, options |
@@ -27,10 +27,12 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 5. **Imported / shared data.** Import files (`import.rs`), shared vaults/items from other identities (signed shares; sender identity verified out of band), SSH keys, otpauth URIs.
 6. **Network fetches.** Favicon fetcher (https-only, public-IP-only, no redirects, size cap), HIBP k-anonymity audit, updater feed.
 7. **Device / OS.** Keychain, Touch ID gating, pasteboard (concealed/transient types), iOS AutoFill extension, files under `~/.gitpass` and `~/Library/Application Support/gitpass`.
+8. **QR device pairing.** A new phone learns the Secret Key and a sync token from QR frames shown by an already-unlocked desktop. There is no gitpass server. The master password is not in any frame; the person types it on the new device. See [Device pairing](#device-pairing).
 
 ## Assets (all equal priority)
 - Master password, Secret Key (`secret.key` / Emergency Kit), AUK, Account Key, vault keys, device keys, X25519/Ed25519 identity secrets.
 - Vault item plaintext: passwords, notes, TOTP seeds, passkey private keys, SSH private keys, API credentials, injected env secrets.
+- Sync token (fine-grained PAT) while it is being paired onto a new device and while it sits in that device's keystore.
 - Vault integrity and anti-rollback state (`manifest.enc`, epoch in `.gitpass-state.json`).
 - Release/updater integrity: minisign updater key, signing keys in `~/.gitpass-release`.
 
@@ -45,6 +47,14 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 
 ## Existing controls
 Argon2id (256 MiB, t=3, p=4) + Secret Key two-secret KDF; XChaCha20-Poly1305 everywhere with structured AAD; padding buckets; Zeroize types; manifest hash/epoch checks; atomic writes + lock file; origin matching rules in `crates/gitpass-host/src/origin.rs`; native-host `allowed_origins`; agent socket permissions + UID + token; secrets never written by the extension; concealed pasteboard + auto-clear; favicon SSRF guards; low-order point rejection in sealbox; signed shares; `cargo deny`/`cargo audit` in CI; actions pinned by SHA; unlock failure throttling (after 3 consecutive failed master password attempts per vault, further attempts are refused with exponential backoff doubling from 2 s up to a 5 min cap; state persists in `.gitpass-throttle.json` with clock rollback protection and monotonic timer).
+
+## Device pairing
+
+QR-only, three frames, no relay (`crates/gitpass-core/src/pairing.rs`). The new device generates an ephemeral X25519 key and shows only the public key (`offer`). The desktop generates its own ephemeral key afterwards and shows `announce` (its public key and the session id). Both sides derive a 6-digit code from the transcript (X25519 shared secret, HKDF-SHA256, domain `gitpass/pair/v1/sas`). The desktop emits `grant` — the ciphertext — only after the typed code matches, and the phone decrypts only after the typed code matches. The AEAD is the same XChaCha20-Poly1305 envelope as the rest of the vault, with the transcript as AAD.
+
+The payload is repo owner, repo name, branch, account id, Secret Key and sync token. It has no master-password field. Low-order public keys are rejected. A session id is single-use for 24 hours after its two-minute expiry (`.gitpass-pairing-consumed.json`, git-ignored, ids and expiries only). Ephemeral private keys and the AEAD key are wiped when the grant is saved or the vault locks. Errors are fixed strings: they do not include the token, the Secret Key, the master password, or a filesystem path.
+
+What this does not stop: a person who confirms matching codes that an attacker swapped end to end (they are comparing the attacker's session with itself), or anyone who already holds the joiner's ephemeral private key. A photo of the grant is not enough. The 6-digit code is not an encryption key. Registering the new phone in `devices.enc` happens later, when that phone is unlocked with the typed master password and the delivered Secret Key.
 
 ## Open questions
 - Should same-user local malware be treated as fully trusted (the agent token is readable by the user)? Currently in scope.

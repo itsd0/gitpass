@@ -5,6 +5,7 @@
 //! - [`merge::merge_records`] / [`merge_items`] field-level merge
 //! - [`device`] registry, [`totp::code_now`] / [`totp_now`], [`search::rank`] / [`fuzzy_find`]
 //! - [`generate::generate`] (random password, passphrase or PIN)
+//! - [`pairing`] QR device pairing (ephemeral X25519; the master password is never transferred)
 pub mod audit;
 pub mod crypto;
 pub mod device;
@@ -23,6 +24,7 @@ pub mod remote;
 pub mod migrate;
 pub mod search;
 pub mod ssh;
+pub mod pairing;
 pub mod passkey;
 pub mod store;
 pub mod sync;

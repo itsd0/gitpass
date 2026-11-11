@@ -29,8 +29,14 @@ use std::path::Path;
 use std::sync::Mutex;
 
 mod first_pull;
-pub use first_pull::validate_first_pull_snapshot;
+mod pairing;
 mod sync;
+pub use first_pull::validate_first_pull_snapshot;
+pub use pairing::{
+    pairing_host_accept, pairing_host_cancel, pairing_host_release, pairing_joiner_begin, pairing_joiner_cancel,
+    pairing_joiner_code, pairing_joiner_open, pairing_test_vector, pairing_test_vector_open, PairedSync,
+    PairingHostInput, PairingHostView,
+};
 pub use sync::{
     GitHubSyncTarget, HttpHeader, HttpTransport, HttpTransportError, HttpTransportRequest, HttpTransportResponse,
     SyncCancellation, GitHubSyncReport, pull_github_snapshot,
@@ -504,14 +510,15 @@ impl Vault {
 /// Level 2: `Vault::sync_github` + `HttpTransport` (#455).
 /// Level 3: quick-unlock key (`derive_quick_unlock_key`,
 /// `open_vault_with_quick_unlock_key`, `QUICK_UNLOCK_STALE`) (#473).
-/// Level 4: reserved for QR device pairing (#457 / PR #471).
+/// Level 4: reserved for QR pairing, then left unused when autofill landed first (#475).
 /// Level 5: autofill (`Vault::autofill_logins`, `AutofillQuery`, `AutofillLogin`,
 /// `autofill_origin_matches`, `autofill_app_matches`) (#475).
-/// Level 6: reserved for QR device pairing (#457 / PR #471).
+/// Level 6: reserved for QR pairing, then left unused when the passkey provider landed first (#477).
 /// Level 7: passkey provider (`PasskeyCaller`, `passkey_request_info`,
 /// `passkey_app_rp_host`, `passkey_verify_caller`, `Vault::passkey_entries`,
 /// `Vault::passkey_register`, `Vault::passkey_assert`) on `gitpass_core::webauthn` (#477).
-pub const FFI_API_LEVEL: u32 = 7;
+/// Level 8: QR pairing (#457). The desktop does not receive its own code.
+pub const FFI_API_LEVEL: u32 = 8;
 
 /// Bridge version: the crate (= workspace) version plus the API level.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
