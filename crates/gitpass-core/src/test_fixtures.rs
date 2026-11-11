@@ -81,6 +81,10 @@ pub fn fixture_secret_key() -> SecretKey {
     SecretKey(FIXTURE_SECRET_KEY_BYTES)
 }
 
+/// Test-only Argon2id parameters for the fixtures: exactly the production
+/// safety floor (`crypto::KDF_FLOOR_M_KIB`, t=1), so fixtures stay fast to
+/// open on CI emulators/simulators without lowering or bypassing the
+/// floor. Production defaults are unchanged.
 fn fast_kdf() -> KdfParams {
     KdfParams { alg: "argon2id".into(), m_kib: 8192, t: 1, p: 1 }
 }

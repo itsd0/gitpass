@@ -225,7 +225,10 @@ class VaultLifecycleRegressionTest {
                 .performTextInput(handedKey!!)
             composeTestRule.onNodeWithTag(TestTags.UNLOCK)
                 .performClick()
-            composeTestRule.waitForIdle()
+            // Unlock runs on Dispatchers.IO; Compose idleness does not wait
+            // for it (same as the creation handoff above), so wait for the
+            // session state instead of asserting right after waitForIdle.
+            composeTestRule.waitUntil(timeoutMillis = 10_000) { app.session.isUnlocked() }
 
             assertTrue("Created account must successfully unlock with the handed key", app.session.isUnlocked())
         }

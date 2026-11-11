@@ -1144,6 +1144,7 @@ dependencies = [
  "dirs",
  "ed25519-dalek",
  "fs2",
+ "gitpass-core",
  "hex",
  "hkdf",
  "hmac 0.12.1",

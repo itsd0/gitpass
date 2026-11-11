@@ -6,7 +6,7 @@ by four consumers, each through its own stack:
 
 - core: `crates/gitpass-core/tests/shared_fixtures.rs`
   (read-only unlock, full semantic dump incl. generator history)
-- bridge: `ios/rust/gitpass-ios-ffi/tests/ffi.rs`
+- bridge: `crates/gitpass-mobile-ffi/tests/ffi.rs`
   (`open_vault` + `record_json`; generator history is not exposed by the
   bridge, so that section is covered by the core test only)
 - Android instrumented: `android/app/src/androidTest/.../SharedFixturesTest.kt`
@@ -23,6 +23,11 @@ by four consumers, each through its own stack:
 These are throwaway test-only values. All item content is synthetic
 (`FAKE-…`, `example.invalid`); there are no real credentials anywhere in
 these fixtures. **Never** use this password or Secret Key for a real vault.
+
+The keysets are wrapped with test-only Argon2id parameters
+(`m=8192 KiB, t=1, p=1`) — exactly the production safety floor
+(`crypto::KDF_FLOOR_M_KIB`), so production code accepts them unmodified;
+no KDF floor or crypto path is lowered for tests.
 
 ## Content
 
@@ -51,8 +56,13 @@ version; the manifest format is content-derived):
 ## Regenerating
 
 ```sh
-cargo run --locked --example gen_shared_fixtures
+cargo run --locked -p gitpass-core --example gen_shared_fixtures
 ```
+
+The generator and `gitpass_core::test_fixtures` are compiled only with the
+test-only `test-fixtures` cargo feature (enabled automatically for
+gitpass-core's own tests/examples and for the mobile bridge's tests via
+dev-dependencies; no shipped binary enables it).
 
 Only the decrypted content (`expected.json`) is reproducible: salts,
 nonces, account ids and device ids are random per generation, so the
@@ -66,7 +76,7 @@ CI fails if the generator's output differs from the committed
 dir and compares). To check without writing:
 
 ```sh
-cargo run --locked --example gen_shared_fixtures -- --check
+cargo run --locked -p gitpass-core --example gen_shared_fixtures -- --check
 ```
 
 ## Two deliberate timestamp sentinels
@@ -83,10 +93,13 @@ history timestamps).
 
 ## Rules for tests
 
-- Copy a fixture to a temp dir before opening it. A normal unlock
-  writes device state, may re-wrap the keyset to the production KDF
-  (which bumps `format.json` to v5 in the copy), and purges expired
-  trash. Never open the committed fixture in place.
+- Copy a fixture to a temp dir before opening it. A normal core unlock
+  (`Session::unlock`, CLI, desktop) writes device state, may re-wrap the
+  keyset to the production KDF (which bumps `format.json` to v5 in the
+  copy), and purges expired trash. The mobile bridge's `open_vault` is
+  side-effect-free since #450, but tests still copy so a regression there
+  cannot touch the committed fixture. Never open the committed fixture
+  in place.
 - Read `format.json`'s version *before* opening when asserting the
   fixture version, for the re-wrap reason above.
 - No committed fixture carries device-local state

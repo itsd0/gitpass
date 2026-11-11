@@ -4,14 +4,14 @@
 //!
 //! ```sh
 //! # Regenerate the committed fixtures + expected.json files:
-//! cargo run --locked --example gen_shared_fixtures
+//! cargo run --locked -p gitpass-core --example gen_shared_fixtures
 //!
 //! # Verify the generator's output matches the committed expected.json
 //! # (what CI runs, via the `shared_fixtures` integration test):
-//! cargo run --locked --example gen_shared_fixtures -- --check
+//! cargo run --locked -p gitpass-core --example gen_shared_fixtures -- --check
 //!
 //! # Regenerate into a different directory:
-//! cargo run --locked --example gen_shared_fixtures -- /tmp/fixtures-out
+//! cargo run --locked -p gitpass-core --example gen_shared_fixtures -- /tmp/fixtures-out
 //! ```
 //!
 //! Only the decrypted content (`expected.json`) is reproducible:

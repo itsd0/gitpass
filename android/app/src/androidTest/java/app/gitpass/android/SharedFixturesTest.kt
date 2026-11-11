@@ -33,8 +33,9 @@ class SharedFixturesTest {
             try {
                 copyAssetDir(assets, "v$version", dir)
                 val expected = JSONObject(dir.resolve("expected.json").readText())
-                // Version is read BEFORE opening: a normal unlock re-wraps
-                // the keyset to the production KDF and bumps format.json.
+                // Version is read BEFORE opening: openVault is side-effect-free
+                // since #450, but a normal unlock may re-wrap the keyset to the
+                // production KDF and bump format.json.
                 val format = JSONObject(dir.resolve("format.json").readText())
                 assertEquals(version, format.getInt("version"))
                 val secret = dir.resolve("secret.key.txt").readText().trim()

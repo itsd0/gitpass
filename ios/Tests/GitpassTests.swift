@@ -145,8 +145,9 @@ final class GitpassTests: XCTestCase {
             defer { try? fm.removeItem(at: work) }
             let expectedData = try Data(contentsOf: work.appendingPathComponent("expected.json"))
             let expected = try JSONSerialization.jsonObject(with: expectedData) as! [String: Any]
-            // Version is read BEFORE opening: a normal unlock re-wraps
-            // the keyset to the production KDF and bumps format.json.
+            // Version is read BEFORE opening: openVault is side-effect-free
+            // since #450, but a normal unlock may re-wrap the keyset to the
+            // production KDF and bump format.json.
             let formatData = try Data(contentsOf: work.appendingPathComponent("format.json"))
             let format = try JSONSerialization.jsonObject(with: formatData) as! [String: Any]
             XCTAssertEqual(format["version"] as? Int, version)

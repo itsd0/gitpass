@@ -414,7 +414,7 @@ fn shared_fixtures_match_expected() {
     use gitpass_core::test_fixtures;
     use std::path::Path;
     let base = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../../crates/gitpass-core/tests/fixtures/shared");
+        .join("../gitpass-core/tests/fixtures/shared");
     for v in test_fixtures::VERSIONS {
         let dir = base.join(test_fixtures::dir_name(v));
         let want: serde_json::Value =
@@ -423,8 +423,9 @@ fn shared_fixtures_match_expected() {
         let tmp = tempfile::tempdir().unwrap();
         let copy = tmp.path().join(test_fixtures::dir_name(v));
         test_fixtures::copy_fixture(&dir, &copy).unwrap();
-        // Read the version BEFORE opening: a normal unlock re-wraps the
-        // keyset to the production KDF and bumps format.json to v5.
+        // Read the version BEFORE opening. The bridge's `open_vault` is
+        // side-effect-free since #450, but a normal core unlock re-wraps
+        // the keyset to the production KDF and bumps format.json to v5.
         let fmt: serde_json::Value =
             serde_json::from_str(&std::fs::read_to_string(copy.join("format.json")).unwrap())
                 .unwrap();
@@ -436,6 +437,11 @@ fn shared_fixtures_match_expected() {
             secret.trim().to_string(),
         )
         .unwrap();
+        // #450 contract: open_vault must not upgrade the copy's format.
+        let fmt_after: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(copy.join("format.json")).unwrap())
+                .unwrap();
+        assert_eq!(fmt_after["version"], fmt["version"], "v{v} open_vault rewrote format.json");
         let mut vaults = vec![];
         for info in vault.list_vaults().unwrap() {
             let mut items = vec![];
