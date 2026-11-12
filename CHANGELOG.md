@@ -3,6 +3,13 @@
 ## Unreleased
 
 ### Added
+- Signed Android release build in `release.yml` (#479): on `v*` tags a release
+  APK (APK Signature Scheme v2 + v3, zipaligned, 16 KB ELF alignment checked)
+  and AAB with a SHA-256 file are attached to the GitHub release on
+  itsd0/gitpass; a manual dispatch keeps them as workflow artifacts. Signing
+  uses the owner's upload keystore from the `release` environment secrets
+  (never committed). The APK version now follows the workspace version
+  (`versionCode` = major*10000 + minor*100 + patch).
 - Android passkey provider for Credential Manager on Android 14+ (#477):
   sign in with and create gitpass passkeys from browsers and apps. The
   WebAuthn authenticator moved from gitpass-host to `gitpass_core::webauthn`,
