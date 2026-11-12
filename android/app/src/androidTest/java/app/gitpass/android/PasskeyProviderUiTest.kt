@@ -159,11 +159,14 @@ class PasskeyProviderUiTest {
         ActivityScenario.launch<PasskeyGetActivity>(getIntent(browser("https://example.com"))).use {
             rule.waitUntil(10_000) { runCatching { rule.onNodeWithTag(AutofillTags.PASSWORD).assertExists() }.isSuccess }
             assertEquals(0, gateway.signed)
+            assertEquals("asking for verification does not lock the user's open vault", true, app.session.isUnlocked())
             unlock()
             waitOutcome("signed")
             assertEquals(1, gateway.signed)
         }
-        assertEquals("the user's own session stays open", true, app.session.isUnlocked())
+        // Afterwards the app's normal lock-on-background policy applies (the test process has no
+        // visible activity), so the session state is not asserted here; PasskeySessionTest covers
+        // that a verification never touches the open session.
     }
 
     @Test fun matchingGrantSignsWithoutASecondPromptAndRelocks() {
