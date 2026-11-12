@@ -69,4 +69,23 @@
     <string name="imported_account">บัญชีที่นำเข้า %1$d</string>
     <string name="account_selection_damaged">ดัชนีเลือกบัญชีในเครื่องเสียหาย ข้อมูลทุกบัญชียังคงอยู่ แต่ปิดการเข้าถึงเพื่อป้องกันการเลือกบัญชีผิด อย่าถอนการติดตั้งหรือล้างข้อมูลแอป ต้องกู้คืนดัชนีเลือกบัญชีที่ไม่มีข้อมูลลับก่อนดำเนินการต่อ</string>
     <string name="bridge_incompatible">gitpass รุ่นนี้มี native core ที่ไม่ตรงกับแอป ไม่ได้เปิดคลังข้อมูลและไม่มีการเปลี่ยนแปลงใด ๆ โปรดติดตั้งแอปรุ่นที่สมบูรณ์และตรงกัน</string>
+    <string name="sync_open">ซิงค์</string>
+    <string name="sync_title">ซิงค์สองทาง</string>
+    <string name="sync_not_configured">ยังไม่ได้ตั้งค่าการซิงค์</string>
+    <string name="sync_in_progress">กำลังซิงค์…</string>
+    <string name="sync_never">ยังไม่เคยซิงค์</string>
+    <string name="sync_last">ซิงค์ล่าสุด %1$s</string>
+    <string name="sync_failed">ซิงค์ไม่สำเร็จ: %1$s</string>
+    <string name="sync_offline">ออฟไลน์อยู่ จะซิงค์อีกครั้งเมื่อเชื่อมต่ออินเทอร์เน็ต</string>
+    <string name="sync_conflicts">มีข้อขัดแย้ง %1$d รายการในการซิงค์ครั้งล่าสุด</string>
+    <string name="sync_conflicts_title">ข้อขัดแย้งในการซิงค์ครั้งล่าสุด</string>
+    <string name="sync_conflicts_help">รายการเหล่านี้ถูกแก้ไขทั้งสองฝั่ง gitpass เก็บสำเนาไว้อย่างปลอดภัย (การแก้ไขชนะการลบ และเก็บค่าบนเครื่องนี้ไว้เมื่อแก้ไขช่องเดียวกันทั้งสองฝั่ง) โปรดตรวจสอบ</string>
+    <string name="sync_now">ซิงค์ตอนนี้</string>
+    <string name="sync_scope">ซิงค์บัญชีนี้กับที่เก็บ GitHub ของคุณเอง: ดึง รวม และส่งข้อมูล ทำงานเมื่อปลดล็อก หลังบันทึกไม่นาน และทุก 15 นาทีขณะที่แอปเปิดและปลดล็อกอยู่ ใช้ fine-grained PAT เฉพาะที่จำกัดไว้กับที่เก็บนี้ โดยมีสิทธิ์ Contents: อ่านและเขียน โทเค็นถูกเข้ารหัสด้วยคีย์ที่เก็บใน Android Keystore รหัสผ่านหลักและ Secret Key จะไม่ถูกจัดเก็บ</string>
+    <string name="sync_token">Fine-grained PAT (github_pat_…)</string>
+    <string name="sync_token_saved">บันทึกโทเค็นไว้แล้ว เว้นว่างไว้เพื่อใช้โทเค็นเดิม หรือใส่โทเค็นใหม่เพื่อแทนที่</string>
+    <string name="sync_invalid">ใส่เจ้าของ ที่เก็บ และสาขาให้ถูกต้อง และใช้ fine-grained token ที่ขึ้นต้นด้วย github_pat_</string>
+    <string name="sync_saved">บันทึกการตั้งค่าการซิงค์แล้ว</string>
+    <string name="sync_save">บันทึกการตั้งค่าการซิงค์</string>
+    <string name="sync_remove">ลบการตั้งค่าการซิงค์</string>
 </resources>

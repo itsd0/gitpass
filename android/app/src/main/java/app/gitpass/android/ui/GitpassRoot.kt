@@ -86,6 +86,7 @@ private sealed interface Screen {
     data object List : Screen
     data class Detail(val itemId: String) : Screen
     data class Edit(val item: ItemView?) : Screen
+    data object Sync : Screen
 }
 
 @Composable
@@ -262,6 +263,7 @@ private fun AccountRoot(app: GitpassApplication) {
             }
         } else when (val current = screen) {
             Screen.List -> Column {
+                SyncStatusLine(app) { screen = Screen.Sync }
                 Row {
                     TextButton(onClick = { screen = Screen.Edit(null) }, enabled = snapshot.selectedVaultId != null && !snapshot.trash) { Text(stringResource(R.string.new_login)) }
                     TextButton(onClick = { session.setTrash(!snapshot.trash); queryText = "" }) { Text(stringResource(if (snapshot.trash) R.string.active_items else R.string.trash)) }
@@ -288,6 +290,7 @@ private fun AccountRoot(app: GitpassApplication) {
                 errorText = errorText,
             )
             }
+            Screen.Sync -> SyncScreen(app, padding) { screen = Screen.List }
             is Screen.Edit -> {
                 val vaultId = snapshot.selectedVaultId
                 LoginEditor(current.item, writing, errorText, padding, session, snapshot.epoch,
