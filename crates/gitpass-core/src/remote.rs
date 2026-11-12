@@ -18,7 +18,7 @@ use std::process::Command;
 pub const REQUIRED_IGNORES: &[&str] = &[
     "secret.key", "*.tmp", ".gitpass.lock", ".gitpass-state.json", ".gitpass-throttle.json", ".gitpass-device.json", ".gitpass-device-key.json",
     ".gitpass-revoke-pending.json", ".gitpass-backup-*/", ".gitpass-migrate-tmp/", ".gitpass-migrating",
-    ".gitpass-settings.json", "*.new", ".DS_Store",
+    ".gitpass-settings.json", ".gitpass-sync-token", ".gitpass-pairing-consumed.json", "*.new", ".DS_Store",
 ];
 
 /// Error-category markers (prefixes of the error message) that the GUI maps to localized guidance.

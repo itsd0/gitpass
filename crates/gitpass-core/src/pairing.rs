@@ -6,11 +6,16 @@
 //! only inside QR frames (any other local copy of the same text is the same message).
 //!
 //! Direction: the joiner (new device) generates an ephemeral X25519 key and reveals only the
-//! public key (`offer`). The host (desktop) generates its own ephemeral key after that, shows
-//! `announce` (host public key + session id, no secrets) and a 6-digit code derived from the
-//! transcript. `grant` (the ciphertext) is released only after the typed code matches, and the
-//! joiner decrypts only after the typed code matches. A photographed grant is unreadable without
-//! the joiner's ephemeral private key, which never leaves the process and is wiped on success.
+//! public key (`offer`). The host (desktop) generates its own ephemeral key after that and shows
+//! `announce` (host public key + session id, no secrets). Only the phone displays the 6-digit
+//! code derived from the transcript. The person types that code on the desktop. The desktop API
+//! does not return its own code: a screen that confirms a code it just computed is not a check.
+//! `grant` (the ciphertext) is released only after the typed code matches, and the joiner decrypts
+//! only after the typed code matches. A photographed grant is unreadable without the joiner's
+//! ephemeral private key, which never leaves the process and is wiped on success.
+//!
+//! UI for #458: show `announce` as the desktop QR and the joiner's code on the phone only.
+//! Three wrong codes end the session. The sync token must be a fine-grained GitHub PAT.
 //!
 //! Frames, all ASCII, one line:
 //! - `gitpass-pair:1:offer:<sid>.<joiner_pub>.<exp>`
@@ -47,7 +52,7 @@ const MAX_MESSAGE_BYTES: usize = 4096;
 const RETAIN_AFTER_EXP_SECS: i64 = 24 * 60 * 60;
 const MAX_CONSUMED_ENTRIES: usize = 1024;
 const MAX_CONSUMED_BYTES: usize = 256 * 1024;
-const PAYLOAD_KEYS: [&str; 7] = [
+const PAYLOAD_KEYS: [&str; 8] = [
     "v",
     "account_id",
     "repo_owner",
@@ -55,7 +60,12 @@ const PAYLOAD_KEYS: [&str; 7] = [
     "branch",
     "secret_key",
     "sync_token",
+    "token_kind",
 ];
+/// Only value accepted for `token_kind`. A later token type needs a new payload version.
+pub const TOKEN_KIND_FINE_GRAINED_PAT: &str = "fine_grained_pat";
+/// Wrong codes before the session is wiped and must be marked used.
+const MAX_WRONG_CODES: u8 = 3;
 
 /// Why a pairing step was refused. Display text never includes secrets, paths or message bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -70,6 +80,8 @@ pub enum PairingError {
     BadField,
     State,
     NotReady,
+    /// Three wrong codes. The session is wiped and must be marked used.
+    Exhausted,
 }
 
 impl PairingError {
@@ -85,6 +97,7 @@ impl PairingError {
             Self::BadField => "pairing payload field rejected",
             Self::State => "pairing state unavailable",
             Self::NotReady => "no pairing in progress",
+            Self::Exhausted => "too many wrong pairing codes",
         }
     }
 }
@@ -300,6 +313,7 @@ pub struct JoinerSession {
     sid_b64: String,
     exp: i64,
     announced_host: Option<[u8; 32]>,
+    wrong_codes: u8,
 }
 
 impl std::fmt::Debug for JoinerSession {
@@ -333,6 +347,7 @@ impl JoinerSession {
             session_id,
             exp,
             announced_host: None,
+            wrong_codes: 0,
         })
     }
     pub fn offer(&self) -> String {
@@ -349,16 +364,21 @@ impl JoinerSession {
     pub fn expires_at(&self) -> i64 {
         self.exp
     }
-    /// Read the host's announce frame and return the 6-digit code. Does not decrypt anything.
+    /// Read the host's announce frame and return the 6-digit code the phone shows.
+    /// Does not decrypt anything. The desktop must not display this value.
     pub fn read_announce(&mut self, announce: &str, now: i64) -> Result<String, PairingError> {
-        let secret = self.secret.as_ref().ok_or(PairingError::Replay)?;
+        if self.secret.is_none() {
+            return Err(PairingError::Replay);
+        }
+        if now >= self.exp {
+            self.consume();
+            return Err(PairingError::Expired);
+        }
         let a = parse_announce(announce)?;
         if a.sid != self.session_id || a.joiner_pub != self.public || a.exp != self.exp {
             return Err(PairingError::BadMessage);
         }
-        if now >= self.exp {
-            return Err(PairingError::Expired);
-        }
+        let secret = self.secret.as_ref().ok_or(PairingError::Replay)?;
         let mut shared = dh(secret, &a.host_pub)?;
         let code = sas_code(
             &shared,
@@ -373,18 +393,22 @@ impl JoinerSession {
     }
     /// Decrypt `grant` when `code` matches the announce. Does not mark the session used; call
     /// [`ConsumedPairings::mark_released`] and [`JoinerSession::consume`] after that record is saved.
+    /// The third wrong code wipes the ephemeral key and returns [`PairingError::Exhausted`].
     pub fn open(
-        &self,
+        &mut self,
         grant: &str,
         code: &str,
         now: i64,
         consumed: &mut ConsumedPairings,
     ) -> Result<PairingPayload, PairingError> {
-        let secret = self.secret.as_ref().ok_or(PairingError::Replay)?;
-        let host_pub = self.announced_host.ok_or(PairingError::BadMessage)?;
+        if self.secret.is_none() {
+            return Err(PairingError::Replay);
+        }
         if now >= self.exp {
+            self.consume();
             return Err(PairingError::Expired);
         }
+        let host_pub = self.announced_host.ok_or(PairingError::BadMessage)?;
         let g = parse_grant(grant)?;
         if g.sid != self.session_id
             || g.joiner_pub != self.public
@@ -396,30 +420,49 @@ impl JoinerSession {
         if consumed.is_released(&self.sid_b64, now) {
             return Err(PairingError::Replay);
         }
-        let entered = normalize_code(code)?;
-        let mut shared = dh(secret, &g.host_pub)?;
-        let expect = sas_code(
-            &shared,
-            &self.public,
-            &g.host_pub,
-            &self.session_id,
-            self.exp,
-        );
-        if !ct_eq(expect.as_bytes(), entered.as_bytes()) {
-            shared.zeroize();
-            return Err(PairingError::BadCode);
-        }
-        let aead = derive_aead(
-            &shared,
-            &self.public,
-            &g.host_pub,
-            &self.session_id,
-            self.exp,
-        );
-        shared.zeroize();
-        let aad = transcript_aad(&self.session_id, &self.public, &g.host_pub, self.exp);
-        let pt = open_grant_blob(&aead, &g.envelope_b64, &aad)?;
+        let entered = match normalize_code(code) {
+            Ok(c) => c.to_string(),
+            Err(_) => return Err(self.note_wrong_code()),
+        };
+        let opened = {
+            let secret = self.secret.as_ref().ok_or(PairingError::Replay)?;
+            let mut shared = dh(secret, &g.host_pub)?;
+            let expect = sas_code(
+                &shared,
+                &self.public,
+                &g.host_pub,
+                &self.session_id,
+                self.exp,
+            );
+            if !ct_eq(expect.as_bytes(), entered.as_bytes()) {
+                shared.zeroize();
+                None
+            } else {
+                let aead = derive_aead(
+                    &shared,
+                    &self.public,
+                    &g.host_pub,
+                    &self.session_id,
+                    self.exp,
+                );
+                shared.zeroize();
+                let aad = transcript_aad(&self.session_id, &self.public, &g.host_pub, self.exp);
+                Some(open_grant_blob(&aead, &g.envelope_b64, &aad)?)
+            }
+        };
+        let Some(pt) = opened else {
+            return Err(self.note_wrong_code());
+        };
         decode_payload(&pt)
+    }
+    fn note_wrong_code(&mut self) -> PairingError {
+        self.wrong_codes = self.wrong_codes.saturating_add(1);
+        if self.wrong_codes >= MAX_WRONG_CODES {
+            self.consume();
+            PairingError::Exhausted
+        } else {
+            PairingError::BadCode
+        }
     }
     pub fn consume(&mut self) {
         self.secret = None;
@@ -438,6 +481,7 @@ pub struct HostSession {
     exp: i64,
     request: Option<PairingRequest>,
     cached_grant: Option<String>,
+    wrong_codes: u8,
 }
 
 impl std::fmt::Debug for HostSession {
@@ -492,9 +536,12 @@ impl HostSession {
             exp: offer.exp,
             request: Some(request),
             cached_grant: None,
+            wrong_codes: 0,
         })
     }
-    pub fn code(&self) -> &str {
+    /// The code the phone will show after it reads [`HostSession::announce`].
+    /// Not part of the desktop API: returning it would let a screen confirm itself.
+    fn code(&self) -> &str {
         &self.code
     }
     pub fn session_id(&self) -> &str {
@@ -528,11 +575,15 @@ impl HostSession {
             return Err(PairingError::Replay);
         }
         if now >= self.exp {
+            self.wipe();
             return Err(PairingError::Expired);
         }
-        let entered = normalize_code(code)?;
+        let entered = match normalize_code(code) {
+            Ok(c) => c,
+            Err(_) => return self.reject_code(),
+        };
         if !ct_eq(self.code.as_bytes(), entered.as_bytes()) {
-            return Err(PairingError::BadCode);
+            return self.reject_code();
         }
         if self.cached_grant.is_none() {
             let nonce = nonce.unwrap_or_else(random_bytes);
@@ -551,6 +602,15 @@ impl HostSession {
             ));
         }
         self.cached_grant.clone().ok_or(PairingError::Replay)
+    }
+    fn reject_code(&mut self) -> Result<String, PairingError> {
+        self.wrong_codes = self.wrong_codes.saturating_add(1);
+        if self.wrong_codes >= MAX_WRONG_CODES {
+            self.wipe();
+            Err(PairingError::Exhausted)
+        } else {
+            Err(PairingError::BadCode)
+        }
     }
     pub fn wipe(&mut self) {
         self.aead = None;
@@ -596,6 +656,7 @@ pub fn test_vector_json() -> Result<String, PairingError> {
         branch: v.payload.branch.clone(),
         secret_key: v.payload.secret_key.encode(),
         sync_token: v.payload.sync_token.to_string(),
+        token_kind: TOKEN_KIND_FINE_GRAINED_PAT.to_string(),
     };
     serde_json::to_string(&body).map_err(|_| PairingError::BadMessage)
 }
@@ -606,7 +667,7 @@ pub fn test_vector_open() -> Result<PairingPayload, PairingError> {
 }
 
 const TV_NOW: i64 = 1_700_000_000;
-const TV_TOKEN: &str = "FAKE-github-pat-pairing-test-vector";
+const TV_TOKEN: &str = "github_pat_FAKE_pairing_test_vector";
 const TV_ACCOUNT: &str = "00000000-0000-4000-8000-000000000001";
 
 #[derive(Serialize)]
@@ -615,6 +676,7 @@ struct TestVectorOut {
     now: i64,
     offer: String,
     announce: String,
+    /// The code the phone would show. The live desktop API does not return a code.
     code: String,
     grant: String,
     account_id: String,
@@ -623,6 +685,7 @@ struct TestVectorOut {
     branch: String,
     secret_key: String,
     sync_token: String,
+    token_kind: String,
 }
 
 struct VectorParts {
@@ -820,6 +883,7 @@ struct PayloadPlain {
     branch: String,
     secret_key: String,
     sync_token: String,
+    token_kind: String,
 }
 
 fn payload_bytes(req: &PairingRequest) -> Result<Zeroizing<Vec<u8>>, PairingError> {
@@ -831,6 +895,7 @@ fn payload_bytes(req: &PairingRequest) -> Result<Zeroizing<Vec<u8>>, PairingErro
         branch: req.branch.clone(),
         secret_key: req.secret_key.encode(),
         sync_token: req.sync_token.to_string(),
+        token_kind: TOKEN_KIND_FINE_GRAINED_PAT.to_string(),
     };
     let bytes = serde_json::to_vec(&plain).map_err(|_| PairingError::BadField)?;
     plain.secret_key.zeroize();
@@ -860,6 +925,9 @@ fn decode_payload(pt: &[u8]) -> Result<PairingPayload, PairingError> {
     validate_repo(&plain.repo_name)?;
     validate_branch(&plain.branch)?;
     validate_token(&plain.sync_token)?;
+    if plain.token_kind != TOKEN_KIND_FINE_GRAINED_PAT {
+        return Err(PairingError::BadField);
+    }
     let sync_token = Zeroizing::new(std::mem::take(&mut plain.sync_token));
     Ok(PairingPayload {
         account_id: plain.account_id,
@@ -922,15 +990,11 @@ fn validate_branch(s: &str) -> Result<(), PairingError> {
     Ok(())
 }
 fn validate_token(s: &str) -> Result<(), PairingError> {
-    let b = s.as_bytes();
-    if !(16..=255).contains(&b.len())
-        || !b
-            .iter()
-            .all(|c| c.is_ascii_alphanumeric() || *c == b'-' || *c == b'_')
-    {
-        return Err(PairingError::BadField);
+    if crate::github_api::is_fine_grained_pat(s) {
+        Ok(())
+    } else {
+        Err(PairingError::BadField)
     }
-    Ok(())
 }
 
 struct OfferParts {
@@ -1044,7 +1108,7 @@ mod tests {
     use std::fs;
 
     const PASSWORD: &str = "FAKE-master-password-must-not-appear";
-    const TOKEN: &str = "FAKE-github-pat-from-desktop";
+    const TOKEN: &str = "github_pat_FAKE_from_desktop";
 
     fn fast() -> crate::crypto::KdfParams {
         crate::crypto::KdfParams {
@@ -1260,7 +1324,7 @@ mod tests {
         );
         let code = joiner.read_announce(&host.announce(), now).unwrap();
         let grant = host.grant_with_nonce(&code, now, Some([0x44; 24])).unwrap();
-        let tampered = tamper_envelope(&grant);
+        let tampered = flip_ct(&grant);
         assert_eq!(
             joiner
                 .open(&tampered, &code, now, &mut ConsumedPairings::default())
@@ -1282,7 +1346,8 @@ mod tests {
         let secret = SecretKey([0xAB; 16]).encode();
         let password_json = serde_json::json!({
             "v": 1, "account_id": TV_ACCOUNT, "repo_owner": "fake-owner", "repo_name": "fake-vault",
-            "branch": "main", "secret_key": secret, "sync_token": TOKEN, "password": PASSWORD,
+            "branch": "main", "secret_key": secret, "sync_token": TOKEN,
+            "token_kind": TOKEN_KIND_FINE_GRAINED_PAT, "password": PASSWORD,
         });
         let injected = host
             .seal_raw(&serde_json::to_vec(&password_json).unwrap(), [0x45; 24])
@@ -1296,6 +1361,7 @@ mod tests {
         let v2 = serde_json::json!({
             "v": 2, "account_id": TV_ACCOUNT, "repo_owner": "fake-owner", "repo_name": "fake-vault",
             "branch": "main", "secret_key": SecretKey([0xAB; 16]).encode(), "sync_token": TOKEN,
+            "token_kind": TOKEN_KIND_FINE_GRAINED_PAT,
         });
         let wrong_v = host
             .seal_raw(&serde_json::to_vec(&v2).unwrap(), [0x46; 24])
@@ -1416,12 +1482,161 @@ mod tests {
         assert!(names.iter().any(|n| n == "FAKE phone"));
     }
 
-    fn tamper_envelope(grant: &str) -> String {
+    #[test]
+    fn three_wrong_codes_burn_the_session_and_classic_tokens_are_refused() {
+        assert_eq!(
+            PairingRequest::new(
+                TV_ACCOUNT,
+                "fake-owner",
+                "fake-vault",
+                "main",
+                SecretKey([0xAB; 16]),
+                "ghp_FAKE0123456789"
+            )
+            .unwrap_err(),
+            PairingError::BadField
+        );
+        let now = 1_700_000_000;
+        let mut joiner = JoinerSession::from_parts([0x11; 32], [0x55; 16], now + PAIRING_TTL_SECS).unwrap();
+        let mut host = HostSession::accept_with(
+            &joiner.offer(),
+            req(TOKEN),
+            now,
+            &mut ConsumedPairings::default(),
+            Some([0x22; 32]),
+        )
+        .unwrap();
+        let code = joiner.read_announce(&host.announce(), now).unwrap();
+        let bad = wrong(&code);
+        assert_eq!(host.grant_if_code_matches(&bad, now).unwrap_err(), PairingError::BadCode);
+        assert_eq!(host.grant_if_code_matches(&bad, now).unwrap_err(), PairingError::BadCode);
+        assert_eq!(
+            host.grant_if_code_matches(&bad, now).unwrap_err(),
+            PairingError::Exhausted
+        );
+        assert_eq!(
+            host.grant_if_code_matches(&code, now).unwrap_err(),
+            PairingError::Replay
+        );
+        let mut joiner = JoinerSession::from_parts([0x12; 32], [0x56; 16], now + PAIRING_TTL_SECS).unwrap();
+        let mut host = HostSession::accept_with(
+            &joiner.offer(),
+            req(TOKEN),
+            now,
+            &mut ConsumedPairings::default(),
+            Some([0x23; 32]),
+        )
+        .unwrap();
+        let code = joiner.read_announce(&host.announce(), now).unwrap();
+        let grant = host.grant_with_nonce(&code, now, Some([0x47; 24])).unwrap();
+        let bad = wrong(&code);
+        let mut consumed = ConsumedPairings::default();
+        assert_eq!(
+            joiner.open(&grant, &bad, now, &mut consumed).unwrap_err(),
+            PairingError::BadCode
+        );
+        assert_eq!(
+            joiner.open(&grant, &bad, now, &mut consumed).unwrap_err(),
+            PairingError::BadCode
+        );
+        assert_eq!(
+            joiner.open(&grant, &bad, now, &mut consumed).unwrap_err(),
+            PairingError::Exhausted
+        );
+        assert_eq!(
+            joiner.open(&grant, &code, now, &mut consumed).unwrap_err(),
+            PairingError::Replay
+        );
+    }
+
+    #[test]
+    fn clock_skew_boundary_and_replay_prune() {
+        let now = 1_700_000_000;
+        // A peer clock 60s ahead of this one still fits (exp = now + ttl + 60). 61s does not.
+        assert!(check_window(now, now + PAIRING_TTL_SECS + 60).is_ok());
+        assert_eq!(
+            check_window(now, now + PAIRING_TTL_SECS + 61).unwrap_err(),
+            PairingError::BadMessage
+        );
+        assert_eq!(check_window(now, now).unwrap_err(), PairingError::Expired);
+        let dir = tempfile::tempdir().unwrap();
+        let mut c = ConsumedPairings::default();
+        let fresh_exp = now + 30;
+        let stale_exp = now - RETAIN_AFTER_EXP_SECS - 1;
+        c.mark_accepted("freshSID", fresh_exp, 1).unwrap();
+        c.mark_released("staleSID", stale_exp, 1).unwrap();
+        save_consumed(dir.path(), &c).unwrap();
+        let mut loaded = load_consumed(dir.path()).unwrap();
+        assert!(loaded.is_used("freshSID", now));
+        assert!(!loaded.is_used("staleSID", now));
+        save_consumed(dir.path(), &loaded).unwrap();
+        let raw = fs::read_to_string(dir.path().join(CONSUMED_FILE)).unwrap();
+        assert!(raw.contains("freshSID"));
+        assert!(!raw.contains("staleSID"));
+    }
+
+    #[test]
+    fn tamper_inside_ciphertext_nonce_or_key_fails_authentication() {
+        let now = 1_700_000_000;
+        let mut joiner = JoinerSession::from_parts([0x11; 32], [0x33; 16], now + PAIRING_TTL_SECS).unwrap();
+        let mut host = HostSession::accept_with(
+            &joiner.offer(),
+            req(TOKEN),
+            now,
+            &mut ConsumedPairings::default(),
+            Some([0x22; 32]),
+        )
+        .unwrap();
+        let code = joiner.read_announce(&host.announce(), now).unwrap();
+        let grant = host.grant_with_nonce(&code, now, Some([0x44; 24])).unwrap();
+        let mut consumed = ConsumedPairings::default();
+        for bad in [flip_ct(&grant), flip_nonce(&grant), seal_with_other_key(&grant)] {
+            assert_eq!(
+                joiner.open(&bad, &code, now, &mut consumed).unwrap_err(),
+                PairingError::Tampered,
+                "{bad}"
+            );
+        }
+        joiner
+            .open(&grant, &code, now, &mut consumed)
+            .unwrap();
+    }
+
+    fn envelope_of(grant: &str) -> (String, crate::crypto::Envelope) {
         let dot = grant.rfind('.').unwrap();
         let (head, blob) = grant.split_at(dot);
-        let mut raw = B64U.decode(&blob[1..]).unwrap();
-        let last = raw.len() - 1;
-        raw[last] ^= 0x01;
+        let raw = B64U.decode(&blob[1..]).unwrap();
+        let env = serde_json::from_slice(&raw).unwrap();
+        (head.to_string(), env)
+    }
+    fn grant_with(head: &str, env: &crate::crypto::Envelope) -> String {
+        let raw = serde_json::to_vec(env).unwrap();
         format!("{head}.{}", b64(&raw))
+    }
+    fn flip_ct(grant: &str) -> String {
+        use base64::engine::general_purpose::STANDARD as B64;
+        use base64::Engine;
+        let (head, mut env) = envelope_of(grant);
+        let mut ct = B64.decode(&env.ct).unwrap();
+        let i = ct.len() / 2;
+        ct[i] ^= 0x01;
+        env.ct = B64.encode(ct);
+        grant_with(&head, &env)
+    }
+    fn flip_nonce(grant: &str) -> String {
+        use base64::engine::general_purpose::STANDARD as B64;
+        use base64::Engine;
+        let (head, mut env) = envelope_of(grant);
+        let mut nonce = B64.decode(&env.nonce).unwrap();
+        nonce[0] ^= 0x01;
+        env.nonce = B64.encode(nonce);
+        grant_with(&head, &env)
+    }
+    fn seal_with_other_key(grant: &str) -> String {
+        let (head, env) = envelope_of(grant);
+        let wrong = crate::crypto::Key32([0x99; 32]);
+        let sealed = crate::crypto::seal_with_nonce(&wrong, b"{}", b"aad", [0x48; 24]).unwrap();
+        let _ = env;
+        grant_with(&head, &sealed)
     }
 }

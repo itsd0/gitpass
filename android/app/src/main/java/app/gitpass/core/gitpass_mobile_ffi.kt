@@ -820,6 +820,44 @@ internal open class UniffiVTableCallbackInterfaceHttpTransport(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -861,6 +899,24 @@ fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with_quick_unlock_key(
 ): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_accept(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_cancel(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_release(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_begin(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_cancel(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_code(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_open(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_test_vector(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_test_vector_open(
+): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_passkey_app_rp_host(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_passkey_request_info(
@@ -876,6 +932,20 @@ fun uniffi_gitpass_mobile_ffi_checksum_func_totp_code(
 fun uniffi_gitpass_mobile_ffi_checksum_func_validate_first_pull_snapshot(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_method_httptransport_send(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_account_id(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_branch(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_repo_name(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_repo_owner(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_secret_key(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_sync_token(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_token_kind(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_method_synccancellation_cancel(
 ): Short
@@ -914,6 +984,8 @@ fun uniffi_gitpass_mobile_ffi_checksum_method_vault_set_favorite(
 fun uniffi_gitpass_mobile_ffi_checksum_method_vault_sync_github(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_method_vault_update_item(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_constructor_pairinghostinput_new(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_constructor_synccancellation_new(
 ): Short
@@ -975,6 +1047,30 @@ fun uniffi_gitpass_mobile_ffi_fn_init_callback_vtable_httptransport(`vtable`: Un
 ): Unit
 fun uniffi_gitpass_mobile_ffi_fn_method_httptransport_send(`ptr`: Pointer,`request`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_clone_pairedsync(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
+fun uniffi_gitpass_mobile_ffi_fn_free_pairedsync(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_gitpass_mobile_ffi_fn_method_pairedsync_account_id(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_method_pairedsync_branch(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_method_pairedsync_repo_name(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_method_pairedsync_repo_owner(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_method_pairedsync_secret_key(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_method_pairedsync_sync_token(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_method_pairedsync_token_kind(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_clone_pairinghostinput(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
+fun uniffi_gitpass_mobile_ffi_fn_free_pairinghostinput(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_gitpass_mobile_ffi_fn_constructor_pairinghostinput_new(`stateDir`: RustBuffer.ByValue,`offer`: RustBuffer.ByValue,`accountId`: RustBuffer.ByValue,`repoOwner`: RustBuffer.ByValue,`repoName`: RustBuffer.ByValue,`branch`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,`syncToken`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_clone_synccancellation(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_free_synccancellation(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
@@ -1048,6 +1144,24 @@ fun uniffi_gitpass_mobile_ffi_fn_func_open_vault(`root`: RustBuffer.ByValue,`pas
 fun uniffi_gitpass_mobile_ffi_fn_func_open_vault_with(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_func_open_vault_with_quick_unlock_key(`root`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_host_accept(`input`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_host_cancel(`stateDir`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_host_release(`stateDir`: RustBuffer.ByValue,`code`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_begin(uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_cancel(uniffi_out_err: UniffiRustCallStatus, 
+): Unit
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_code(`announce`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_open(`stateDir`: RustBuffer.ByValue,`grant`: RustBuffer.ByValue,`code`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_test_vector(uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_test_vector_open(uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_func_passkey_app_rp_host(`rpId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1228,6 +1342,33 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with_quick_unlock_key() != 48988.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_accept() != 27246.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_cancel() != 7288.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_release() != 50616.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_begin() != 50517.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_cancel() != 157.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_code() != 64150.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_open() != 21757.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_test_vector() != 49933.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_test_vector_open() != 37902.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_passkey_app_rp_host() != 17044.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1250,6 +1391,27 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_method_httptransport_send() != 52168.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_account_id() != 23311.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_branch() != 18407.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_repo_name() != 18202.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_repo_owner() != 48719.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_secret_key() != 33555.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_sync_token() != 25324.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_pairedsync_token_kind() != 15059.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_method_synccancellation_cancel() != 39292.toShort()) {
@@ -1307,6 +1469,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_update_item() != 43322.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_constructor_pairinghostinput_new() != 64616.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_constructor_synccancellation_new() != 4632.toShort()) {
@@ -1552,6 +1717,29 @@ public object FfiConverterULong: FfiConverter<ULong, Long> {
 
     override fun write(value: ULong, buf: ByteBuffer) {
         buf.putLong(value.toLong())
+    }
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterLong: FfiConverter<Long, Long> {
+    override fun lift(value: Long): Long {
+        return value
+    }
+
+    override fun read(buf: ByteBuffer): Long {
+        return buf.getLong()
+    }
+
+    override fun lower(value: Long): Long {
+        return value
+    }
+
+    override fun allocationSize(value: Long) = 8UL
+
+    override fun write(value: Long, buf: ByteBuffer) {
+        buf.putLong(value)
     }
 }
 
@@ -1931,6 +2119,586 @@ public object FfiConverterTypeHttpTransport: FfiConverter<HttpTransport, Pointer
     override fun allocationSize(value: HttpTransport) = 8UL
 
     override fun write(value: HttpTransport, buf: ByteBuffer) {
+        // The Rust code always expects pointers written as 8 bytes,
+        // and will fail to compile if they don't fit.
+        buf.putLong(Pointer.nativeValue(lower(value)))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a Pointer/Arc<T>
+// to the live Rust struct on the other side of the FFI.
+//
+// Each instance implements core operations for working with the Rust `Arc<T>` and the
+// Kotlin Pointer to work with the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque pointer to the underlying Rust struct.
+//     Method calls need to read this pointer from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its pointer should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the pointer, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the pointer, but is interrupted
+//      before it can pass the pointer over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read pointer value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * Opened grant. `Debug` and `Display` redact the Secret Key and the sync token.
+ * The generated foreign object does not put those fields in `toString` / `description`.
+ */
+public interface PairedSyncInterface {
+    
+    fun `accountId`(): kotlin.String
+    
+    fun `branch`(): kotlin.String
+    
+    fun `repoName`(): kotlin.String
+    
+    fun `repoOwner`(): kotlin.String
+    
+    /**
+     * Account Secret Key. Never log the return value.
+     */
+    fun `secretKey`(): kotlin.String
+    
+    /**
+     * Fine-grained GitHub PAT. Never log the return value.
+     */
+    fun `syncToken`(): kotlin.String
+    
+    fun `tokenKind`(): kotlin.String
+    
+    companion object
+}
+
+/**
+ * Opened grant. `Debug` and `Display` redact the Secret Key and the sync token.
+ * The generated foreign object does not put those fields in `toString` / `description`.
+ */
+open class PairedSync: Disposable, AutoCloseable, PairedSyncInterface
+{
+
+    constructor(pointer: Pointer) {
+        this.pointer = pointer
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(pointer))
+    }
+
+    /**
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noPointer: NoPointer) {
+        this.pointer = null
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(pointer))
+    }
+
+    protected val pointer: Pointer?
+    protected val cleanable: UniffiCleaner.Cleanable
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithPointer(block: (ptr: Pointer) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the pointer being freed concurrently.
+        try {
+            return block(this.uniffiClonePointer())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val pointer: Pointer?) : Runnable {
+        override fun run() {
+            pointer?.let { ptr ->
+                uniffiRustCall { status ->
+                    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_free_pairedsync(ptr, status)
+                }
+            }
+        }
+    }
+
+    fun uniffiClonePointer(): Pointer {
+        return uniffiRustCall() { status ->
+            UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_clone_pairedsync(pointer!!, status)
+        }
+    }
+
+    override fun `accountId`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_pairedsync_account_id(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `branch`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_pairedsync_branch(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `repoName`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_pairedsync_repo_name(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `repoOwner`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_pairedsync_repo_owner(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Account Secret Key. Never log the return value.
+     */override fun `secretKey`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_pairedsync_secret_key(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Fine-grained GitHub PAT. Never log the return value.
+     */override fun `syncToken`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_pairedsync_sync_token(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    override fun `tokenKind`(): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_pairedsync_token_kind(
+        it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+
+    
+    
+    companion object
+    
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePairedSync: FfiConverter<PairedSync, Pointer> {
+
+    override fun lower(value: PairedSync): Pointer {
+        return value.uniffiClonePointer()
+    }
+
+    override fun lift(value: Pointer): PairedSync {
+        return PairedSync(value)
+    }
+
+    override fun read(buf: ByteBuffer): PairedSync {
+        // The Rust code always writes pointers as 8 bytes, and will
+        // fail to compile if they don't fit.
+        return lift(Pointer(buf.getLong()))
+    }
+
+    override fun allocationSize(value: PairedSync) = 8UL
+
+    override fun write(value: PairedSync, buf: ByteBuffer) {
+        // The Rust code always expects pointers written as 8 bytes,
+        // and will fail to compile if they don't fit.
+        buf.putLong(Pointer.nativeValue(lower(value)))
+    }
+}
+
+
+// This template implements a class for working with a Rust struct via a Pointer/Arc<T>
+// to the live Rust struct on the other side of the FFI.
+//
+// Each instance implements core operations for working with the Rust `Arc<T>` and the
+// Kotlin Pointer to work with the live Rust struct on the other side of the FFI.
+//
+// There's some subtlety here, because we have to be careful not to operate on a Rust
+// struct after it has been dropped, and because we must expose a public API for freeing
+// theq Kotlin wrapper object in lieu of reliable finalizers. The core requirements are:
+//
+//   * Each instance holds an opaque pointer to the underlying Rust struct.
+//     Method calls need to read this pointer from the object's state and pass it in to
+//     the Rust FFI.
+//
+//   * When an instance is no longer needed, its pointer should be passed to a
+//     special destructor function provided by the Rust FFI, which will drop the
+//     underlying Rust struct.
+//
+//   * Given an instance, calling code is expected to call the special
+//     `destroy` method in order to free it after use, either by calling it explicitly
+//     or by using a higher-level helper like the `use` method. Failing to do so risks
+//     leaking the underlying Rust struct.
+//
+//   * We can't assume that calling code will do the right thing, and must be prepared
+//     to handle Kotlin method calls executing concurrently with or even after a call to
+//     `destroy`, and to handle multiple (possibly concurrent!) calls to `destroy`.
+//
+//   * We must never allow Rust code to operate on the underlying Rust struct after
+//     the destructor has been called, and must never call the destructor more than once.
+//     Doing so may trigger memory unsafety.
+//
+//   * To mitigate many of the risks of leaking memory and use-after-free unsafety, a `Cleaner`
+//     is implemented to call the destructor when the Kotlin object becomes unreachable.
+//     This is done in a background thread. This is not a panacea, and client code should be aware that
+//      1. the thread may starve if some there are objects that have poorly performing
+//     `drop` methods or do significant work in their `drop` methods.
+//      2. the thread is shared across the whole library. This can be tuned by using `android_cleaner = true`,
+//         or `android = true` in the [`kotlin` section of the `uniffi.toml` file](https://mozilla.github.io/uniffi-rs/kotlin/configuration.html).
+//
+// If we try to implement this with mutual exclusion on access to the pointer, there is the
+// possibility of a race between a method call and a concurrent call to `destroy`:
+//
+//    * Thread A starts a method call, reads the value of the pointer, but is interrupted
+//      before it can pass the pointer over the FFI to Rust.
+//    * Thread B calls `destroy` and frees the underlying Rust struct.
+//    * Thread A resumes, passing the already-read pointer value to Rust and triggering
+//      a use-after-free.
+//
+// One possible solution would be to use a `ReadWriteLock`, with each method call taking
+// a read lock (and thus allowed to run concurrently) and the special `destroy` method
+// taking a write lock (and thus blocking on live method calls). However, we aim not to
+// generate methods with any hidden blocking semantics, and a `destroy` method that might
+// block if called incorrectly seems to meet that bar.
+//
+// So, we achieve our goals by giving each instance an associated `AtomicLong` counter to track
+// the number of in-flight method calls, and an `AtomicBoolean` flag to indicate whether `destroy`
+// has been called. These are updated according to the following rules:
+//
+//    * The initial value of the counter is 1, indicating a live object with no in-flight calls.
+//      The initial value for the flag is false.
+//
+//    * At the start of each method call, we atomically check the counter.
+//      If it is 0 then the underlying Rust struct has already been destroyed and the call is aborted.
+//      If it is nonzero them we atomically increment it by 1 and proceed with the method call.
+//
+//    * At the end of each method call, we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+//    * When `destroy` is called, we atomically flip the flag from false to true.
+//      If the flag was already true we silently fail.
+//      Otherwise we atomically decrement and check the counter.
+//      If it has reached zero then we destroy the underlying Rust struct.
+//
+// Astute readers may observe that this all sounds very similar to the way that Rust's `Arc<T>` works,
+// and indeed it is, with the addition of a flag to guard against multiple calls to `destroy`.
+//
+// The overall effect is that the underlying Rust struct is destroyed only when `destroy` has been
+// called *and* all in-flight method calls have completed, avoiding violating any of the expectations
+// of the underlying Rust code.
+//
+// This makes a cleaner a better alternative to _not_ calling `destroy()` as
+// and when the object is finished with, but the abstraction is not perfect: if the Rust object's `drop`
+// method is slow, and/or there are many objects to cleanup, and it's on a low end Android device, then the cleaner
+// thread may be starved, and the app will leak memory.
+//
+// In this case, `destroy`ing manually may be a better solution.
+//
+// The cleaner can live side by side with the manual calling of `destroy`. In the order of responsiveness, uniffi objects
+// with Rust peers are reclaimed:
+//
+// 1. By calling the `destroy` method of the object, which calls `rustObject.free()`. If that doesn't happen:
+// 2. When the object becomes unreachable, AND the Cleaner thread gets to call `rustObject.free()`. If the thread is starved then:
+// 3. The memory is reclaimed when the process terminates.
+//
+// [1] https://stackoverflow.com/questions/24376768/can-java-finalize-an-object-when-it-is-still-in-scope/24380219
+//
+
+
+/**
+ * Arguments for the host role. Secrets are wiped after they are copied into the session.
+ * Do not log this value.
+ */
+public interface PairingHostInputInterface {
+    
+    companion object
+}
+
+/**
+ * Arguments for the host role. Secrets are wiped after they are copied into the session.
+ * Do not log this value.
+ */
+open class PairingHostInput: Disposable, AutoCloseable, PairingHostInputInterface
+{
+
+    constructor(pointer: Pointer) {
+        this.pointer = pointer
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(pointer))
+    }
+
+    /**
+     * This constructor can be used to instantiate a fake object. Only used for tests. Any
+     * attempt to actually use an object constructed this way will fail as there is no
+     * connected Rust object.
+     */
+    @Suppress("UNUSED_PARAMETER")
+    constructor(noPointer: NoPointer) {
+        this.pointer = null
+        this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(pointer))
+    }
+    /**
+     * Foreign constructor. The argument count is the pairing input; secrets are wiped after accept.
+     */
+    constructor(`stateDir`: kotlin.String, `offer`: kotlin.String, `accountId`: kotlin.String, `repoOwner`: kotlin.String, `repoName`: kotlin.String, `branch`: kotlin.String, `secretKey`: kotlin.String, `syncToken`: kotlin.String) :
+        this(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_constructor_pairinghostinput_new(
+        FfiConverterString.lower(`stateDir`),FfiConverterString.lower(`offer`),FfiConverterString.lower(`accountId`),FfiConverterString.lower(`repoOwner`),FfiConverterString.lower(`repoName`),FfiConverterString.lower(`branch`),FfiConverterString.lower(`secretKey`),FfiConverterString.lower(`syncToken`),_status)
+}
+    )
+
+    protected val pointer: Pointer?
+    protected val cleanable: UniffiCleaner.Cleanable
+
+    private val wasDestroyed = AtomicBoolean(false)
+    private val callCounter = AtomicLong(1)
+
+    override fun destroy() {
+        // Only allow a single call to this method.
+        // TODO: maybe we should log a warning if called more than once?
+        if (this.wasDestroyed.compareAndSet(false, true)) {
+            // This decrement always matches the initial count of 1 given at creation time.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable.clean()
+            }
+        }
+    }
+
+    @Synchronized
+    override fun close() {
+        this.destroy()
+    }
+
+    internal inline fun <R> callWithPointer(block: (ptr: Pointer) -> R): R {
+        // Check and increment the call counter, to keep the object alive.
+        // This needs a compare-and-set retry loop in case of concurrent updates.
+        do {
+            val c = this.callCounter.get()
+            if (c == 0L) {
+                throw IllegalStateException("${this.javaClass.simpleName} object has already been destroyed")
+            }
+            if (c == Long.MAX_VALUE) {
+                throw IllegalStateException("${this.javaClass.simpleName} call counter would overflow")
+            }
+        } while (! this.callCounter.compareAndSet(c, c + 1L))
+        // Now we can safely do the method call without the pointer being freed concurrently.
+        try {
+            return block(this.uniffiClonePointer())
+        } finally {
+            // This decrement always matches the increment we performed above.
+            if (this.callCounter.decrementAndGet() == 0L) {
+                cleanable.clean()
+            }
+        }
+    }
+
+    // Use a static inner class instead of a closure so as not to accidentally
+    // capture `this` as part of the cleanable's action.
+    private class UniffiCleanAction(private val pointer: Pointer?) : Runnable {
+        override fun run() {
+            pointer?.let { ptr ->
+                uniffiRustCall { status ->
+                    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_free_pairinghostinput(ptr, status)
+                }
+            }
+        }
+    }
+
+    fun uniffiClonePointer(): Pointer {
+        return uniffiRustCall() { status ->
+            UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_clone_pairinghostinput(pointer!!, status)
+        }
+    }
+
+    
+
+    
+    
+    companion object
+    
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePairingHostInput: FfiConverter<PairingHostInput, Pointer> {
+
+    override fun lower(value: PairingHostInput): Pointer {
+        return value.uniffiClonePointer()
+    }
+
+    override fun lift(value: Pointer): PairingHostInput {
+        return PairingHostInput(value)
+    }
+
+    override fun read(buf: ByteBuffer): PairingHostInput {
+        // The Rust code always writes pointers as 8 bytes, and will
+        // fail to compile if they don't fit.
+        return lift(Pointer(buf.getLong()))
+    }
+
+    override fun allocationSize(value: PairingHostInput) = 8UL
+
+    override fun write(value: PairingHostInput, buf: ByteBuffer) {
         // The Rust code always expects pointers written as 8 bytes,
         // and will fail to compile if they don't fit.
         buf.putLong(Pointer.nativeValue(lower(value)))
@@ -3488,6 +4256,41 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
 
 
 /**
+ * What the desktop shows: the announce QR and when it expires. No code.
+ */
+data class PairingHostView (
+    var `announce`: kotlin.String, 
+    var `expiresAt`: kotlin.Long
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePairingHostView: FfiConverterRustBuffer<PairingHostView> {
+    override fun read(buf: ByteBuffer): PairingHostView {
+        return PairingHostView(
+            FfiConverterString.read(buf),
+            FfiConverterLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PairingHostView) = (
+            FfiConverterString.allocationSize(value.`announce`) +
+            FfiConverterLong.allocationSize(value.`expiresAt`)
+    )
+
+    override fun write(value: PairingHostView, buf: ByteBuffer) {
+            FfiConverterString.write(value.`announce`, buf)
+            FfiConverterLong.write(value.`expiresAt`, buf)
+    }
+}
+
+
+
+/**
  * A stored passkey offered for sign-in; no secret material.
  */
 data class PasskeyEntry (
@@ -4458,6 +5261,108 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     uniffiRustCallWithError(GitpassException) { _status ->
     UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_open_vault_with_quick_unlock_key(
         FfiConverterString.lower(`root`),FfiConverterByteArray.lower(`key`),FfiConverterTypeUnlockOptions.lower(`options`),_status)
+}
+    )
+    }
+    
+
+    @Throws(GitpassException::class) fun `pairingHostAccept`(`input`: PairingHostInput): PairingHostView {
+            return FfiConverterTypePairingHostView.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_host_accept(
+        FfiConverterTypePairingHostInput.lower(`input`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Drop the host session when `state_dir` is the directory that accepted it.
+         */
+    @Throws(GitpassException::class) fun `pairingHostCancel`(`stateDir`: kotlin.String)
+        = 
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_host_cancel(
+        FfiConverterString.lower(`stateDir`),_status)
+}
+    
+    
+
+    @Throws(GitpassException::class) fun `pairingHostRelease`(`stateDir`: kotlin.String, `code`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_host_release(
+        FfiConverterString.lower(`stateDir`),FfiConverterString.lower(`code`),_status)
+}
+    )
+    }
+    
+
+    @Throws(GitpassException::class) fun `pairingJoinerBegin`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_begin(
+        _status)
+}
+    )
+    }
+    
+
+        /**
+         * Forget the joiner's ephemeral private key.
+         */ fun `pairingJoinerCancel`()
+        = 
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_cancel(
+        _status)
+}
+    
+    
+
+        /**
+         * Code for the phone to display. The desktop does not have a matching call.
+         */
+    @Throws(GitpassException::class) fun `pairingJoinerCode`(`announce`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_code(
+        FfiConverterString.lower(`announce`),_status)
+}
+    )
+    }
+    
+
+    @Throws(GitpassException::class) fun `pairingJoinerOpen`(`stateDir`: kotlin.String, `grant`: kotlin.String, `code`: kotlin.String): PairedSync {
+            return FfiConverterTypePairedSync.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_open(
+        FfiConverterString.lower(`stateDir`),FfiConverterString.lower(`grant`),FfiConverterString.lower(`code`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Synthetic vector JSON. Fake token and Secret Key only. `code` is what the phone would show.
+         */
+    @Throws(GitpassException::class) fun `pairingTestVector`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_test_vector(
+        _status)
+}
+    )
+    }
+    
+
+        /**
+         * Open the synthetic vector inside core and return the payload fields.
+         */
+    @Throws(GitpassException::class) fun `pairingTestVectorOpen`(): PairedSync {
+            return FfiConverterTypePairedSync.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_test_vector_open(
+        _status)
 }
     )
     }
