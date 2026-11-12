@@ -39,10 +39,8 @@ struct SettingsView: View {
                 }
                 Section(String(localized: "Sync")) {
                     Button(String(localized: "GitHub sync")) { showingSync = true }
-                    if let lastSyncMessage = store.lastSyncMessage {
-                        Text(lastSyncMessage).font(.footnote).foregroundStyle(Color.gitpassSecondary)
-                    }
-                    Text(String(localized: "Sync uses the GitHub API over HTTPS with the desktop's field-level merge rules. Whole-vault creation and deletion still go through desktop git sync."))
+                    SyncStatusLine(sync: store.sync)
+                    Text(String(localized: "Two-way sync with a GitHub repository you choose, on the same engine as the desktop app: field-level merge, deletes in both directions, conflicts kept fail-safe and listed."))
                         .font(.footnote)
                         .foregroundStyle(Color.gitpassSecondary)
                 }
@@ -74,135 +72,120 @@ struct SettingsView: View {
     }
 }
 
+/// One-line sync status (last success, syncing, failure, conflicts).
+struct SyncStatusLine: View {
+    @ObservedObject var sync: SyncCoordinator
+
+    var body: some View {
+        Text(Self.text(phase: sync.phase, lastSuccess: sync.lastSuccess, conflicts: sync.lastConflicts.count))
+            .font(.footnote)
+            .foregroundStyle(Color.gitpassSecondary)
+            .accessibilityIdentifier("sync-status")
+    }
+
+    static func text(phase: SyncCoordinator.Phase, lastSuccess: Date?, conflicts: Int) -> String {
+        switch phase {
+        case .notConfigured:
+            return String(localized: "Sync is not set up.")
+        case .syncing:
+            return String(localized: "Syncing…")
+        case .failed(let message):
+            return message
+        case .idle:
+            guard let lastSuccess else { return String(localized: "Not synced yet.") }
+            let when = lastSuccess.formatted(date: .abbreviated, time: .shortened)
+            if conflicts > 0 {
+                return String(localized: "Last synced \(when) · \(conflicts) conflict(s), local kept")
+            }
+            return String(localized: "Last synced \(when)")
+        }
+    }
+}
+
+/// GitHub sync settings, status and first pull. The repository, branch and
+/// PAT are always entered by the user; there is no default repository and
+/// no app-registration flow. The token field is never prefilled.
 struct SyncSetupView: View {
     @EnvironmentObject private var store: VaultStore
     @Environment(\.dismiss) private var dismiss
-    @State private var clientId = UserDefaults.standard.string(forKey: "gitpass.github.clientId") ?? ""
-    @State private var repo = UserDefaults.standard.string(forKey: "gitpass.github.repo") ?? "itsd0/gitpass-vault"
-    @State private var pat = ""
-    @State private var authMode = 0 // 0: Fine-grained PAT, 1: OAuth Device Flow
-    @State private var deviceCode: DeviceCodeResponse?
+    @State private var owner = ""
+    @State private var repo = ""
+    @State private var branch = ""
+    @State private var token = ""
+    @State private var tokenSaved = false
+    @State private var configured = false
     @State private var status = ""
     @State private var isWorking = false
-    @State private var tokenPresent = KeychainStore.shared.loadGitHubToken() != nil
-
-    private let sync = GitHubSyncService()
+    // First pull only (no vault on this device yet).
+    @State private var pullPassword = ""
+    @State private var pullSecretKey = ""
+    @State private var pullCancellation: SyncCancellation?
 
     var body: some View {
         NavigationStack {
             Form {
-                if tokenPresent {
-                    // Connected: show what was saved instead of an
-                    // empty form, plus a way to disconnect.
-                    Section(String(localized: "GitHub")) {
-                        HStack {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(Color.gitpassPrimary)
-                            Text(String(localized: "Connected"))
-                                .font(.headline)
-                                .foregroundStyle(Color.gitpassPrimary)
-                        }
-                        if !clientId.isEmpty {
-                            LabeledContent(String(localized: "Client ID")) {
-                                Text(clientId)
-                                    .font(.footnote.monospaced())
-                                    .foregroundStyle(Color.gitpassSecondary)
-                                    .textSelection(.enabled)
-                            }
-                        } else {
-                            Text(String(localized: "Connected using a Personal Access Token"))
-                                .font(.footnote)
-                                .foregroundStyle(Color.gitpassSecondary)
-                        }
-                        TextField(String(localized: "Vault repository (owner/repo)"), text: $repo)
-                            .autocapitalization(.none)
-                            .disableAutocorrection(true)
-                            .onSubmit { saveSettings() }
+                Section(String(localized: "Repository")) {
+                    TextField(String(localized: "Owner"), text: $owner)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField(String(localized: "Repository"), text: $repo)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    TextField(String(localized: "Branch"), text: $branch)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled()
+                    SecureField(
+                        tokenSaved
+                            ? String(localized: "Token saved (leave empty to keep it)")
+                            : String(localized: "Fine-grained token (github_pat_…)"),
+                        text: $token
+                    )
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    Button(String(localized: "Save")) { saveSettings() }
+                        .disabled(isWorking)
+                    if configured {
                         Button(role: .destructive) {
-                            KeychainStore.shared.deleteGitHubToken()
-                            tokenPresent = false
-                            status = String(localized: "Disconnected.")
+                            store.sync.settings.clear()
+                            store.sync.settingsChanged()
+                            load()
+                            status = String(localized: "Sync settings and token removed from this device.")
                         } label: {
                             Text(String(localized: "Disconnect GitHub"))
-                                .foregroundStyle(Color.gitpassPrimary)
                         }
+                        .disabled(isWorking)
                     }
-                } else {
-                    Section {
-                        Picker(String(localized: "Method"), selection: $authMode) {
-                            Text(String(localized: "Fine-grained PAT")).tag(0)
-                            Text(String(localized: "OAuth App")).tag(1)
-                        }
-                        .pickerStyle(.segmented)
+                    Text(String(localized: "Create a fine-grained personal access token on GitHub limited to only your vault repository with Contents: Read and write. It is stored in the Keychain on this device only and is never shown again."))
+                        .font(.footnote)
+                        .foregroundStyle(Color.gitpassSecondary)
+                }
+                if store.isUnlocked {
+                    Section(String(localized: "Sync")) {
+                        SyncStatusLine(sync: store.sync)
+                        SyncNowButton(sync: store.sync, enabled: configured && !isWorking)
                     }
-
-                    if authMode == 0 {
-                        Section(String(localized: "Fine-grained Personal Access Token")) {
-                            TextField(String(localized: "Vault repository (owner/repo)"), text: $repo)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                            SecureField(String(localized: "Token (github_pat_...)"), text: $pat)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                            Button(String(localized: "Connect with Personal Access Token")) {
-                                savePat()
+                    SyncConflictsSection(sync: store.sync)
+                } else if !store.vaultExists {
+                    Section(String(localized: "First pull (new device)")) {
+                        SecureField(String(localized: "Master password"), text: $pullPassword)
+                        TextField(String(localized: "Secret Key (A3-…)"), text: $pullSecretKey)
+                            .textInputAutocapitalization(.characters)
+                            .autocorrectionDisabled()
+                        if pullCancellation == nil {
+                            Button(String(localized: "Pull vault and unlock")) {
+                                Task { await runFirstPull() }
                             }
-                            .disabled(pat.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                            Text(String(localized: "Recommended: create a fine-grained Personal Access Token on GitHub (github.com/settings/tokens?type=beta) scoped ONLY to your vault repository (Repository access: Only select repositories -> choose your vault repo; Permissions: Contents: Read and write). Unlike OAuth Apps with the classic 'repo' scope, a fine-grained PAT cannot access any of your other repositories."))
-                                .font(.footnote)
-                                .foregroundStyle(Color.gitpassSecondary)
+                            .disabled(!configured || pullPassword.isEmpty || pullSecretKey.isEmpty)
+                        } else {
+                            Button(String(localized: "Cancel")) { pullCancellation?.cancel() }
                         }
-                    } else {
-                        Section(String(localized: "GitHub OAuth App")) {
-                            TextField(String(localized: "OAuth App client ID"), text: $clientId)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                            TextField(String(localized: "Vault repository (owner/repo)"), text: $repo)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                            Text(String(localized: "The client ID is an OAuth App identifier, not a secret. Create one at github.com/settings/developers (do not enable a client secret flow for a public device app) and paste its client ID here. The token it issues is stored in the Keychain."))
-                                .font(.footnote)
-                                .foregroundStyle(Color.gitpassSecondary)
-                        }
-                        Section {
-                            if let deviceCode {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(String(localized: "On another device, open:"))
-                                        .font(.footnote)
-                                    Text(deviceCode.verificationUri).font(.headline)
-                                    Text(String(localized: "Enter this code:"))
-                                        .font(.footnote)
-                                    Text(deviceCode.userCode).font(.largeTitle.monospaced())
-                                    Button(String(localized: "Copy code")) {
-                                        store.copyToClipboard(deviceCode.userCode)
-                                    }
-                                }
-                                Button(String(localized: "I authorized it — fetch token")) {
-                                    Task { await fetchToken() }
-                                }
-                                .disabled(isWorking)
-                            } else {
-                                Button(String(localized: "Connect with device code")) {
-                                    Task { await startDeviceFlow() }
-                                }
-                                .disabled(clientId.isEmpty || isWorking)
-                            }
-                        }
+                        Text(String(localized: "Downloads the vault from the repository above, checks it with your master password and Secret Key, and only then saves it on this device. Nothing is pushed."))
+                            .font(.footnote)
+                            .foregroundStyle(Color.gitpassSecondary)
                     }
                 }
-                Section(String(localized: "Sync")) {
-                    Button(String(localized: "Sync now")) {
-                        Task { await runSync() }
-                    }
-                    .disabled(!tokenPresent || isWorking)
-                    Button(String(localized: "Pull remote vault first (new device)")) {
-                        Task { await runFirstPull() }
-                    }
-                    .disabled(!tokenPresent || isWorking)
-                    if !status.isEmpty {
-                        Text(status).font(.footnote).foregroundStyle(Color.gitpassSecondary)
-                    }
+                if !status.isEmpty {
+                    Section { Text(status).font(.footnote).foregroundStyle(Color.gitpassSecondary) }
                 }
             }
             .gitpassBackground()
@@ -213,94 +196,110 @@ struct SyncSetupView: View {
                     Button(String(localized: "Done")) { dismiss() }
                 }
             }
+            .onAppear(perform: load)
+            .onDisappear {
+                pullCancellation?.cancel()
+                token = ""
+                pullPassword = ""
+                pullSecretKey = ""
+            }
         }
     }
 
-    private func savePat() {
-        let trimmedPat = pat.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedPat.isEmpty else { return }
-        saveSettings()
-        do {
-            try KeychainStore.shared.saveGitHubToken(trimmedPat)
-            tokenPresent = true
-            pat = ""
-            status = String(localized: "Connected with Personal Access Token.")
-        } catch {
-            status = error.localizedDescription
-        }
+    private func load() {
+        let settings = store.sync.settings
+        let target = settings.target
+        owner = target?.owner ?? ""
+        repo = target?.repo ?? ""
+        branch = target?.branch ?? ""
+        token = ""
+        tokenSaved = settings.hasToken
+        configured = settings.isConfigured
     }
 
-    /// Client ID and repo are not secrets, so UserDefaults is fine; the
-    /// token itself only ever lives in the Keychain.
     private func saveSettings() {
-        clientId = clientId.trimmingCharacters(in: .whitespacesAndNewlines)
-        UserDefaults.standard.set(clientId, forKey: "gitpass.github.clientId")
-        UserDefaults.standard.set(repo, forKey: "gitpass.github.repo")
-    }
-
-    private func startDeviceFlow() async {
-        saveSettings()
-        isWorking = true
-        defer { isWorking = false }
-        do {
-            deviceCode = try await sync.requestDeviceCode(clientId: clientId)
-            status = String(localized: "Enter the code on GitHub, then tap the fetch button.")
-        } catch {
-            status = error.localizedDescription
-        }
-    }
-
-    private func fetchToken() async {
-        guard let deviceCode else { return }
-        isWorking = true
-        defer { isWorking = false }
-        do {
-            let token = try await sync.pollForToken(
-                clientId: clientId, deviceCode: deviceCode.deviceCode, initialInterval: deviceCode.interval
-            )
-            try KeychainStore.shared.saveGitHubToken(token)
-            saveSettings()
-            tokenPresent = true
-            self.deviceCode = nil
-            status = String(localized: "GitHub connected.")
-        } catch {
-            status = error.localizedDescription
-        }
-    }
-
-    private func runSync() async {
-        saveSettings()
-        guard let vault = store.vault,
-              let password = store.sessionPassword,
-              let secretKey = store.sessionSecretKey
-        else {
-            status = String(localized: "Unlock the vault first, then sync.")
+        guard let target = SyncTarget.validated(owner: owner, repo: repo, branch: branch) else {
+            status = SyncSettingsError.invalidTarget.errorDescription ?? ""
             return
         }
-        isWorking = true
-        defer { isWorking = false }
         do {
-            let report = try await sync.sync(
-                vault: vault, localRoot: store.vaultRoot,
-                password: password, secretKey: secretKey, repo: repo
-            )
-            try? store.refresh()
-            store.lastSyncMessage = report.message
-            status = report.message
+            try store.sync.settings.save(target: target, token: token)
+            store.sync.settingsChanged()
+            load()
+            status = String(localized: "Saved.")
         } catch {
-            status = error.localizedDescription
+            token = ""
+            status = syncErrorMessage(error)
         }
     }
 
     private func runFirstPull() async {
-        saveSettings()
-        isWorking = true
-        defer { isWorking = false }
-        do {
-            let report = try await sync.firstPull(localRoot: store.vaultRoot, repo: repo)
-            status = report.message
-        } catch {
-            status = error.localizedDescription
+        let settings = store.sync.settings
+        guard let target = settings.target, let savedToken = settings.token() else {
+            status = String(localized: "Save the repository and token first.")
+            return
+        }
+        let password = pullPassword
+        let secretKey = pullSecretKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        let root = store.vaultRoot
+        let cancellation = SyncCancellation()
+        pullCancellation = cancellation
+        status = String(localized: "Pulling…")
+        let result: Result<Void, Error> = await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .userInitiated).async {
+                cont.resume(returning: Result {
+                    try GitHubSyncService().firstPull(
+                        localRoot: root, target: target, token: savedToken,
+                        password: password, secretKey: secretKey, cancellation: cancellation
+                    )
+                })
+            }
+        }
+        pullCancellation = nil
+        switch result {
+        case .success:
+            do {
+                try store.unlock(password: password, secretKey: secretKey)
+                pullPassword = ""
+                pullSecretKey = ""
+                dismiss()
+            } catch {
+                status = error.localizedDescription
+            }
+        case .failure(let error):
+            status = syncErrorMessage(error)
+        }
+    }
+}
+
+struct SyncNowButton: View {
+    @ObservedObject var sync: SyncCoordinator
+    let enabled: Bool
+
+    var body: some View {
+        Button(String(localized: "Sync now")) {
+            Task { await sync.syncNow() }
+        }
+        .disabled(!enabled || sync.phase == .syncing)
+        .accessibilityIdentifier("sync-now")
+    }
+}
+
+/// Conflicts from the last sync (already resolved fail-safe: local kept).
+/// One line each with ids and field names only, never item data.
+struct SyncConflictsSection: View {
+    @ObservedObject var sync: SyncCoordinator
+
+    var body: some View {
+        if !sync.lastConflicts.isEmpty {
+            Section(String(localized: "Conflicts in the last sync")) {
+                ForEach(sync.lastConflicts, id: \.self) { line in
+                    Text(line).font(.footnote.monospaced())
+                }
+                Text(String(localized: "Each conflict was resolved without losing data (the local value was kept); review these items."))
+                    .font(.footnote)
+                    .foregroundStyle(Color.gitpassSecondary)
+            }
         }
     }
 }

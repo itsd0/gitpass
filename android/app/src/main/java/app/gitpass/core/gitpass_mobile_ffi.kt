@@ -794,6 +794,8 @@ internal open class UniffiVTableCallbackInterfaceHttpTransport(
 
 
 
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -826,6 +828,8 @@ fun uniffi_gitpass_mobile_ffi_checksum_func_merge_item_records(
 fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pull_github_snapshot(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_totp_code(
 ): Short
@@ -981,6 +985,8 @@ fun uniffi_gitpass_mobile_ffi_fn_func_open_vault(`root`: RustBuffer.ByValue,`pas
 ): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_func_open_vault_with(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
+fun uniffi_gitpass_mobile_ffi_fn_func_pull_github_snapshot(`root`: RustBuffer.ByValue,`target`: RustBuffer.ByValue,`token`: RustBuffer.ByValue,`transport`: Pointer,`cancellation`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_totp_code(`secret`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_validate_first_pull_snapshot(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1136,6 +1142,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with() != 39303.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pull_github_snapshot() != 28152.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_totp_code() != 28435.toShort()) {
@@ -3869,6 +3878,29 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     uniffiRustCallWithError(GitpassException) { _status ->
     UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_open_vault_with(
         FfiConverterString.lower(`root`),FfiConverterString.lower(`password`),FfiConverterString.lower(`secretKey`),FfiConverterTypeUnlockOptions.lower(`options`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * First pull for a device with no vault yet (#456): download the vault files
+         * at the branch head into `root` on the shared core GitHub transport.
+         *
+         * `root` must be a PRIVATE staging directory that does not exist yet or is
+         * empty; it is never an existing vault (refused, nothing written). Every
+         * path is checked against core's allowlist and every blob against its git
+         * id by core before anything is written; foreign files, symlinks, oversized
+         * or truncated trees are refused. Nothing is decrypted or authenticated here:
+         * the caller must run [`crate::validate_first_pull_snapshot`] on `root` with
+         * the Master Password and Secret Key before activating it, and delete `root`
+         * on any failure. Read-only on the remote. Returns the pulled head.
+         */
+    @Throws(GitpassException::class) fun `pullGithubSnapshot`(`root`: kotlin.String, `target`: GitHubSyncTarget, `token`: kotlin.String, `transport`: HttpTransport, `cancellation`: SyncCancellation): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pull_github_snapshot(
+        FfiConverterString.lower(`root`),FfiConverterTypeGitHubSyncTarget.lower(`target`),FfiConverterString.lower(`token`),FfiConverterTypeHttpTransport.lower(`transport`),FfiConverterTypeSyncCancellation.lower(`cancellation`),_status)
 }
     )
     }

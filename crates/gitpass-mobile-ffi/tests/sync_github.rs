@@ -387,3 +387,67 @@ fn foreign_file_on_the_remote_is_refused_without_local_changes() {
     assert!(m.contains("refusing"), "{m}");
     assert_eq!(vb.list_items(d.vid.clone()).unwrap().len(), before);
 }
+
+fn pull(root: &Path, gh: &FakeGitHub) -> Result<String, GitpassError> {
+    pull_github_snapshot(root.to_str().unwrap().into(), target(), TOKEN.into(), Arc::new(gh.clone()), SyncCancellation::new())
+}
+
+#[test]
+fn first_pull_downloads_a_verifiable_snapshot_that_syncs_as_a_no_op() {
+    let d = devices();
+    let c = d._dir.path().join("pulled");
+    let head = pull(&c, &d.gh).unwrap();
+    assert_eq!(Some(head.clone()), d.gh.0.lock().unwrap().head);
+    assert!(!c.join(".gitpass-state.json").exists(), "local state is never pulled");
+    validate_first_pull_snapshot(c.to_str().unwrap().into(), PW.into(), d.sk.clone()).unwrap();
+    let vc = open(&c, &d.sk);
+    assert_eq!(vc.list_items(d.vid.clone()).unwrap().len(), 2);
+    let r = sync(&vc, &d.gh).unwrap();
+    assert!(!r.pushed && !r.local_changed && r.conflicts.is_empty(), "{r:?}");
+}
+
+#[test]
+fn first_pull_is_read_only_and_refuses_unsafe_destinations_and_remotes() {
+    let d = devices();
+    let writes_before = d.gh.0.lock().unwrap().requests.iter().filter(|r| !r.starts_with("GET")).count();
+    // An existing vault (or any non-empty directory) is never overwritten.
+    let before = fs::read(d.b.join("manifest.enc")).unwrap();
+    assert!(msg(pull(&d.b, &d.gh).unwrap_err()).contains("refusing"));
+    assert_eq!(fs::read(d.b.join("manifest.enc")).unwrap(), before);
+    // An empty repository: nothing to pull, nothing written.
+    let empty = FakeGitHub::default();
+    let e = d._dir.path().join("empty");
+    assert!(msg(pull(&e, &empty).unwrap_err()).contains("no vault"));
+    assert!(!e.exists());
+    // Cancelled before start: no request.
+    let n = d.gh.0.lock().unwrap().requests.len();
+    let cancel = SyncCancellation::new();
+    cancel.cancel();
+    let x = d._dir.path().join("x");
+    let m = msg(pull_github_snapshot(x.to_str().unwrap().into(), target(), TOKEN.into(), Arc::new(d.gh.clone()), cancel).unwrap_err());
+    assert!(m.contains("cancelled"), "{m}");
+    assert_eq!(d.gh.0.lock().unwrap().requests.len(), n);
+    assert!(!x.exists());
+    // Classic token refused up front.
+    let m = msg(pull_github_snapshot(x.to_str().unwrap().into(), target(), "ghp_classic".into(), Arc::new(d.gh.clone()), SyncCancellation::new()).unwrap_err());
+    assert!(m.contains("invalid"), "{m}");
+    // A foreign file on the remote: refused, nothing written.
+    {
+        let mut s = d.gh.0.lock().unwrap();
+        let head = s.head.clone().unwrap();
+        let (tree, _) = s.commits[&head].clone();
+        let mut pairs = s.trees[&tree].clone();
+        let blob = git_blob_sha(b"hello");
+        s.blobs.insert(blob.clone(), b"hello".to_vec());
+        pairs.push(("notes.txt".into(), blob));
+        let t = git_tree_id(&pairs).unwrap();
+        s.trees.insert(t.clone(), pairs);
+        let c = s.new_commit(&t, vec![head]);
+        s.head = Some(c);
+    }
+    let f = d._dir.path().join("foreign");
+    assert!(msg(pull(&f, &d.gh).unwrap_err()).contains("refusing"));
+    assert!(!f.exists());
+    let writes_after = d.gh.0.lock().unwrap().requests.iter().filter(|r| !r.starts_with("GET")).count();
+    assert_eq!(writes_before, writes_after, "first pull never writes to the remote");
+}

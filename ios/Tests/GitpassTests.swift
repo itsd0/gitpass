@@ -6,20 +6,6 @@ import XCTest
 // as a library. The app target is only the test host (it launches the
 // app binary on the simulator; the tests do not call app UI code).
 
-final class StubHTTPSession: HTTPSession {
-    var handler: (URLRequest) throws -> (Data, HTTPURLResponse) = { _ in
-        throw URLError(.badServerResponse)
-    }
-
-    func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try handler(request)
-    }
-}
-
-private func httpResponse(url: URL, status: Int) -> HTTPURLResponse {
-    HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
-}
-
 final class GitpassTests: XCTestCase {
 
     // MARK: - Rust FFI (real vault, real crypto)
@@ -240,44 +226,6 @@ final class GitpassTests: XCTestCase {
         let loaded = try store.loadUnlockCredentials()
         XCTAssertEqual(loaded.password, "pw")
         XCTAssertEqual(loaded.secretKey, "A3-TEST")
-    }
-
-    // MARK: - Sync service (stubbed network, no real GitHub calls)
-
-    func testDeviceCodeParsing() async throws {
-        let stub = StubHTTPSession()
-        stub.handler = { request in
-            XCTAssertEqual(request.url?.absoluteString, "https://github.com/login/device/code")
-            XCTAssertEqual(request.httpMethod, "POST")
-            let json = """
-            {"device_code":"dev-1","user_code":"ABCD-EFGH","verification_uri":"https://github.com/login/device","expires_in":900,"interval":5}
-            """
-            return (Data(json.utf8), httpResponse(url: request.url!, status: 200))
-        }
-        let service = GitHubSyncService(session: stub)
-        let code = try await service.requestDeviceCode(clientId: "test-client")
-        XCTAssertEqual(code.deviceCode, "dev-1")
-        XCTAssertEqual(code.userCode, "ABCD-EFGH")
-        XCTAssertEqual(code.interval, 5)
-    }
-
-    func testGitBlobSHAEmpty() {
-        // The well-known git hash of an empty blob.
-        XCTAssertEqual(
-            GitHubSyncService.gitBlobSHA(for: Data()),
-            "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
-        )
-    }
-
-    func testSyncablePaths() {
-        XCTAssertFalse(GitHubSyncService.isSyncable(path: ".gitpass-state.json"))
-        XCTAssertFalse(GitHubSyncService.isSyncable(path: ".gitpass-device.json"))
-        XCTAssertFalse(GitHubSyncService.isSyncable(path: ".git/config"))
-        XCTAssertFalse(GitHubSyncService.isSyncable(path: "../escape.json"))
-        XCTAssertFalse(GitHubSyncService.isSyncable(path: "items/../../escape.json"))
-        XCTAssertFalse(GitHubSyncService.isSyncable(path: "/etc/passwd"))
-        XCTAssertTrue(GitHubSyncService.isSyncable(path: "format.json"))
-        XCTAssertTrue(GitHubSyncService.isSyncable(path: "vaults/abc/items/xyz.enc"))
     }
 }
 

@@ -33,7 +33,7 @@ pub use first_pull::validate_first_pull_snapshot;
 mod sync;
 pub use sync::{
     GitHubSyncTarget, HttpHeader, HttpTransport, HttpTransportError, HttpTransportRequest, HttpTransportResponse,
-    SyncCancellation, GitHubSyncReport,
+    SyncCancellation, GitHubSyncReport, pull_github_snapshot,
 };
 
 uniffi::setup_scaffolding!();

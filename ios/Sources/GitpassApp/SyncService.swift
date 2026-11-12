@@ -1,444 +1,608 @@
-import CryptoKit
 import Foundation
 
-/// GitHub sync for gitpass iOS.
+/// GitHub two-way sync for gitpass iOS on the shared core engine (#456).
 ///
-/// Transport is the GitHub REST / Git Data API over HTTPS, not the
-/// `git` CLI (iOS has no git binary). The conflict rules are the
-/// desktop's: field-level merge from `gitpass-core`
-/// (`merge_item_records`), where the higher field clock wins and an
-/// equal clock with different values keeps the local value and is
-/// recorded as a conflict. Nothing about the merge is re-implemented
-/// in Swift.
+/// The merge, delete propagation, rollback and foreign-file checks, the
+/// account/KDF guard and the whole GitHub Git Data API protocol run in
+/// `gitpass-core` through the bridge (`Vault.syncGithub`, the same engine the
+/// desktop, CLI and Android use). First pull on a new device is
+/// `pullGithubSnapshot` (core transport, allowlist and blob-id checks) followed
+/// by `validateFirstPullSnapshot` (full authentication with the Master
+/// Password and Secret Key) before the snapshot is moved into place. Swift
+/// only supplies the HTTPS round trip (`GitHubHTTPSTransport`), stores the
+/// non-secret target and the PAT (Keychain), and schedules syncs. Swift never
+/// parses GitHub JSON or vault data for sync and implements no crypto.
 ///
-/// Scope of this first version, stated plainly so nobody mistakes it
-/// for full desktop sync:
-///  - Items are merged within vaults that exist on both sides.
-///  - A vault that exists on only one side aborts the sync without
-///    changing local data (the desktop `sync --merge` rule for
-///    local-only vaults, extended to remote-only vaults, because the
-///    encrypted manifest cannot be rebuilt from the iOS side for a
-///    whole new vault). Creating a vault on a new device still goes
-///    through a first pull (whole-tree copy, below) or desktop git.
-///  - A first sync on a device with no local vault is a whole-tree
-///    pull from the remote, then a normal unlock.
-///  - Uploads are a single Git Data API commit whose parent is the
-///    fetched remote HEAD; the ref update is not forced, so if the
-///    remote moved in between, the update fails and the user retries
-///    instead of overwriting someone else's push.
-///  - Local-only files (`.gitpass-state.json`, the local device
-///    registry file, backups) are never uploaded, matching the
-///    desktop `.gitignore` behaviour for local state.
-///  - This service never touches any repository other than the one
-///    the user configures in Settings. The default is
-///    `itsd0/gitpass-vault`, and the token is scoped by the OAuth
-///    app the user connects, not by this code.
-protocol HTTPSession {
-    func data(for request: URLRequest) async throws -> (Data, URLResponse)
+/// There is no default repository and no app-registration flow: the owner, repository,
+/// branch and a fine-grained PAT (`github_pat_…`, Contents read/write on that
+/// one repository) are entered by the user. The token is never logged,
+/// displayed, put in a URL or returned in an error.
+
+// MARK: - Target
+
+/// The GitHub repository and branch holding the vault. Not secret.
+struct SyncTarget: Equatable {
+    let owner: String
+    let repo: String
+    let branch: String
+
+    /// Trims and checks the parts (core validates again). `nil` when invalid.
+    static func validated(owner: String, repo: String, branch: String) -> SyncTarget? {
+        let o = owner.trimmingCharacters(in: .whitespacesAndNewlines)
+        let r = repo.trimmingCharacters(in: .whitespacesAndNewlines)
+        let b = branch.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard validOwner(o), validRepo(r), validBranch(b) else { return nil }
+        return SyncTarget(owner: o, repo: r, branch: b)
+    }
+
+    var ffi: GitHubSyncTarget { GitHubSyncTarget(owner: owner, repo: repo, branch: branch) }
+    var display: String { "\(owner)/\(repo) (\(branch))" }
+
+    private static func ascii(_ s: String, _ allowed: (Character) -> Bool) -> Bool {
+        s.allSatisfy { $0.isASCII && allowed($0) }
+    }
+
+    static func validOwner(_ s: String) -> Bool {
+        (1...39).contains(s.count) && !s.hasPrefix("-")
+            && ascii(s) { $0.isLetter || $0.isNumber || $0 == "-" }
+    }
+
+    static func validRepo(_ s: String) -> Bool {
+        (1...100).contains(s.count) && s != "." && s != ".."
+            && ascii(s) { $0.isLetter || $0.isNumber || $0 == "-" || $0 == "_" || $0 == "." }
+    }
+
+    static func validBranch(_ s: String) -> Bool {
+        guard (1...255).contains(s.count), !s.hasPrefix("/"), !s.hasSuffix("/"),
+              !s.hasPrefix("-"), !s.hasSuffix("."), !s.hasSuffix(".lock"),
+              !s.contains(".."), !s.contains("//"), !s.contains("@{")
+        else { return false }
+        return ascii(s) { c in
+            guard let v = c.asciiValue, v > 32, v < 127 else { return false }
+            return !"~^:?*[\\".contains(c)
+        }
+    }
 }
 
-extension URLSession: HTTPSession {}
-
-struct DeviceCodeResponse: Decodable {
-    var deviceCode: String
-    var userCode: String
-    var verificationUri: String
-    var expiresIn: Int
-    var interval: Int
+/// Fine-grained PATs only (core enforces the same); printable ASCII, bounded.
+func isValidSyncToken(_ token: String) -> Bool {
+    token.hasPrefix("github_pat_") && (20...512).contains(token.count)
+        && token.unicodeScalars.allSatisfy { (33...126).contains($0.value) }
 }
 
-struct GitHubTreeEntry: Decodable {
-    var path: String
-    var mode: String?
-    var type: String
-    var sha: String
-    var url: String?
+// MARK: - Settings (target in UserDefaults, token in the Keychain)
+
+protocol SyncTokenStore: AnyObject {
+    func saveGitHubToken(_ token: String) throws
+    func loadGitHubToken() -> String?
+    func deleteGitHubToken()
 }
 
-struct GitHubTreeResponse: Decodable {
-    var sha: String
-    var tree: [GitHubTreeEntry]
-}
+extension KeychainStore: SyncTokenStore {}
 
-struct GitHubBlobResponse: Decodable {
-    var content: String
-    var encoding: String
-}
-
-struct GitHubRefResponse: Decodable {
-    struct Object: Decodable { var sha: String }
-    var object: Object
-}
-
-struct GitHubCommitResponse: Decodable {
-    var sha: String
-}
-
-struct SyncReport: Equatable {
-    var merged: Int
-    var addedFromRemote: Int
-    var uploadedFiles: Int
-    var message: String
-}
-
-enum SyncError: Error, LocalizedError {
-    case notConfigured
-    case http(Int, String)
-    case invalidResponse
-    case vaultsDiffer(String)
-    case tokenExpired
+enum SyncSettingsError: Error, LocalizedError, Equatable {
+    case invalidTarget
+    case invalidToken
+    case missingToken
 
     var errorDescription: String? {
         switch self {
-        case .notConfigured: return "GitHub sync is not configured. Connect it in Settings first."
-        case .http(let code, let body): return "GitHub returned HTTP \(code): \(body.prefix(200))"
-        case .invalidResponse: return "GitHub returned an unexpected response."
-        case .vaultsDiffer(let detail): return detail
-        case .tokenExpired: return "The GitHub token was rejected. Reconnect in Settings."
+        case .invalidTarget: return String(localized: "Enter a valid owner, repository and branch.")
+        case .invalidToken: return String(localized: "Use a fine-grained personal access token (starts with github_pat_).")
+        case .missingToken: return String(localized: "Enter a fine-grained personal access token.")
         }
     }
 }
 
-final class GitHubSyncService {
-    private let session: HTTPSession
-    private let keychain: KeychainStore
+final class SyncSettingsStore {
+    private let defaults: UserDefaults
+    private let tokens: SyncTokenStore
 
-    init(session: HTTPSession = URLSession.shared, keychain: KeychainStore = .shared) {
-        self.session = session
-        self.keychain = keychain
+    static let ownerKey = "gitpass.sync.owner"
+    static let repoKey = "gitpass.sync.repo"
+    static let branchKey = "gitpass.sync.branch"
+    static let lastSuccessKey = "gitpass.sync.lastSuccess"
+
+    init(defaults: UserDefaults = .standard, tokens: SyncTokenStore = KeychainStore.shared) {
+        self.defaults = defaults
+        self.tokens = tokens
+        migrateLegacy()
     }
 
-    // MARK: - Device flow
-
-    /// Step 1 of GitHub device flow. The client ID is an OAuth App
-    /// identifier, not a secret; the user enters it in Settings
-    /// (their own app, or one they were given). It is stored in
-    /// UserDefaults, never in the Keychain, and never logged.
-    func requestDeviceCode(clientId: String) async throws -> DeviceCodeResponse {
-        var request = URLRequest(url: URL(string: "https://github.com/login/device/code")!)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Accept")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(
-            withJSONObject: ["client_id": clientId, "scope": "repo"]
-        )
-        let (data, response) = try await session.data(for: request)
-        try check(response: response, data: data)
-        let decoder = JSONDecoder()
-        decoder.keyDecodingStrategy = .convertFromSnakeCase
-        return try decoder.decode(DeviceCodeResponse.self, from: data)
-    }
-
-    /// Step 2: poll until the user authorizes, the code expires, or
-    /// the caller cancels the task. `authorization_pending` and
-    /// `slow_down` are handled per the device-flow spec.
-    func pollForToken(clientId: String, deviceCode: String, initialInterval: Int) async throws -> String {
-        var interval = max(initialInterval, 1)
-        let deadline = Date().addingTimeInterval(10 * 60)
-        while Date() < deadline {
-            try await Task.sleep(nanoseconds: UInt64(interval) * 1_000_000_000)
-            var request = URLRequest(url: URL(string: "https://github.com/login/oauth/access_token")!)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Accept")
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: [
-                "client_id": clientId,
-                "device_code": deviceCode,
-                "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
-            ])
-            let (data, response) = try await session.data(for: request)
-            try check(response: response, data: data)
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                throw SyncError.invalidResponse
-            }
-            if let token = json["access_token"] as? String, !token.isEmpty {
-                return token
-            }
-            switch json["error"] as? String {
-            case "authorization_pending": break
-            case "slow_down": interval += 5
-            case "expired_token": throw SyncError.tokenExpired
-            case "access_denied": throw SyncError.tokenExpired
-            default: break
-            }
-        }
-        throw SyncError.tokenExpired
-    }
-
-    // MARK: - API helpers
-
-    private func check(response: URLResponse, data: Data) throws {
-        guard let http = response as? HTTPURLResponse else { throw SyncError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else {
-            if http.statusCode == 401 { throw SyncError.tokenExpired }
-            throw SyncError.http(http.statusCode, String(data: data, encoding: .utf8) ?? "")
+    /// A token saved by an earlier version that is not a fine-grained PAT is
+    /// deleted: core refuses it, and the user re-enters the repository and a
+    /// PAT explicitly (earlier settings keys are never read).
+    private func migrateLegacy() {
+        if let token = tokens.loadGitHubToken(), !isValidSyncToken(token) {
+            tokens.deleteGitHubToken()
         }
     }
 
-    private func api(
-        token: String, path: String, method: String = "GET", body: [String: Any]? = nil
-    ) async throws -> (Data, HTTPURLResponse) {
-        var request = URLRequest(url: URL(string: "https://api.github.com\(path)")!)
-        request.httpMethod = method
-        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("gitpass-ios", forHTTPHeaderField: "User-Agent")
-        if let body {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-        }
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw SyncError.invalidResponse }
-        try check(response: response, data: data)
-        return (data, http)
+    var target: SyncTarget? {
+        guard let o = defaults.string(forKey: Self.ownerKey),
+              let r = defaults.string(forKey: Self.repoKey),
+              let b = defaults.string(forKey: Self.branchKey)
+        else { return nil }
+        return SyncTarget.validated(owner: o, repo: r, branch: b)
     }
 
-    /// SHA-1 of a git blob object (`blob <len>\0<content>`). Used to
-    /// skip unchanged files on upload. This is a content-addressing
-    /// hash for git, not a security hash; no secret is hashed here.
-    static func gitBlobSHA(for data: Data) -> String {
-        var header = Data("blob \(data.count)\0".utf8)
-        header.append(data)
-        return Insecure.SHA1.hash(data: header).map { String(format: "%02x", $0) }.joined()
+    var hasToken: Bool { token() != nil }
+
+    /// The saved PAT, only for the transport. Never display or log it.
+    func token() -> String? {
+        guard let t = tokens.loadGitHubToken(), isValidSyncToken(t) else { return nil }
+        return t
     }
 
-    private static let localOnlyFiles: Set<String> = [
-        ".gitpass-state.json",
-        ".gitpass-device.json",
-    ]
+    var isConfigured: Bool { target != nil && hasToken }
 
-    static func isSyncable(path: String) -> Bool {
-        // Remote tree paths are untrusted: never let one escape the
-        // vault directory (absolute paths, `..` or empty components).
-        if path.isEmpty || path.hasPrefix("/") { return false }
-        if path.split(separator: "/", omittingEmptySubsequences: false)
-            .contains(where: { $0.isEmpty || $0 == "." || $0 == ".." }) { return false }
-        if localOnlyFiles.contains(path) { return false }
-        if path.contains("backup") { return false }
-        if path.hasPrefix(".git/") { return false }
-        return true
-    }
-
-    // MARK: - Sync
-
-    private struct RemoteSnapshot {
-        var branch: String
-        var headSHA: String
-        var tree: [GitHubTreeEntry]
-    }
-
-    private func fetchRemote(token: String, repo: String) async throws -> RemoteSnapshot {
-        let repoPath = "/repos/\(repo)"
-        let (repoData, _) = try await api(token: token, path: repoPath)
-        guard let repoJson = try JSONSerialization.jsonObject(with: repoData) as? [String: Any],
-              let branch = repoJson["default_branch"] as? String
-        else { throw SyncError.invalidResponse }
-        // A 404 on the branch ref means an empty repository (no commits yet).
-        do {
-            let (refData, _) = try await api(token: token, path: "\(repoPath)/git/ref/heads/\(branch)")
-            let refJson = try JSONDecoder().decode(GitHubRefResponse.self, from: refData)
-            let headSHA = refJson.object.sha
-            let (treeData, _) = try await api(
-                token: token, path: "\(repoPath)/git/trees/\(headSHA)?recursive=1"
-            )
-            let tree = try JSONDecoder().decode(GitHubTreeResponse.self, from: treeData).tree
-                .filter { $0.type == "blob" && Self.isSyncable(path: $0.path) }
-            return RemoteSnapshot(branch: branch, headSHA: headSHA, tree: tree)
-        } catch SyncError.http(404, _) {
-            return RemoteSnapshot(branch: branch, headSHA: "", tree: [])
-        }
-    }
-
-    private func downloadTree(token: String, repo: String, entries: [GitHubTreeEntry], to staging: URL) async throws {
-        let fileManager = FileManager.default
-        try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
-        for entry in entries {
-            let (blobData, _) = try await api(token: token, path: "/repos/\(repo)/git/blobs/\(entry.sha)")
-            let blob = try JSONDecoder().decode(GitHubBlobResponse.self, from: blobData)
-            guard blob.encoding == "base64",
-                  let content = Data(base64Encoded: blob.content.replacingOccurrences(of: "\n", with: ""))
-            else { throw SyncError.invalidResponse }
-            let dest = staging.appendingPathComponent(entry.path)
-            try fileManager.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try content.write(to: dest)
-        }
-    }
-
-    /// First pull for a device with no local vault yet: downloads the
-    /// whole remote tree into `localRoot`. The caller then unlocks
-    /// with the master password + Secret Key. If the remote is empty,
-    /// nothing is copied and the report says so.
-    func firstPull(localRoot: URL, repo: String) async throws -> SyncReport {
-        guard let token = keychain.loadGitHubToken() else { throw SyncError.notConfigured }
-        let remote = try await fetchRemote(token: token, repo: repo)
-        if remote.tree.isEmpty {
-            return SyncReport(merged: 0, addedFromRemote: 0, uploadedFiles: 0,
-                              message: "The remote repository is empty. Create an account in the app first, then sync to push it.")
-        }
-        let fileManager = FileManager.default
-        let staging = fileManager.temporaryDirectory
-            .appendingPathComponent("gitpass-sync-staging-\(UUID().uuidString)")
-        defer { try? fileManager.removeItem(at: staging) }
-        try await downloadTree(token: token, repo: repo, entries: remote.tree, to: staging)
-        for entry in remote.tree {
-            let src = staging.appendingPathComponent(entry.path)
-            let dest = localRoot.appendingPathComponent(entry.path)
-            try fileManager.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if fileManager.fileExists(atPath: dest.path) { try fileManager.removeItem(at: dest) }
-            try fileManager.copyItem(at: src, to: dest)
-        }
-        return SyncReport(merged: 0, addedFromRemote: remote.tree.count, uploadedFiles: 0,
-                          message: "Pulled the remote vault. Unlock it to continue.")
-    }
-
-    /// Runs one sync against `repo` (e.g. `itsd0/gitpass-vault`).
-    /// `vault` is the already-unlocked local vault, `password` /
-    /// `secretKey` are only used to open the staged remote copy for
-    /// record comparison; they are not stored by this service.
-    func sync(
-        vault: Vault, localRoot: URL, password: String, secretKey: String, repo: String
-    ) async throws -> SyncReport {
-        guard let token = keychain.loadGitHubToken() else { throw SyncError.notConfigured }
-        let repoPath = "/repos/\(repo)"
-        let remote = try await fetchRemote(token: token, repo: repo)
-        let remoteTree = remote.tree
-        let headSHA = remote.headSHA
-        let branch = remote.branch
-
-        let fileManager = FileManager.default
-        let staging = fileManager.temporaryDirectory
-            .appendingPathComponent("gitpass-sync-staging-\(UUID().uuidString)")
-        defer { try? fileManager.removeItem(at: staging) }
-        try await downloadTree(token: token, repo: repo, entries: remoteTree, to: staging)
-
-        if remoteTree.isEmpty {
-            // Remote is empty: upload the local tree as the first commit.
-            let uploaded = try await uploadLocalTree(
-                token: token, repoPath: repoPath, branch: branch, headSHA: headSHA,
-                localRoot: localRoot, remoteTree: []
-            )
-            return SyncReport(merged: 0, addedFromRemote: 0, uploadedFiles: uploaded,
-                              message: "Pushed the local vault to an empty remote.")
-        }
-
-        // Merge within shared vaults.
-        let remoteVault: Vault
-        do {
-            remoteVault = try openVault(
-                root: staging.path, password: password, secretKey: secretKey
-            )
-        } catch {
-            throw SyncError.vaultsDiffer("The remote vault could not be opened with these credentials. Nothing was changed.")
-        }
-        let localVaultIds = Set(try vault.listVaults().map(\.id))
-        let remoteVaultIds = Set(try remoteVault.listVaults().map(\.id))
-        if localVaultIds != remoteVaultIds {
-            let onlyLocal = localVaultIds.subtracting(remoteVaultIds)
-            let onlyRemote = remoteVaultIds.subtracting(localVaultIds)
-            throw SyncError.vaultsDiffer(
-                "Vaults differ (local-only: \(onlyLocal.sorted().joined(separator: ", ")); " +
-                "remote-only: \(onlyRemote.sorted().joined(separator: ", "))). " +
-                "Sync does not create or delete whole vaults; use desktop git sync for vault changes. Nothing was changed."
-            )
-        }
-
-        var merged = 0
-        var added = 0
-        for vid in localVaultIds {
-            let localItems = try vault.listItems(vaultId: vid)
-            let localIds = Set(localItems.map(\.id))
-            let remoteItems = try remoteVault.listItems(vaultId: vid)
-            let remoteIds = Set(remoteItems.map(\.id))
-            for iid in remoteIds.subtracting(localIds) {
-                let record = try remoteVault.recordJson(vaultId: vid, itemId: iid)
-                try vault.putRecordJson(vaultId: vid, itemId: iid, recordJson: record)
-                added += 1
-            }
-            for iid in localIds.intersection(remoteIds) {
-                let localRecord = try vault.recordJson(vaultId: vid, itemId: iid)
-                let remoteRecord = try remoteVault.recordJson(vaultId: vid, itemId: iid)
-                if localRecord == remoteRecord { continue }
-                let mergedRecord = try mergeItemRecords(localJson: localRecord, remoteJson: remoteRecord)
-                if mergedRecord != localRecord {
-                    try vault.putRecordJson(vaultId: vid, itemId: iid, recordJson: mergedRecord)
-                }
-                merged += 1
-            }
-        }
-
-        let uploaded = try await uploadLocalTree(
-            token: token, repoPath: repoPath, branch: branch, headSHA: headSHA,
-            localRoot: localRoot, remoteTree: remoteTree
-        )
-        return SyncReport(merged: merged, addedFromRemote: added, uploadedFiles: uploaded,
-                          message: "Merged \(merged) item(s), added \(added) from remote, uploaded \(uploaded) file(s).")
-    }
-
-    // MARK: - Upload (Git Data API)
-
-    private func uploadLocalTree(
-        token: String, repoPath: String, branch: String, headSHA: String,
-        localRoot: URL, remoteTree: [GitHubTreeEntry]
-    ) async throws -> Int {
-        let fileManager = FileManager.default
-        guard let enumerator = fileManager.enumerator(at: localRoot, includingPropertiesForKeys: nil) else {
-            return 0
-        }
-        var localFiles: [String: Data] = [:]
-        for case let url as URL in enumerator {
-            var isDir: ObjCBool = false
-            guard fileManager.fileExists(atPath: url.path, isDirectory: &isDir), !isDir.boolValue else { continue }
-            let rel = url.path.replacingOccurrences(of: localRoot.path + "/", with: "")
-            guard Self.isSyncable(path: rel) else { continue }
-            localFiles[rel] = try Data(contentsOf: url)
-        }
-        var remoteByPath: [String: String] = [:]
-        for entry in remoteTree { remoteByPath[entry.path] = entry.sha }
-        var treeEntries: [[String: Any]] = []
-        var changed = 0
-        for (path, data) in localFiles.sorted(by: { $0.key < $1.key }) {
-            if remoteByPath[path] == Self.gitBlobSHA(for: data) { continue }
-            let (blobData, _) = try await api(token: token, path: "\(repoPath)/git/blobs", method: "POST", body: [
-                "content": data.base64EncodedString(), "encoding": "base64",
-            ])
-            guard let blobJson = try JSONSerialization.jsonObject(with: blobData) as? [String: Any],
-                  let blobSHA = blobJson["sha"] as? String
-            else { throw SyncError.invalidResponse }
-            treeEntries.append(["path": path, "mode": "100644", "type": "blob", "sha": blobSHA])
-            changed += 1
-        }
-        for path in remoteByPath.keys where localFiles[path] == nil {
-            treeEntries.append(["path": path, "mode": "100644", "type": "blob", "sha": NSNull()])
-            changed += 1
-        }
-        if treeEntries.isEmpty { return 0 }
-        var treeBody: [String: Any] = ["tree": treeEntries]
-        if !headSHA.isEmpty {
-            let (treeData0, _) = try await api(token: token, path: "\(repoPath)/git/trees/\(headSHA)")
-            if let treeJson = try JSONSerialization.jsonObject(with: treeData0) as? [String: Any],
-               let baseSHA = treeJson["sha"] as? String {
-                treeBody["base_tree"] = baseSHA
-            }
-        }
-        let (treeData, _) = try await api(token: token, path: "\(repoPath)/git/trees", method: "POST", body: treeBody)
-        guard let treeJson = try JSONSerialization.jsonObject(with: treeData) as? [String: Any],
-              let treeSHA = treeJson["sha"] as? String
-        else { throw SyncError.invalidResponse }
-        var commitBody: [String: Any] = ["message": "gitpass iOS sync", "tree": treeSHA]
-        if !headSHA.isEmpty { commitBody["parents"] = [headSHA] }
-        let (commitData, _) = try await api(token: token, path: "\(repoPath)/git/commits", method: "POST", body: commitBody)
-        let commit = try JSONDecoder().decode(GitHubCommitResponse.self, from: commitData)
-        if headSHA.isEmpty {
-            _ = try await api(token: token, path: "\(repoPath)/git/refs", method: "POST", body: [
-                "ref": "refs/heads/\(branch)", "sha": commit.sha,
-            ])
+    /// Saves the target and, when `token` is non-empty, replaces the PAT.
+    /// An empty `token` keeps the saved one (the field is never prefilled).
+    func save(target: SyncTarget, token: String?) throws {
+        let trimmed = token?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if trimmed.isEmpty {
+            guard hasToken else { throw SyncSettingsError.missingToken }
         } else {
-            // Not forced: if the remote moved since we fetched, this
-            // fails and the user retries instead of overwriting.
-            _ = try await api(token: token, path: "\(repoPath)/git/refs/heads/\(branch)", method: "PATCH", body: [
-                "sha": commit.sha, "force": false,
-            ])
+            guard isValidSyncToken(trimmed) else { throw SyncSettingsError.invalidToken }
+            try tokens.saveGitHubToken(trimmed)
         }
-        return changed
+        if self.target != target { defaults.removeObject(forKey: Self.lastSuccessKey) }
+        defaults.set(target.owner, forKey: Self.ownerKey)
+        defaults.set(target.repo, forKey: Self.repoKey)
+        defaults.set(target.branch, forKey: Self.branchKey)
+    }
+
+    /// Forgets the target, the token and the last-success time.
+    func clear() {
+        tokens.deleteGitHubToken()
+        for key in [Self.ownerKey, Self.repoKey, Self.branchKey, Self.lastSuccessKey] {
+            defaults.removeObject(forKey: key)
+        }
+    }
+
+    var lastSuccess: Date? {
+        let t = defaults.double(forKey: Self.lastSuccessKey)
+        return t > 0 ? Date(timeIntervalSince1970: t) : nil
+    }
+
+    func recordSuccess(_ date: Date = Date()) {
+        defaults.set(date.timeIntervalSince1970, forKey: Self.lastSuccessKey)
+    }
+}
+
+// MARK: - HTTPS transport (the only thing Swift does for sync)
+
+/// One bounded HTTPS exchange. Production is `URLSessionExchange`; tests
+/// inject a fake. Implementations must not follow redirects or cache.
+protocol HTTPExchange: AnyObject {
+    /// Returns status, response headers (lower-cased names) and body.
+    func perform(
+        _ request: URLRequest, maxBytes: Int, isCancelled: @escaping () -> Bool
+    ) throws -> (status: Int, headers: [String: String], body: Data)
+}
+
+/// Transport-level failures (mapped to `HttpTransportError`).
+enum ExchangeError: Error {
+    case timeout, cancelled, tooLarge, redirect, transport
+}
+
+/// `HttpTransport` for core's GitHub client: fixed origin
+/// `https://api.github.com`, no redirects, no cache, no cookies, bounded
+/// reads, cancellation. The token is held only for the `Authorization`
+/// header (it is never part of the request record from Rust) and is never
+/// logged; errors carry no text from the TLS/HTTP layers.
+final class GitHubHTTPSTransport: HttpTransport, @unchecked Sendable, CustomStringConvertible {
+    static let origin = "https://api.github.com"
+    private static let methods: Set<String> = ["GET", "POST", "PATCH", "PUT"]
+    private static let maxResponse = 64 * 1024 * 1024
+
+    private let lock = NSLock()
+    private var credential: String?
+    private let cancellation: SyncCancellation
+    private let exchange: HTTPExchange
+
+    /// `nil` when `token` is not a fine-grained PAT.
+    init?(token: String, cancellation: SyncCancellation, exchange: HTTPExchange = URLSessionExchange()) {
+        guard isValidSyncToken(token) else { return nil }
+        credential = token
+        self.cancellation = cancellation
+        self.exchange = exchange
+    }
+
+    var description: String { "GitHubHTTPSTransport([redacted])" }
+
+    /// Forgets the token; later requests fail as cancelled.
+    func close() {
+        lock.lock(); credential = nil; lock.unlock()
+    }
+
+    private func currentToken() -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return credential
+    }
+
+    private func cancelled() -> Bool { cancellation.isCancelled() || currentToken() == nil }
+
+    /// `/repos/...` built by core from validated parts; refuse anything that
+    /// could change the origin or traverse.
+    static func validPath(_ path: String) -> Bool {
+        path.hasPrefix("/repos/") && path.count <= 2048
+            && path.unicodeScalars.allSatisfy { (33...126).contains($0.value) }
+            && !path.contains("..") && !path.contains("//") && !path.contains("@")
+            && !path.contains("\\") && !path.contains("#")
+    }
+
+    private static func validHeaderName(_ name: String) -> Bool {
+        (1...64).contains(name.count)
+            && name.unicodeScalars.allSatisfy { CharacterSet.alphanumerics.contains($0) && $0.isASCII || $0 == "-" }
+    }
+
+    func send(request: HttpTransportRequest) throws -> HttpTransportResponse {
+        if cancelled() { throw HttpTransportError.Cancelled }
+        guard Self.methods.contains(request.method), Self.validPath(request.path),
+              let url = URL(string: Self.origin + request.path),
+              url.scheme == "https", url.host == "api.github.com", url.user == nil
+        else { throw HttpTransportError.Transport }
+        let limit = Int(min(request.maxResponseBytes, UInt64(Self.maxResponse)))
+        let timeout = TimeInterval(min(max(request.timeoutMs, 1_000), 120_000)) / 1000
+        var req = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: timeout)
+        req.httpMethod = request.method
+        req.httpShouldHandleCookies = false
+        for header in request.headers {
+            if header.name.caseInsensitiveCompare("Authorization") == .orderedSame { continue }
+            guard Self.validHeaderName(header.name),
+                  header.value.unicodeScalars.allSatisfy({ (32...126).contains($0.value) })
+            else { throw HttpTransportError.Transport }
+            req.setValue(header.value, forHTTPHeaderField: header.name)
+        }
+        guard let token = currentToken() else { throw HttpTransportError.Cancelled }
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        if let body = request.body { req.httpBody = body }
+        let result: (status: Int, headers: [String: String], body: Data)
+        do {
+            result = try exchange.perform(req, maxBytes: limit) { [weak self] in self?.cancelled() ?? true }
+        } catch let e as ExchangeError {
+            switch e {
+            case .timeout: throw cancelled() ? HttpTransportError.Cancelled : HttpTransportError.Timeout
+            case .cancelled: throw HttpTransportError.Cancelled
+            case .tooLarge: throw HttpTransportError.TooLarge
+            case .redirect: throw HttpTransportError.Redirect
+            case .transport: throw cancelled() ? HttpTransportError.Cancelled : HttpTransportError.Transport
+            }
+        } catch {
+            throw cancelled() ? HttpTransportError.Cancelled : HttpTransportError.Transport
+        }
+        if cancelled() { throw HttpTransportError.Cancelled }
+        guard (100...599).contains(result.status) else { throw HttpTransportError.Transport }
+        if result.body.count > limit { throw HttpTransportError.TooLarge }
+        func number(_ name: String) -> UInt64? { result.headers[name].flatMap { UInt64($0) } }
+        return HttpTransportResponse(
+            status: UInt16(result.status),
+            body: result.body,
+            retryAfter: number("retry-after"),
+            rateLimitRemaining: number("x-ratelimit-remaining"),
+            rateLimitReset: number("x-ratelimit-reset")
+        )
+    }
+}
+
+/// Production exchange: an ephemeral `URLSession` (no cache, no cookies, no
+/// credential storage) per request, redirects refused, the body bounded
+/// while it streams, cancellation polled. Blocks the calling (sync) thread,
+/// never the main thread.
+final class URLSessionExchange: HTTPExchange {
+    private final class Delegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+        let maxBytes: Int
+        var data = Data()
+        var response: HTTPURLResponse?
+        var failure: ExchangeError?
+        let done = DispatchSemaphore(value: 0)
+
+        init(maxBytes: Int) { self.maxBytes = maxBytes }
+
+        func urlSession(
+            _ session: URLSession, task: URLSessionTask,
+            willPerformHTTPRedirection response: HTTPURLResponse,
+            newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void
+        ) {
+            // Never follow: the 3xx response itself is returned to core.
+            completionHandler(nil)
+        }
+
+        func urlSession(
+            _ session: URLSession, dataTask: URLSessionDataTask,
+            didReceive response: URLResponse,
+            completionHandler: @escaping (URLSession.ResponseDisposition) -> Void
+        ) {
+            if response.expectedContentLength > Int64(maxBytes) {
+                failure = .tooLarge
+                completionHandler(.cancel)
+                return
+            }
+            self.response = response as? HTTPURLResponse
+            completionHandler(.allow)
+        }
+
+        func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive chunk: Data) {
+            if data.count + chunk.count > maxBytes {
+                failure = .tooLarge
+                dataTask.cancel()
+                return
+            }
+            data.append(chunk)
+        }
+
+        func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+            if response == nil, let http = task.response as? HTTPURLResponse { response = http }
+            if failure == nil, let error = error as? URLError {
+                failure = error.code == .timedOut ? .timeout : (error.code == .cancelled ? .cancelled : .transport)
+            } else if failure == nil, error != nil {
+                failure = .transport
+            }
+            done.signal()
+        }
+    }
+
+    func perform(
+        _ request: URLRequest, maxBytes: Int, isCancelled: @escaping () -> Bool
+    ) throws -> (status: Int, headers: [String: String], body: Data) {
+        let config = URLSessionConfiguration.ephemeral
+        config.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        config.urlCache = nil
+        config.httpCookieStorage = nil
+        config.httpShouldSetCookies = false
+        config.urlCredentialStorage = nil
+        config.timeoutIntervalForRequest = request.timeoutInterval
+        config.timeoutIntervalForResource = request.timeoutInterval * 4
+        let delegate = Delegate(maxBytes: maxBytes)
+        let queue = OperationQueue()
+        queue.maxConcurrentOperationCount = 1
+        let session = URLSession(configuration: config, delegate: delegate, delegateQueue: queue)
+        defer { session.invalidateAndCancel() }
+        let task = session.dataTask(with: request)
+        task.resume()
+        while delegate.done.wait(timeout: .now() + .milliseconds(100)) == .timedOut {
+            if isCancelled() {
+                task.cancel()
+                _ = delegate.done.wait(timeout: .now() + .seconds(5))
+                throw ExchangeError.cancelled
+            }
+        }
+        // The delegate queue is serial and has finished: safe to read.
+        let (failure, response, body): (ExchangeError?, HTTPURLResponse?, Data) =
+            queue.addOperationAndWait { (delegate.failure, delegate.response, delegate.data) }
+        if let failure { throw failure }
+        guard let response else { throw ExchangeError.transport }
+        var headers: [String: String] = [:]
+        for (k, v) in response.allHeaderFields {
+            if let k = k as? String, let v = v as? String { headers[k.lowercased()] = v }
+        }
+        return (response.statusCode, headers, body)
+    }
+}
+
+private final class ResultBox<T>: @unchecked Sendable {
+    var value: T?
+}
+
+private extension OperationQueue {
+    func addOperationAndWait<T>(_ body: @escaping () -> T) -> T {
+        let box = ResultBox<T>()
+        addOperations([BlockOperation { box.value = body() }], waitUntilFinished: true)
+        return box.value!
+    }
+}
+
+// MARK: - Engine entry points
+
+/// Runs core sync / first pull for one target. Blocking; call off the main
+/// thread (the coordinator does).
+protocol SyncEngine: AnyObject {
+    func sync(vault: Vault, target: SyncTarget, token: String, cancellation: SyncCancellation) throws -> GitHubSyncReport
+}
+
+final class GitHubSyncService: SyncEngine {
+    private let makeTransport: (String, SyncCancellation) -> HttpTransport?
+
+    init(makeTransport: @escaping (String, SyncCancellation) -> HttpTransport? = {
+        GitHubHTTPSTransport(token: $0, cancellation: $1)
+    }) {
+        self.makeTransport = makeTransport
+    }
+
+    func sync(vault: Vault, target: SyncTarget, token: String, cancellation: SyncCancellation) throws -> GitHubSyncReport {
+        guard let transport = makeTransport(token, cancellation) else { throw SyncSettingsError.invalidToken }
+        defer { (transport as? GitHubHTTPSTransport)?.close() }
+        return try vault.syncGithub(target: target.ffi, token: token, transport: transport, cancellation: cancellation)
+    }
+
+    static let vaultExistsMessage = String(localized: "A vault is already on this device; first pull never replaces it.")
+
+    /// First pull for a device with no vault: core downloads and checks the
+    /// remote files into a private staging directory next to `localRoot`,
+    /// core authenticates the whole snapshot with the Master Password and
+    /// Secret Key, and only then is it moved into place (one rename). On any
+    /// failure the staging copy is deleted and `localRoot` is untouched. An
+    /// existing vault is never replaced. Read-only on the remote.
+    func firstPull(
+        localRoot: URL, target: SyncTarget, token: String,
+        password: String, secretKey: String, cancellation: SyncCancellation
+    ) throws {
+        let fm = FileManager.default
+        if fm.fileExists(atPath: localRoot.path) {
+            let contents = (try? fm.contentsOfDirectory(atPath: localRoot.path)) ?? ["?"]
+            guard contents.isEmpty else { throw GitpassError.Generic(Self.vaultExistsMessage) }
+        }
+        guard let transport = makeTransport(token, cancellation) else { throw SyncSettingsError.invalidToken }
+        defer { (transport as? GitHubHTTPSTransport)?.close() }
+        let parent = localRoot.deletingLastPathComponent()
+        try fm.createDirectory(at: parent, withIntermediateDirectories: true)
+        let staging = parent.appendingPathComponent(".gitpass-first-pull-\(UUID().uuidString)")
+        defer { try? fm.removeItem(at: staging) }
+        _ = try pullGithubSnapshot(
+            root: staging.path, target: target.ffi, token: token,
+            transport: transport, cancellation: cancellation
+        )
+        if cancellation.isCancelled() { throw HttpTransportError.Cancelled }
+        try validateFirstPullSnapshot(root: staging.path, password: password, secretKey: secretKey)
+        if cancellation.isCancelled() { throw HttpTransportError.Cancelled }
+        if fm.fileExists(atPath: localRoot.path) {
+            // Re-checked right before the rename: only an empty directory goes.
+            guard (try? fm.contentsOfDirectory(atPath: localRoot.path))?.isEmpty == true else {
+                throw GitpassError.Generic(Self.vaultExistsMessage)
+            }
+            try fm.removeItem(at: localRoot)
+        }
+        try fm.moveItem(at: staging, to: localRoot)
+    }
+}
+
+/// Fixed text for any sync error: core's own messages are already fixed
+/// text without tokens, paths or data; everything else collapses.
+func syncErrorMessage(_ error: Error) -> String {
+    switch error {
+    case GitpassError.Generic(let message): return message
+    case let e as SyncSettingsError: return e.errorDescription ?? genericSyncFailure
+    case HttpTransportError.Cancelled: return String(localized: "Sync cancelled.")
+    default: return genericSyncFailure
+    }
+}
+
+let genericSyncFailure = String(localized: "Sync failed; check the repository settings and the connection, then try again.")
+
+// MARK: - Coordinator (when to sync, status for the UI)
+
+/// Decides when to sync and publishes the status. Syncs run only while the
+/// vault is unlocked (the Master Password is never stored for background
+/// sync): on unlock, a few seconds after a local change, periodically while
+/// unlocked, and on demand. Locking cancels a running sync.
+@MainActor
+final class SyncCoordinator: ObservableObject {
+    enum Phase: Equatable {
+        case notConfigured
+        case idle
+        case syncing
+        case failed(String)
+    }
+
+    @Published private(set) var phase: Phase = .notConfigured
+    @Published private(set) var lastSuccess: Date?
+    @Published private(set) var lastConflicts: [String] = []
+    @Published private(set) var lastReport: GitHubSyncReport?
+
+    let settings: SyncSettingsStore
+    private let engine: SyncEngine
+    private let queue: DispatchQueue
+    private let debounce: TimeInterval
+    private let period: TimeInterval
+
+    /// The unlocked vault, or nil. Set by the owner (VaultStore).
+    var vaultProvider: () -> Vault? = { nil }
+    /// Called on the main actor when a sync changed the local vault.
+    var onLocalChange: () -> Void = {}
+
+    private var running: SyncCancellation?
+    private var generation = 0
+    private var debounceTask: Task<Void, Never>?
+    private var periodicTask: Task<Void, Never>?
+
+    init(
+        settings: SyncSettingsStore, engine: SyncEngine,
+        queue: DispatchQueue = DispatchQueue(label: "dev.gitpass.ios.sync", qos: .utility),
+        debounce: TimeInterval = 5, period: TimeInterval = 15 * 60
+    ) {
+        self.settings = settings
+        self.engine = engine
+        self.queue = queue
+        self.debounce = debounce
+        self.period = period
+        lastSuccess = settings.lastSuccess
+        phase = settings.isConfigured ? .idle : .notConfigured
+    }
+
+    var isSyncing: Bool { running != nil }
+
+    func unlocked() {
+        settingsChanged()
+        guard settings.isConfigured else { return }
+        Task { await syncNow() }
+        periodicTask?.cancel()
+        let period = self.period
+        periodicTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(period * 1_000_000_000))
+                if Task.isCancelled { return }
+                await self?.syncNow()
+            }
+        }
+    }
+
+    func locked() {
+        generation += 1
+        running?.cancel()
+        running = nil
+        debounceTask?.cancel()
+        debounceTask = nil
+        periodicTask?.cancel()
+        periodicTask = nil
+        if case .syncing = phase { phase = settings.isConfigured ? .idle : .notConfigured }
+    }
+
+    /// A local edit: sync shortly after the last one.
+    func localChange() {
+        guard settings.isConfigured else { return }
+        debounceTask?.cancel()
+        let delay = debounce
+        debounceTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            if Task.isCancelled { return }
+            await self?.syncNow()
+        }
+    }
+
+    func settingsChanged() {
+        lastSuccess = settings.lastSuccess
+        if !settings.isConfigured {
+            phase = .notConfigured
+        } else if phase == .notConfigured {
+            phase = .idle
+        }
+    }
+
+    /// Runs one sync now (no-op if one is already running or the vault is
+    /// locked) and returns when it finished.
+    func syncNow() async {
+        guard running == nil else { return }
+        guard let target = settings.target, let token = settings.token() else {
+            phase = .notConfigured
+            return
+        }
+        guard let vault = vaultProvider() else { return }
+        let cancellation = SyncCancellation()
+        running = cancellation
+        phase = .syncing
+        let gen = generation
+        let engine = self.engine
+        let result: Result<GitHubSyncReport, Error> = await withCheckedContinuation { cont in
+            queue.async {
+                cont.resume(returning: Result {
+                    try engine.sync(vault: vault, target: target, token: token, cancellation: cancellation)
+                })
+            }
+        }
+        // Locked (or another generation) meanwhile: drop the result.
+        guard gen == generation else { return }
+        running = nil
+        switch result {
+        case .success(let report):
+            settings.recordSuccess()
+            lastSuccess = settings.lastSuccess
+            lastReport = report
+            lastConflicts = report.conflicts
+            phase = .idle
+            if report.localChanged { onLocalChange() }
+        case .failure(let error):
+            phase = .failed(syncErrorMessage(error))
+        }
     }
 }
