@@ -111,4 +111,15 @@
     <string name="autofill_save_needs_android9">การบันทึกจากการกรอกอัตโนมัติต้องใช้ Android 9 ขึ้นไป</string>
     <string name="autofill_setting_off">เปิดการกรอกอัตโนมัติ</string>
     <string name="autofill_setting_on">เปิดการกรอกอัตโนมัติอยู่</string>
+    <!-- #477 passkey strings: UNREVIEWED machine-assisted Thai; needs a native-speaker review. -->
+    <string name="passkey_unlock_action">ปลดล็อก gitpass</string>
+    <string name="passkey_account_name">gitpass</string>
+    <string name="passkey_unlock_title">ปลดล็อก gitpass เพื่อใช้พาสคีย์</string>
+    <string name="passkey_sign_in_title">ลงชื่อเข้าใช้ด้วยพาสคีย์ของ gitpass</string>
+    <string name="passkey_create_title">บันทึกพาสคีย์ใน gitpass</string>
+    <string name="passkey_refused">gitpass ใช้พาสคีย์กับแอปหรือเว็บไซต์นี้ไม่ได้</string>
+    <string name="passkey_unavailable">gitpass ยังไม่พร้อม โปรดเปิดแอป gitpass ก่อน</string>
+    <string name="passkey_failed">คำขอพาสคีย์ไม่สำเร็จ โปรดลองอีกครั้ง</string>
+    <string name="passkey_none">ไม่มีพาสคีย์ของ gitpass สำหรับ %1$s</string>
+    <string name="passkey_setting">การตั้งค่าพาสคีย์</string>
 </resources>

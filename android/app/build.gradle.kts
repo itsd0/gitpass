@@ -80,6 +80,8 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    // Passkey CredentialProviderService (#477); the provider classes are only used on API 34+.
+    implementation(libs.androidx.credentials)
 
     // JNA AAR dependency required by UniFFI generated Kotlin bindings (pinned in libs.versions.toml)
     implementation(libs.net.java.dev.jna) {

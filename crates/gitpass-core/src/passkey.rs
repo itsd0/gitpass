@@ -97,8 +97,14 @@ impl Passkey {
     }
     /// ES256 signature (ASN.1 DER) over `auth_data || SHA-256(client_data_json)`.
     pub fn sign_assertion(&self, auth_data: &[u8], client_data_json: &[u8]) -> Vec<u8> {
+        let hash: [u8; 32] = Sha256::digest(client_data_json).into();
+        self.sign_assertion_hash(auth_data, &hash)
+    }
+    /// ES256 signature over `auth_data || client_data_hash`, for callers that supply the SHA-256 of
+    /// clientDataJSON themselves (a privileged browser through Android Credential Manager, #477).
+    pub fn sign_assertion_hash(&self, auth_data: &[u8], client_data_hash: &[u8; 32]) -> Vec<u8> {
         let mut msg = auth_data.to_vec();
-        msg.extend_from_slice(&Sha256::digest(client_data_json));
+        msg.extend_from_slice(client_data_hash);
         let sig: Signature = self.key.sign(&msg);
         sig.to_der().as_bytes().to_vec()
     }
