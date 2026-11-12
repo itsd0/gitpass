@@ -873,6 +873,19 @@ pub trait RemoteRepo {
     /// Move the head to `new_head`, failing unless the current head equals
     /// `expected_old` (None = the remote must currently be empty).
     fn update_ref(&mut self, new_head: &str, expected_old: Option<&str>) -> Result<()>;
+    /// A transport-known merge base between this replica and `remote_head`
+    /// (git: `git merge-base HEAD <remote_head>`), preferred over the
+    /// locally recorded base because it survives syncs made by other tools.
+    /// Default: none (API transports rely on the recorded base, #453).
+    fn merge_base(&self, _remote_head: &str) -> Result<Option<String>> {
+        Ok(None)
+    }
+    /// Called once after a successful sync with the remote head the local
+    /// vault now matches (git: move the local branch/index onto it without
+    /// touching the working tree). Default: nothing to do.
+    fn finish(&mut self, _head: &str) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// Returned (inside `anyhow::Error`) by [`RemoteRepo::update_ref`] when the

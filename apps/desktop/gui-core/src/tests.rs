@@ -132,3 +132,43 @@ fn sync_local_repo_no_remote() {
     assert!(r.log.contains("integrity verified"));
     assert!(st.list_vaults().is_ok());
 }
+
+/// `sync --merge` from the desktop state runs the shared engine (#454): a delete
+/// made on another device propagates and the report reaches the result.
+#[test]
+fn sync_merge_on_shared_engine_propagates_remote_delete() {
+    let (d, enc, st) = setup();
+    let git = |dir: &std::path::Path, args: &[&str]| {
+        let o = std::process::Command::new("git").arg("-C").arg(dir).args(args).output().expect("git");
+        assert!(o.status.success(), "git {args:?}: {}", String::from_utf8_lossy(&o.stderr));
+    };
+    if !gitpass_core::remote::git_available() { eprintln!("git unavailable; skipping"); return; }
+    let remote = tempfile::tempdir().unwrap();
+    git(remote.path(), &["init", "--bare", "-q", "-b", "main"]);
+    git(d.path(), &["init", "-q", "-b", "main"]);
+    for (k, v) in [("user.email", "t@t"), ("user.name", "t")] { git(d.path(), &["config", k, v]); }
+    git(d.path(), &["remote", "add", "origin", remote.path().to_str().unwrap()]);
+    let v = st.create_vault("Personal").unwrap();
+    let keep = st.add_item(&v, input("Keep", "a", "pw-a")).unwrap();
+    let gone = st.add_item(&v, input("Gone", "b", "pw-b")).unwrap();
+    let r = st.sync_with_target(true, Some(fast())).unwrap();
+    assert!(r.log.contains("integrity verified"), "{}", r.log);
+
+    // Another device clones, deletes one item and syncs.
+    let other = tempfile::tempdir().unwrap();
+    let ob = other.path().join("b");
+    let o = std::process::Command::new("git").args(["clone", "-q", remote.path().to_str().unwrap(), ob.to_str().unwrap()]).output().unwrap();
+    assert!(o.status.success());
+    for (k, val) in [("user.email", "t@t"), ("user.name", "t")] { git(&ob, &["config", k, val]); }
+    let sk = parse_secret_key(&enc).unwrap();
+    let s = Session::unlock_with(&ob, "correct horse", &sk, &opts()).unwrap();
+    s.remove_item(&v, &gone).unwrap();
+    drop(s);
+    gitpass_core::sync::sync_merge(&ob, "correct horse", &sk, &opts()).unwrap();
+
+    // Desktop merges: the delete arrives (the pre-#454 merge resurrected it).
+    let r = st.sync_with_target(true, Some(fast())).unwrap();
+    assert!(r.conflicts.is_empty(), "{:?}", r.conflicts);
+    let ids: Vec<String> = st.list_items(&v, "").unwrap().into_iter().map(|i| i.id).collect();
+    assert_eq!(ids, vec![keep]);
+}

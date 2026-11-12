@@ -175,7 +175,7 @@ pub fn classify_git_error(op: &str, out: &str) -> anyhow::Error {
 
 fn has_commits(root: &Path) -> Result<bool> { Ok(git_cmd(root, &["rev-parse", "--verify", "-q", "HEAD"])?.0) }
 
-fn ensure_identity(root: &Path) -> Result<()> {
+pub(crate) fn ensure_identity(root: &Path) -> Result<()> {
     let (ok, out) = git_cmd(root, &["config", "user.email"])?;
     if !ok || out.trim().is_empty() {
         git_ok(root, &["config", "user.email", "gitpass@localhost"])?;

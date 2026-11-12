@@ -48,7 +48,7 @@ pub struct DeviceDto { pub id: String, pub name: String, pub created_at: String,
 pub struct StatusDto { pub unlocked: bool, pub vault_dir: Option<String>, pub device_id: Option<String>, pub device_revoked: bool, pub auto_lock_minutes: u64, pub warnings: Vec<String> }
 
 #[derive(Serialize, Debug, Clone, PartialEq)]
-pub struct SyncDto { pub log: String, pub merged: Vec<String>, pub reapplied: Vec<String>, pub epoch: u64 }
+pub struct SyncDto { pub log: String, pub merged: Vec<String>, pub reapplied: Vec<String>, pub conflicts: Vec<String>, pub epoch: u64 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize)]
 #[serde(rename_all = "lowercase")]
@@ -305,7 +305,7 @@ impl GuiState {
             // Device last-seen refresh (throttled) happens BEFORE the sync commit so it is pushed, not left dirty.
             let name = u.device_name.clone().unwrap_or_else(gitpass_core::device::default_device_name);
             u.session.touch_device(&name)?;
-            let mut dto = SyncDto { log: String::new(), merged: vec![], reapplied: vec![], epoch: 0 };
+            let mut dto = SyncDto { log: String::new(), merged: vec![], reapplied: vec![], conflicts: vec![], epoch: 0 };
             if merge {
                 let r = gitpass_core::sync::sync_merge(&root, &u.password, &u.secret, &opts)?;
                 dto.log = r.log.clone();
@@ -315,6 +315,7 @@ impl GuiState {
                     dto.merged.push(s);
                 }
                 dto.reapplied = r.reapplied.iter().map(|(v, i)| format!("{v}/{i}")).collect();
+                dto.conflicts = r.conflicts.clone();
             } else {
                 dto.log = gitpass_core::sync::sync(&root)?;
             }
