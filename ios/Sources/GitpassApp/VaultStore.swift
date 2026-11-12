@@ -8,12 +8,17 @@ import UniformTypeIdentifiers
 /// The Rust `Vault` object is the only holder of unlocked state. When
 /// the user locks, it is dropped, which drops the `Session` and its
 /// account key from memory. The master password and Secret Key are
-/// kept only for the duration of a sync (to open the staged remote
-/// copy) and are otherwise held in these two properties while the
-/// app is unlocked — the same trade-off the desktop app makes with
-/// its in-memory session. They are never written to disk by this
-/// class; only the Keychain copy (when Face ID is enabled) persists,
-/// under a biometry access control.
+/// held in memory while the app is unlocked only so Face ID unlock can
+/// be turned on (sync does not use them: it runs on the unlocked Rust
+/// session) — the same trade-off the desktop app makes with its
+/// in-memory session. They are never written to disk by this class;
+/// only the Keychain copy (when Face ID is enabled) persists, under a
+/// biometry access control.
+///
+/// Sync (#456) runs in `SyncCoordinator` on a background queue and holds
+/// the Rust session while it talks to GitHub, so vault calls from the UI
+/// are refused with a short message while a sync is running instead of
+/// blocking the main thread.
 @MainActor
 final class VaultStore: ObservableObject {
     @Published var vault: Vault?
@@ -22,7 +27,8 @@ final class VaultStore: ObservableObject {
     @Published var selectedVaultId: String?
     @Published var errorMessage: String?
     @Published var isBusy = false
-    @Published var lastSyncMessage: String?
+
+    let sync: SyncCoordinator
 
     /// Unlock credentials for the current session (see class doc).
     var sessionPassword: String?
@@ -54,6 +60,18 @@ final class VaultStore: ObservableObject {
     /// fails, the UI stays blocked and no vault is ever opened.
     let bridgeIncompatible = !BridgeCompat.checkNative()
 
+    init(sync: SyncCoordinator? = nil) {
+        self.sync = sync ?? SyncCoordinator(settings: SyncSettingsStore(), engine: GitHubSyncService())
+        self.sync.vaultProvider = { [weak self] in self?.vault }
+        self.sync.onLocalChange = { [weak self] in try? self?.refresh() }
+    }
+
+    static let syncBusyMessage = String(localized: "Sync in progress; try again in a moment.")
+
+    private func ensureNotSyncing() throws {
+        if sync.isSyncing { throw GitpassError.Generic(Self.syncBusyMessage) }
+    }
+
     // MARK: - Unlock / lock
 
     /// Shown instead of core's desktop hint ("run `gitpass init`"),
@@ -74,6 +92,7 @@ final class VaultStore: ObservableObject {
         sessionSecretKey = secretKey
         errorMessage = nil
         try refresh()
+        sync.unlocked()
     }
 
     func createAccount(password: String) throws -> String {
@@ -113,6 +132,7 @@ final class VaultStore: ObservableObject {
     }
 
     func lock() {
+        sync.locked()
         vault = nil
         vaults = []
         items = []
@@ -126,6 +146,7 @@ final class VaultStore: ObservableObject {
 
     func refresh() throws {
         guard let vault else { return }
+        try ensureNotSyncing()
         vaults = try vault.listVaults()
         if selectedVaultId == nil { selectedVaultId = vaults.first?.id }
         if let selectedVaultId {
@@ -152,29 +173,36 @@ final class VaultStore: ObservableObject {
 
     func itemDetail(vaultId: String, itemId: String) throws -> ItemDetail {
         guard let vault else { throw KeychainError.notFound }
+        try ensureNotSyncing()
         return try vault.getItem(vaultId: vaultId, itemId: itemId)
     }
 
     func saveItem(vaultId: String, itemId: String?, input: ItemInput) throws {
         guard let vault else { throw KeychainError.notFound }
+        try ensureNotSyncing()
         if let itemId {
             try vault.updateItem(vaultId: vaultId, itemId: itemId, input: input)
         } else {
             _ = try vault.createItem(vaultId: vaultId, input: input)
         }
         try refresh()
+        sync.localChange()
     }
 
     func deleteItem(vaultId: String, itemId: String) throws {
         guard let vault else { throw KeychainError.notFound }
+        try ensureNotSyncing()
         try vault.deleteItem(vaultId: vaultId, itemId: itemId)
         try refresh()
+        sync.localChange()
     }
 
     func toggleFavorite(vaultId: String, item: ItemSummary) throws {
         guard let vault else { throw KeychainError.notFound }
+        try ensureNotSyncing()
         try vault.setFavorite(vaultId: vaultId, itemId: item.id, favorite: !item.favorite)
         try refresh()
+        sync.localChange()
     }
 
     func totpCode(for secret: String) throws -> TotpCode {

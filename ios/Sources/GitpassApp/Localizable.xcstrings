@@ -1083,36 +1083,6 @@
         }
       }
     },
-    "OAuth App client ID": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OAuth App client ID"
-          }
-        }
-      }
-    },
-    "Vault repository (owner/repo)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Vault repository (owner/repo)"
-          }
-        }
-      }
-    },
-    "The client ID is an OAuth App identifier, not a secret. Create one at github.com/settings/developers (do not enable a client secret flow for a public device app) and paste its client ID here. The token it issues is stored in the Keychain.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "The client ID is an OAuth App identifier, not a secret. Create one at github.com/settings/developers (do not enable a client secret flow for a public device app) and paste its client ID here. The token it issues is stored in the Keychain."
-          }
-        }
-      }
-    },
     "GitHub is connected.": {
       "localizations": {
         "en": {
@@ -1133,86 +1103,6 @@
         }
       }
     },
-    "Disconnected.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Disconnected."
-          }
-        }
-      }
-    },
-    "On another device, open:": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "On another device, open:"
-          }
-        }
-      }
-    },
-    "Enter this code:": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enter this code:"
-          }
-        }
-      }
-    },
-    "Copy code": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Copy code"
-          }
-        }
-      }
-    },
-    "I authorized it — fetch token": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "I authorized it — fetch token"
-          }
-        }
-      }
-    },
-    "Connect with device code": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Connect with device code"
-          }
-        }
-      }
-    },
-    "Enter the code on GitHub, then tap the fetch button.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Enter the code on GitHub, then tap the fetch button."
-          }
-        }
-      }
-    },
-    "GitHub connected.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "GitHub connected."
-          }
-        }
-      }
-    },
     "Sync now": {
       "localizations": {
         "en": {
@@ -1223,42 +1113,12 @@
         }
       }
     },
-    "Pull remote vault first (new device)": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Pull remote vault first (new device)"
-          }
-        }
-      }
-    },
-    "Unlock the vault first, then sync.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unlock the vault first, then sync."
-          }
-        }
-      }
-    },
     "GitHub Sync": {
       "localizations": {
         "en": {
           "stringUnit": {
             "state": "translated",
             "value": "GitHub Sync"
-          }
-        }
-      }
-    },
-    "Sync uses the GitHub API over HTTPS with the desktop's field-level merge rules. Whole-vault creation and deletion still go through desktop git sync.": {
-      "localizations": {
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Sync uses the GitHub API over HTTPS with the desktop's field-level merge rules. Whole-vault creation and deletion still go through desktop git sync."
           }
         }
       }
@@ -1281,6 +1141,622 @@
           "stringUnit": {
             "state": "translated",
             "value": "gitpass รุ่นนี้มี native core ที่ไม่ตรงกับแอป ไม่ได้เปิดคลังข้อมูลและไม่มีการเปลี่ยนแปลงใด ๆ โปรดติดตั้งแอปรุ่นที่สมบูรณ์และตรงกัน"
+          }
+        }
+      }
+    },
+    "A vault is already on this device; first pull never replaces it.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "A vault is already on this device; first pull never replaces it."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ဤစက်တွင် vault ရှိပြီးသားဖြစ်သည်။ ပထမဆုံး pull သည် ၎င်းကို အစားမထိုးပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "มีห้องนิรภัยอยู่ในอุปกรณ์นี้แล้ว การดึงครั้งแรกจะไม่แทนที่ห้องนิรภัยเดิม"
+          }
+        }
+      }
+    },
+    "Branch": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Branch"
+          }
+        }
+      }
+    },
+    "Conflicts in the last sync": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Conflicts in the last sync"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "နောက်ဆုံး sync တွင် ပဋိပက္ခများ"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ความขัดแย้งในการซิงก์ครั้งล่าสุด"
+          }
+        }
+      }
+    },
+    "Create a fine-grained personal access token on GitHub limited to only your vault repository with Contents: Read and write. It is stored in the Keychain on this device only and is never shown again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Create a fine-grained personal access token on GitHub limited to only your vault repository with Contents: Read and write. It is stored in the Keychain on this device only and is never shown again."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GitHub တွင် သင့် vault repository တစ်ခုတည်းအတွက် Contents: Read and write ပါသော fine-grained personal access token ကို ဖန်တီးပါ။ ၎င်းကို ဤစက်၏ Keychain တွင်သာ သိမ်းဆည်းပြီး ထပ်မပြပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "สร้าง fine-grained personal access token บน GitHub ที่จำกัดเฉพาะ repository ของห้องนิรภัย โดยให้สิทธิ์ Contents: Read and write โทเค็นจะถูกเก็บใน Keychain ของอุปกรณ์นี้เท่านั้นและจะไม่แสดงอีก"
+          }
+        }
+      }
+    },
+    "Downloads the vault from the repository above, checks it with your master password and Secret Key, and only then saves it on this device. Nothing is pushed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloads the vault from the repository above, checks it with your master password and Secret Key, and only then saves it on this device. Nothing is pushed."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "အထက်ပါ repository မှ vault ကို ဒေါင်းလုဒ်လုပ်ပြီး master password နှင့် Secret Key ဖြင့် စစ်ဆေးပြီးမှသာ ဤစက်တွင် သိမ်းဆည်းသည်။ ဘာမှ push မလုပ်ပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ดาวน์โหลดห้องนิรภัยจาก repository ด้านบน ตรวจสอบด้วยรหัสผ่านหลักและ Secret Key แล้วจึงบันทึกลงในอุปกรณ์นี้ ไม่มีการ push ใด ๆ"
+          }
+        }
+      }
+    },
+    "Each conflict was resolved without losing data (the local value was kept); review these items.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Each conflict was resolved without losing data (the local value was kept); review these items."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ပဋိပက္ခတိုင်းကို ဒေတာမဆုံးရှုံးဘဲ ဖြေရှင်းပြီးဖြစ်သည် (local တန်ဖိုးကို ထားရှိသည်)။ ဤအရာများကို ပြန်စစ်ပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ทุกความขัดแย้งได้รับการแก้ไขโดยไม่สูญเสียข้อมูล (เก็บค่าในเครื่องไว้) โปรดตรวจสอบรายการเหล่านี้"
+          }
+        }
+      }
+    },
+    "Enter a fine-grained personal access token.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a fine-grained personal access token."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fine-grained personal access token ကို ထည့်ပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ป้อน fine-grained personal access token"
+          }
+        }
+      }
+    },
+    "Enter a valid owner, repository and branch.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter a valid owner, repository and branch."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "မှန်ကန်သော owner၊ repository နှင့် branch ကို ထည့်ပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ป้อน owner, repository และ branch ให้ถูกต้อง"
+          }
+        }
+      }
+    },
+    "Fine-grained token (github_pat_…)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fine-grained token (github_pat_…)"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fine-grained token (github_pat_…)"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fine-grained token (github_pat_…)"
+          }
+        }
+      }
+    },
+    "First pull (new device)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "First pull (new device)"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ပထမဆုံး pull (စက်အသစ်)"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ดึงครั้งแรก (อุปกรณ์ใหม่)"
+          }
+        }
+      }
+    },
+    "Last synced %@": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last synced %@"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "နောက်ဆုံး sync %@"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ซิงก์ล่าสุด %@"
+          }
+        }
+      }
+    },
+    "Last synced %@ · %lld conflict(s), local kept": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last synced %@ · %lld conflict(s), local kept"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "နောက်ဆုံး sync %@ · ပဋိပက္ခ %lld ခု၊ local ကို ထားရှိသည်"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ซิงก์ล่าสุด %@ · ความขัดแย้ง %lld รายการ เก็บค่าในเครื่องไว้"
+          }
+        }
+      }
+    },
+    "Not synced yet.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Not synced yet."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sync မလုပ်ရသေးပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ยังไม่ได้ซิงก์"
+          }
+        }
+      }
+    },
+    "Owner": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Owner"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Owner"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Owner"
+          }
+        }
+      }
+    },
+    "Pull vault and unlock": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull vault and unlock"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "vault ကို pull လုပ်ပြီး ဖွင့်ပါ"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ดึงห้องนิรภัยและปลดล็อก"
+          }
+        }
+      }
+    },
+    "Pulling…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pulling…"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pull လုပ်နေသည်…"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังดึง…"
+          }
+        }
+      }
+    },
+    "Repository": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repository"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repository"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Repository"
+          }
+        }
+      }
+    },
+    "Save the repository and token first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save the repository and token first."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "repository နှင့် token ကို အရင်သိမ်းပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บันทึก repository และโทเค็นก่อน"
+          }
+        }
+      }
+    },
+    "Saved.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Saved."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "သိမ်းပြီးပါပြီ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บันทึกแล้ว"
+          }
+        }
+      }
+    },
+    "Sync cancelled.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync cancelled."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sync ကို ပယ်ဖျက်လိုက်သည်။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ยกเลิกการซิงก์แล้ว"
+          }
+        }
+      }
+    },
+    "Sync failed; check the repository settings and the connection, then try again.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync failed; check the repository settings and the connection, then try again."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sync မအောင်မြင်ပါ။ repository ဆက်တင်နှင့် ချိတ်ဆက်မှုကို စစ်ပြီး ထပ်ကြိုးစားပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ซิงก์ไม่สำเร็จ ตรวจสอบการตั้งค่า repository และการเชื่อมต่อ แล้วลองอีกครั้ง"
+          }
+        }
+      }
+    },
+    "Sync in progress; try again in a moment.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync in progress; try again in a moment."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sync လုပ်နေဆဲဖြစ်သည်။ ခဏနေမှ ထပ်ကြိုးစားပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังซิงก์ โปรดลองอีกครั้งในอีกสักครู่"
+          }
+        }
+      }
+    },
+    "Sync is not set up.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync is not set up."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sync ကို မသတ်မှတ်ရသေးပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ยังไม่ได้ตั้งค่าการซิงก์"
+          }
+        }
+      }
+    },
+    "Sync settings and token removed from this device.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sync settings and token removed from this device."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sync ဆက်တင်နှင့် token ကို ဤစက်မှ ဖယ်ရှားပြီးပါပြီ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ลบการตั้งค่าซิงก์และโทเค็นออกจากอุปกรณ์นี้แล้ว"
+          }
+        }
+      }
+    },
+    "Syncing…": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Syncing…"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "sync လုပ်နေသည်…"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "กำลังซิงก์…"
+          }
+        }
+      }
+    },
+    "Token saved (leave empty to keep it)": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token saved (leave empty to keep it)"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "token သိမ်းထားပြီး (ဆက်သုံးရန် ဗလာထားပါ)"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "บันทึกโทเค็นแล้ว (เว้นว่างไว้เพื่อใช้ต่อ)"
+          }
+        }
+      }
+    },
+    "Two-way sync with a GitHub repository you choose, on the same engine as the desktop app: field-level merge, deletes in both directions, conflicts kept fail-safe and listed.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Two-way sync with a GitHub repository you choose, on the same engine as the desktop app: field-level merge, deletes in both directions, conflicts kept fail-safe and listed."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "သင်ရွေးသော GitHub repository နှင့် desktop app နှင့် တူညီသော engine ဖြင့် နှစ်လမ်း sync: field အဆင့် merge၊ နှစ်ဘက်စလုံး ဖျက်ခြင်း၊ ပဋိပက္ခများကို ဘေးကင်းစွာ ထားရှိပြီး စာရင်းပြသည်။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ซิงก์สองทางกับ GitHub repository ที่คุณเลือก ด้วยเอนจินเดียวกับแอปเดสก์ท็อป: รวมระดับฟิลด์ การลบทั้งสองทิศทาง และความขัดแย้งถูกจัดการอย่างปลอดภัยพร้อมแสดงรายการ"
+          }
+        }
+      }
+    },
+    "Use a fine-grained personal access token (starts with github_pat_).": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Use a fine-grained personal access token (starts with github_pat_)."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "fine-grained personal access token (github_pat_ ဖြင့်စသည်) ကို သုံးပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ใช้ fine-grained personal access token (ขึ้นต้นด้วย github_pat_)"
           }
         }
       }

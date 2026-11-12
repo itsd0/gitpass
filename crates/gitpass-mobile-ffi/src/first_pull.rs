@@ -18,7 +18,7 @@ fn budget(format: &Format) -> Result<(), GitpassError> {
         || !(1..=4).contains(&k.p)
         || k.m_kib < 8 * k.p
     {
-        return Err(GitpassError::Generic("Imported vault KDF is unsupported on Android: require Argon2id, memory 8192..262144 KiB, iterations 1..6, lanes 1..4; parameters were not changed".into()));
+        return Err(GitpassError::Generic("Imported vault KDF is unsupported on this device: require Argon2id, memory 8192..262144 KiB, iterations 1..6, lanes 1..4; parameters were not changed".into()));
     }
     Ok(())
 }

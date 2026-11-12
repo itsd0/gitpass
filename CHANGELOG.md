@@ -3,6 +3,17 @@
 ## Unreleased
 
 ### Added
+- iOS two-way sync on the shared core engine (#456): the Swift merge/upload
+  loop, `gitBlobSHA` and `isSyncable` are gone; sync is `Vault.syncGithub`
+  over a Swift `URLSession` `HttpTransport` (fixed origin, no redirects or
+  cache, bounded, cancellable; token only in the `Authorization` header).
+  First pull on a new device is the new additive bridge export
+  `pullGithubSnapshot` (core transport and checks, read-only) followed by
+  `validateFirstPullSnapshot` before the snapshot is moved into place. The
+  hardcoded default repository and the OAuth device flow are removed: owner,
+  repository, branch and a fine-grained PAT (Keychain) are entered by the
+  user. Syncs run on unlock, after edits (debounced), every 15 minutes while
+  unlocked and on "Sync now"; locking cancels; status and conflicts are shown.
 - Android two-way sync on the shared core engine (#455): the bridge exports
   `Vault.syncGithub` (core `sync_with_remote` over the GitHub API transport,
   with the HTTPS round trip supplied by the app through the new

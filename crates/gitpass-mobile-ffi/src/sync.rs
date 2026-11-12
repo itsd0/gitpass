@@ -17,7 +17,9 @@ use crate::{GitpassError, Vault};
 use gitpass_core::github_api::{
     GitHubApi, GitHubApiError, GitHubRepoRef, HttpClient, HttpError, HttpMethod, HttpRequest, HttpResponse, Limits,
 };
+use gitpass_core::sync_engine::RemoteRepo;
 use gitpass_core::sync_remote::{sync_with_remote, SyncOptions};
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -242,6 +244,75 @@ impl Vault {
             attempts: out.attempts,
         })
     }
+}
+
+const EMPTY_REMOTE: &str = "The repository has no vault yet; nothing was pulled. Sync from a device that has the vault first";
+const PULL_TARGET_IN_USE: &str = "A vault already exists in the pull destination; refusing to overwrite it (nothing was changed)";
+
+/// First pull for a device with no vault yet (#456): download the vault files
+/// at the branch head into `root` on the shared core GitHub transport.
+///
+/// `root` must be a PRIVATE staging directory that does not exist yet or is
+/// empty; it is never an existing vault (refused, nothing written). Every
+/// path is checked against core's allowlist and every blob against its git
+/// id by core before anything is written; foreign files, symlinks, oversized
+/// or truncated trees are refused. Nothing is decrypted or authenticated here:
+/// the caller must run [`crate::validate_first_pull_snapshot`] on `root` with
+/// the Master Password and Secret Key before activating it, and delete `root`
+/// on any failure. Read-only on the remote. Returns the pulled head.
+#[uniffi::export]
+pub fn pull_github_snapshot(
+    root: String,
+    target: GitHubSyncTarget,
+    token: String,
+    transport: Arc<dyn HttpTransport>,
+    cancellation: Arc<SyncCancellation>,
+) -> Result<String, GitpassError> {
+    let token = zeroize::Zeroizing::new(token);
+    let repo_ref = GitHubRepoRef::new(&target.owner, &target.repo, &target.branch)
+        .map_err(|_| GitpassError::Generic(GitHubApiError::InvalidConfig.to_string()))?;
+    let root = Path::new(&root);
+    if root.exists() && std::fs::read_dir(root).map(|mut d| d.next().is_some()).unwrap_or(true) {
+        return Err(GitpassError::Generic(PULL_TARGET_IN_USE.into()));
+    }
+    let cancelled = || cancellation.is_cancelled();
+    let result = (|| -> anyhow::Result<String> {
+        let api = GitHubApi::new(ForeignHttp(transport.clone()), token.to_string(), repo_ref, Limits::default(), cancellation.flag.clone())?;
+        let Some(head) = api.head()? else {
+            anyhow::bail!(EMPTY_REMOTE);
+        };
+        // Core verifies paths, modes, sizes and the listing's tree id.
+        let entries = api.list_tree(&head)?;
+        anyhow::ensure!(entries.iter().any(|e| e.path == "format.json"), EMPTY_REMOTE);
+        let mut files = Vec::with_capacity(entries.len());
+        for e in &entries {
+            anyhow::ensure!(!cancelled(), GitHubApiError::Cancelled);
+            anyhow::ensure!(gitpass_core::remote::is_allowed_path(&e.path), "remote tree contains a file outside the vault allowlist; refusing to pull");
+            // get_blob checks size and the blob's git id against the bytes.
+            files.push((e.path.clone(), api.get_blob(&e.sha)?));
+        }
+        anyhow::ensure!(!cancelled(), GitHubApiError::Cancelled);
+        std::fs::create_dir_all(root)?;
+        for (path, bytes) in &files {
+            let dest = root.join(path);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let mut f = std::fs::OpenOptions::new().write(true).create_new(true).open(&dest)?;
+            std::io::Write::write_all(&mut f, bytes)?;
+            f.sync_all()?;
+        }
+        Ok(head)
+    })();
+    result.map_err(|e| {
+        if cancelled() {
+            GitpassError::Generic(GitHubApiError::Cancelled.to_string())
+        } else if e.to_string() == EMPTY_REMOTE {
+            GitpassError::Generic(EMPTY_REMOTE.into())
+        } else {
+            sync_error(&e)
+        }
+    })
 }
 
 #[cfg(test)]

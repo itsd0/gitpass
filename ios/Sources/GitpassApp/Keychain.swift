@@ -7,8 +7,9 @@ import Security
 /// Two kinds of secrets live here, and nothing else:
 ///  - the unlock credentials (master password + Secret Key) used by
 ///    Face ID unlock, gated by a biometry access control;
-///  - the GitHub OAuth token from device flow, stored without biometry
-///    so background sync does not need a Face ID prompt.
+///  - the fine-grained GitHub token for sync (#456), stored without
+///    biometry (this device only, when unlocked) so automatic syncs do
+///    not need a Face ID prompt.
 ///
 /// The master password itself is never written to a file, UserDefaults
 /// or a log. No access group is set on purpose: the app and the
@@ -110,7 +111,7 @@ final class KeychainStore {
         SecItemDelete(query as CFDictionary)
     }
 
-    // MARK: - GitHub token (device flow)
+    // MARK: - GitHub sync token (fine-grained PAT)
 
     func saveGitHubToken(_ token: String) throws {
         let data = Data(token.utf8)

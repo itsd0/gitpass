@@ -23,9 +23,10 @@ and English / Burmese / Thai UI. All cryptography runs in
   API credential, document, SSH key, Wi-Fi, passkey. Non-login items
   store their fields as v5 sections; login items keep the legacy
   login fields, exactly as desktop and the CLI read them.
-- GitHub sync over HTTPS (device flow, token in the Keychain) with
-  the desktop's field-level merge rules (higher clock wins; equal
-  clock + different value keeps local). See "Sync scope" below.
+- Two-way GitHub sync on the shared core engine (#456): the same
+  `gitpass-core` sync the desktop, CLI and Android use, through the
+  bridge. Repository, branch and a fine-grained PAT are entered by
+  you (token in the Keychain). See "Sync" below.
 - AutoFill credential provider extension for passwords, sharing the
   vault files through the app group. The extension asks for the
   password itself — it does not reuse the app's Keychain credentials.
@@ -36,37 +37,57 @@ and English / Burmese / Thai UI. All cryptography runs in
   domains, an RP ID and a real device). Password filling works;
   passkey items are listed in the app with their stored fields.
 - Face ID unlock on a real device (simulator has no biometrics).
-- End-to-end sync against a live vault repository (CI cannot do
-  this without a token and a real repo; the sync engine, device
-  flow and merge logic are unit-tested, the live path is not).
-- Vault creation / deletion through sync. See "Sync scope".
+- End-to-end sync against a live vault repository or on a physical
+  device (CI cannot do this without a token and a real repo; the
+  engine, first pull, the Swift transport, settings and scheduling
+  are tested against an in-process fake GitHub; the live path is not).
+- Background sync while locked (the master password is never stored
+  for it) and an offline indicator (a network failure shows as a
+  sync error).
 - Vault renaming (the desktop app does not offer it either).
 
-## Sync scope
+## Sync
 
-Sync uses the GitHub REST / Git Data API, not the `git` CLI (iOS
-has no git binary). One sync:
+All sync logic runs in `gitpass-core` through the bridge; Swift only
+performs the HTTPS round trip, stores settings, and decides when to sync.
 
-1. Fetches the remote tree for the configured repository.
-2. Downloads it to a staging directory and opens it with the same
-   credentials (read-only comparison; staging is deleted after).
-3. For vaults present on both sides, merges items: remote-only
-   items are added locally, differing items are merged with
-   `gitpass-core`'s `merge_records`, local-only items are uploaded.
-4. Uploads the resulting local tree as one commit whose parent is
-   the fetched remote HEAD, without forcing the ref update — if the
-   remote moved in between, the update fails and you retry instead
-   of overwriting someone else's push.
+- **Engine.** `Vault.syncGithub` runs core `sync_with_remote` over the
+  core GitHub Git Data API client: three-way merge against the last
+  synced base, field-level merges (equal clock + different value keeps
+  local and is reported), deletes in both directions, delete-vs-edit
+  keeps the edit, vault create/delete. It refuses a rolled-back remote
+  (epoch below the last synced one), files outside the vault allowlist,
+  non-regular files, and a remote password/KDF change, without changing
+  local data. Pushes are one commit with a non-forced, compare-and-swap
+  ref update (retried on a concurrent push). An empty repository is
+  initialized from this device.
+- **Transport.** `GitHubHTTPSTransport` (Swift) implements the bridge's
+  `HttpTransport`: fixed origin `https://api.github.com`, `/repos/...`
+  paths only, an ephemeral `URLSession` (no cache, cookies or credential
+  storage), redirects never followed, bounded response size, timeouts and
+  cancellation. The token is added only as the `Authorization` header
+  (it is never part of the request record from Rust, a URL, a log or an
+  error). Errors are fixed text from core.
+- **Settings.** Owner, repository and branch (no default repository) are
+  stored in `UserDefaults`; the fine-grained PAT (`github_pat_…`, limit it
+  to the vault repository with Contents: Read and write) is stored in the
+  Keychain (`WhenUnlockedThisDeviceOnly`) and never shown again. A token
+  saved by an earlier version that is not a fine-grained PAT is deleted.
+- **When.** On unlock, a few seconds after an edit, every 15 minutes while
+  unlocked, and on **Sync now**. Locking cancels a running sync. While a
+  sync runs (it holds the Rust session), item actions show "Sync in
+  progress" instead of blocking the UI.
+- **Status.** Settings shows last sync / syncing / the error, and the sync
+  screen lists the last sync's conflicts (ids and field names only).
+- **First pull (new device).** With no vault on the device, the sync
+  screen pulls the branch head with `pullGithubSnapshot` (core transport;
+  allowlist, tree and blob ids checked) into a private staging directory,
+  authenticates the whole snapshot with `validateFirstPullSnapshot` (Master
+  Password + Secret Key), and only then moves it into place and unlocks.
+  It never replaces an existing vault and never writes to the remote.
 
-A vault that exists on only one side aborts the sync without
-changing local data (the desktop `sync --merge` rule for
-local-only vaults, extended to remote-only vaults, because the
-encrypted manifest cannot be rebuilt on iOS for a whole new vault).
-A first pull on a device with no local vault copies the whole
-remote tree, after which you unlock normally.
-
-Local-only files (`.gitpass-state.json`, the local device registry
-file, backups) are never uploaded.
+Local-only files (`.gitpass-state.json`, the local device registry file,
+backups) are never uploaded (core's single allowlist).
 
 ## Build (local, on a Mac)
 
@@ -88,11 +109,11 @@ The bundle IDs are `dev.gitpass.ios` (app) and
 To enable AutoFill on the phone: Settings → General → AutoFill &
 Passwords → enable gitpass, then use it from a login screen.
 
-To connect sync: in the app, Settings → GitHub sync, enter your
-OAuth App client ID and the vault repository (default
-`itsd0/gitpass-vault`), follow the device-code flow, then Sync now.
-For a new device with no local vault, use "Pull remote vault first"
-before unlocking.
+To connect sync: in the app, Settings → GitHub sync (or "Sync from
+GitHub first" on the unlock screen), enter the owner, repository and
+branch of your vault repository and a fine-grained PAT limited to it,
+then Save. On a new device with no local vault, enter your master
+password and Secret Key under "First pull" to pull and unlock.
 
 ## CI
 
@@ -108,7 +129,7 @@ signs, never needs a team, and never touches a vault repository.
 ios/
   Sources/GitpassApp/     SwiftUI app
   Sources/AutoFill/       ASCredentialProviderViewController extension
-  Tests/                  XCTest: FFI round-trip, Keychain, sync requests
+  Tests/                  XCTest: FFI round-trip, Keychain, sync on a fake GitHub
   scripts/                XCFramework build script
   Generated/              generated Swift bindings (build output, gitignored)
   Frameworks/             GitpassCore.xcframework (build output, gitignored)
