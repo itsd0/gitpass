@@ -30,6 +30,11 @@ use std::sync::Mutex;
 
 mod first_pull;
 pub use first_pull::validate_first_pull_snapshot;
+mod sync;
+pub use sync::{
+    GitHubSyncTarget, HttpHeader, HttpTransport, HttpTransportError, HttpTransportRequest, HttpTransportResponse,
+    SyncCancellation, SyncReport,
+};
 
 uniffi::setup_scaffolding!();
 
@@ -374,7 +379,8 @@ impl Vault {
 /// API level of this bridge. Bump it whenever an exported function,
 /// record or behaviour changes in a way the apps must know about; the
 /// apps compare it with the level they were written against at startup.
-pub const FFI_API_LEVEL: u32 = 1;
+/// Level 2: `Vault::sync_github` + `HttpTransport` (#455).
+pub const FFI_API_LEVEL: u32 = 2;
 
 /// Bridge version: the crate (= workspace) version plus the API level.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]

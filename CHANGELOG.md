@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Added
+- Android two-way sync on the shared core engine (#455): the bridge exports
+  `Vault.syncGithub` (core `sync_with_remote` over the GitHub API transport,
+  with the HTTPS round trip supplied by the app through the new
+  `HttpTransport` foreign trait) and `SyncCancellation`; bridge API level 2.
+  The Android app syncs on unlock, after edits (debounced), every 15 minutes
+  while unlocked and on "Sync now", shows last sync / in-progress / offline /
+  error / conflicts, and keeps the fine-grained PAT sealed with an Android
+  Keystore key. No background sync while locked; nothing secret besides the
+  sealed token is stored.
 - Core sync engine (#452): a transport-independent `RemoteRepo` trait (resolve
   head, list tree, get blob, create commit, compare-and-swap ref update) with
   an in-memory fake using real git object ids, a pure three-way

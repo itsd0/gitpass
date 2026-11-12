@@ -1212,11 +1212,13 @@ name = "gitpass-mobile-ffi"
 version = "0.6.8"
 dependencies = [
  "anyhow",
+ "base64",
  "gitpass-core",
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
  "uniffi",
+ "zeroize",
 ]
 
 [[package]]

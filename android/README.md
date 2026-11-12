@@ -215,10 +215,67 @@ with all lock paths; stale callbacks cannot activate after lock/account changes.
 Cancellation/errors remove staging and unregistered imports, not old accounts.
 Process startup cleans owned orphan stages and unregistered UUID imports; a
 corrupt journal never authorizes cleanup. Registered account data is never deleted.
-No automatic refresh, push, merge or bidirectional sync is implemented. First pull
-creates a separate local snapshot; editing it does not update the GitHub repository.
+First pull itself never pushes or merges; it creates a separate local snapshot.
+To keep that account in sync afterwards, set up two-way sync (#455, below).
 
 This does NOT mean the owner's sync is configured: actual owner/repo/branch and
 a dedicated read-only credential must be supplied by the owner inside the app.
 The development GitHub token is never a data-plane credential. No real vault,
 physical-device runner, uninstall or app-data wipe is used by this milestone.
+
+## Two-way sync on the shared core engine (#455)
+
+The unlocked list shows a sync status line (**Sync** opens the sync screen):
+last successful sync, *Syncing…*, offline, failure text, and the number of
+conflicts in the last sync, with the conflict list and **Sync now** on the
+sync screen.
+
+**Engine.** `Vault.syncGithub(target, token, transport, cancellation)` in
+`gitpass-mobile-ffi` runs `gitpass_core::sync_remote::sync_with_remote` over
+`gitpass_core::github_api::GitHubApi`: the same engine desktop and CLI use
+(#452/#453/#454). Pull, field-level merge, delete propagation in both
+directions, conflict report (fail-safe: an edit beats a delete, equal-clock
+edits keep the local value), rollback refusal, foreign-file refusal, refusal of
+a remote password/KDF change, bounded retries when the branch moves, and the
+initial commit into an empty repository all run in Rust. Kotlin only supplies
+the HTTPS round trip (`sync/GitHubSyncTransport.kt`, platform
+`HttpsURLConnection`): fixed origin `https://api.github.com`, no redirects, no
+cache, bounded reads, cancellation between chunks, no lower-layer error text.
+The native library carries no TLS code. No crypto is re-implemented in Kotlin.
+
+**Triggers** (`sync/SyncCoordinator.kt`, one sync at a time on one background
+thread): on unlock, 3 s after the last save/trash/restore, every 15 minutes
+while the vault stays unlocked, and **Sync now**. Each needs saved settings, a
+network with internet capability and an unlocked session. A lock (Lock button,
+leaving the foreground, inactivity) cancels pending and running syncs without
+waiting for the network. While a sync holds the native session, item actions
+fail fast with "Sync in progress; try again in a moment" instead of blocking.
+There is **no background sync while locked** (no WorkManager job): the vault
+locks when the app leaves the foreground and the Master Password is never
+stored, so there is nothing to sync with.
+
+**What is stored, and how** (`sync/SyncSettingsStore.kt`), per account, in
+`noBackupFilesDir/<account>.sync.json` (next to, never inside, the vault
+directory; `allowBackup=false`):
+- owner, repository, branch, last successful sync time: plain JSON (not secret);
+- the GitHub token: AES-256-GCM sealed with a non-exportable Android Keystore
+  key (`gitpass.sync.token.v1`, hardware-backed where available, no user
+  authentication so automatic sync can run while unlocked). If the key is lost,
+  sync reports "not set up" and the token must be re-entered.
+- never stored: Master Password, Secret Key, account key, decrypted items.
+
+The token is decrypted only for a sync, passed to Rust for validation
+(fine-grained `github_pat_…` only) and to the transport for the
+`Authorization` header; it is not part of the request record crossing the
+bridge, never logged, never shown (the field is never prefilled) and never in
+errors. Use a dedicated fine-grained PAT restricted to the vault repository
+with **Contents: read and write**. JVM strings cannot be reliably wiped.
+
+**Tests.** Rust: `crates/gitpass-mobile-ffi/tests/sync_github.rs` (bridge →
+core engine → in-process fake GitHub). JVM: `GitHubSyncTransportTest`,
+`SyncSettingsStoreTest`, `SyncCoordinatorTest` (fake transport, fake cipher,
+manual scheduler). Instrumented (API 35 16 KB emulator): `SyncStatusUiTest`
+(status flow on the real screens with a test-only Keystore key and a faked
+engine boundary) and `SyncPlatformTest` (Keystore sealing, PATCH support of
+the platform HTTPS stack). No network, no real repository, fake data only.
+Manual Redmi ↔ desktop verification is still to be done by the owner.

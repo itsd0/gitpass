@@ -5,6 +5,10 @@ import app.gitpass.core.ItemDetail
 import app.gitpass.core.ItemSummary
 import app.gitpass.core.Vault
 import app.gitpass.core.VaultInfo
+import app.gitpass.core.GitHubSyncTarget
+import app.gitpass.core.GitpassException
+import app.gitpass.core.SyncCancellation
+import app.gitpass.android.sync.GitHubSyncTransport
 import app.gitpass.core.createAccount as ffiCreateAccount
 import app.gitpass.core.defaultUnlockOptions
 import app.gitpass.core.openVaultWith as ffiOpenVaultWith
@@ -39,8 +43,41 @@ private class FfiOpenVault(private val vault: Vault) : OpenVault {
     override fun deleteItem(vaultId: String, itemId: String) = vault.deleteItem(vaultId, itemId)
     override fun restoreItem(vaultId: String, itemId: String) = vault.restoreItem(vaultId, itemId)
 
+    /**
+     * The merge, safety checks and GitHub protocol run in gitpass-core; this
+     * only supplies the HTTPS round trip. Cancelling stops the native engine
+     * before its next request and disconnects the in-flight one.
+     */
+    override fun syncGitHub(target: SyncTarget, token: String, cancel: SyncCancel): SyncOutcome {
+        val native = SyncCancellation()
+        val transport = GitHubSyncTransport(token, cancel::isCancelled)
+        cancel.onCancel { runCatching { native.cancel() }; transport.close() }
+        try {
+            val report = vault.syncGithub(GitHubSyncTarget(target.owner, target.repository, target.branch), token, transport, native)
+            return SyncOutcome(
+                pushed = report.pushed,
+                localChanged = report.localChanged,
+                conflicts = report.conflicts,
+                mergedItems = report.mergedItems.toInt(),
+                localOnlyItems = report.localOnlyItems.toInt(),
+            )
+        } catch (error: GitpassException.Generic) {
+            // Core sync errors are fixed text without token, URL, path or item data.
+            throw SyncFailedException(error.v1)
+        } catch (error: GitpassException) {
+            throw SyncFailedException(GENERIC_SYNC_FAILURE)
+        } finally {
+            transport.close()
+            runCatching { native.close() }
+        }
+    }
+
     override fun close() {
         vault.close()
+    }
+
+    private companion object {
+        const val GENERIC_SYNC_FAILURE = "Sync failed; try again"
     }
 }
 

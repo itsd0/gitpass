@@ -69,4 +69,23 @@
     <string name="imported_account">ရယူထားသော local account %1$d</string>
     <string name="account_selection_damaged">Local account ရွေးချယ်မှု index ပျက်နေသည်။ Account data အားလုံး မပြောင်းလဲပါ။ Account မှားမရွေးမိစေရန် အသုံးပြုမှု ပိတ်ထားသည်။ App uninstall သို့မဟုတ် data clear မလုပ်ပါနှင့်။ ဆက်ရန် non-secret account selection index ကို ပြန်ပြင်ရန် လိုသည်။</string>
     <string name="bridge_incompatible">ဤ gitpass build ၏ native core သည် app နှင့် မကိုက်ညီပါ။ Vault ကို မဖွင့်ခဲ့ဘဲ ဘာမျှ မပြောင်းလဲခဲ့ပါ။ ကိုက်ညီသော app build အပြည့်အစုံကို ထည့်သွင်းပါ။</string>
+    <string name="sync_open">ချိန်ကိုက်ရန်</string>
+    <string name="sync_title">နှစ်ဘက်ချိန်ကိုက်ခြင်း</string>
+    <string name="sync_not_configured">ချိန်ကိုက်ခြင်းကို မသတ်မှတ်ရသေးပါ</string>
+    <string name="sync_in_progress">ချိန်ကိုက်နေသည်…</string>
+    <string name="sync_never">မချိန်ကိုက်ရသေးပါ</string>
+    <string name="sync_last">နောက်ဆုံးချိန်ကိုက်ခဲ့သည် %1$s</string>
+    <string name="sync_failed">ချိန်ကိုက်ခြင်း မအောင်မြင်ပါ: %1$s</string>
+    <string name="sync_offline">အော့ဖ်လိုင်းဖြစ်နေသည်။ အွန်လိုင်းပြန်ဖြစ်သောအခါ ထပ်မံချိန်ကိုက်ပါမည်။</string>
+    <string name="sync_conflicts">နောက်ဆုံးချိန်ကိုက်မှုတွင် ပဋိပက္ခ %1$d ခု</string>
+    <string name="sync_conflicts_title">နောက်ဆုံးချိန်ကိုက်မှုရှိ ပဋိပက္ခများ</string>
+    <string name="sync_conflicts_help">ဤအရာများကို နှစ်ဘက်စလုံးတွင် ပြောင်းလဲထားသည်။ gitpass သည် မိတ္တူကို လုံခြုံစွာ သိမ်းထားသည် (ပြင်ဆင်မှုသည် ဖျက်ခြင်းထက် ဦးစားပေးသည်၊ နှစ်ဘက်စလုံး တူညီသောအကွက်ကို ပြင်ပါက ဤစက်ပေါ်ရှိတန်ဖိုးကို ထားရှိသည်)။ ပြန်လည်စစ်ဆေးပါ။</string>
+    <string name="sync_now">ယခုချိန်ကိုက်ရန်</string>
+    <string name="sync_scope">ဤအကောင့်ကို သင့်ကိုယ်ပိုင် GitHub repository နှင့် ချိန်ကိုက်သည်- ဆွဲယူခြင်း၊ ပေါင်းစည်းခြင်းနှင့် ပို့ခြင်း။ သော့ဖွင့်သောအခါ၊ သိမ်းဆည်းပြီးမကြာမီနှင့် အက်ပ်ဖွင့်ထားပြီး သော့ဖွင့်ထားစဉ် ၁၅ မိနစ်တိုင်း လုပ်ဆောင်သည်။ ဤ repository တစ်ခုတည်းအတွက် Contents: read and write ခွင့်ပြုချက်ရှိသော သီးသန့် fine-grained PAT ကို အသုံးပြုပါ။ Token ကို Android Keystore တွင်ထားသော သော့ဖြင့် စာဝှက်ထားသည်။ Master Password နှင့် Secret Key ကို ဘယ်တော့မှ မသိမ်းဆည်းပါ။</string>
+    <string name="sync_token">Fine-grained PAT (github_pat_…)</string>
+    <string name="sync_token_saved">Token သိမ်းဆည်းထားပြီးဖြစ်သည်။ ဆက်ထားရန် အကွက်ကို လွတ်ထားပါ သို့မဟုတ် အစားထိုးရန် အသစ်ထည့်ပါ။</string>
+    <string name="sync_invalid">မှန်ကန်သော owner၊ repository နှင့် branch ကိုထည့်ပြီး github_pat_ ဖြင့်စသော fine-grained token ကို အသုံးပြုပါ။</string>
+    <string name="sync_saved">ချိန်ကိုက်ခြင်းဆက်တင်များကို သိမ်းဆည်းပြီးပါပြီ။</string>
+    <string name="sync_save">ချိန်ကိုက်ခြင်းဆက်တင်များ သိမ်းရန်</string>
+    <string name="sync_remove">ချိန်ကိုက်ခြင်းဆက်တင်များ ဖယ်ရှားရန်</string>
 </resources>

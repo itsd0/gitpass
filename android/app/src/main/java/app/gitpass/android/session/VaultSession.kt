@@ -40,6 +40,10 @@ class VaultSession(
     private var query: String = ""
     private var trash: Boolean = false
     private var lastActivityMs: Long = 0
+    /** Set while a sync holds the native session; cancelled by every lock. */
+    private var syncing: SyncCancel? = null
+    /** Sync coordinator hooks (#455). */
+    @Volatile var events: SessionEvents? = null
     private val mutableState = MutableStateFlow(lockedSnapshot())
 
     /** Current UI state. Locked snapshots never carry vaults, items, query, or detail. */
@@ -68,6 +72,7 @@ class VaultSession(
                 throw UnlockCancelledException()
             }
             installLocked(fresh)
+            events?.unlocked(generation)
         }
     }
 
@@ -110,6 +115,7 @@ class VaultSession(
                     reloadLocked()
                 }
                 publishLocked()
+                events?.unlocked(generation)
             } catch (error: Throwable) {
                 lockLocked()
                 throw AccountCreatedButLocked(secret, error)
@@ -148,6 +154,7 @@ class VaultSession(
     fun selectVault(vaultId: String) {
         mutex.withLock {
             val current = opened ?: throw VaultLockedException()
+            ensureNotSyncing()
             if (vaults.none { it.id == vaultId }) {
                 throw VaultSessionException("Unknown vault")
             }
@@ -172,6 +179,7 @@ class VaultSession(
     fun openDetail(itemId: String): ItemView {
         return mutex.withLock {
             val current = opened ?: throw VaultLockedException()
+            ensureNotSyncing()
             val vaultId = selectedVaultId ?: throw VaultSessionException("No vault selected")
             val loaded = current.getItem(vaultId, itemId)
             detail = loaded
@@ -217,6 +225,7 @@ class VaultSession(
         enforceInactivity()
         val current = opened ?: throw VaultLockedException()
         if (generation != epoch || selectedVaultId != vaultId) throw UnlockCancelledException()
+        ensureNotSyncing()
         val existing = itemId?.let { current.getItem(vaultId, it) }
         if (existing?.deleted == true || existing?.archived == true) throw VaultSessionException("Restore item before editing")
         val input = edit.input(existing)
@@ -228,6 +237,7 @@ class VaultSession(
         reloadLocked()
         lastActivityMs = nowMs()
         publishLocked()
+        events?.localChange()
         id
     }
 
@@ -235,11 +245,13 @@ class VaultSession(
         enforceInactivity()
         val current = opened ?: throw VaultLockedException()
         if (generation != epoch || selectedVaultId != vaultId) throw UnlockCancelledException()
+        ensureNotSyncing()
         if (deleted) current.deleteItem(vaultId, itemId) else current.restoreItem(vaultId, itemId)
         detail = null
         reloadLocked()
         lastActivityMs = nowMs()
         publishLocked()
+        events?.localChange()
     }
 
     fun clearDetail() {
@@ -253,10 +265,59 @@ class VaultSession(
         enforceInactivity()
         mutex.withLock {
             if (opened == null) throw VaultLockedException()
+            ensureNotSyncing()
             reloadLocked()
             lastActivityMs = nowMs()
             publishLocked()
         }
+    }
+
+    /** True while a sync holds the native session. */
+    fun isSyncing(): Boolean = mutex.withLock { syncing != null }
+
+    /**
+     * Two-way sync of the unlocked account on the shared core engine (#455).
+     *
+     * The network part runs WITHOUT this session's lock, so a lock (background,
+     * Lock button, inactivity) never waits for the network: it cancels the
+     * sync instead. While the sync runs, operations that would touch the native
+     * session fail fast with [SyncInProgressException] rather than block a UI
+     * thread on the native lock. Results from a sync that outlived its unlock
+     * epoch are discarded.
+     */
+    fun sync(epoch: Long, target: SyncTarget, token: String): SyncOutcome {
+        val cancel = SyncCancel()
+        val current = mutex.withLock {
+            enforceInactivity()
+            val c = opened ?: throw VaultLockedException()
+            if (generation != epoch) throw UnlockCancelledException()
+            if (syncing != null) throw SyncInProgressException()
+            syncing = cancel
+            c
+        }
+        try {
+            val outcome = current.syncGitHub(target, token, cancel)
+            mutex.withLock {
+                if (generation != epoch || opened !== current) throw UnlockCancelledException()
+                syncing = null
+                if (outcome.localChanged) {
+                    reloadLocked()
+                    detail = detail?.let { open -> runCatching { current.getItem(open.vaultId, open.id) }.getOrNull() }
+                }
+                publishLocked()
+            }
+            return outcome
+        } catch (error: Throwable) {
+            if (cancel.isCancelled) throw UnlockCancelledException()
+            throw error
+        } finally {
+            mutex.withLock { if (syncing === cancel) syncing = null }
+        }
+    }
+
+    private fun ensureNotSyncing() {
+        check(mutex.isHeldByCurrentThread)
+        if (syncing != null) throw SyncInProgressException()
     }
 
     fun snapshot(): VaultSnapshot {
@@ -316,6 +377,9 @@ class VaultSession(
         check(mutex.isHeldByCurrentThread)
         generation += 1
         onLock()
+        syncing?.cancel()
+        syncing = null
+        events?.locked()
         val current = opened
         opened = null
         vaults = emptyList()
@@ -356,6 +420,8 @@ interface OpenVault {
     fun updateItem(vaultId: String, itemId: String, input: app.gitpass.core.ItemInput): Unit = throw UnsupportedOperationException()
     fun deleteItem(vaultId: String, itemId: String): Unit = throw UnsupportedOperationException()
     fun restoreItem(vaultId: String, itemId: String): Unit = throw UnsupportedOperationException()
+    /** Pull, merge and push with GitHub on the shared core engine; honour [cancel]. */
+    fun syncGitHub(target: SyncTarget, token: String, cancel: SyncCancel): SyncOutcome = throw UnsupportedOperationException()
     fun close()
 }
 

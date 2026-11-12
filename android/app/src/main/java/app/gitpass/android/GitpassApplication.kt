@@ -24,6 +24,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import app.gitpass.android.sync.ExecutorSyncScheduler
+import app.gitpass.android.sync.KeystoreTokenCipher
+import app.gitpass.android.sync.SyncCoordinator
+import app.gitpass.android.sync.SyncScheduler
+import app.gitpass.android.sync.SyncSettingsStore
+import app.gitpass.android.sync.TokenCipher
 
 class GitpassApplication : Application() {
     @Volatile lateinit var session: VaultSession
@@ -40,6 +48,14 @@ class GitpassApplication : Application() {
     val pendingSecret = PendingSecret()
     lateinit var accountRoots: AccountRoots
         private set
+    /** Two-way sync for the selected account (#455). Replaced with the session on every account switch. */
+    @Volatile lateinit var sync: SyncCoordinator
+        private set
+    @Volatile lateinit var syncSettings: SyncSettingsStore
+        private set
+    private var tokenCipher: TokenCipher = KeystoreTokenCipher()
+    private var syncScheduler: SyncScheduler = ExecutorSyncScheduler()
+    private var online: () -> Boolean = ::hasValidatedNetwork
     private val revision = MutableStateFlow(0L)
     val accountRevision = revision.asStateFlow()
     private val pull = AtomicReference<FirstPullAttempt?>()
@@ -87,6 +103,12 @@ class GitpassApplication : Application() {
         }
     }
 
+    private fun hasValidatedNetwork(): Boolean = runCatching {
+        val cm = getSystemService(ConnectivityManager::class.java) ?: return true
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }.getOrDefault(true)
+
     /** Outlives every Activity; used for work that must not die with the UI. */
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -123,8 +145,18 @@ class GitpassApplication : Application() {
      * and a controllable clock. Never used with the production directory.
      */
     @VisibleForTesting
-    fun installForTest(gateway: VaultGateway, root: File, nowMs: () -> Long, secretTools: SecretTools = NativeSecretTools) {
+    fun installForTest(
+        gateway: VaultGateway,
+        root: File,
+        nowMs: () -> Long,
+        secretTools: SecretTools = NativeSecretTools,
+        cipher: TokenCipher? = null,
+        isOnline: () -> Boolean = { true },
+    ) {
         if (this::session.isInitialized) session.lock()
+        // Tests never touch the production Keystore alias or the network check.
+        tokenCipher = cipher ?: KeystoreTokenCipher("gitpass.sync.token.test")
+        online = isOnline
         pendingSecret.clear()
         accountSelectionDamaged = false
         accountRoots = AccountRoots(File(root.parentFile, "first-pull-test-${root.name}"), root)
@@ -137,6 +169,10 @@ class GitpassApplication : Application() {
         vaultRoot = root
         val fresh = VaultSession(gateway, nowMs = nowMs, secretTools = secretTools, onLock = ::cancelFirstPull)
         session = fresh
+        // Settings live next to the account directory, never inside it (not synced, not backed up).
+        syncSettings = SyncSettingsStore(File(root.parentFile, "${root.name}.sync.json"), tokenCipher)
+        sync = SyncCoordinator(fresh, syncSettings, syncScheduler, online = { online() })
+        fresh.events = sync
         accountSetup = AccountSetup(
             session = fresh,
             pending = pendingSecret,
