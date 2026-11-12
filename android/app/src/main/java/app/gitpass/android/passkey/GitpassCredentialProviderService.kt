@@ -51,7 +51,7 @@ class GitpassCredentialProviderService : CredentialProviderService() {
                 val checked = PasskeyEntries.checkedOptions(app, identity, request)
                 when {
                     checked.isEmpty() -> BeginGetCredentialResponse()
-                    app.session.isUnlocked() -> PasskeyEntries.response(this, app, checked, grant = null)
+                    app.session.isUnlocked() -> PasskeyEntries.response(this, app, checked)
                     else -> {
                         val pending = PendingIntent.getActivity(
                             this, PasskeyEntries.nextRequestCode(), Intent(this, PasskeyUnlockActivity::class.java),

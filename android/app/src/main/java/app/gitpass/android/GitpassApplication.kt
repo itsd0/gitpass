@@ -53,8 +53,7 @@ class GitpassApplication : Application() {
     val pendingSecret = PendingSecret()
     /** Autofill save requests waiting for an unlock (#475); process memory only. */
     val autofillSaves = app.gitpass.android.autofill.SaveStash()
-    /** Passkey provider (#477): single-use unlock grants (process memory only) and the caller/rpId checks. */
-    val passkeyGrants = app.gitpass.android.passkey.PasskeyGrants(android.os.SystemClock::elapsedRealtime)
+    /** Passkey provider (#477): caller/rpId checks (Digital Asset Links fetch for apps). */
     @Volatile var passkeyBroker = app.gitpass.android.passkey.PasskeyBroker(app.gitpass.android.passkey.HttpsAssetLinks())
         @VisibleForTesting set
     lateinit var accountRoots: AccountRoots

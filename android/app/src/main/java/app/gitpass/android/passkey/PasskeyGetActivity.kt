@@ -12,11 +12,10 @@ import androidx.credentials.provider.PendingIntentHandler
 import app.gitpass.android.R
 
 /**
- * Signs in with the passkey the user picked (#477). Needs a fresh
- * verification, unless the user unlocked gitpass for this same rpId and
- * caller in the unlock step moments ago (single-use grant). The caller and
- * rpId are checked again here, and core only signs for a passkey stored for
- * that rpId.
+ * Signs in with the passkey the user picked (#477). Always needs a fresh
+ * verification (unlock, or a re-check when the vault is open), because every
+ * assertion reports user verification. The caller and rpId are checked
+ * again here, and core only signs for a passkey stored for that rpId.
  */
 @RequiresApi(34)
 class PasskeyGetActivity : PasskeyActivity() {
@@ -38,13 +37,7 @@ class PasskeyGetActivity : PasskeyActivity() {
                     finish()
                 }.onFailure { fail(getString(R.string.passkey_failed)) }
             }
-            val grant = app.passkeyGrants.take(intent.getStringExtra(EXTRA_GRANT), ok.rpId, identity.key)
-            if (grant != null && app.session.isUnlocked()) {
-                unlockedHere = grant.lockAfter
-                sign()
-            } else {
-                requireUser(getString(R.string.passkey_sign_in_title), ok.rpId) { sign() }
-            }
+            requireUser(getString(R.string.passkey_sign_in_title), ok.rpId) { sign() }
         }
     }
 
@@ -60,6 +53,5 @@ class PasskeyGetActivity : PasskeyActivity() {
 
     companion object {
         const val EXTRA_CREDENTIAL_ID = "app.gitpass.passkey.CREDENTIAL_ID"
-        const val EXTRA_GRANT = "app.gitpass.passkey.GRANT"
     }
 }

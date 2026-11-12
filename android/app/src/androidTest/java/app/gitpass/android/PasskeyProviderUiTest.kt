@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.content.pm.SigningInfo
 import android.credentials.CredentialOption
 import android.os.Build
+import android.service.credentials.BeginGetCredentialOption
+import android.service.credentials.BeginGetCredentialRequest
 import android.service.credentials.CallingAppInfo
 import android.service.credentials.CreateCredentialRequest
 import android.service.credentials.CredentialProviderService
@@ -27,6 +29,7 @@ import app.gitpass.android.passkey.PasskeyBroker
 import app.gitpass.android.passkey.PasskeyCallers
 import app.gitpass.android.passkey.PasskeyCreateActivity
 import app.gitpass.android.passkey.PasskeyGetActivity
+import app.gitpass.android.passkey.PasskeyUnlockActivity
 import app.gitpass.android.passkey.HttpsAssetLinks
 import app.gitpass.android.session.*
 import app.gitpass.core.PasskeyCaller
@@ -48,7 +51,8 @@ import org.junit.runner.RunWith
  * the real native library; the vault is faked at the [OpenVault] boundary so
  * the test sees exactly when gitpass creates or signs. Nothing is created or
  * signed before the user is verified, mismatched callers are refused before
- * any unlock, and a vault unlocked for the request is locked again.
+ * any unlock, the unlock action lists names only and locks again, and a
+ * vault unlocked for the request is locked again.
  */
 @RunWith(AndroidJUnit4::class)
 class PasskeyProviderUiTest {
@@ -83,7 +87,6 @@ class PasskeyProviderUiTest {
     @After fun tearDown() {
         if (Build.VERSION.SDK_INT < 34) return
         app.session.lock()
-        app.passkeyGrants.clear()
         PasskeyCallers.allowlistOverride = null
         app.passkeyBroker = PasskeyBroker(HttpsAssetLinks())
         root.deleteRecursively()
@@ -98,13 +101,12 @@ class PasskeyProviderUiTest {
             .putExtra(CredentialProviderService.EXTRA_CREATE_CREDENTIAL_REQUEST, CreateCredentialRequest(caller, req.type, req.credentialData))
     }
 
-    private fun getIntent(caller: CallingAppInfo, credentialId: String = "Y3JlZA", grant: String? = null): Intent {
+    private fun getIntent(caller: CallingAppInfo, credentialId: String = "Y3JlZA"): Intent {
         val opt = GetPublicKeyCredentialOption(getJson)
         val option = CredentialOption.Builder(opt.type, opt.requestData, opt.candidateQueryData).build()
         return Intent(context, PasskeyGetActivity::class.java)
             .putExtra(CredentialProviderService.EXTRA_GET_CREDENTIAL_REQUEST, GetCredentialRequest(caller, listOf(option)))
             .putExtra(PasskeyGetActivity.EXTRA_CREDENTIAL_ID, credentialId)
-            .putExtra(PasskeyGetActivity.EXTRA_GRANT, grant)
     }
 
     private fun unlock() {
@@ -154,6 +156,26 @@ class PasskeyProviderUiTest {
         assertFalse(app.session.isUnlocked())
     }
 
+    @Test fun unlockActionListsAfterUnlockAndLocksAgain() {
+        val opt = GetPublicKeyCredentialOption(getJson)
+        val begin = BeginGetCredentialRequest.Builder()
+            .setCallingAppInfo(browser("https://example.com"))
+            .addBeginGetCredentialOption(BeginGetCredentialOption("opt-1", opt.type, opt.candidateQueryData))
+            .build()
+        val intent = Intent(context, PasskeyUnlockActivity::class.java)
+            .putExtra(CredentialProviderService.EXTRA_BEGIN_GET_CREDENTIAL_REQUEST, begin)
+        ActivityScenario.launch<PasskeyUnlockActivity>(intent).use { scenario ->
+            rule.waitUntil(10_000) { runCatching { rule.onNodeWithTag(AutofillTags.PASSWORD).assertExists() }.isSuccess }
+            assertEquals("nothing listed before the unlock", 0, gateway.listed)
+            unlock()
+            waitOutcome("listed")
+            assertEquals(1, gateway.listed)
+            assertEquals(0, gateway.signed)
+            assertFalse("locked again right after listing", app.session.isUnlocked())
+            rule.waitUntil(10_000) { scenario.state == Lifecycle.State.DESTROYED }
+        }
+    }
+
     @Test fun anOpenVaultStillNeedsAFreshVerification() {
         app.session.unlock(root.absolutePath, "FAKE-password", "FAKE-key")
         ActivityScenario.launch<PasskeyGetActivity>(getIntent(browser("https://example.com"))).use {
@@ -168,31 +190,13 @@ class PasskeyProviderUiTest {
         // visible activity), so the session state is not asserted here; PasskeySessionTest covers
         // that a verification never touches the open session.
     }
-
-    @Test fun matchingGrantSignsWithoutASecondPromptAndRelocks() {
-        app.session.unlock(root.absolutePath, "FAKE-password", "FAKE-key")
-        val grant = app.passkeyGrants.issue(setOf("example.com"), "web:https://example.com", lockAfter = true)
-        ActivityScenario.launch<PasskeyGetActivity>(getIntent(browser("https://example.com"), grant = grant)).use {
-            waitOutcome("signed")
-            rule.onNodeWithTag(AutofillTags.PASSWORD).assertDoesNotExist()
-        }
-        assertFalse("grant asked for the lock", app.session.isUnlocked())
-
-        // A grant for another site does not skip the prompt.
-        app.session.unlock(root.absolutePath, "FAKE-password", "FAKE-key")
-        val other = app.passkeyGrants.issue(setOf("example.org"), "web:https://example.com", lockAfter = true)
-        PasskeyActivity.lastOutcome = null
-        ActivityScenario.launch<PasskeyGetActivity>(getIntent(browser("https://example.com"), grant = other)).use {
-            rule.waitUntil(10_000) { runCatching { rule.onNodeWithTag(AutofillTags.PASSWORD).assertExists() }.isSuccess }
-            assertEquals(1, gateway.signed)
-        }
-    }
 }
 
 private class PasskeyGateway : VaultGateway, OpenVault {
     @Volatile var registered = 0
     @Volatile var signed = 0
     @Volatile var lastCaller: PasskeyCaller? = null
+    @Volatile var listed = 0
     override fun vaultExists(root: String) = true
     override fun createAccount(root: String, password: String) = "FAKE-key"
     override fun open(root: String, password: String, secretKey: String): OpenVault {
@@ -203,7 +207,10 @@ private class PasskeyGateway : VaultGateway, OpenVault {
     override fun listItems(vaultId: String) = emptyList<ItemRow>()
     override fun getItem(vaultId: String, itemId: String): ItemView = error("unused")
     override fun createVault(name: String) = "v1"
-    override fun passkeyEntries(caller: PasskeyCaller, requestJson: String) = listOf(PasskeyEntry("Y3JlZA", "alice", "Fake", 0u))
+    override fun passkeyEntries(caller: PasskeyCaller, requestJson: String): List<PasskeyEntry> {
+        listed++
+        return listOf(PasskeyEntry("Y3JlZA", "alice", "Fake", 0u))
+    }
     override fun passkeyRegister(caller: PasskeyCaller, requestJson: String, vaultId: String?): String {
         registered++; lastCaller = caller
         return """{"id":"Y3JlZA","rawId":"Y3JlZA","type":"public-key","response":{"clientDataJSON":"e30","attestationObject":"oA"},"clientExtensionResults":{}}"""

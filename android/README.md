@@ -442,10 +442,11 @@ again in the activity that creates or signs.
   biometric unlock (#473) or Master Password + Secret Key, creates the
   passkey in the selected vault, and locks again if it unlocked.
 - Sign in, vault locked: Credential Manager shows **Unlock gitpass**. After the
-  unlock, the matching passkeys (names only) are listed. The one the user
-  picks signs without a second prompt through a single-use grant that is
-  bound to that rpId and caller and expires after 60 s; the vault is locked
-  after signing, or when the grant expires.
+  unlock, the matching passkeys (names only) are listed and the vault is
+  locked again at once (the app also locks whenever it leaves the
+  foreground). Picking one asks for verification again before it signs, so a
+  locked sign-in takes two prompts (two biometric touches when biometric
+  unlock is on).
 - Sign in, vault already open: the passkeys are listed directly, and picking
   one asks for a fresh verification (biometric or Master Password, checked
   without disturbing the open session), because gitpass reports user
@@ -456,10 +457,11 @@ again in the activity that creates or signs.
 **Tests.** Rust: `crates/gitpass-core/tests/webauthn.rs` (rpId rules, Digital
 Asset Links, request parsing, create/sign with built and supplied client
 data, cross-RP refusal) and `crates/gitpass-mobile-ffi/tests/passkey.rs`. JVM:
-`CallerIdentityTest`, `HttpsAssetLinksTest`, `PasskeyGrantsTest`,
-`PasskeyBrokerTest`, `PasskeySessionTest`. Instrumented (CI API 35
+`CallerIdentityTest`, `HttpsAssetLinksTest`, `PasskeyBrokerTest`,
+`PasskeySessionTest`. Instrumented (CI API 35
 emulator): `PasskeyBridgeTest` (real native create/list/sign on a v5 fixture
 copy) and `PasskeyProviderUiTest` (Android 14+: framework request extras;
-nothing before verification, refusals before any unlock, relock, grants).
+nothing before verification, refusals before any unlock, the unlock action
+lists then relocks, fresh verification on an open vault).
 The full system flow (choosing gitpass in Credential Manager, a real site or
 app) needs an Android 14+ device.

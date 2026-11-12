@@ -27,15 +27,14 @@ object PasskeyEntries {
             runCatching { option to app.passkeyBroker.check(identity, option.requestJson, create = false) }.getOrNull()
         }
 
-    /** Entries for every matching passkey; each opens [PasskeyGetActivity], carrying [grant] when one was issued. */
-    fun response(context: Context, app: GitpassApplication, checked: List<Pair<BeginGetPublicKeyCredentialOption, PasskeyBroker.Checked>>, grant: String?): BeginGetCredentialResponse {
+    /** Entries (names only) for every matching passkey; each opens [PasskeyGetActivity], which verifies the user again. */
+    fun response(context: Context, app: GitpassApplication, checked: List<Pair<BeginGetPublicKeyCredentialOption, PasskeyBroker.Checked>>): BeginGetCredentialResponse {
         val entries = mutableListOf<CredentialEntry>()
         for ((option, ok) in checked) {
             for (e in app.session.passkeyEntries(ok.caller, option.requestJson)) {
                 if (entries.size >= MAX_ENTRIES) break
                 val intent = Intent(context, PasskeyGetActivity::class.java)
                     .putExtra(PasskeyGetActivity.EXTRA_CREDENTIAL_ID, e.credentialId)
-                    .putExtra(PasskeyGetActivity.EXTRA_GRANT, grant)
                 val pending = PendingIntent.getActivity(context, nextRequestCode(), intent, PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
                 val builder = PublicKeyCredentialEntry.Builder(context, e.userName.ifEmpty { ok.rpId }, pending, option)
                     .setDisplayName(e.vaultName.ifEmpty { null })

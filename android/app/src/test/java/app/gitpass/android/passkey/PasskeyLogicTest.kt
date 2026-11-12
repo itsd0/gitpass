@@ -16,7 +16,7 @@ import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** #477: who the caller is, which Digital Asset Links file is fetched, and the single-use unlock grant. */
+/** #477: who the caller is and which Digital Asset Links file is fetched. */
 class CallerIdentityTest {
     private val cert = byteArrayOf(1, 2, 3)
     private val own = "app.gitpass.android"
@@ -98,40 +98,6 @@ class HttpsAssetLinksTest {
         bad.fetch("b.example")
         assertEquals(2, opened.size)
     }
-}
-
-class PasskeyGrantsTest {
-    private var now = 0L
-    private val grants = PasskeyGrants({ now }, ttlMs = 1_000)
-
-    @Test fun grantIsSingleUseAndBoundToRpAndCaller() {
-        val t = grants.issue(setOf("example.com"), "web:https://example.com", lockAfter = true)
-        assertEquals(32, t.length)
-        assertNull(grants.take(t, "example.org", "web:https://example.com"))
-        assertNull(grants.take(t, "example.com", "web:https://example.com"), "a mismatched use burns the grant")
-        val u = grants.issue(setOf("example.com"), "web:https://example.com", lockAfter = true)
-        assertNull(grants.take(u, "example.com", "app:com.evil:00"))
-        val v = grants.issue(setOf("example.com"), "web:https://example.com", lockAfter = false)
-        val g = grants.take(v, "example.com", "web:https://example.com")
-        assertNotNull(g)
-        assertFalse(g!!.lockAfter)
-        assertNull(grants.take(v, "example.com", "web:https://example.com"))
-        assertNull(grants.take(null, "example.com", "web:https://example.com"))
-    }
-
-    @Test fun expiredGrantsDoNotWorkAndAskForTheLock() {
-        val t = grants.issue(setOf("example.com"), "k", lockAfter = true)
-        grants.issue(setOf("example.com"), "k", lockAfter = false)
-        assertFalse(grants.expire())
-        now = 1_000
-        assertNull(grants.take(t, "example.com", "k"))
-        grants.issue(setOf("x.example"), "k", lockAfter = true)
-        now = 2_000
-        assertTrue(grants.expire())
-        assertEquals(0, grants.pending())
-    }
-
-    private fun assertNull(value: Any?, message: String) = org.junit.Assert.assertNull(message, value)
 }
 
 class PasskeyBrokerTest {

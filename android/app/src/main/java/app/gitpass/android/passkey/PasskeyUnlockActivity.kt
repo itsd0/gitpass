@@ -2,18 +2,17 @@ package app.gitpass.android.passkey
 
 import android.app.Activity
 import android.content.Intent
-import android.os.Handler
-import android.os.Looper
 import androidx.annotation.RequiresApi
 import androidx.credentials.provider.PendingIntentHandler
 import app.gitpass.android.R
 
 /**
- * "Unlock gitpass" action of a sign-in request (#477): unlocks the vault,
- * lists the passkeys valid for the caller, and returns them to Credential
- * Manager. If entries were returned, the vault stays open for at most
- * [PasskeyGrants.TTL_MS] so the passkey the user picks next can sign
- * without a second prompt; then it is locked again.
+ * "Unlock gitpass" action of a sign-in request while the vault is locked
+ * (#477): unlocks, lists the passkeys valid for the caller (names only),
+ * locks again and returns the list to Credential Manager. Signing with the
+ * one the user picks verifies the user again in [PasskeyGetActivity]; the
+ * vault is never left open between the two steps (the app also locks
+ * whenever it leaves the foreground).
  */
 @RequiresApi(34)
 class PasskeyUnlockActivity : PasskeyActivity() {
@@ -26,18 +25,12 @@ class PasskeyUnlockActivity : PasskeyActivity() {
             if (checked.isEmpty()) return@background refuse(getString(R.string.passkey_refused))
             val label = checked.map { it.second.rpId }.distinct().joinToString(", ")
             requireUser(getString(R.string.passkey_unlock_title), label) {
-                val lockAfter = unlockedHere
-                val grant = app.passkeyGrants.issue(checked.map { it.second.rpId }.toSet(), identity.key, lockAfter)
-                background({ PasskeyEntries.response(this, app, checked, grant) }) { built ->
+                background({ PasskeyEntries.response(this, app, checked) }) { built ->
+                    relock()
                     val response = built.getOrNull()
                     if (response == null || response.credentialEntries.isEmpty()) {
-                        app.passkeyGrants.take(grant, "", "") // drop it
-                        relock()
                         return@background refuse(getString(R.string.passkey_none, label))
                     }
-                    // The vault stays open for the entry the user picks next; the grant's expiry locks it otherwise.
-                    unlockedHere = false
-                    if (lockAfter) scheduleExpiryLock()
                     record("listed")
                     val data = Intent()
                     PendingIntentHandler.setBeginGetCredentialResponse(data, response)
@@ -46,13 +39,6 @@ class PasskeyUnlockActivity : PasskeyActivity() {
                 }
             }
         }
-    }
-
-    private fun scheduleExpiryLock() {
-        val application = app
-        Handler(Looper.getMainLooper()).postDelayed({
-            if (application.passkeyGrants.expire()) application.session.lock()
-        }, PasskeyGrants.TTL_MS + 500)
     }
 
     override fun fail(reason: String, cancelled: Boolean) {

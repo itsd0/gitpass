@@ -19,7 +19,7 @@ sealed class CallerIdentity {
         override fun toString() = "App($packageName)"
     }
 
-    /** Stable key that binds an unlock grant to this caller. */
+    /** Stable identity string (origin, or package + cert digest); never contains request data. */
     val key: String
         get() = when (this) {
             is Browser -> "web:$origin"
