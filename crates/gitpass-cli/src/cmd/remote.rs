@@ -34,6 +34,7 @@ pub(crate) fn run(cli: &Cli, root: &Path, cmd: &Cmd) -> Result<()> {
                     if m.has_conflicts() { println!("  CONFLICT (equal clocks, kept local): {:?}", m.conflicts); }
                 }
                 for (vid, iid) in &r.reapplied { println!("re-applied local-only item {vid}/{iid}"); }
+                // Conflicts are already in `r.log` ("conflict: …"); exit stays 0 because each was resolved fail-safe.
             } else {
                 print!("{}", gitpass_core::sync::sync(root)?);
             }

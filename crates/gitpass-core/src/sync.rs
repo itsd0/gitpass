@@ -44,44 +44,46 @@ pub struct MergeSyncReport {
     pub log: String,
     /// (vault id, item id, report) for every item that existed on both sides and differed.
     pub merged: Vec<(String, String, crate::merge::MergeReport)>,
-    /// Local-only items re-applied on top of remote.
+    /// Local-only items kept and pushed (absent remotely and not deleted there since the last sync).
     pub reapplied: Vec<(String, String)>,
+    /// Secret-free conflict report from the shared engine (ids, field names, kinds):
+    /// equal-clock field conflicts, delete-vs-edit, vault meta/key, identity, blobs.
+    /// Every conflict is resolved fail-safe (nothing is lost); see `SyncConflict::describe`.
+    pub conflicts: Vec<String>,
 }
 
-fn git_ok(dir: &Path, args: &[&str]) -> Result<String> {
-    let (ok, out) = git(dir, args)?;
-    if !ok { bail!("git {} failed:\n{out}", args.join(" ")); }
-    Ok(out)
-}
-
-/// `sync --merge`: field-level merge instead of failing on rebase conflicts.
+/// `sync --merge` on the shared sync engine (issue #454): the same three-way
+/// planner as every other platform ([`crate::sync_engine::plan_sync`]), driven
+/// over the vault's git repository by [`crate::sync_remote::sync_with_remote`]
+/// with the [`crate::sync_git::GitCliRemote`] transport.
 ///
-/// 1. unlock, snapshot the plaintext record of every local item; commit local changes; backup.
-/// 2. `git fetch origin HEAD`. Fast-forward / ahead-only cases are handled like plain sync.
-/// 3. Diverged: decrypt the merge-base manifest and remember its epoch; `git reset --hard FETCH_HEAD`;
-///    re-unlock requiring the remote epoch >= merge-base epoch (rollback check still applies);
-///    then for each snapshotted item: field-merge into the remote copy (`Session::merge_item`) or, if the
-///    remote lacks it, re-add it. Every write bumps the item version and re-seals the manifest (epoch+1).
-/// 4. commit + push.
+/// 1. Unlock (integrity + rollback checks); commit pending local changes
+///    under the repo lock; take a pre-pull backup (kept: last 5).
+/// 2. Fetch the remote branch; decrypt the remote tree with this session's
+///    keys (no KDF on remote data) and refuse a remote below this device's
+///    last-synced epoch.
+/// 3. Base = `git merge-base HEAD <remote>` (else the recorded last-synced
+///    commit, else empty = union). Deletes propagate from either side when the
+///    other side did not edit the item since the base; delete-vs-edit keeps the
+///    edit and is reported. Whole vaults created or deleted on one side are
+///    handled too (the old MVP aborted on a local-only vault).
+/// 4. Apply locally, push a commit whose parent is the fetched head with a
+///    plain non-forced push (re-fetch + re-plan if someone pushed meanwhile,
+///    bounded), then move the local branch onto it. A pure pull is a
+///    fast-forward of the files.
 ///
-/// Limitations (MVP): a vault created locally but absent remotely aborts (backup kept); an item deleted
-/// remotely but still present locally is resurrected (fail-safe: no data loss); a local delete of an item
-/// that still exists remotely is lost (the item comes back).
+/// The caller re-unlocks afterwards (`Session::reopen_verify`) to verify the
+/// final state, as before. A remote password/KDF change made on another device
+/// is refused here (pull it with plain `sync`, which fast-forwards it).
 pub fn sync_merge(dir: &Path, password: &str, secret: &crate::crypto::SecretKey, opts: &crate::store::UnlockOpts) -> Result<MergeSyncReport> {
-    use crate::store::{set_last_epoch, Session};
+    use crate::store::Session;
+    use crate::sync_remote::{sync_with_remote, SyncOptions};
     let mut rep = MergeSyncReport::default();
     if !dir.join(".git").exists() { bail!("{} is not a git repository", dir.display()); }
     let s = Session::unlock_with(dir, password, secret, opts)?;
-    let mut snap = vec![];
-    let local_gen_hist = s.read_generator_history().unwrap_or_default();
-    let lm = s.load_manifest()?;
-    for (vid, ve) in &lm.vaults {
-        for iid in ve.items.keys() { snap.push((vid.clone(), iid.clone(), s.read_record(vid, iid)?.1)); }
-    }
-    let local_vaults: Vec<String> = lm.vaults.keys().cloned().collect();
-    drop(s);
     {
         let _g = fsutil::lock(dir)?;
+        crate::remote::ensure_gitattributes(dir)?;
         rep.log.push_str(if commit_all(dir, "sync")? { "committed local changes\n" } else { "nothing to commit\n" });
     }
     let (has_remote, _) = git(dir, &["remote", "get-url", "origin"])?;
@@ -89,63 +91,25 @@ pub fn sync_merge(dir: &Path, password: &str, secret: &crate::crypto::SecretKey,
     let b = fsutil::backup(dir, "")?;
     fsutil::prune_backups(dir, 5)?;
     rep.log.push_str(&format!("pre-pull backup: {}\n", b.display()));
-    let (ok, out) = git(dir, &["fetch", "origin", "HEAD"])?;
-    if !ok {
-        if out.contains("couldn't find remote ref") {
-            git_ok(dir, &["push", "-u", "origin", "HEAD"])?;
-            rep.log.push_str("remote empty; pushed\n");
-            return Ok(rep);
-        }
-        bail!("git fetch failed:\n{out}");
+    let mut repo = crate::sync_git::GitCliRemote::open(dir)?;
+    let id = repo.remote_id();
+    let out = sync_with_remote(&s, &mut repo, &id, &SyncOptions { message: "sync --merge".into(), ..Default::default() })
+        .map_err(|e| anyhow::anyhow!("{e:#} (pre-pull backup kept in .gitpass-backup-*/)"))?;
+    rep.merged = out.merged;
+    rep.reapplied = out.local_only;
+    rep.conflicts = out.conflicts.iter().map(|c| c.describe()).collect();
+    if out.attempts > 1 {
+        rep.log.push_str(&format!("remote moved during sync; re-planned ({} attempts)\n", out.attempts));
     }
-    let head = git_ok(dir, &["rev-parse", "HEAD"])?.trim().to_string();
-    let theirs = git_ok(dir, &["rev-parse", "FETCH_HEAD"])?.trim().to_string();
-    let base = git_ok(dir, &["merge-base", "HEAD", "FETCH_HEAD"])?.trim().to_string();
-    if base == theirs {
-        rep.log.push_str("local is ahead or equal\n");
-    } else if base == head {
-        git_ok(dir, &["merge", "--ff-only", "FETCH_HEAD"])?;
-        rep.log.push_str("fast-forwarded to remote\n");
-    } else {
-        let s = Session::unlock_with(dir, password, secret, opts)?;
-        let base_bytes = std::process::Command::new("git").arg("-C").arg(dir)
-            .args(["show", &format!("{base}:manifest.enc")]).output()?;
-        if !base_bytes.status.success() { bail!("cannot read merge-base manifest"); }
-        let base_epoch = s.open_manifest_bytes(&base_bytes.stdout)?.epoch;
-        let account_id = s.fmt.account_id.clone();
-        drop(s);
-        git_ok(dir, &["reset", "--hard", "FETCH_HEAD"])?;
-        set_last_epoch(dir, &account_id, base_epoch)?;
-        let s = Session::unlock_with(dir, password, secret, opts)
-            .map_err(|e| anyhow::anyhow!("remote state failed integrity check ({e:#}); local state is in {}", b.display()))?;
-        let rm = s.load_manifest()?;
-        if let Some(v) = local_vaults.iter().find(|v| !rm.vaults.contains_key(*v)) {
-            bail!("vault {v} exists only locally; sync --merge cannot re-apply whole vaults yet. Local state is in {}", b.display());
-        }
-        for (vid, iid, local) in &snap {
-            if rm.vaults[vid].items.contains_key(iid) {
-                let (_, remote) = s.read_record(vid, iid)?;
-                if remote == *local { continue; }
-                // merge local snapshot INTO the remote file, but report from the local device's viewpoint
-                let (merged, r) = crate::merge::merge_records(local, &remote);
-                if merged != remote { s.put_record(vid, iid, &merged)?; }
-                rep.merged.push((vid.clone(), iid.clone(), r));
-            } else {
-                s.put_record(vid, iid, local)?;
-                rep.reapplied.push((vid.clone(), iid.clone()));
-            }
-        }
-        let remote_gen_hist = s.read_generator_history().unwrap_or_default();
-        let merged_gen_hist = local_gen_hist.merge(&remote_gen_hist, crate::store::now_secs());
-        if merged_gen_hist != remote_gen_hist {
-            s.write_generator_history(&merged_gen_hist)?;
-        }
-        let _g = fsutil::lock(dir)?;
-        commit_all(dir, "sync --merge: field-level merge")?;
-        rep.log.push_str(&format!("diverged from remote; field-merged {} item(s), re-applied {} local-only item(s)\n",
-            rep.merged.len(), rep.reapplied.len()));
+    rep.log.push_str(match (out.local_changed, out.pushed) {
+        (false, false) => "already in sync with remote\n",
+        (true, false) => "fast-forwarded to remote\n",
+        (false, true) => "local is ahead; pushed to origin\n",
+        (true, true) => "merged with remote (shared engine) and pushed to origin\n",
+    });
+    if !rep.merged.is_empty() || !rep.reapplied.is_empty() {
+        rep.log.push_str(&format!("field-merged {} item(s), kept {} local-only item(s)\n", rep.merged.len(), rep.reapplied.len()));
     }
-    git_ok(dir, &["push", "-u", "origin", "HEAD"])?;
-    rep.log.push_str("pushed to origin\n");
+    for c in &rep.conflicts { rep.log.push_str(&format!("conflict: {c}\n")); }
     Ok(rep)
 }

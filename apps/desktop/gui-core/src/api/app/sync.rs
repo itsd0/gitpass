@@ -43,6 +43,9 @@ impl App {
         let _ = self.update_local(|l| l.last_sync = Some(gitpass_core::device::now_iso8601()));
         let mut m = d.log;
         for x in d.merged { m.push_str(&format!("merged {x}\n")); }
+        // Conflict report from the shared engine (#454); already resolved fail-safe, listed so the user can review.
+        // (`log` also carries them; only append when the log does not already.)
+        for c in d.conflicts { if !m.contains(&c) { m.push_str(&format!("conflict: {c}\n")); } }
         Ok(SyncResult { message: m })
     }
 

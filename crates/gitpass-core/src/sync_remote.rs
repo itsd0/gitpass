@@ -8,9 +8,11 @@
 //!    transport) and decrypt it with this session's keys
 //!    ([`Session::snapshot_from_files`]). No key derivation runs on remote
 //!    data.
-//! 2. Base = this device's last-synced commit for this remote, stored in the
-//!    local-only `.gitpass-state.json` ([`SyncBase`]); its tree id is
-//!    re-verified when fetched. Without a recorded base (first sync with this
+//! 2. Base = the transport's merge base if it has one
+//!    ([`RemoteRepo::merge_base`]: git uses `git merge-base`, #454), else
+//!    this device's last-synced commit for this remote, stored in the
+//!    local-only `.gitpass-state.json` ([`SyncBase`]); a recorded base's tree
+//!    id is re-verified when fetched. Without either (first sync with this
 //!    remote) the base is EMPTY: the plan is a union — nothing is deleted on
 //!    either side — which is the fail-safe choice. Deletes propagate once a
 //!    base exists.
@@ -74,6 +76,13 @@ pub struct SyncOutcome {
     pub conflicts: Vec<SyncConflict>,
     /// Attempts used (> 1 when the ref moved concurrently).
     pub attempts: u32,
+    /// Items present on both sides with different content, with the
+    /// field-level merge report from this device's viewpoint (`from_remote`
+    /// = fields taken from the remote). Ids and field names only.
+    pub merged: Vec<(String, String, crate::merge::MergeReport)>,
+    /// Items this side had that the remote lacked and that survive the merge
+    /// (pushed). Items the remote deleted since the base are not listed.
+    pub local_only: Vec<(String, String)>,
 }
 
 /// All vault files under `root` that may be committed, as (path, bytes),
@@ -202,6 +211,7 @@ pub fn sync_with_remote<R: RemoteRepo>(
                 Err(e) if e.downcast_ref::<RefUpdateConflict>().is_some() => continue,
                 Err(e) => return Err(e),
             }
+            repo.finish(&commit)?;
             let epoch = session.epoch()?;
             store::set_sync_base(&root, &account, &SyncBase { remote: remote_id.into(), commit: commit.clone(), tree, epoch })?;
             outcome.head = commit;
@@ -220,16 +230,21 @@ pub fn sync_with_remote<R: RemoteRepo>(
                 );
             }
         }
-        let (base_files, base_snap) = match &recorded {
-            Some(b) if b.commit == head => {
-                if b.tree != remote_tree {
+        // Base: a transport merge base (git) wins over the recorded base;
+        // the recorded tree id is re-verified only for the recorded commit.
+        let hint = repo.merge_base(&head)?;
+        let base_commit = hint.clone().or_else(|| recorded.as_ref().map(|b| b.commit.clone()));
+        let recorded_tree = |c: &str| recorded.as_ref().filter(|b| b.commit == c).map(|b| b.tree.clone());
+        let (base_files, base_snap) = match base_commit {
+            Some(c) if c == head => {
+                if recorded_tree(&c).is_some_and(|t| t != remote_tree) {
                     bail!("remote tree does not match the recorded last-synced tree; refusing to sync");
                 }
                 (Some(remote_files.clone()), remote_snap.clone())
             }
-            Some(b) => {
-                let (files, tree) = fetch_tree(repo, &b.commit)?;
-                if tree != b.tree {
+            Some(c) => {
+                let (files, tree) = fetch_tree(repo, &c)?;
+                if recorded_tree(&c).is_some_and(|t| t != tree) {
                     bail!("the last-synced commit's tree does not match the recorded tree; refusing to sync");
                 }
                 let snap = session.snapshot_from_files(&files)?;
@@ -244,6 +259,27 @@ pub fn sync_with_remote<R: RemoteRepo>(
         let local_snap = session.snapshot_sync()?;
         let plan = plan_sync(&local_snap, &base_snap, &remote_snap, store::now_secs())?;
         outcome.conflicts = plan.conflicts.clone();
+        outcome.merged.clear();
+        outcome.local_only.clear();
+        for ((vid, iid), local) in &local_snap.items {
+            match remote_snap.items.get(&(vid.clone(), iid.clone())) {
+                Some(remote) if remote != local => {
+                    let (_, r) = crate::merge::merge_records(local, remote);
+                    outcome.merged.push((vid.clone(), iid.clone(), r));
+                }
+                Some(_) => {}
+                None => {
+                    let deleted_remotely = plan
+                        .actions
+                        .iter()
+                        .any(|a| matches!(a, crate::sync_engine::SyncAction::DeleteItem { vault_id, item_id } if vault_id == vid && item_id == iid)
+                            || matches!(a, crate::sync_engine::SyncAction::DeleteVault { vault_id } if vault_id == vid));
+                    if !deleted_remotely {
+                        outcome.local_only.push((vid.clone(), iid.clone()));
+                    }
+                }
+            }
+        }
         let remote_epoch = remote_snap.manifest.epoch;
         // Fast-forward: this side has nothing the remote lacks (no local
         // content change since the base, or the same content) and the remote
@@ -275,6 +311,7 @@ pub fn sync_with_remote<R: RemoteRepo>(
             outcome.pushed = true;
             commit
         };
+        repo.finish(&new_head)?;
         let epoch = session.epoch()?;
         store::set_sync_base(&root, &account, &SyncBase { remote: remote_id.into(), commit: new_head.clone(), tree: merged_tree, epoch })?;
         outcome.head = new_head;
