@@ -22,6 +22,34 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- Password AutofillService (#475). Only the system can bind it. -->
+        <service
+            android:name=".autofill.GitpassAutofillService"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.autofill.AutofillService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.autofill"
+                android:resource="@xml/autofill_service" />
+        </service>
+        <!-- Unlock steps for autofill; started only through the service's own PendingIntents. -->
+        <activity
+            android:name=".autofill.AutofillAuthActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Gitpass" />
+        <activity
+            android:name=".autofill.AutofillSaveActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Gitpass" />
     </application>
 
 </manifest>

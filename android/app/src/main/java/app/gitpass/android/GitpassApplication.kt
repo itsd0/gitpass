@@ -51,6 +51,8 @@ class GitpassApplication : Application() {
     var bridgeIncompatible: Boolean = false
         private set
     val pendingSecret = PendingSecret()
+    /** Autofill save requests waiting for an unlock (#475); process memory only. */
+    val autofillSaves = app.gitpass.android.autofill.SaveStash()
     lateinit var accountRoots: AccountRoots
         private set
     /** Two-way sync for the selected account (#455). Replaced with the session on every account switch. */

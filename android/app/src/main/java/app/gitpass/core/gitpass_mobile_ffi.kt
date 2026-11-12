@@ -802,6 +802,12 @@ internal open class UniffiVTableCallbackInterfaceHttpTransport(
 
 
 
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -817,7 +823,11 @@ internal open class UniffiVTableCallbackInterfaceHttpTransport(
 // when the library is loaded.
 internal interface IntegrityCheckingUniffiLib : Library {
     // Integrity check functions only
-    fun uniffi_gitpass_mobile_ffi_checksum_func_create_account(
+    fun uniffi_gitpass_mobile_ffi_checksum_func_autofill_app_matches(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_autofill_origin_matches(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_create_account(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_default_unlock_options(
 ): Short
@@ -852,6 +862,8 @@ fun uniffi_gitpass_mobile_ffi_checksum_method_httptransport_send(
 fun uniffi_gitpass_mobile_ffi_checksum_method_synccancellation_cancel(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_method_synccancellation_is_cancelled(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_autofill_logins(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_method_vault_create_item(
 ): Short
@@ -953,6 +965,8 @@ fun uniffi_gitpass_mobile_ffi_fn_clone_vault(`ptr`: Pointer,uniffi_out_err: Unif
 ): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_free_vault(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_autofill_logins(`ptr`: Pointer,`query`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_method_vault_create_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_method_vault_create_vault(`ptr`: Pointer,`name`: RustBuffer.ByValue,`description`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -979,6 +993,10 @@ fun uniffi_gitpass_mobile_ffi_fn_method_vault_sync_github(`ptr`: Pointer,`target
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_method_vault_update_item(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`input`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
+fun uniffi_gitpass_mobile_ffi_fn_func_autofill_app_matches(`itemUrl`: RustBuffer.ByValue,`package`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
+fun uniffi_gitpass_mobile_ffi_fn_func_autofill_origin_matches(`itemUrl`: RustBuffer.ByValue,`webOrigin`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Byte
 fun uniffi_gitpass_mobile_ffi_fn_func_create_account(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_default_unlock_options(uniffi_out_err: UniffiRustCallStatus, 
@@ -1135,6 +1153,12 @@ private fun uniffiCheckContractApiVersion(lib: IntegrityCheckingUniffiLib) {
 }
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_autofill_app_matches() != 8153.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_autofill_origin_matches() != 64924.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_create_account() != 36389.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1187,6 +1211,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_method_synccancellation_is_cancelled() != 28205.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_autofill_logins() != 11715.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_create_item() != 5558.toShort()) {
@@ -2221,6 +2248,12 @@ public object FfiConverterTypeSyncCancellation: FfiConverter<SyncCancellation, P
 
 public interface VaultInterface {
     
+    /**
+     * Logins matching an autofill request (#475), across all vaults, sorted
+     * by title. Never returns an item whose URL does not match.
+     */
+    fun `autofillLogins`(`query`: AutofillQuery): List<AutofillLogin>
+    
     fun `createItem`(`vaultId`: kotlin.String, `input`: ItemInput): kotlin.String
     
     fun `createVault`(`name`: kotlin.String, `description`: kotlin.String?): kotlin.String
@@ -2351,6 +2384,23 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
             UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_clone_vault(pointer!!, status)
         }
     }
+
+    
+    /**
+     * Logins matching an autofill request (#475), across all vaults, sorted
+     * by title. Never returns an item whose URL does not match.
+     */
+    @Throws(GitpassException::class)override fun `autofillLogins`(`query`: AutofillQuery): List<AutofillLogin> {
+            return FfiConverterSequenceTypeAutofillLogin.lift(
+    callWithPointer {
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_autofill_logins(
+        it, FfiConverterTypeAutofillQuery.lower(`query`),_status)
+}
+    }
+    )
+    }
+    
 
     
     @Throws(GitpassException::class)override fun `createItem`(`vaultId`: kotlin.String, `input`: ItemInput): kotlin.String {
@@ -2568,6 +2618,92 @@ public object FfiConverterTypeVault: FfiConverter<Vault, Pointer> {
         // The Rust code always expects pointers written as 8 bytes,
         // and will fail to compile if they don't fit.
         buf.putLong(Pointer.nativeValue(lower(value)))
+    }
+}
+
+
+
+/**
+ * One login that matches an [`AutofillQuery`]. Only returned from an
+ * unlocked vault, and only for items whose URL matches the request.
+ */
+data class AutofillLogin (
+    var `vaultId`: kotlin.String, 
+    var `itemId`: kotlin.String, 
+    var `title`: kotlin.String, 
+    var `username`: kotlin.String?, 
+    var `password`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAutofillLogin: FfiConverterRustBuffer<AutofillLogin> {
+    override fun read(buf: ByteBuffer): AutofillLogin {
+        return AutofillLogin(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AutofillLogin) = (
+            FfiConverterString.allocationSize(value.`vaultId`) +
+            FfiConverterString.allocationSize(value.`itemId`) +
+            FfiConverterString.allocationSize(value.`title`) +
+            FfiConverterOptionalString.allocationSize(value.`username`) +
+            FfiConverterOptionalString.allocationSize(value.`password`)
+    )
+
+    override fun write(value: AutofillLogin, buf: ByteBuffer) {
+            FfiConverterString.write(value.`vaultId`, buf)
+            FfiConverterString.write(value.`itemId`, buf)
+            FfiConverterString.write(value.`title`, buf)
+            FfiConverterOptionalString.write(value.`username`, buf)
+            FfiConverterOptionalString.write(value.`password`, buf)
+    }
+}
+
+
+
+/**
+ * What an Android autofill request is for (#475). Exactly one identity is
+ * used: `web_origin` (`https://host`, from a trusted browser's web domain)
+ * when set, otherwise `android_package` (the requesting app, reported by
+ * the OS). With neither, nothing matches.
+ */
+data class AutofillQuery (
+    var `webOrigin`: kotlin.String?, 
+    var `androidPackage`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeAutofillQuery: FfiConverterRustBuffer<AutofillQuery> {
+    override fun read(buf: ByteBuffer): AutofillQuery {
+        return AutofillQuery(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: AutofillQuery) = (
+            FfiConverterOptionalString.allocationSize(value.`webOrigin`) +
+            FfiConverterOptionalString.allocationSize(value.`androidPackage`)
+    )
+
+    override fun write(value: AutofillQuery, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`webOrigin`, buf)
+            FfiConverterOptionalString.write(value.`androidPackage`, buf)
     }
 }
 
@@ -3673,6 +3809,34 @@ public object FfiConverterSequenceString: FfiConverterRustBuffer<List<kotlin.Str
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypeAutofillLogin: FfiConverterRustBuffer<List<AutofillLogin>> {
+    override fun read(buf: ByteBuffer): List<AutofillLogin> {
+        val len = buf.getInt()
+        return List<AutofillLogin>(len) {
+            FfiConverterTypeAutofillLogin.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<AutofillLogin>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypeAutofillLogin.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<AutofillLogin>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypeAutofillLogin.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeFfiField: FfiConverterRustBuffer<List<FfiField>> {
     override fun read(buf: ByteBuffer): List<FfiField> {
         val len = buf.getInt()
@@ -3806,6 +3970,30 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
         }
     }
 }
+        /**
+         * Exact Android package rule (`gitpass_core::origin::app_matches`).
+         */ fun `autofillAppMatches`(`itemUrl`: kotlin.String, `package`: kotlin.String): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_autofill_app_matches(
+        FfiConverterString.lower(`itemUrl`),FfiConverterString.lower(`package`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The shared eTLD+1 web rule (`gitpass_core::origin::origin_matches`).
+         */ fun `autofillOriginMatches`(`itemUrl`: kotlin.String, `webOrigin`: kotlin.String): kotlin.Boolean {
+            return FfiConverterBoolean.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_autofill_origin_matches(
+        FfiConverterString.lower(`itemUrl`),FfiConverterString.lower(`webOrigin`),_status)
+}
+    )
+    }
+    
+
     @Throws(GitpassException::class) fun `createAccount`(`root`: kotlin.String, `password`: kotlin.String): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCallWithError(GitpassException) { _status ->

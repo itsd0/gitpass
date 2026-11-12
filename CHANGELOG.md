@@ -3,6 +3,14 @@
 ## Unreleased
 
 ### Added
+- Android password AutofillService (#475): detects username/password fields
+  (hints, then heuristics), matches the requesting app by package
+  (`android://`/`androidapp://` item URLs) or, for trusted browsers, the page
+  origin by the shared eTLD+1 rule (origin matching moved from gitpass-host to
+  `gitpass_core::origin`). Fill and save always go through an unlock
+  activity (biometric or Master Password) before any secret enters a dataset;
+  mismatched domains never fill. Optional save prompt creates or updates a
+  login. Bridge API level 5 (`Vault.autofill_logins`).
 - Android opt-in biometric unlock (#473): BiometricPrompt (BIOMETRIC_STRONG,
   Android 11+) releases the Account Unlock Key from an auth-bound Android
   Keystore AES-GCM key (invalidated on biometric enrolment change). The key is

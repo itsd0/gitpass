@@ -372,6 +372,7 @@ private fun AccountRoot(app: GitpassApplication) {
                 Row {
                     TextButton(onClick = { screen = Screen.Edit(null) }, enabled = snapshot.selectedVaultId != null && !snapshot.trash) { Text(stringResource(R.string.new_login)) }
                     TextButton(onClick = { session.setTrash(!snapshot.trash); queryText = "" }) { Text(stringResource(if (snapshot.trash) R.string.active_items else R.string.trash)) }
+                    AutofillSettingButton()
                     if (quickEnabled) {
                         TextButton(
                             onClick = {
@@ -482,6 +483,28 @@ private fun AccountRoot(app: GitpassApplication) {
             }
         }
     }
+}
+
+/**
+ * Settings entry for the password AutofillService (#475): shows whether
+ * gitpass is the device's autofill service and opens the system picker.
+ */
+@Composable
+private fun AutofillSettingButton() {
+    val context = LocalContext.current
+    val manager = remember { context.getSystemService(android.view.autofill.AutofillManager::class.java) }
+    var enabled by remember { mutableStateOf(runCatching { manager?.hasEnabledAutofillServices() == true }.getOrDefault(false)) }
+    val supported = remember { runCatching { manager?.isAutofillSupported == true }.getOrDefault(false) }
+    if (!supported) return
+    TextButton(
+        onClick = {
+            val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_SET_AUTOFILL_SERVICE)
+                .setData(android.net.Uri.parse("package:${context.packageName}"))
+            runCatching { context.startActivity(intent) }
+            enabled = runCatching { manager?.hasEnabledAutofillServices() == true }.getOrDefault(false)
+        },
+        modifier = Modifier.testTag(TestTags.AUTOFILL_SETTING),
+    ) { Text(stringResource(if (enabled) R.string.autofill_setting_on else R.string.autofill_setting_off)) }
 }
 
 private const val MIN_TICK_MS = 250L
@@ -938,6 +961,7 @@ object TestTags {
     const val BIOMETRIC_ENROLL = "biometric-enroll"
     const val BIOMETRIC_NOTICE = "biometric-notice"
     const val BIOMETRIC_OFF = "biometric-off"
+    const val AUTOFILL_SETTING = "autofill-setting"
 }
 
 @Composable

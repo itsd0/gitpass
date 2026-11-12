@@ -36,6 +36,9 @@ ed25519-dalek = { version = "2", features = ["rand_core", "zeroize"] }
 ssh-encoding = { version = "0.2", features = ["alloc"] }
 signature = "2"
 rsa = { version = "0.9", features = ["sha2"] }
+# Origin matching (eTLD+1 via the Public Suffix List), shared by gitpass-host and the mobile autofill (#475).
+url = "2"
+psl = "2"
 # GitHub API sync transport HTTP client (issue #453); only with feature `github-ureq`.
 ureq = { version = "2.12", default-features = false, features = ["tls"], optional = true }
 

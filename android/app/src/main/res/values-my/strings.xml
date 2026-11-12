@@ -98,4 +98,17 @@
     <string name="biometric_not_enabled">ဇီဝအချက်အလက်ဖြင့် ဖွင့်ခြင်းကို မဖွင့်ရသေးပါ။</string>
     <string name="biometric_invalidated">ဇီဝအချက်အလက်၊ မျက်နှာပြင်လော့ခ် သို့မဟုတ် ပင်မစကားဝှက် ပြောင်းလဲသွားသောကြောင့် ဇီဝအချက်အလက်ဖြင့် ဖွင့်ခြင်းကို ပိတ်လိုက်ပါပြီ။ ပြန်လည်သတ်မှတ်ရန် ပင်မစကားဝှက်ဖြင့် ဖွင့်ပါ။</string>
     <string name="biometric_turn_off">ဇီဝအချက်အလက်ဖြင့် ဖွင့်ခြင်းကို ပိတ်မည်</string>
+    <!-- Password autofill (#475). UNREVIEWED: machine-drafted Burmese, needs native-speaker review before release. -->
+    <string name="autofill_unlock_to_fill">ဖြည့်ရန် gitpass ကို ဖွင့်ပါ</string>
+    <string name="autofill_unlock_to_save">ဤဝင်ရောက်မှုကို သိမ်းရန် gitpass ကို ဖွင့်ပါ</string>
+    <string name="autofill_no_match">%1$s အတွက် သိမ်းထားသော ဝင်ရောက်မှု မရှိပါ။</string>
+    <string name="autofill_cancel">မလုပ်တော့ပါ</string>
+    <string name="autofill_save_question">%1$s အတွက် ဤဝင်ရောက်မှုကို gitpass တွင် သိမ်းမလား။</string>
+    <string name="autofill_save">သိမ်းမည်</string>
+    <string name="autofill_not_now">ယခု မလုပ်ပါ</string>
+    <string name="autofill_saved">“%1$s” ကို သိမ်းပြီးပါပြီ။</string>
+    <string name="autofill_save_failed">ဤဝင်ရောက်မှုကို မသိမ်းနိုင်ပါ။</string>
+    <string name="autofill_save_needs_android9">autofill မှ သိမ်းရန် Android 9 သို့မဟုတ် နောက်ပိုင်း လိုအပ်ပါသည်။</string>
+    <string name="autofill_setting_off">အလိုအလျောက်ဖြည့်ခြင်းကို ဖွင့်မည်</string>
+    <string name="autofill_setting_on">အလိုအလျောက်ဖြည့်ခြင်း ဖွင့်ထားသည်</string>
 </resources>

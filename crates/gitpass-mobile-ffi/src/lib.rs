@@ -364,6 +364,66 @@ fn detail(vid: &str, iid: &str, rec: &ItemRecord) -> ItemDetail {
     }
 }
 
+/// What an Android autofill request is for (#475). Exactly one identity is
+/// used: `web_origin` (`https://host`, from a trusted browser's web domain)
+/// when set, otherwise `android_package` (the requesting app, reported by
+/// the OS). With neither, nothing matches.
+#[derive(Debug, Clone, Default, PartialEq, Eq, uniffi::Record)]
+pub struct AutofillQuery {
+    pub web_origin: Option<String>,
+    pub android_package: Option<String>,
+}
+
+/// One login that matches an [`AutofillQuery`]. Only returned from an
+/// unlocked vault, and only for items whose URL matches the request.
+#[derive(Clone, uniffi::Record)]
+pub struct AutofillLogin {
+    pub vault_id: String,
+    pub item_id: String,
+    pub title: String,
+    pub username: Option<String>,
+    pub password: Option<String>,
+}
+
+impl std::fmt::Debug for AutofillLogin {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AutofillLogin").field("vault_id", &self.vault_id).field("item_id", &self.item_id).finish_non_exhaustive()
+    }
+}
+
+/// The shared eTLD+1 web rule (`gitpass_core::origin::origin_matches`).
+#[uniffi::export]
+pub fn autofill_origin_matches(item_url: String, web_origin: String) -> bool {
+    gitpass_core::origin::origin_matches(&item_url, &web_origin)
+}
+
+/// Exact Android package rule (`gitpass_core::origin::app_matches`).
+#[uniffi::export]
+pub fn autofill_app_matches(item_url: String, package: String) -> bool {
+    gitpass_core::origin::app_matches(&item_url, &package)
+}
+
+fn record_urls(rec: &ItemRecord) -> impl Iterator<Item = &str> {
+    rec.item.url.as_deref().into_iter().chain(
+        rec.sections.iter().flat_map(|s| &s.fields).filter(|f| f.kind == FieldKind::Url && !f.removed).filter_map(|f| f.value.as_deref()),
+    )
+}
+
+/// True when `rec` is a live login whose URL (main or a URL field) matches `q`.
+pub fn autofill_record_matches(rec: &ItemRecord, q: &AutofillQuery) -> bool {
+    if rec.category != Category::Login || rec.archived || rec.deleted_at.is_some() {
+        return false;
+    }
+    if rec.item.password.as_deref().unwrap_or("").is_empty() && rec.item.username.as_deref().unwrap_or("").is_empty() {
+        return false;
+    }
+    match (&q.web_origin, &q.android_package) {
+        (Some(origin), _) => record_urls(rec).any(|u| gitpass_core::origin::origin_matches(u, origin)),
+        (None, Some(pkg)) => record_urls(rec).any(|u| gitpass_core::origin::app_matches(u, pkg)),
+        (None, None) => false,
+    }
+}
+
 #[derive(uniffi::Object)]
 pub struct Vault {
     session: Mutex<Session>,
@@ -382,7 +442,10 @@ impl Vault {
 /// Level 2: `Vault::sync_github` + `HttpTransport` (#455).
 /// Level 3: quick-unlock key (`derive_quick_unlock_key`,
 /// `open_vault_with_quick_unlock_key`, `QUICK_UNLOCK_STALE`) (#473).
-pub const FFI_API_LEVEL: u32 = 3;
+/// Level 4: reserved for QR device pairing (#457 / PR #471).
+/// Level 5: autofill (`Vault::autofill_logins`, `AutofillQuery`, `AutofillLogin`,
+/// `autofill_origin_matches`, `autofill_app_matches`) (#475).
+pub const FFI_API_LEVEL: u32 = 5;
 
 /// Bridge version: the crate (= workspace) version plus the API level.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -566,6 +629,29 @@ pub fn is_allowed_path(path: String) -> bool {
 
 #[uniffi::export]
 impl Vault {
+    /// Logins matching an autofill request (#475), across all vaults, sorted
+    /// by title. Never returns an item whose URL does not match.
+    pub fn autofill_logins(&self, query: AutofillQuery) -> Result<Vec<AutofillLogin>, GitpassError> {
+        self.with_session(|s| {
+            let mut out = Vec::new();
+            for (vid, _meta) in s.list_vaults()? {
+                for (iid, _v, rec) in s.list_records(&vid)? {
+                    if autofill_record_matches(&rec, &query) {
+                        out.push(AutofillLogin {
+                            vault_id: vid.clone(),
+                            item_id: iid,
+                            title: rec.item.title.clone(),
+                            username: rec.item.username.clone(),
+                            password: rec.item.password.clone(),
+                        });
+                    }
+                }
+            }
+            out.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+            Ok(out)
+        })
+    }
+
     pub fn list_vaults(&self) -> Result<Vec<VaultInfo>, GitpassError> {
         self.with_session(|s| {
             let manifest = s.load_manifest()?;
