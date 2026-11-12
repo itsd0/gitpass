@@ -64,10 +64,13 @@ class BiometricUnlockUiTest {
                 // Biometric unlock: no password typed, no password unlock.
                 rule.onNodeWithTag(TestTags.LOCK).performClick()
                 val passwordOpens = gateway.passwordOpens
+                val keyOpens = gateway.keyOpens // setup already opened once with the derived key
                 rule.onNodeWithTag(TestTags.BIOMETRIC_UNLOCK).performScrollTo().performClick()
                 rule.waitUntil(10_000) { app.session.state.value.unlocked }
+                assertEquals(0, passwordOpens)
                 assertEquals(passwordOpens, gateway.passwordOpens)
-                assertEquals(1, gateway.keyOpens)
+                assertEquals(keyOpens + 1, gateway.keyOpens)
+                assertEquals(2, gate.prompts)
 
                 // Enrolment changed: Keystore key invalidated → Master Password + setup offered again.
                 rule.onNodeWithTag(TestTags.LOCK).performClick()
