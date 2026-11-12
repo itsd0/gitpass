@@ -6,7 +6,7 @@ This directory contains the first approved Android milestone for the `gitpass` c
 
 - **Milestone 1:** Buildable Kotlin + Jetpack Compose shell in `android/`, `#121212` dark background, `#F28C28` orange accent, localized strings (`en`, `values-my`, `values-th`), and a Kotlin-to-Rust UniFFI bridge packaging `arm64-v8a` and `x86_64` native libraries into a debug APK (#438).
 - **Milestone 2 (current):** Local vault unlock with Master Password + Secret Key, in-account vault selection, item list, substring search, item detail, and lock (#441). A new account can be created on the device so there is a vault to unlock. The vault directory is `noBackupFilesDir/vault`. Locking drops the UniFFI `Vault` (and the core `Session`). The app also locks when it leaves the foreground, and after 5 minutes with no activity while it is open. `FLAG_SECURE` is set on the activity window. The one-time Secret Key from account creation stays on that secure screen until the owner confirms they saved it.
-- **Not in this milestone:** Item editing, sync, Autofill, biometrics, Credential Provider passkeys, release signing, and crypto/KDF changes. Kotlin `String` values that cross the bridge are not wiped from the JVM heap. Search uses list summaries (title, subtitle, URL, category, tags), not notes or secrets. Deleted and archived items are hidden. Temp/fake data only.
+- **Not in this milestone:** Item editing, sync, Autofill, Credential Provider passkeys, release signing, and crypto/KDF changes. Kotlin `String` values that cross the bridge are not wiped from the JVM heap. Search uses list summaries (title, subtitle, URL, category, tags), not notes or secrets. Deleted and archived items are hidden. Temp/fake data only.
 
 ## Pinned Build Inputs
 
@@ -279,3 +279,67 @@ manual scheduler). Instrumented (API 35 16 KB emulator): `SyncStatusUiTest`
 engine boundary) and `SyncPlatformTest` (Keystore sealing, PATCH support of
 the platform HTTPS stack). No network, no real repository, fake data only.
 Manual Redmi ↔ desktop verification is still to be done by the owner.
+
+## Opt-in biometric unlock (#473)
+
+On a Master Password unlock, tick **Use biometrics to unlock next time**
+(shown only on Android 11+ with an enrolled BIOMETRIC_STRONG biometric). After
+one strong biometric check the unlock screen offers **Unlock with
+biometrics**; **Turn off biometric unlock** on the unlocked list removes it.
+
+**What is wrapped.** Not the Master Password. gitpass-core derives the 32-byte
+Account Unlock Key (AUK) with the vault's own Argon2id parameters (never
+lowered) combined with the Secret Key, verifies it by opening `keyset.enc`, and
+hands it over the bridge (`derive_quick_unlock_key`, bridge API level 3). The
+same unlock then opens the session with that key, so enabling costs no extra
+KDF run. Why the AUK and not the password:
+- the Master Password is never stored, not even encrypted, so a compromise of
+  the Keystore key or the sealed blob never reveals a password reused
+  elsewhere;
+- the AUK opens only this account's keyset; it is useless for any other vault
+  and cannot be used to log in elsewhere;
+- it goes stale by itself when the password, Secret Key or KDF parameters
+  change (the keyset is re-wrapped); the next biometric unlock fails AEAD
+  verification in Rust and the app falls back to the Master Password;
+- the Secret Key is not stored separately either (it is folded into the AUK).
+
+**Where and how it is stored** (`biometric/QuickUnlockStore.kt`):
+`noBackupFilesDir/<account>.quick-unlock` (next to, never inside, the vault
+directory; `allowBackup=false`; not in SharedPreferences). Format:
+version | IV | AES-256-GCM(AUK) with the account path as associated data. The
+key (`biometric/KeystoreQuickUnlockKeys.kt`, alias
+`gitpass.quickunlock.v1.<hash of account path>`) is a non-exportable Android
+Keystore AES-256-GCM key, StrongBox-backed when available, with
+`setUserAuthenticationRequired(true)`,
+`setUserAuthenticationParameters(0, AUTH_BIOMETRIC_STRONG)` (one
+authentication per use, no device-credential fallback, no validity window),
+`setInvalidatedByBiometricEnrollment(true)` and
+`setUnlockedDeviceRequired(true)`. The prompt is the platform
+`android.hardware.biometrics.BiometricPrompt` bound to the cipher
+(`CryptoObject`), so the AUK can only be unsealed right after a strong
+biometric match.
+
+**Fallback.** Enrolling or removing a biometric, removing the screen lock
+(`KeyPermanentlyInvalidatedException`), a damaged blob, or a stale AUK
+(password/Secret Key/KDF changed elsewhere) deletes the blob and the key,
+shows a notice, and pre-ticks the setup box for the next Master Password
+unlock. Cancelling the prompt or choosing **Use Master Password** keeps the
+password fields.
+
+**Unchanged.** A biometric unlock is side-effect free like the password
+unlock (no device registration, no trash purge, no KDF upgrade; the bridge
+refuses those without the password) and still runs the integrity and rollback
+checks. Locking, the inactivity lock and lock-on-background are unchanged.
+Biometrics do **not** enable background sync while locked: the AUK is unsealed
+only inside a foreground prompt, and sync still runs only while unlocked.
+
+**Tests.** Rust: `crates/gitpass-core/tests/quick_unlock.rs`,
+`crates/gitpass-mobile-ffi/tests/quick_unlock.rs`. JVM: `QuickUnlockStoreTest`
+(software stand-in for the Keystore key: round trip, wipe, AAD binding,
+tamper, invalidation, disable), `QuickUnlockSessionTest`. Instrumented:
+`BiometricUnlockUiTest` (real screens; prompt and Keystore key faked: opt in,
+biometric unlock, invalidation fallback, stale fallback, turn off, cancelled
+setup) and `BiometricKeystoreTest` (real Keystore: fails closed without an
+enrolled biometric; real bridge: derived key opens, wrong key is stale). CI
+emulators have no enrolled biometric, so the real prompt and real
+enrolment-change invalidation must be checked on a device.

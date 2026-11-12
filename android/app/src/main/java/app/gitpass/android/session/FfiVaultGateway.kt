@@ -12,6 +12,9 @@ import app.gitpass.android.sync.GitHubSyncTransport
 import app.gitpass.core.createAccount as ffiCreateAccount
 import app.gitpass.core.defaultUnlockOptions
 import app.gitpass.core.openVaultWith as ffiOpenVaultWith
+import app.gitpass.core.deriveQuickUnlockKey as ffiDeriveQuickUnlockKey
+import app.gitpass.core.openVaultWithQuickUnlockKey as ffiOpenVaultWithQuickUnlockKey
+import app.gitpass.core.quickUnlockStaleMessage
 import java.io.File
 
 /** UniFFI adapter. Crypto and the vault format stay in gitpass-core. */
@@ -26,6 +29,21 @@ class FfiVaultGateway : VaultGateway {
      */
     override fun open(root: String, password: String, secretKey: String): OpenVault {
         return FfiOpenVault(ffiOpenVaultWith(root, password, secretKey, defaultUnlockOptions()))
+    }
+
+    override fun deriveUnlockKey(root: String, password: String, secretKey: String): ByteArray =
+        ffiDeriveQuickUnlockKey(root, password, secretKey)
+
+    /** Same side-effect-free options as [open]; the native side wipes its copy of [key]. */
+    override fun openWithUnlockKey(root: String, key: ByteArray): OpenVault {
+        try {
+            return FfiOpenVault(ffiOpenVaultWithQuickUnlockKey(root, key, defaultUnlockOptions()))
+        } catch (error: GitpassException.Generic) {
+            if (error.v1 == quickUnlockStaleMessage()) throw QuickUnlockStaleException()
+            throw error
+        } finally {
+            key.fill(0)
+        }
     }
 }
 

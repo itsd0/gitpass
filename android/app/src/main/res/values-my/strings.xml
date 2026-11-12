@@ -88,4 +88,14 @@
     <string name="sync_saved">ချိန်ကိုက်ခြင်းဆက်တင်များကို သိမ်းဆည်းပြီးပါပြီ။</string>
     <string name="sync_save">ချိန်ကိုက်ခြင်းဆက်တင်များ သိမ်းရန်</string>
     <string name="sync_remove">ချိန်ကိုက်ခြင်းဆက်တင်များ ဖယ်ရှားရန်</string>
+    <!-- Biometric unlock (#473). UNREVIEWED: machine-drafted Burmese, needs native-speaker review before release. -->
+    <string name="biometric_unlock">ဇီဝအချက်အလက်ဖြင့် ဖွင့်မည်</string>
+    <string name="biometric_enroll">နောက်တစ်ကြိမ် ဇီဝအချက်အလက်ဖြင့် ဖွင့်မည်</string>
+    <string name="biometric_enroll_help">ပင်မစကားဝှက်ကို ဤတစ်ကြိမ်သာ လိုအပ်ပါသည်။ gitpass သည် ဤသိုလှောင်ခန်းကိုသာ ဖွင့်နိုင်သော သော့ကို Android Keystore ဖြင့် ပိတ်သိမ်းထားပြီး ခိုင်မာသော ဇီဝအချက်အလက် စစ်ဆေးပြီးမှသာ ထုတ်ပေးပါသည်။ ပင်မစကားဝှက်ကို ဘယ်တော့မှ မသိမ်းဆည်းပါ။ ဇီဝအချက်အလက်၊ မျက်နှာပြင်လော့ခ် သို့မဟုတ် ပင်မစကားဝှက် ပြောင်းလဲပါက ဤလုပ်ဆောင်ချက် ပိတ်သွားပါမည်။ သိုလှောင်ခန်း ပိတ်ထားစဉ် နောက်ခံတွင် ဘာမှ မဖွင့်ပါ၊ မ sync လုပ်ပါ။</string>
+    <string name="biometric_prompt_unlock">gitpass ကို ဖွင့်မည်</string>
+    <string name="biometric_prompt_enable">ဇီဝအချက်အလက်ဖြင့် ဖွင့်ခြင်းကို ဖွင့်မည်</string>
+    <string name="biometric_use_password">ပင်မစကားဝှက် သုံးမည်</string>
+    <string name="biometric_not_enabled">ဇီဝအချက်အလက်ဖြင့် ဖွင့်ခြင်းကို မဖွင့်ရသေးပါ။</string>
+    <string name="biometric_invalidated">ဇီဝအချက်အလက်၊ မျက်နှာပြင်လော့ခ် သို့မဟုတ် ပင်မစကားဝှက် ပြောင်းလဲသွားသောကြောင့် ဇီဝအချက်အလက်ဖြင့် ဖွင့်ခြင်းကို ပိတ်လိုက်ပါပြီ။ ပြန်လည်သတ်မှတ်ရန် ပင်မစကားဝှက်ဖြင့် ဖွင့်ပါ။</string>
+    <string name="biometric_turn_off">ဇီဝအချက်အလက်ဖြင့် ဖွင့်ခြင်းကို ပိတ်မည်</string>
 </resources>

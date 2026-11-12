@@ -88,4 +88,14 @@
     <string name="sync_saved">Sync settings saved.</string>
     <string name="sync_save">Save sync settings</string>
     <string name="sync_remove">Remove sync settings</string>
+    <!-- Biometric unlock (#473). -->
+    <string name="biometric_unlock">Unlock with biometrics</string>
+    <string name="biometric_enroll">Use biometrics to unlock next time</string>
+    <string name="biometric_enroll_help">Your Master Password is needed this once. gitpass keeps a key that opens only this vault, sealed by Android Keystore and released only after a strong biometric check. Your Master Password is never stored. Changing your biometrics, screen lock or Master Password turns this off. Nothing unlocks or syncs in the background while the vault is locked.</string>
+    <string name="biometric_prompt_unlock">Unlock gitpass</string>
+    <string name="biometric_prompt_enable">Turn on biometric unlock</string>
+    <string name="biometric_use_password">Use Master Password</string>
+    <string name="biometric_not_enabled">Biometric unlock was not turned on.</string>
+    <string name="biometric_invalidated">Biometric unlock was turned off because your biometrics, screen lock or Master Password changed. Unlock with your Master Password to set it up again.</string>
+    <string name="biometric_turn_off">Turn off biometric unlock</string>
 </resources>

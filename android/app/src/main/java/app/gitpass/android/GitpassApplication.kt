@@ -32,6 +32,11 @@ import app.gitpass.android.sync.SyncCoordinator
 import app.gitpass.android.sync.SyncScheduler
 import app.gitpass.android.sync.SyncSettingsStore
 import app.gitpass.android.sync.TokenCipher
+import app.gitpass.android.biometric.BiometricGate
+import app.gitpass.android.biometric.KeystoreQuickUnlockKeys
+import app.gitpass.android.biometric.PlatformBiometricGate
+import app.gitpass.android.biometric.QuickUnlockKeys
+import app.gitpass.android.biometric.QuickUnlockStore
 
 class GitpassApplication : Application() {
     @Volatile lateinit var session: VaultSession
@@ -53,6 +58,12 @@ class GitpassApplication : Application() {
         private set
     @Volatile lateinit var syncSettings: SyncSettingsStore
         private set
+    /** Opt-in biometric unlock for the selected account (#473). Replaced on every account switch. */
+    @Volatile lateinit var quickUnlock: QuickUnlockStore
+        private set
+    var biometricGate: BiometricGate = PlatformBiometricGate()
+        private set
+    private var quickUnlockKeys: QuickUnlockKeys = KeystoreQuickUnlockKeys()
     private var tokenCipher: TokenCipher = KeystoreTokenCipher()
     private var syncScheduler: SyncScheduler = ExecutorSyncScheduler()
     private var online: () -> Boolean = ::hasValidatedNetwork
@@ -152,11 +163,16 @@ class GitpassApplication : Application() {
         secretTools: SecretTools = NativeSecretTools,
         cipher: TokenCipher? = null,
         isOnline: () -> Boolean = { true },
+        quickKeys: QuickUnlockKeys? = null,
+        gate: BiometricGate? = null,
     ) {
         if (this::session.isInitialized) session.lock()
         // Tests never touch the production Keystore alias or the network check.
         tokenCipher = cipher ?: KeystoreTokenCipher("gitpass.sync.token.test")
         online = isOnline
+        // Keystore aliases are derived from the (test-only) root path.
+        quickUnlockKeys = quickKeys ?: KeystoreQuickUnlockKeys()
+        biometricGate = gate ?: PlatformBiometricGate()
         pendingSecret.clear()
         accountSelectionDamaged = false
         accountRoots = AccountRoots(File(root.parentFile, "first-pull-test-${root.name}"), root)
@@ -171,6 +187,8 @@ class GitpassApplication : Application() {
         session = fresh
         // Settings live next to the account directory, never inside it (not synced, not backed up).
         syncSettings = SyncSettingsStore(File(root.parentFile, "${root.name}.sync.json"), tokenCipher)
+        // Sealed biometric unlock key also lives next to the account directory (not synced, not backed up).
+        quickUnlock = QuickUnlockStore(root, quickUnlockKeys)
         sync = SyncCoordinator(fresh, syncSettings, syncScheduler, online = { online() })
         fresh.events = sync
         accountSetup = AccountSetup(

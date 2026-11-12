@@ -3,6 +3,17 @@
 ## Unreleased
 
 ### Added
+- Android opt-in biometric unlock (#473): BiometricPrompt (BIOMETRIC_STRONG,
+  Android 11+) releases the Account Unlock Key from an auth-bound Android
+  Keystore AES-GCM key (invalidated on biometric enrolment change). The key is
+  derived and verified by gitpass-core with the vault's full KDF; the Master
+  Password is never stored. Invalidation or a password/Secret Key/KDF change
+  falls back to the Master Password and offers setup again; turning it off
+  deletes the key. New bridge exports `derive_quick_unlock_key`,
+  `open_vault_with_quick_unlock_key`, `quick_unlock_stale_message` (bridge API
+  level 3) and core `Session::derive_unlock_key` /
+  `Session::unlock_with_unlock_key` (side-effect free, integrity and rollback
+  checks kept). No background sync while locked.
 - iOS two-way sync on the shared core engine (#456): the Swift merge/upload
   loop, `gitBlobSHA` and `isSyncable` are gone; sync is `Vault.syncGithub`
   over a Swift `URLSession` `HttpTransport` (fixed origin, no redirects or
