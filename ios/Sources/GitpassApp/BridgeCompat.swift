@@ -7,7 +7,7 @@ import Foundation
 /// `formatVersion()`). No secret is involved in this check.
 enum BridgeCompat {
     /// `FFI_API_LEVEL` in `crates/gitpass-mobile-ffi/src/lib.rs`.
-    static let expectedApiLevel: UInt32 = 7
+    static let expectedApiLevel: UInt32 = 8
     /// Vault format (`FORMAT_VERSION` in gitpass-core) this app handles.
     static let expectedFormat: UInt32 = 5
 

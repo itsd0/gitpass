@@ -268,11 +268,15 @@ impl GitHubRepoRef {
 }
 
 /// Fine-grained PAT shape: `github_pat_` + `[A-Za-z0-9_]`. Classic tokens
-/// (`ghp_…`, account-wide scopes) are refused.
-fn valid_token(t: &str) -> bool {
+/// (`ghp_…`, account-wide scopes) are refused. Pairing uses the same check.
+pub(crate) fn is_fine_grained_pat(t: &str) -> bool {
     t.len() <= 255
         && t.strip_prefix("github_pat_")
             .is_some_and(|rest| !rest.is_empty() && rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_'))
+}
+
+fn valid_token(t: &str) -> bool {
+    is_fine_grained_pat(t)
 }
 
 /// The GitHub Git Data API [`RemoteRepo`]. One instance per sync: limits,
