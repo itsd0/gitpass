@@ -102,7 +102,7 @@ fn ffi_version_matches_workspace_version() {
             api_level: FFI_API_LEVEL
         }
     );
-    assert_eq!(FFI_API_LEVEL, 3);
+    assert_eq!(FFI_API_LEVEL, 5);
 }
 
 #[test]

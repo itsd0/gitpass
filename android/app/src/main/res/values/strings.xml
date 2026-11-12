@@ -98,4 +98,17 @@
     <string name="biometric_not_enabled">Biometric unlock was not turned on.</string>
     <string name="biometric_invalidated">Biometric unlock was turned off because your biometrics, screen lock or Master Password changed. Unlock with your Master Password to set it up again.</string>
     <string name="biometric_turn_off">Turn off biometric unlock</string>
+    <!-- Password autofill (#475). -->
+    <string name="autofill_unlock_to_fill">Unlock gitpass to fill</string>
+    <string name="autofill_unlock_to_save">Unlock gitpass to save this login</string>
+    <string name="autofill_no_match">No saved logins for %1$s.</string>
+    <string name="autofill_cancel">Cancel</string>
+    <string name="autofill_save_question">Save this login for %1$s in gitpass?</string>
+    <string name="autofill_save">Save</string>
+    <string name="autofill_not_now">Not now</string>
+    <string name="autofill_saved">Saved “%1$s”.</string>
+    <string name="autofill_save_failed">Could not save this login.</string>
+    <string name="autofill_save_needs_android9">Saving from autofill needs Android 9 or newer.</string>
+    <string name="autofill_setting_off">Turn on autofill</string>
+    <string name="autofill_setting_on">Autofill is on</string>
 </resources>

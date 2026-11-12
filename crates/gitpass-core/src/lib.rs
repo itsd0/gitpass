@@ -10,6 +10,7 @@ pub mod crypto;
 pub mod device;
 pub mod fsutil;
 pub mod gen_history;
+pub mod origin;
 pub mod generate;
 pub mod keys;
 pub mod import;

@@ -317,6 +317,44 @@ class VaultSession(
         }
     }
 
+    /**
+     * Logins for an autofill request (#475). Only from an unlocked session and
+     * only items whose URL matches [target] (rules in gitpass-core).
+     */
+    fun autofillLogins(target: app.gitpass.android.autofill.AutofillTarget): List<AutofillCredential> = mutex.withLock {
+        val current = opened ?: throw VaultLockedException()
+        ensureNotSyncing()
+        lastActivityMs = nowMs()
+        current.autofillLogins(target)
+    }
+
+    /**
+     * Saves a login from an autofill save request (#475): updates the password
+     * of the matching item with the same username, otherwise creates a new
+     * login in the selected vault. Returns the item title.
+     */
+    fun saveAutofillLogin(target: app.gitpass.android.autofill.AutofillTarget, username: String, password: String): String = mutex.withLock {
+        val current = opened ?: throw VaultLockedException()
+        ensureNotSyncing()
+        require(password.isNotEmpty()) { "Nothing to save" }
+        val match = current.autofillLogins(target).firstOrNull { (it.username ?: "") == username }
+        val title = if (match != null) {
+            val existing = current.getItem(match.vaultId, match.itemId)
+            val edit = ItemEdit(existing.title, username, password, existing.url ?: target.itemUrl, existing.notes.orEmpty())
+            current.updateItem(match.vaultId, match.itemId, edit.input(existing))
+            existing.title
+        } else {
+            val vaultId = selectedVaultId ?: vaults.firstOrNull()?.id ?: throw VaultSessionException("No vault selected")
+            current.createItem(vaultId, ItemEdit(target.label, username, password, target.itemUrl).input(null))
+            target.label
+        }
+        reloadLocked()
+        lastActivityMs = nowMs()
+        publishLocked()
+        events?.localChange()
+        title
+    }
+
     /** True while a sync holds the native session. */
     fun isSyncing(): Boolean = mutex.withLock { syncing != null }
 
@@ -478,12 +516,19 @@ interface OpenVault {
     fun updateItem(vaultId: String, itemId: String, input: app.gitpass.core.ItemInput): Unit = throw UnsupportedOperationException()
     fun deleteItem(vaultId: String, itemId: String): Unit = throw UnsupportedOperationException()
     fun restoreItem(vaultId: String, itemId: String): Unit = throw UnsupportedOperationException()
+    /** Matching logins for autofill (#475); secrets only for matching items. */
+    fun autofillLogins(target: app.gitpass.android.autofill.AutofillTarget): List<AutofillCredential> = throw UnsupportedOperationException()
     /** Pull, merge and push with GitHub on the shared core engine; honour [cancel]. */
     fun syncGitHub(target: SyncTarget, token: String, cancel: SyncCancel): SyncOutcome = throw UnsupportedOperationException()
     fun close()
 }
 
 class VaultLockedException : Exception("Vault is locked")
+
+/** One autofill match. [toString] never includes the username or password. */
+class AutofillCredential(val vaultId: String, val itemId: String, val title: String, val username: String?, val password: String?) {
+    override fun toString() = "AutofillCredential([redacted])"
+}
 
 /** The saved biometric unlock key no longer opens this vault (password, Secret Key or KDF changed). */
 class QuickUnlockStaleException : Exception("Biometric unlock no longer matches this vault. Unlock with your Master Password.")

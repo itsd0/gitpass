@@ -6,7 +6,7 @@ This directory contains the first approved Android milestone for the `gitpass` c
 
 - **Milestone 1:** Buildable Kotlin + Jetpack Compose shell in `android/`, `#121212` dark background, `#F28C28` orange accent, localized strings (`en`, `values-my`, `values-th`), and a Kotlin-to-Rust UniFFI bridge packaging `arm64-v8a` and `x86_64` native libraries into a debug APK (#438).
 - **Milestone 2 (current):** Local vault unlock with Master Password + Secret Key, in-account vault selection, item list, substring search, item detail, and lock (#441). A new account can be created on the device so there is a vault to unlock. The vault directory is `noBackupFilesDir/vault`. Locking drops the UniFFI `Vault` (and the core `Session`). The app also locks when it leaves the foreground, and after 5 minutes with no activity while it is open. `FLAG_SECURE` is set on the activity window. The one-time Secret Key from account creation stays on that secure screen until the owner confirms they saved it.
-- **Not in this milestone:** Item editing, sync, Autofill, Credential Provider passkeys, release signing, and crypto/KDF changes. Kotlin `String` values that cross the bridge are not wiped from the JVM heap. Search uses list summaries (title, subtitle, URL, category, tags), not notes or secrets. Deleted and archived items are hidden. Temp/fake data only.
+- **Not in this milestone:** Item editing, sync, Credential Provider passkeys, release signing, and crypto/KDF changes. Kotlin `String` values that cross the bridge are not wiped from the JVM heap. Search uses list summaries (title, subtitle, URL, category, tags), not notes or secrets. Deleted and archived items are hidden. Temp/fake data only.
 
 ## Pinned Build Inputs
 
@@ -343,3 +343,57 @@ setup) and `BiometricKeystoreTest` (real Keystore: fails closed without an
 enrolled biometric; real bridge: derived key opens, wrong key is stale). CI
 emulators have no enrolled biometric, so the real prompt and real
 enrolment-change invalidation must be checked on a device.
+
+## Password autofill (#475)
+
+Passwords only (no passkeys). Turn it on with **Turn on autofill** on the
+unlocked list (opens the system autofill picker), or in Android Settings →
+Passwords & accounts → Autofill service.
+
+**Detection** (`autofill/FieldParser.kt`): autofill hints and HTML
+`autocomplete` first, then input types (`textPassword`, `textWebPassword`,
+`textEmailAddress`, numeric password, HTML `type=password|email`), then
+id/name/hint words. The text field right before the first password field
+becomes the username when nothing better was found. One-time-code, search,
+captcha, hidden and invisible fields are ignored.
+
+**Matching** (`autofill/AutofillTarget.kt` + `gitpass_core::origin`): exactly
+one identity per request.
+- Browsers on the trusted list (Chrome, Firefox, Brave, Edge, Samsung, Mi
+  Browser, …) report the page domain; the origin `https://<domain>` is matched
+  with the same eTLD+1 rule the browser extension uses (moved from
+  gitpass-host into gitpass-core: `paypal.com.evil.io` never matches
+  `paypal.com`; `http` pages never match except loopback).
+- Every other app is matched by its package (reported by the OS) against item
+  URLs `android://<package>`, `androidapp://<package>` or
+  `android://<cert-hash>@<package>/`. A web domain reported by a non-browser
+  app (e.g. a WebView) is ignored, so an app cannot obtain another site's
+  login.
+- Matching runs in Rust (`Vault.autofill_logins`, bridge API level 5; level 4
+  is reserved for device pairing #457) over live login items (main URL and
+  URL fields); archived and trashed items are never offered.
+
+**Unlock before any secret.** The service only ever answers with one
+"Unlock gitpass to fill" entry. Its Intent opens `AutofillAuthActivity`, which
+unlocks with biometrics (#473) or Master Password + Secret Key, asks the core
+for matching logins and only then builds datasets (title + username shown,
+values filled on selection). No match returns nothing. When the framework
+attaches the view structure, the activity re-derives the target from it and
+refuses a request whose target differs from the service's. A vault unlocked
+for autofill is locked again before the activity finishes or stops.
+
+**Save prompt.** Forms with a password field carry `SaveInfo`. On save
+(Android 9+), the typed values stay in process memory (`SaveStash`, random
+single-use token, 5 minute expiry; never in the Intent) and
+`AutofillSaveActivity` asks for an unlock and a confirmation. It updates the
+password of the matching item with the same username, otherwise creates a
+login (title = domain or package, URL = origin or `android://<package>`), then
+locks again.
+
+**Tests.** Rust: `crates/gitpass-core/tests/origin_android.rs`,
+`crates/gitpass-mobile-ffi/tests/autofill.rs`. JVM: `FieldParserTest`,
+`AutofillTargetTest`, `FillPlanTest`, `SaveStashTest`, `AutofillSessionTest`.
+Instrumented: `AutofillUiTest` (unlock activities: nothing before unlock,
+datasets after, mismatch returns nothing, vault re-locked, save updates).
+The system autofill flow itself (choosing gitpass as the service, real apps
+and browsers) is not automated and must be checked on a device.

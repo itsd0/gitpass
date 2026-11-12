@@ -56,6 +56,11 @@ private class FfiOpenVault(private val vault: Vault) : OpenVault {
 
     override fun createVault(name: String): String = vault.createVault(name, null)
 
+    override fun autofillLogins(target: app.gitpass.android.autofill.AutofillTarget): List<AutofillCredential> =
+        vault.autofillLogins(app.gitpass.core.AutofillQuery(target.webOrigin, target.androidPackage)).map {
+            AutofillCredential(it.vaultId, it.itemId, it.title, it.username, it.password)
+        }
+
     override fun createItem(vaultId: String, input: ItemInput): String = vault.createItem(vaultId, input)
     override fun updateItem(vaultId: String, itemId: String, input: ItemInput) = vault.updateItem(vaultId, itemId, input)
     override fun deleteItem(vaultId: String, itemId: String) = vault.deleteItem(vaultId, itemId)

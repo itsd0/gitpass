@@ -98,4 +98,17 @@
     <string name="biometric_not_enabled">ยังไม่ได้เปิดการปลดล็อกด้วยไบโอเมตริก</string>
     <string name="biometric_invalidated">ปิดการปลดล็อกด้วยไบโอเมตริกแล้ว เพราะไบโอเมตริก การล็อกหน้าจอ หรือรหัสผ่านหลักมีการเปลี่ยนแปลง ปลดล็อกด้วยรหัสผ่านหลักเพื่อตั้งค่าอีกครั้ง</string>
     <string name="biometric_turn_off">ปิดการปลดล็อกด้วยไบโอเมตริก</string>
+    <!-- Password autofill (#475). UNREVIEWED: machine-drafted Thai, needs native-speaker review before release. -->
+    <string name="autofill_unlock_to_fill">ปลดล็อก gitpass เพื่อกรอกข้อมูล</string>
+    <string name="autofill_unlock_to_save">ปลดล็อก gitpass เพื่อบันทึกการเข้าสู่ระบบนี้</string>
+    <string name="autofill_no_match">ไม่มีข้อมูลเข้าสู่ระบบที่บันทึกไว้สำหรับ %1$s</string>
+    <string name="autofill_cancel">ยกเลิก</string>
+    <string name="autofill_save_question">บันทึกการเข้าสู่ระบบนี้สำหรับ %1$s ไว้ใน gitpass หรือไม่</string>
+    <string name="autofill_save">บันทึก</string>
+    <string name="autofill_not_now">ไว้ทีหลัง</string>
+    <string name="autofill_saved">บันทึก “%1$s” แล้ว</string>
+    <string name="autofill_save_failed">บันทึกการเข้าสู่ระบบนี้ไม่ได้</string>
+    <string name="autofill_save_needs_android9">การบันทึกจากการกรอกอัตโนมัติต้องใช้ Android 9 ขึ้นไป</string>
+    <string name="autofill_setting_off">เปิดการกรอกอัตโนมัติ</string>
+    <string name="autofill_setting_on">เปิดการกรอกอัตโนมัติอยู่</string>
 </resources>
