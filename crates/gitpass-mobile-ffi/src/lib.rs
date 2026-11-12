@@ -380,7 +380,9 @@ impl Vault {
 /// record or behaviour changes in a way the apps must know about; the
 /// apps compare it with the level they were written against at startup.
 /// Level 2: `Vault::sync_github` + `HttpTransport` (#455).
-pub const FFI_API_LEVEL: u32 = 2;
+/// Level 3: quick-unlock key (`derive_quick_unlock_key`,
+/// `open_vault_with_quick_unlock_key`, `QUICK_UNLOCK_STALE`) (#473).
+pub const FFI_API_LEVEL: u32 = 3;
 
 /// Bridge version: the crate (= workspace) version plus the API level.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -465,6 +467,58 @@ pub fn open_vault_with(
         options.device_name.as_deref(),
         effects,
     ))?;
+    Ok(std::sync::Arc::new(Vault { session: Mutex::new(session) }))
+}
+
+/// Error text of `open_vault_with_quick_unlock_key` when the stored key no
+/// longer opens the vault (password, Secret Key or KDF changed, or the key is
+/// wrong). Apps compare against this to drop the saved key and fall back to
+/// the Master Password.
+#[uniffi::export]
+pub fn quick_unlock_stale_message() -> String {
+    gitpass_core::store::STALE_UNLOCK_KEY.to_string()
+}
+
+/// Derive the 32-byte Account Unlock Key for quick (biometric) unlock.
+///
+/// Runs the vault's full Argon2id KDF (stored parameters; never lowered) and
+/// verifies the result by opening the keyset, so a wrong password or Secret
+/// Key fails here and counts towards the unlock throttle. The key opens only
+/// this account's keyset and stops working when the password, Secret Key or
+/// KDF parameters change (the keyset is re-wrapped). Callers must keep it
+/// only inside hardware-backed, user-authentication-bound storage and wipe
+/// their copy after wrapping it.
+#[uniffi::export]
+pub fn derive_quick_unlock_key(root: String, password: String, secret_key: String) -> Result<Vec<u8>, GitpassError> {
+    let secret = err(crypto::SecretKey::parse(&secret_key))?;
+    let key = err(Session::derive_unlock_key(Path::new(&root), &password, &secret))?;
+    Ok(key.0.to_vec())
+}
+
+/// Side-effect-free unlock with a key from [`derive_quick_unlock_key`]. Skips
+/// the KDF; integrity and rollback checks still run. Never registers the
+/// device or upgrades the KDF (those need the Master Password); only
+/// `purge_expired_trash` from `options` is honoured. The input buffer is
+/// wiped before returning.
+#[uniffi::export]
+pub fn open_vault_with_quick_unlock_key(
+    root: String,
+    key: Vec<u8>,
+    options: UnlockOptions,
+) -> Result<std::sync::Arc<Vault>, GitpassError> {
+    use zeroize::Zeroize;
+    let mut key = key;
+    let parsed: Option<[u8; 32]> = key.as_slice().try_into().ok();
+    key.zeroize();
+    let Some(bytes) = parsed else {
+        return Err(GitpassError::Generic(gitpass_core::store::STALE_UNLOCK_KEY.to_string()));
+    };
+    let key = crypto::Key32(bytes);
+    if options.register_device || options.upgrade_kdf {
+        return Err(GitpassError::Generic("quick unlock cannot register the device or upgrade the KDF".into()));
+    }
+    let effects = UnlockEffects { touch_device: false, purge_expired: options.purge_expired_trash, upgrade_kdf: false };
+    let session = err(Session::unlock_with_unlock_key(Path::new(&root), &key, &UnlockOpts::default(), effects))?;
     Ok(std::sync::Arc::new(Vault { session: Mutex::new(session) }))
 }
 

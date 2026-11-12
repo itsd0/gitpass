@@ -796,6 +796,12 @@ internal open class UniffiVTableCallbackInterfaceHttpTransport(
 
 
 
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -815,6 +821,8 @@ internal interface IntegrityCheckingUniffiLib : Library {
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_default_unlock_options(
 ): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_derive_quick_unlock_key(
+): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_ffi_version(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_format_version(
@@ -829,7 +837,11 @@ fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with(
 ): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with_quick_unlock_key(
+): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_pull_github_snapshot(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_quick_unlock_stale_message(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_totp_code(
 ): Short
@@ -971,6 +983,8 @@ fun uniffi_gitpass_mobile_ffi_fn_func_create_account(`root`: RustBuffer.ByValue,
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_default_unlock_options(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_derive_quick_unlock_key(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_ffi_version(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_format_version(uniffi_out_err: UniffiRustCallStatus, 
@@ -985,7 +999,11 @@ fun uniffi_gitpass_mobile_ffi_fn_func_open_vault(`root`: RustBuffer.ByValue,`pas
 ): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_func_open_vault_with(`root`: RustBuffer.ByValue,`password`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
+fun uniffi_gitpass_mobile_ffi_fn_func_open_vault_with_quick_unlock_key(`root`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_func_pull_github_snapshot(`root`: RustBuffer.ByValue,`target`: RustBuffer.ByValue,`token`: RustBuffer.ByValue,`transport`: Pointer,`cancellation`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_quick_unlock_stale_message(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_totp_code(`secret`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
@@ -1123,6 +1141,9 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_default_unlock_options() != 8485.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_derive_quick_unlock_key() != 48170.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_ffi_version() != 63213.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1144,7 +1165,13 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with() != 39303.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with_quick_unlock_key() != 48988.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pull_github_snapshot() != 28152.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_quick_unlock_stale_message() != 15850.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_totp_code() != 28435.toShort()) {
@@ -3800,6 +3827,27 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     )
     }
     
+
+        /**
+         * Derive the 32-byte Account Unlock Key for quick (biometric) unlock.
+         *
+         * Runs the vault's full Argon2id KDF (stored parameters; never lowered) and
+         * verifies the result by opening the keyset, so a wrong password or Secret
+         * Key fails here and counts towards the unlock throttle. The key opens only
+         * this account's keyset and stops working when the password, Secret Key or
+         * KDF parameters change (the keyset is re-wrapped). Callers must keep it
+         * only inside hardware-backed, user-authentication-bound storage and wipe
+         * their copy after wrapping it.
+         */
+    @Throws(GitpassException::class) fun `deriveQuickUnlockKey`(`root`: kotlin.String, `password`: kotlin.String, `secretKey`: kotlin.String): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_derive_quick_unlock_key(
+        FfiConverterString.lower(`root`),FfiConverterString.lower(`password`),FfiConverterString.lower(`secretKey`),_status)
+}
+    )
+    }
+    
  fun `ffiVersion`(): FfiVersion {
             return FfiConverterTypeFfiVersion.lift(
     uniffiRustCall() { _status ->
@@ -3884,6 +3932,23 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     
 
         /**
+         * Side-effect-free unlock with a key from [`derive_quick_unlock_key`]. Skips
+         * the KDF; integrity and rollback checks still run. Never registers the
+         * device or upgrades the KDF (those need the Master Password); only
+         * `purge_expired_trash` from `options` is honoured. The input buffer is
+         * wiped before returning.
+         */
+    @Throws(GitpassException::class) fun `openVaultWithQuickUnlockKey`(`root`: kotlin.String, `key`: kotlin.ByteArray, `options`: UnlockOptions): Vault {
+            return FfiConverterTypeVault.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_open_vault_with_quick_unlock_key(
+        FfiConverterString.lower(`root`),FfiConverterByteArray.lower(`key`),FfiConverterTypeUnlockOptions.lower(`options`),_status)
+}
+    )
+    }
+    
+
+        /**
          * First pull for a device with no vault yet (#456): download the vault files
          * at the branch head into `root` on the shared core GitHub transport.
          *
@@ -3901,6 +3966,21 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     uniffiRustCallWithError(GitpassException) { _status ->
     UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pull_github_snapshot(
         FfiConverterString.lower(`root`),FfiConverterTypeGitHubSyncTarget.lower(`target`),FfiConverterString.lower(`token`),FfiConverterTypeHttpTransport.lower(`transport`),FfiConverterTypeSyncCancellation.lower(`cancellation`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Error text of `open_vault_with_quick_unlock_key` when the stored key no
+         * longer opens the vault (password, Secret Key or KDF changed, or the key is
+         * wrong). Apps compare against this to drop the saved key and fall back to
+         * the Master Password.
+         */ fun `quickUnlockStaleMessage`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_quick_unlock_stale_message(
+        _status)
 }
     )
     }

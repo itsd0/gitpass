@@ -24,6 +24,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -61,7 +62,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.gitpass.android.GitpassApplication
 import app.gitpass.android.R
+import app.gitpass.android.biometric.BiometricResult
+import app.gitpass.android.biometric.QuickUnlockInvalidatedException
 import app.gitpass.android.session.AccountCreatedButLocked
+import app.gitpass.android.session.QuickUnlockStaleException
 import app.gitpass.android.session.AccountSetup
 import app.gitpass.android.session.DetailRow
 import app.gitpass.android.session.ItemEdit
@@ -77,6 +81,7 @@ import app.gitpass.android.ui.theme.GitpassSecondary
 import app.gitpass.android.ui.theme.GitpassSurface
 import app.gitpass.core.GitpassException
 import java.io.File
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -128,12 +133,101 @@ private fun AccountRoot(app: GitpassApplication) {
     var importing by remember(snapshot.epoch) { mutableStateOf(false) }
     var writing by remember(snapshot.epoch) { mutableStateOf(false) }
 
+    // Biometric unlock (#473). [enrollNext] is not keyed on the lock epoch so a
+    // re-setup prompt after invalidation survives the lock that caused it.
+    val quick = app.quickUnlock
+    val gate = app.biometricGate
+    var quickEnabled by remember(snapshot.epoch) { mutableStateOf(quick.isEnabled()) }
+    var enrollNext by remember { mutableStateOf(false) }
+    var quickNotice by remember { mutableStateOf<String?>(null) }
+    val promptUnlock = stringResource(R.string.biometric_prompt_unlock)
+    val promptEnable = stringResource(R.string.biometric_prompt_enable)
+    val usePassword = stringResource(R.string.biometric_use_password)
+    val notEnabled = stringResource(R.string.biometric_not_enabled)
+    val invalidated = stringResource(R.string.biometric_invalidated)
     val tooShort = stringResource(R.string.password_too_short)
     val mismatch = stringResource(R.string.passwords_do_not_match)
     val context = LocalContext.current
     val root = app.vaultRoot.absolutePath
     val creating = setupState == AccountSetup.State.Creating
     val busy = unlocking || creating
+    val biometricAvailable = remember(snapshot.epoch, quickEnabled) { gate.available(context) }
+
+    fun quickInvalidated() {
+        quick.disable()
+        quickEnabled = false
+        enrollNext = true // re-prompt setup on the next Master Password unlock
+        quickNotice = invalidated
+    }
+
+    /** Seals [key] with a new auth-bound Keystore key after one strong biometric check; always wipes [key]. */
+    fun enableQuick(key: ByteArray) {
+        val cipher = try {
+            quick.beginEnable()
+        } catch (_: Exception) {
+            key.fill(0)
+            quickNotice = notEnabled
+            return
+        }
+        gate.authenticate(context, cipher, promptEnable, usePassword) { result ->
+            if (result is BiometricResult.Success) {
+                // Synchronous so the key is wiped even if this screen is gone.
+                val saved = runCatching { quick.finishEnable(result.cipher, key) }.isSuccess
+                quickEnabled = saved
+                if (saved) enrollNext = false
+                quickNotice = if (saved) null else notEnabled
+            } else {
+                key.fill(0)
+                quick.disable()
+                quickNotice = notEnabled
+            }
+        }
+    }
+
+    fun biometricUnlock() {
+        if (busy) return
+        errorText = null
+        val cipher = try {
+            quick.beginUnlock()
+        } catch (_: QuickUnlockInvalidatedException) {
+            quickInvalidated()
+            return
+        }
+        unlocking = true
+        gate.authenticate(context, cipher, promptUnlock, usePassword) { result ->
+            when (result) {
+                is BiometricResult.Success -> {
+                    val key = try {
+                        quick.finishUnlock(result.cipher)
+                    } catch (_: QuickUnlockInvalidatedException) {
+                        unlocking = false
+                        quickInvalidated()
+                        return@authenticate
+                    }
+                    // ATOMIC: the body (and its finally) runs even if the scope is cancelled first.
+                    scope.launch(start = CoroutineStart.ATOMIC) {
+                        val outcome = try {
+                            withContext(Dispatchers.IO) { runCatching { session.unlockWithKey(root, key) } }
+                        } finally {
+                            key.fill(0)
+                        }
+                        unlocking = false
+                        outcome.onSuccess {
+                            setup.noteUnlocked()
+                            quickNotice = null
+                        }.onFailure { error ->
+                            if (error is QuickUnlockStaleException) quickInvalidated() else errorText = userVisibleError(error)
+                        }
+                    }
+                }
+                BiometricResult.Cancelled -> unlocking = false
+                is BiometricResult.Failed -> {
+                    unlocking = false
+                    errorText = result.message
+                }
+            }
+        }
+    }
 
     LaunchedEffect(snapshot.unlocked, snapshot.epoch) {
         // Wakes near the deadline only; the lock itself reaches the UI
@@ -221,22 +315,33 @@ private fun AccountRoot(app: GitpassApplication) {
                 onConfirm = { confirmPassword = it },
                 onSecretKey = { secretKey = it },
                 onToggleSecret = { showSecretKey = !showSecretKey },
+                quickUnlockOffered = vaultExists && quickEnabled && biometricAvailable,
+                enrollOffered = vaultExists && !quickEnabled && biometricAvailable,
+                enrollChecked = enrollNext,
+                quickNotice = quickNotice,
+                onEnroll = { enrollNext = it },
+                onBiometricUnlock = { biometricUnlock() },
                 onUnlock = {
                     if (busy) return@UnlockScreen
                     errorText = null
                     unlocking = true
                     val typedPassword = password
                     val typedSecret = secretKey
+                    val wantQuick = enrollNext && biometricAvailable && !quickEnabled
                     scope.launch {
                         val result = withContext(Dispatchers.IO) {
-                            runCatching { session.unlock(root, typedPassword, typedSecret) }
+                            runCatching {
+                                if (wantQuick) session.unlockForQuickSetup(root, typedPassword, typedSecret)
+                                else { session.unlock(root, typedPassword, typedSecret); null }
+                            }
                         }
                         unlocking = false
-                        result.onSuccess {
+                        result.onSuccess { key ->
                             setup.noteUnlocked()
                             password = ""
                             secretKey = ""
                             errorText = null
+                            if (key != null) enableQuick(key)
                         }.onFailure { error ->
                             errorText = userVisibleError(error)
                         }
@@ -267,6 +372,16 @@ private fun AccountRoot(app: GitpassApplication) {
                 Row {
                     TextButton(onClick = { screen = Screen.Edit(null) }, enabled = snapshot.selectedVaultId != null && !snapshot.trash) { Text(stringResource(R.string.new_login)) }
                     TextButton(onClick = { session.setTrash(!snapshot.trash); queryText = "" }) { Text(stringResource(if (snapshot.trash) R.string.active_items else R.string.trash)) }
+                    if (quickEnabled) {
+                        TextButton(
+                            onClick = {
+                                quick.disable()
+                                quickEnabled = false
+                                enrollNext = false
+                            },
+                            modifier = Modifier.testTag(TestTags.BIOMETRIC_OFF),
+                        ) { Text(stringResource(R.string.biometric_turn_off)) }
+                    }
                 }
                 ItemListScreen(
                 padding = padding,
@@ -421,6 +536,12 @@ private fun UnlockScreen(
     onConfirm: (String) -> Unit,
     onSecretKey: (String) -> Unit,
     onToggleSecret: () -> Unit,
+    quickUnlockOffered: Boolean,
+    enrollOffered: Boolean,
+    enrollChecked: Boolean,
+    quickNotice: String?,
+    onEnroll: (Boolean) -> Unit,
+    onBiometricUnlock: () -> Unit,
     onUnlock: () -> Unit,
     onCreate: () -> Unit,
 ) {
@@ -513,11 +634,36 @@ private fun UnlockScreen(
                 colors = fieldColors(),
             )
         }
+        if (enrollOffered) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Checkbox(
+                    checked = enrollChecked,
+                    onCheckedChange = onEnroll,
+                    enabled = !busy,
+                    modifier = Modifier.testTag(TestTags.BIOMETRIC_ENROLL),
+                )
+                Text(stringResource(R.string.biometric_enroll), color = GitpassOnSurface, fontSize = 14.sp)
+            }
+            if (enrollChecked) {
+                Text(stringResource(R.string.biometric_enroll_help), color = GitpassSecondary, fontSize = 12.sp)
+            }
+        }
+        if (quickNotice != null) {
+            Text(quickNotice, color = MaterialTheme.colorScheme.error, fontSize = 13.sp, modifier = Modifier.testTag(TestTags.BIOMETRIC_NOTICE))
+        }
         if (errorText != null) {
             Text(errorText, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
         }
         if (busy) {
             CircularProgressIndicator(color = GitpassAccent)
+        }
+        if (quickUnlockOffered) {
+            AccentButton(
+                text = stringResource(R.string.biometric_unlock),
+                enabled = !busy,
+                onClick = onBiometricUnlock,
+                tag = TestTags.BIOMETRIC_UNLOCK,
+            )
         }
         if (vaultExists) {
             AccentButton(
@@ -788,6 +934,10 @@ object TestTags {
     const val SECRET_KEY_VALUE = "secret-key-value"
     const val I_SAVED_IT = "i-saved-it"
     const val SETUP_INTERRUPTED = "setup-interrupted"
+    const val BIOMETRIC_UNLOCK = "biometric-unlock"
+    const val BIOMETRIC_ENROLL = "biometric-enroll"
+    const val BIOMETRIC_NOTICE = "biometric-notice"
+    const val BIOMETRIC_OFF = "biometric-off"
 }
 
 @Composable

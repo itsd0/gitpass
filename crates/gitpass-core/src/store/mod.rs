@@ -10,6 +10,6 @@ pub mod sharing;
 
 pub use format::*;
 pub use local_state::{get_all_last_used, get_item_last_used, last_epoch, now, now_secs, set_last_epoch, set_sync_base, sync_base, touch_item_used, SyncBase};
-pub use session::{init, verify, Session, UnlockEffects, UnlockOpts};
+pub use session::{init, verify, Session, UnlockEffects, UnlockOpts, STALE_UNLOCK_KEY};
 pub use sharing::*;
 pub(crate) use format::{read_json, write_json};

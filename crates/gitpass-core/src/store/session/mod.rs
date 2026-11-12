@@ -19,6 +19,7 @@ mod keys;
 mod records;
 mod sync_apply;
 mod unlock;
+pub use unlock::STALE_UNLOCK_KEY;
 mod vaults;
 
 pub(crate) fn seal_manifest(root: &Path, ak: &Key32, m: &Manifest) -> Result<()> {

@@ -58,6 +58,48 @@ class VaultSession(
     }
 
     fun unlock(root: String, password: String, secretKey: String) {
+        val attempt = beginUnlock(root)
+        installUnlocked(attempt, gateway.open(root, password, secretKey))
+    }
+
+    /**
+     * Master Password unlock that also turns on biometric unlock (#473):
+     * gitpass-core derives the Account Unlock Key once (full KDF, verified
+     * against the keyset) and the session is opened with it, so enabling
+     * costs no extra KDF run. Returns the key for the caller to seal with the
+     * biometric Keystore key; the caller must wipe it. Nothing is returned
+     * when the unlock fails or is cancelled.
+     */
+    fun unlockForQuickSetup(root: String, password: String, secretKey: String): ByteArray {
+        val attempt = beginUnlock(root)
+        val key = gateway.deriveUnlockKey(root, password, secretKey)
+        try {
+            installUnlocked(attempt, gateway.openWithUnlockKey(root, key.copyOf()))
+            return key
+        } catch (error: Throwable) {
+            key.fill(0)
+            throw error
+        }
+    }
+
+    /**
+     * Biometric unlock with a key released by Android Keystore after a
+     * BIOMETRIC_STRONG authentication. [key] is wiped before returning.
+     * Throws [QuickUnlockStaleException] when the key no longer opens the
+     * vault (password, Secret Key or KDF changed), so the caller can delete
+     * it and fall back to the Master Password. Side-effect free, like the
+     * password unlock.
+     */
+    fun unlockWithKey(root: String, key: ByteArray) {
+        try {
+            val attempt = beginUnlock(root)
+            installUnlocked(attempt, gateway.openWithUnlockKey(root, key.copyOf()))
+        } finally {
+            key.fill(0)
+        }
+    }
+
+    private fun beginUnlock(root: String): Long {
         val attempt = mutex.withLock {
             if (opened != null) throw VaultSessionException("Already unlocked")
             generation
@@ -65,7 +107,10 @@ class VaultSession(
         if (!gateway.vaultExists(root)) {
             throw VaultSessionException("No vault on this device yet.")
         }
-        val fresh = gateway.open(root, password, secretKey)
+        return attempt
+    }
+
+    private fun installUnlocked(attempt: Long, fresh: OpenVault) {
         mutex.withLock {
             if (generation != attempt || opened != null) {
                 fresh.close()
@@ -409,6 +454,19 @@ interface VaultGateway {
     fun vaultExists(root: String): Boolean
     fun createAccount(root: String, password: String): String
     fun open(root: String, password: String, secretKey: String): OpenVault
+
+    /**
+     * The 32-byte Account Unlock Key (gitpass-core, full KDF) for biometric
+     * unlock (#473). Wrong credentials fail like [open] and count towards the
+     * unlock throttle. The caller wipes the result.
+     */
+    fun deriveUnlockKey(root: String, password: String, secretKey: String): ByteArray = throw UnsupportedOperationException()
+
+    /**
+     * Side-effect-free unlock with a key from [deriveUnlockKey]; wipes [key].
+     * Throws [QuickUnlockStaleException] when the key no longer opens the vault.
+     */
+    fun openWithUnlockKey(root: String, key: ByteArray): OpenVault = throw UnsupportedOperationException()
 }
 
 interface OpenVault {
@@ -426,6 +484,9 @@ interface OpenVault {
 }
 
 class VaultLockedException : Exception("Vault is locked")
+
+/** The saved biometric unlock key no longer opens this vault (password, Secret Key or KDF changed). */
+class QuickUnlockStaleException : Exception("Biometric unlock no longer matches this vault. Unlock with your Master Password.")
 
 class UnlockCancelledException : Exception("Unlock cancelled because the vault locked.")
 

@@ -88,4 +88,14 @@
     <string name="sync_saved">บันทึกการตั้งค่าการซิงค์แล้ว</string>
     <string name="sync_save">บันทึกการตั้งค่าการซิงค์</string>
     <string name="sync_remove">ลบการตั้งค่าการซิงค์</string>
+    <!-- Biometric unlock (#473). UNREVIEWED: machine-drafted Thai, needs native-speaker review before release. -->
+    <string name="biometric_unlock">ปลดล็อกด้วยไบโอเมตริก</string>
+    <string name="biometric_enroll">ใช้ไบโอเมตริกเพื่อปลดล็อกครั้งถัดไป</string>
+    <string name="biometric_enroll_help">ต้องใช้รหัสผ่านหลักเพียงครั้งนี้ gitpass จะเก็บคีย์ที่เปิดได้เฉพาะคลังนี้ ซึ่งถูกปิดผนึกด้วย Android Keystore และจะปล่อยออกมาหลังการยืนยันไบโอเมตริกแบบรัดกุมเท่านั้น รหัสผ่านหลักจะไม่ถูกจัดเก็บ หากเปลี่ยนไบโอเมตริก การล็อกหน้าจอ หรือรหัสผ่านหลัก ฟีเจอร์นี้จะปิดเอง ไม่มีการปลดล็อกหรือซิงค์เบื้องหลังขณะที่คลังล็อกอยู่</string>
+    <string name="biometric_prompt_unlock">ปลดล็อก gitpass</string>
+    <string name="biometric_prompt_enable">เปิดการปลดล็อกด้วยไบโอเมตริก</string>
+    <string name="biometric_use_password">ใช้รหัสผ่านหลัก</string>
+    <string name="biometric_not_enabled">ยังไม่ได้เปิดการปลดล็อกด้วยไบโอเมตริก</string>
+    <string name="biometric_invalidated">ปิดการปลดล็อกด้วยไบโอเมตริกแล้ว เพราะไบโอเมตริก การล็อกหน้าจอ หรือรหัสผ่านหลักมีการเปลี่ยนแปลง ปลดล็อกด้วยรหัสผ่านหลักเพื่อตั้งค่าอีกครั้ง</string>
+    <string name="biometric_turn_off">ปิดการปลดล็อกด้วยไบโอเมตริก</string>
 </resources>
