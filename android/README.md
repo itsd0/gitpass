@@ -397,3 +397,71 @@ Instrumented: `AutofillUiTest` (unlock activities: nothing before unlock,
 datasets after, mismatch returns nothing, vault re-locked, save updates).
 The system autofill flow itself (choosing gitpass as the service, real apps
 and browsers) is not automated and must be checked on a device.
+
+## Passkey provider (#477, Android 14+)
+
+gitpass can be the passkey provider for Android Credential Manager on
+Android 14 (API 34) and newer: **Passkey settings** on the unlocked list
+opens the system Credential Manager settings, where gitpass is turned on.
+Below API 34 the service and its activities are disabled
+(`@bool/passkey_provider_enabled`), the settings button is hidden and
+nothing else changes (minSdk stays 26). Passkeys only; passwords keep using
+the AutofillService (#475).
+
+**One WebAuthn implementation.** Creating and signing run in
+`gitpass_core::webauthn`, the same code the extension host and desktop agent
+use (moved out of `gitpass-host`, which now only maps its JSON contract):
+ES256 keys, `fmt: none` attestation, sign counter, one passkey per account per
+site, the same passkey items in the vault. Bridge API level 7
+(`Vault.passkey_entries/register/assert`, `passkey_request_info`,
+`passkey_app_rp_host`, `passkey_verify_caller`); level 6 is reserved for
+device pairing (#457 / PR #471).
+
+**Who may use which passkey.** The caller comes from Android's
+`CallingAppInfo`, never from the request:
+- A browser on Google's privileged-apps allowlist (bundled as
+  `res/raw/privileged_browsers.json`) gives a web origin via
+  `CallingAppInfo.getOrigin(allowlist)`; core then applies the WebAuthn rule
+  (https only, the rpId is the origin's host or a registrable parent of it;
+  `example.com.evil.io` never gets `example.com`). If the browser supplies
+  `clientDataHash`, gitpass signs over it.
+- Any other app: package + SHA-256 of its single signing certificate. The
+  rpId must be a real domain (no public suffix, IP or port), and
+  `https://<rpId>/.well-known/assetlinks.json` (HTTPS, no redirects, 5 s
+  timeouts, 512 KB cap, cached 5 min) must grant that package and
+  certificate `delegate_permission/common.get_login_creds`. clientDataJSON then
+  uses `android:apk-key-hash:<base64url(sha256)>` as its origin. No DAL file,
+  or no match, means no passkey. `include` statements are not followed.
+- An app that claims a web origin without being on the allowlist, apps
+  with several signers, and gitpass itself are refused.
+The checks run in the begin step (gitpass is not offered otherwise) and
+again in the activity that creates or signs.
+
+**User verification before any secret operation.**
+- Create: the "gitpass" entry opens `PasskeyCreateActivity`, which asks for
+  biometric unlock (#473) or Master Password + Secret Key, creates the
+  passkey in the selected vault, and locks again if it unlocked.
+- Sign in, vault locked: Credential Manager shows **Unlock gitpass**. After the
+  unlock, the matching passkeys (names only) are listed and the vault is
+  locked again at once (the app also locks whenever it leaves the
+  foreground). Picking one asks for verification again before it signs, so a
+  locked sign-in takes two prompts (two biometric touches when biometric
+  unlock is on).
+- Sign in, vault already open: the passkeys are listed directly, and picking
+  one asks for a fresh verification (biometric or Master Password, checked
+  without disturbing the open session), because gitpass reports user
+  verification (UV) in every assertion.
+- The activities block screenshots and lock a vault they unlocked when they
+  finish or go to the background.
+
+**Tests.** Rust: `crates/gitpass-core/tests/webauthn.rs` (rpId rules, Digital
+Asset Links, request parsing, create/sign with built and supplied client
+data, cross-RP refusal) and `crates/gitpass-mobile-ffi/tests/passkey.rs`. JVM:
+`CallerIdentityTest`, `HttpsAssetLinksTest`, `PasskeyBrokerTest`,
+`PasskeySessionTest`. Instrumented (CI API 35
+emulator): `PasskeyBridgeTest` (real native create/list/sign on a v5 fixture
+copy) and `PasskeyProviderUiTest` (Android 14+: framework request extras;
+nothing before verification, refusals before any unlock, the unlock action
+lists then relocks, fresh verification on an open vault).
+The full system flow (choosing gitpass in Credential Manager, a real site or
+app) needs an Android 14+ device.

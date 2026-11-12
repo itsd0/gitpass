@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Added
+- Android passkey provider for Credential Manager on Android 14+ (#477):
+  sign in with and create gitpass passkeys from browsers and apps. The
+  WebAuthn authenticator moved from gitpass-host to `gitpass_core::webauthn`,
+  so the extension host, desktop agent and Android share one implementation.
+  Browsers are trusted only from the privileged-apps allowlist; apps only when
+  the site's Digital Asset Links lists their package and signing certificate.
+  Every create and sign-in needs biometric or Master Password verification,
+  and the vault locks again afterwards. Absent below API 34. Bridge API level
+  7.
 - Android password AutofillService (#475): detects username/password fields
   (hints, then heuristics), matches the requesting app by package
   (`android://`/`androidapp://` item URLs) or, for trusted browsers, the page

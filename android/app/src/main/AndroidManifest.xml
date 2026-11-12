@@ -50,6 +50,49 @@
             android:noHistory="true"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.Gitpass" />
+        <!--
+          Passkey provider for Credential Manager (#477). Android 14+ only:
+          below API 34 the bool is false, so the service and its activities
+          do not exist for the system. Only the system can bind it.
+        -->
+        <service
+            android:name=".passkey.GitpassCredentialProviderService"
+            android:enabled="@bool/passkey_provider_enabled"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_CREDENTIAL_PROVIDER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.credentials.CredentialProviderService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.credentials.provider"
+                android:resource="@xml/credential_provider" />
+        </service>
+        <!-- Passkey steps; started only through the provider's own PendingIntents. -->
+        <activity
+            android:name=".passkey.PasskeyUnlockActivity"
+            android:enabled="@bool/passkey_provider_enabled"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Gitpass" />
+        <activity
+            android:name=".passkey.PasskeyGetActivity"
+            android:enabled="@bool/passkey_provider_enabled"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Gitpass" />
+        <activity
+            android:name=".passkey.PasskeyCreateActivity"
+            android:enabled="@bool/passkey_provider_enabled"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.Gitpass" />
     </application>
 
 </manifest>

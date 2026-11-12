@@ -56,6 +56,14 @@ private class FfiOpenVault(private val vault: Vault) : OpenVault {
 
     override fun createVault(name: String): String = vault.createVault(name, null)
 
+    override fun passkeyEntries(caller: app.gitpass.core.PasskeyCaller, requestJson: String) = vault.passkeyEntries(caller, requestJson)
+
+    override fun passkeyRegister(caller: app.gitpass.core.PasskeyCaller, requestJson: String, vaultId: String?) =
+        vault.passkeyRegister(caller, requestJson, vaultId)
+
+    override fun passkeyAssert(caller: app.gitpass.core.PasskeyCaller, requestJson: String, credentialId: String, clientDataHash: ByteArray?) =
+        vault.passkeyAssert(caller, requestJson, credentialId, clientDataHash)
+
     override fun autofillLogins(target: app.gitpass.android.autofill.AutofillTarget): List<AutofillCredential> =
         vault.autofillLogins(app.gitpass.core.AutofillQuery(target.webOrigin, target.androidPackage)).map {
             AutofillCredential(it.vaultId, it.itemId, it.title, it.username, it.password)

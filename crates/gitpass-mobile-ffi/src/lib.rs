@@ -424,6 +424,68 @@ pub fn autofill_record_matches(rec: &ItemRecord, q: &AutofillQuery) -> bool {
     }
 }
 
+/// Who is asking for a passkey (#477). Built by the app from Android's `CallingAppInfo`.
+#[derive(Debug, Clone, uniffi::Enum)]
+pub enum PasskeyCaller {
+    /// A browser on the privileged allowlist; `origin` is the web origin the browser vouches for
+    /// (`CallingAppInfo.getOrigin(allowlist)`), never one taken from the request.
+    Browser { origin: String },
+    /// Any other app: its package, the SHA-256 of its signing certificate (from the OS), and the
+    /// rpId's `/.well-known/assetlinks.json` as fetched by the app (may be empty when unavailable).
+    App { package: String, cert_sha256: Vec<u8>, asset_links_json: String },
+}
+
+fn verified_rp(caller: &PasskeyCaller, rp_id: Option<&str>) -> anyhow::Result<gitpass_core::webauthn::VerifiedRp> {
+    match caller {
+        PasskeyCaller::Browser { origin } => gitpass_core::webauthn::verify_web(origin, rp_id),
+        PasskeyCaller::App { package, cert_sha256, asset_links_json } => gitpass_core::webauthn::verify_app(package, cert_sha256, rp_id, asset_links_json),
+    }
+}
+
+/// Non-secret summary of a WebAuthn request JSON, for the provider's first ("begin") step.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PasskeyRequestInfo {
+    pub rp_id: Option<String>,
+    pub rp_name: Option<String>,
+    pub user_name: Option<String>,
+}
+
+/// Parse a WebAuthn creation (`create = true`) or request options JSON.
+#[uniffi::export]
+pub fn passkey_request_info(request_json: String, create: bool) -> Result<PasskeyRequestInfo, GitpassError> {
+    use gitpass_core::webauthn as wa;
+    if create {
+        let o = wa::parse_create_options(&request_json)?;
+        Ok(PasskeyRequestInfo { rp_id: o.rp_id, rp_name: o.rp_name, user_name: Some(o.user_name).filter(|u| !u.is_empty()) })
+    } else {
+        let o = wa::parse_get_options(&request_json)?;
+        Ok(PasskeyRequestInfo { rp_id: o.rp_id, rp_name: None, user_name: None })
+    }
+}
+
+/// The host whose Digital Asset Links file an app caller must be listed in, or an error when the
+/// rpId can never be used by an app. Call before fetching anything.
+#[uniffi::export]
+pub fn passkey_app_rp_host(rp_id: String) -> Result<String, GitpassError> {
+    Ok(gitpass_core::webauthn::app_rp_host(&rp_id)?)
+}
+
+/// The rpId if `caller` may use it, else an error. Never touches a vault.
+#[uniffi::export]
+pub fn passkey_verify_caller(caller: PasskeyCaller, rp_id: Option<String>) -> Result<String, GitpassError> {
+    Ok(verified_rp(&caller, rp_id.as_deref())?.rp_id().to_string())
+}
+
+/// A stored passkey offered for sign-in; no secret material.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct PasskeyEntry {
+    /// base64url credential id.
+    pub credential_id: String,
+    pub user_name: String,
+    pub vault_name: String,
+    pub last_used: u64,
+}
+
 #[derive(uniffi::Object)]
 pub struct Vault {
     session: Mutex<Session>,
@@ -445,7 +507,11 @@ impl Vault {
 /// Level 4: reserved for QR device pairing (#457 / PR #471).
 /// Level 5: autofill (`Vault::autofill_logins`, `AutofillQuery`, `AutofillLogin`,
 /// `autofill_origin_matches`, `autofill_app_matches`) (#475).
-pub const FFI_API_LEVEL: u32 = 5;
+/// Level 6: reserved for QR device pairing (#457 / PR #471).
+/// Level 7: passkey provider (`PasskeyCaller`, `passkey_request_info`,
+/// `passkey_app_rp_host`, `passkey_verify_caller`, `Vault::passkey_entries`,
+/// `Vault::passkey_register`, `Vault::passkey_assert`) on `gitpass_core::webauthn` (#477).
+pub const FFI_API_LEVEL: u32 = 7;
 
 /// Bridge version: the crate (= workspace) version plus the API level.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
@@ -650,6 +716,37 @@ impl Vault {
             out.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
             Ok(out)
         })
+    }
+
+    /// Passkeys `caller` may use for the request (`PublicKeyCredentialRequestOptionsJSON`), most
+    /// recently used first. Fails when the caller is not valid for the request's rpId (#477).
+    pub fn passkey_entries(&self, caller: PasskeyCaller, request_json: String) -> Result<Vec<PasskeyEntry>, GitpassError> {
+        use gitpass_core::webauthn as wa;
+        let o = wa::parse_get_options(&request_json)?;
+        let rp = verified_rp(&caller, o.rp_id.as_deref())?;
+        self.with_session(|s| Ok(wa::candidates(s, &rp, &o.allow)?.into_iter().map(|c| PasskeyEntry {
+            credential_id: gitpass_core::passkey::b64(&c.credential_id), user_name: c.user_name, vault_name: c.vault_name, last_used: c.last_used,
+        }).collect()))
+    }
+
+    /// Create a passkey (`PublicKeyCredentialCreationOptionsJSON`) in `vault_id` (default: the
+    /// first vault). Returns `RegistrationResponseJSON`. The app must have verified the user.
+    pub fn passkey_register(&self, caller: PasskeyCaller, request_json: String, vault_id: Option<String>) -> Result<String, GitpassError> {
+        use gitpass_core::webauthn as wa;
+        let o = wa::parse_create_options(&request_json)?;
+        let rp = verified_rp(&caller, o.rp_id.as_deref())?;
+        self.with_session(|s| Ok(wa::create(s, &rp, &o, vault_id.as_deref())?.to_webauthn_json().to_string()))
+    }
+
+    /// Sign in with passkey `credential_id` (base64url). `client_data_hash` is the SHA-256 of
+    /// clientDataJSON when a privileged browser supplies it. Returns `AuthenticationResponseJSON`.
+    /// The app must have verified the user.
+    pub fn passkey_assert(&self, caller: PasskeyCaller, request_json: String, credential_id: String, client_data_hash: Option<Vec<u8>>) -> Result<String, GitpassError> {
+        use gitpass_core::webauthn as wa;
+        let o = wa::parse_get_options(&request_json)?;
+        let rp = verified_rp(&caller, o.rp_id.as_deref())?;
+        let cred = gitpass_core::passkey::unb64(&credential_id)?;
+        self.with_session(|s| Ok(wa::get(s, &rp, &o, Some(&cred), client_data_hash.as_deref())?.to_webauthn_json().to_string()))
     }
 
     pub fn list_vaults(&self) -> Result<Vec<VaultInfo>, GitpassError> {

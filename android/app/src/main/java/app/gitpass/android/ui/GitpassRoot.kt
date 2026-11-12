@@ -373,6 +373,7 @@ private fun AccountRoot(app: GitpassApplication) {
                     TextButton(onClick = { screen = Screen.Edit(null) }, enabled = snapshot.selectedVaultId != null && !snapshot.trash) { Text(stringResource(R.string.new_login)) }
                     TextButton(onClick = { session.setTrash(!snapshot.trash); queryText = "" }) { Text(stringResource(if (snapshot.trash) R.string.active_items else R.string.trash)) }
                     AutofillSettingButton()
+                    PasskeySettingButton()
                     if (quickEnabled) {
                         TextButton(
                             onClick = {
@@ -505,6 +506,22 @@ private fun AutofillSettingButton() {
         },
         modifier = Modifier.testTag(TestTags.AUTOFILL_SETTING),
     ) { Text(stringResource(if (enabled) R.string.autofill_setting_on else R.string.autofill_setting_off)) }
+}
+
+/**
+ * Opens the system Credential Manager settings where gitpass can be turned
+ * on as a passkey provider (#477). Android 14+ only; absent below.
+ */
+@Composable
+private fun PasskeySettingButton() {
+    if (android.os.Build.VERSION.SDK_INT < 34) return
+    val context = LocalContext.current
+    TextButton(
+        onClick = {
+            runCatching { androidx.credentials.CredentialManager.create(context).createSettingsPendingIntent().send() }
+        },
+        modifier = Modifier.testTag(TestTags.PASSKEY_SETTING),
+    ) { Text(stringResource(R.string.passkey_setting)) }
 }
 
 private const val MIN_TICK_MS = 250L
@@ -962,6 +979,7 @@ object TestTags {
     const val BIOMETRIC_NOTICE = "biometric-notice"
     const val BIOMETRIC_OFF = "biometric-off"
     const val AUTOFILL_SETTING = "autofill-setting"
+    const val PASSKEY_SETTING = "passkey-setting"
 }
 
 @Composable

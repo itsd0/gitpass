@@ -808,6 +808,18 @@ internal open class UniffiVTableCallbackInterfaceHttpTransport(
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -849,6 +861,12 @@ fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with_quick_unlock_key(
 ): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_passkey_app_rp_host(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_passkey_request_info(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_passkey_verify_caller(
+): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_pull_github_snapshot(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_quick_unlock_stale_message(
@@ -876,6 +894,12 @@ fun uniffi_gitpass_mobile_ffi_checksum_method_vault_get_item(
 fun uniffi_gitpass_mobile_ffi_checksum_method_vault_list_items(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_method_vault_list_vaults(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_passkey_assert(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_passkey_entries(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_method_vault_passkey_register(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_method_vault_put_record_json(
 ): Short
@@ -979,6 +1003,12 @@ fun uniffi_gitpass_mobile_ffi_fn_method_vault_list_items(`ptr`: Pointer,`vaultId
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_method_vault_list_vaults(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_passkey_assert(`ptr`: Pointer,`caller`: RustBuffer.ByValue,`requestJson`: RustBuffer.ByValue,`credentialId`: RustBuffer.ByValue,`clientDataHash`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_passkey_entries(`ptr`: Pointer,`caller`: RustBuffer.ByValue,`requestJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_method_vault_passkey_register(`ptr`: Pointer,`caller`: RustBuffer.ByValue,`requestJson`: RustBuffer.ByValue,`vaultId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_method_vault_put_record_json(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`recordJson`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
 fun uniffi_gitpass_mobile_ffi_fn_method_vault_record_json(`ptr`: Pointer,`vaultId`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
@@ -1019,6 +1049,12 @@ fun uniffi_gitpass_mobile_ffi_fn_func_open_vault_with(`root`: RustBuffer.ByValue
 ): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_func_open_vault_with_quick_unlock_key(`root`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
+fun uniffi_gitpass_mobile_ffi_fn_func_passkey_app_rp_host(`rpId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_passkey_request_info(`requestJson`: RustBuffer.ByValue,`create`: Byte,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_passkey_verify_caller(`caller`: RustBuffer.ByValue,`rpId`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_pull_github_snapshot(`root`: RustBuffer.ByValue,`target`: RustBuffer.ByValue,`token`: RustBuffer.ByValue,`transport`: Pointer,`cancellation`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_quick_unlock_stale_message(uniffi_out_err: UniffiRustCallStatus, 
@@ -1192,6 +1228,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with_quick_unlock_key() != 48988.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_passkey_app_rp_host() != 17044.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_passkey_request_info() != 34356.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_passkey_verify_caller() != 3075.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pull_github_snapshot() != 28152.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1232,6 +1277,15 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_list_vaults() != 43376.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_passkey_assert() != 13507.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_passkey_entries() != 11805.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_passkey_register() != 51894.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_put_record_json() != 39521.toShort()) {
@@ -2267,6 +2321,25 @@ public interface VaultInterface {
     fun `listVaults`(): List<VaultInfo>
     
     /**
+     * Sign in with passkey `credential_id` (base64url). `client_data_hash` is the SHA-256 of
+     * clientDataJSON when a privileged browser supplies it. Returns `AuthenticationResponseJSON`.
+     * The app must have verified the user.
+     */
+    fun `passkeyAssert`(`caller`: PasskeyCaller, `requestJson`: kotlin.String, `credentialId`: kotlin.String, `clientDataHash`: kotlin.ByteArray?): kotlin.String
+    
+    /**
+     * Passkeys `caller` may use for the request (`PublicKeyCredentialRequestOptionsJSON`), most
+     * recently used first. Fails when the caller is not valid for the request's rpId (#477).
+     */
+    fun `passkeyEntries`(`caller`: PasskeyCaller, `requestJson`: kotlin.String): List<PasskeyEntry>
+    
+    /**
+     * Create a passkey (`PublicKeyCredentialCreationOptionsJSON`) in `vault_id` (default: the
+     * first vault). Returns `RegistrationResponseJSON`. The app must have verified the user.
+     */
+    fun `passkeyRegister`(`caller`: PasskeyCaller, `requestJson`: kotlin.String, `vaultId`: kotlin.String?): kotlin.String
+    
+    /**
      * Write a record previously produced by `record_json` /
      * `merge_item_records` back into the vault (used by sync after a
      * merge, and for remote-only items). Version is bumped by the core.
@@ -2473,6 +2546,58 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
     uniffiRustCallWithError(GitpassException) { _status ->
     UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_list_vaults(
         it, _status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Sign in with passkey `credential_id` (base64url). `client_data_hash` is the SHA-256 of
+     * clientDataJSON when a privileged browser supplies it. Returns `AuthenticationResponseJSON`.
+     * The app must have verified the user.
+     */
+    @Throws(GitpassException::class)override fun `passkeyAssert`(`caller`: PasskeyCaller, `requestJson`: kotlin.String, `credentialId`: kotlin.String, `clientDataHash`: kotlin.ByteArray?): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_passkey_assert(
+        it, FfiConverterTypePasskeyCaller.lower(`caller`),FfiConverterString.lower(`requestJson`),FfiConverterString.lower(`credentialId`),FfiConverterOptionalByteArray.lower(`clientDataHash`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Passkeys `caller` may use for the request (`PublicKeyCredentialRequestOptionsJSON`), most
+     * recently used first. Fails when the caller is not valid for the request's rpId (#477).
+     */
+    @Throws(GitpassException::class)override fun `passkeyEntries`(`caller`: PasskeyCaller, `requestJson`: kotlin.String): List<PasskeyEntry> {
+            return FfiConverterSequenceTypePasskeyEntry.lift(
+    callWithPointer {
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_passkey_entries(
+        it, FfiConverterTypePasskeyCaller.lower(`caller`),FfiConverterString.lower(`requestJson`),_status)
+}
+    }
+    )
+    }
+    
+
+    
+    /**
+     * Create a passkey (`PublicKeyCredentialCreationOptionsJSON`) in `vault_id` (default: the
+     * first vault). Returns `RegistrationResponseJSON`. The app must have verified the user.
+     */
+    @Throws(GitpassException::class)override fun `passkeyRegister`(`caller`: PasskeyCaller, `requestJson`: kotlin.String, `vaultId`: kotlin.String?): kotlin.String {
+            return FfiConverterString.lift(
+    callWithPointer {
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_passkey_register(
+        it, FfiConverterTypePasskeyCaller.lower(`caller`),FfiConverterString.lower(`requestJson`),FfiConverterOptionalString.lower(`vaultId`),_status)
 }
     }
     )
@@ -3362,6 +3487,91 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
 
 
 
+/**
+ * A stored passkey offered for sign-in; no secret material.
+ */
+data class PasskeyEntry (
+    /**
+     * base64url credential id.
+     */
+    var `credentialId`: kotlin.String, 
+    var `userName`: kotlin.String, 
+    var `vaultName`: kotlin.String, 
+    var `lastUsed`: kotlin.ULong
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyEntry: FfiConverterRustBuffer<PasskeyEntry> {
+    override fun read(buf: ByteBuffer): PasskeyEntry {
+        return PasskeyEntry(
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterULong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PasskeyEntry) = (
+            FfiConverterString.allocationSize(value.`credentialId`) +
+            FfiConverterString.allocationSize(value.`userName`) +
+            FfiConverterString.allocationSize(value.`vaultName`) +
+            FfiConverterULong.allocationSize(value.`lastUsed`)
+    )
+
+    override fun write(value: PasskeyEntry, buf: ByteBuffer) {
+            FfiConverterString.write(value.`credentialId`, buf)
+            FfiConverterString.write(value.`userName`, buf)
+            FfiConverterString.write(value.`vaultName`, buf)
+            FfiConverterULong.write(value.`lastUsed`, buf)
+    }
+}
+
+
+
+/**
+ * Non-secret summary of a WebAuthn request JSON, for the provider's first ("begin") step.
+ */
+data class PasskeyRequestInfo (
+    var `rpId`: kotlin.String?, 
+    var `rpName`: kotlin.String?, 
+    var `userName`: kotlin.String?
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyRequestInfo: FfiConverterRustBuffer<PasskeyRequestInfo> {
+    override fun read(buf: ByteBuffer): PasskeyRequestInfo {
+        return PasskeyRequestInfo(
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+            FfiConverterOptionalString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PasskeyRequestInfo) = (
+            FfiConverterOptionalString.allocationSize(value.`rpId`) +
+            FfiConverterOptionalString.allocationSize(value.`rpName`) +
+            FfiConverterOptionalString.allocationSize(value.`userName`)
+    )
+
+    override fun write(value: PasskeyRequestInfo, buf: ByteBuffer) {
+            FfiConverterOptionalString.write(value.`rpId`, buf)
+            FfiConverterOptionalString.write(value.`rpName`, buf)
+            FfiConverterOptionalString.write(value.`userName`, buf)
+    }
+}
+
+
+
 data class TotpCode (
     var `code`: kotlin.String, 
     var `secondsRemaining`: kotlin.ULong
@@ -3681,6 +3891,95 @@ public object FfiConverterTypeHttpTransportError : FfiConverterRustBuffer<HttpTr
 
 
 
+/**
+ * Who is asking for a passkey (#477). Built by the app from Android's `CallingAppInfo`.
+ */
+sealed class PasskeyCaller {
+    
+    /**
+     * A browser on the privileged allowlist; `origin` is the web origin the browser vouches for
+     * (`CallingAppInfo.getOrigin(allowlist)`), never one taken from the request.
+     */
+    data class Browser(
+        val `origin`: kotlin.String) : PasskeyCaller() {
+        companion object
+    }
+    
+    /**
+     * Any other app: its package, the SHA-256 of its signing certificate (from the OS), and the
+     * rpId's `/.well-known/assetlinks.json` as fetched by the app (may be empty when unavailable).
+     */
+    data class App(
+        val `package`: kotlin.String, 
+        val `certSha256`: kotlin.ByteArray, 
+        val `assetLinksJson`: kotlin.String) : PasskeyCaller() {
+        companion object
+    }
+    
+
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyCaller : FfiConverterRustBuffer<PasskeyCaller>{
+    override fun read(buf: ByteBuffer): PasskeyCaller {
+        return when(buf.getInt()) {
+            1 -> PasskeyCaller.Browser(
+                FfiConverterString.read(buf),
+                )
+            2 -> PasskeyCaller.App(
+                FfiConverterString.read(buf),
+                FfiConverterByteArray.read(buf),
+                FfiConverterString.read(buf),
+                )
+            else -> throw RuntimeException("invalid enum value, something is very wrong!!")
+        }
+    }
+
+    override fun allocationSize(value: PasskeyCaller) = when(value) {
+        is PasskeyCaller.Browser -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`origin`)
+            )
+        }
+        is PasskeyCaller.App -> {
+            // Add the size for the Int that specifies the variant plus the size needed for all fields
+            (
+                4UL
+                + FfiConverterString.allocationSize(value.`package`)
+                + FfiConverterByteArray.allocationSize(value.`certSha256`)
+                + FfiConverterString.allocationSize(value.`assetLinksJson`)
+            )
+        }
+    }
+
+    override fun write(value: PasskeyCaller, buf: ByteBuffer) {
+        when(value) {
+            is PasskeyCaller.Browser -> {
+                buf.putInt(1)
+                FfiConverterString.write(value.`origin`, buf)
+                Unit
+            }
+            is PasskeyCaller.App -> {
+                buf.putInt(2)
+                FfiConverterString.write(value.`package`, buf)
+                FfiConverterByteArray.write(value.`certSha256`, buf)
+                FfiConverterString.write(value.`assetLinksJson`, buf)
+                Unit
+            }
+        }.let { /* this makes the `when` an expression, which ensures it is exhaustive */ }
+    }
+}
+
+
+
+
+
 
 /**
  * @suppress
@@ -3949,6 +4248,34 @@ public object FfiConverterSequenceTypeItemSummary: FfiConverterRustBuffer<List<I
 /**
  * @suppress
  */
+public object FfiConverterSequenceTypePasskeyEntry: FfiConverterRustBuffer<List<PasskeyEntry>> {
+    override fun read(buf: ByteBuffer): List<PasskeyEntry> {
+        val len = buf.getInt()
+        return List<PasskeyEntry>(len) {
+            FfiConverterTypePasskeyEntry.read(buf)
+        }
+    }
+
+    override fun allocationSize(value: List<PasskeyEntry>): ULong {
+        val sizeForLength = 4UL
+        val sizeForItems = value.map { FfiConverterTypePasskeyEntry.allocationSize(it) }.sum()
+        return sizeForLength + sizeForItems
+    }
+
+    override fun write(value: List<PasskeyEntry>, buf: ByteBuffer) {
+        buf.putInt(value.size)
+        value.iterator().forEach {
+            FfiConverterTypePasskeyEntry.write(it, buf)
+        }
+    }
+}
+
+
+
+
+/**
+ * @suppress
+ */
 public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<VaultInfo>> {
     override fun read(buf: ByteBuffer): List<VaultInfo> {
         val len = buf.getInt()
@@ -4131,6 +4458,46 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     uniffiRustCallWithError(GitpassException) { _status ->
     UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_open_vault_with_quick_unlock_key(
         FfiConverterString.lower(`root`),FfiConverterByteArray.lower(`key`),FfiConverterTypeUnlockOptions.lower(`options`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The host whose Digital Asset Links file an app caller must be listed in, or an error when the
+         * rpId can never be used by an app. Call before fetching anything.
+         */
+    @Throws(GitpassException::class) fun `passkeyAppRpHost`(`rpId`: kotlin.String): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_passkey_app_rp_host(
+        FfiConverterString.lower(`rpId`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Parse a WebAuthn creation (`create = true`) or request options JSON.
+         */
+    @Throws(GitpassException::class) fun `passkeyRequestInfo`(`requestJson`: kotlin.String, `create`: kotlin.Boolean): PasskeyRequestInfo {
+            return FfiConverterTypePasskeyRequestInfo.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_passkey_request_info(
+        FfiConverterString.lower(`requestJson`),FfiConverterBoolean.lower(`create`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * The rpId if `caller` may use it, else an error. Never touches a vault.
+         */
+    @Throws(GitpassException::class) fun `passkeyVerifyCaller`(`caller`: PasskeyCaller, `rpId`: kotlin.String?): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_passkey_verify_caller(
+        FfiConverterTypePasskeyCaller.lower(`caller`),FfiConverterOptionalString.lower(`rpId`),_status)
 }
     )
     }

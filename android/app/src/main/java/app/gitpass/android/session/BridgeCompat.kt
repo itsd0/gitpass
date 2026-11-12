@@ -13,7 +13,7 @@ import app.gitpass.core.formatVersion
  */
 object BridgeCompat {
     /** `FFI_API_LEVEL` in `crates/gitpass-mobile-ffi/src/lib.rs`. */
-    const val EXPECTED_API_LEVEL: UInt = 5u
+    const val EXPECTED_API_LEVEL: UInt = 7u
 
     /** Vault format (`FORMAT_VERSION` in gitpass-core) this app handles. */
     const val EXPECTED_FORMAT: UInt = 5u

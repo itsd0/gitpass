@@ -91,7 +91,7 @@ pub fn android_package_of(item_url: &str) -> Option<String> {
     if is_package_name(rest) { Some(rest.to_string()) } else { None }
 }
 
-fn is_package_name(p: &str) -> bool {
+pub(crate) fn is_package_name(p: &str) -> bool {
     let parts: Vec<&str> = p.split('.').collect();
     parts.len() >= 2
         && parts.iter().all(|s| {

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Passkey provider (#477) needs Credential Manager provider support (Android 14 / API 34). -->
+    <bool name="passkey_provider_enabled">false</bool>
+</resources>

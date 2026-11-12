@@ -111,4 +111,15 @@
     <string name="autofill_save_needs_android9">autofill မှ သိမ်းရန် Android 9 သို့မဟုတ် နောက်ပိုင်း လိုအပ်ပါသည်။</string>
     <string name="autofill_setting_off">အလိုအလျောက်ဖြည့်ခြင်းကို ဖွင့်မည်</string>
     <string name="autofill_setting_on">အလိုအလျောက်ဖြည့်ခြင်း ဖွင့်ထားသည်</string>
+    <!-- #477 passkey strings: UNREVIEWED machine-assisted Burmese; needs a native-speaker review. -->
+    <string name="passkey_unlock_action">gitpass ကို ဖွင့်ပါ</string>
+    <string name="passkey_account_name">gitpass</string>
+    <string name="passkey_unlock_title">passkey သုံးရန် gitpass ကို ဖွင့်ပါ</string>
+    <string name="passkey_sign_in_title">gitpass passkey ဖြင့် ဝင်ရောက်ပါ</string>
+    <string name="passkey_create_title">gitpass တွင် passkey သိမ်းပါ</string>
+    <string name="passkey_refused">ဤအက်ပ် သို့မဟုတ် ဆိုက်အတွက် gitpass က passkey မသုံးနိုင်ပါ။</string>
+    <string name="passkey_unavailable">gitpass အဆင်သင့် မဖြစ်သေးပါ။ gitpass အက်ပ်ကို အရင်ဖွင့်ပါ။</string>
+    <string name="passkey_failed">passkey တောင်းဆိုမှု မအောင်မြင်ပါ။ ထပ်စမ်းကြည့်ပါ။</string>
+    <string name="passkey_none">%1$s အတွက် gitpass passkey မရှိပါ။</string>
+    <string name="passkey_setting">Passkey ဆက်တင်များ</string>
 </resources>

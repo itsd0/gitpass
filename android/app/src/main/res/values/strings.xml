@@ -111,4 +111,14 @@
     <string name="autofill_save_needs_android9">Saving from autofill needs Android 9 or newer.</string>
     <string name="autofill_setting_off">Turn on autofill</string>
     <string name="autofill_setting_on">Autofill is on</string>
+    <string name="passkey_unlock_action">Unlock gitpass</string>
+    <string name="passkey_account_name">gitpass</string>
+    <string name="passkey_unlock_title">Unlock gitpass to use a passkey</string>
+    <string name="passkey_sign_in_title">Sign in with a gitpass passkey</string>
+    <string name="passkey_create_title">Save a passkey in gitpass</string>
+    <string name="passkey_refused">gitpass can\'t use passkeys for this app or site.</string>
+    <string name="passkey_unavailable">gitpass isn\'t ready. Open the gitpass app first.</string>
+    <string name="passkey_failed">The passkey request didn\'t work. Try again.</string>
+    <string name="passkey_none">No gitpass passkey for %1$s.</string>
+    <string name="passkey_setting">Passkey settings</string>
 </resources>

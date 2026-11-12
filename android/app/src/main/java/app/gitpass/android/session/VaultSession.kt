@@ -130,6 +130,27 @@ class VaultSession(
      * disk, before the unlock is attempted, so the caller can hand the key
      * off even if a later step fails or the caller stops listening.
      */
+    /**
+     * Fresh user verification while the vault may already be open (#477): the
+     * Master Password + Secret Key must open the vault again (full KDF and the
+     * unlock throttle), but the open session is left as it is. The extra
+     * handle is closed at once.
+     */
+    fun verify(root: String, password: String, secretKey: String) {
+        if (!gateway.vaultExists(root)) throw VaultSessionException("No vault on this device yet.")
+        gateway.open(root, password, secretKey).close()
+    }
+
+    /** [verify] with a biometric-released key; [key] is wiped before returning. */
+    fun verifyWithKey(root: String, key: ByteArray) {
+        try {
+            if (!gateway.vaultExists(root)) throw VaultSessionException("No vault on this device yet.")
+            gateway.openWithUnlockKey(root, key.copyOf()).close()
+        } finally {
+            key.fill(0)
+        }
+    }
+
     fun createAccount(root: String, password: String, onCreated: (String) -> Unit = {}): String {
         if (password.length < MIN_PASSWORD_LENGTH) {
             throw VaultSessionException("Use at least 10 characters for the Master Password.")
@@ -355,6 +376,34 @@ class VaultSession(
         title
     }
 
+    /** Passkeys [caller] may use for a WebAuthn request (#477); no secret material. */
+    fun passkeyEntries(caller: app.gitpass.core.PasskeyCaller, requestJson: String): List<app.gitpass.core.PasskeyEntry> = mutex.withLock {
+        (opened ?: throw VaultLockedException()).passkeyEntries(caller, requestJson)
+    }
+
+    /** Creates a passkey in the selected (or first) vault; returns RegistrationResponseJSON. The caller verified the user. */
+    fun passkeyRegister(caller: app.gitpass.core.PasskeyCaller, requestJson: String): String = mutex.withLock {
+        val current = opened ?: throw VaultLockedException()
+        ensureNotSyncing()
+        val vaultId = selectedVaultId ?: vaults.firstOrNull()?.id
+        val response = current.passkeyRegister(caller, requestJson, vaultId)
+        reloadLocked()
+        lastActivityMs = nowMs()
+        publishLocked()
+        events?.localChange()
+        response
+    }
+
+    /** Signs a WebAuthn assertion with [credentialId]; returns AuthenticationResponseJSON. The caller verified the user. */
+    fun passkeyAssert(caller: app.gitpass.core.PasskeyCaller, requestJson: String, credentialId: String, clientDataHash: ByteArray?): String = mutex.withLock {
+        val current = opened ?: throw VaultLockedException()
+        ensureNotSyncing()
+        val response = current.passkeyAssert(caller, requestJson, credentialId, clientDataHash)
+        lastActivityMs = nowMs()
+        events?.localChange() // the sign count changed
+        response
+    }
+
     /** True while a sync holds the native session. */
     fun isSyncing(): Boolean = mutex.withLock { syncing != null }
 
@@ -518,6 +567,10 @@ interface OpenVault {
     fun restoreItem(vaultId: String, itemId: String): Unit = throw UnsupportedOperationException()
     /** Matching logins for autofill (#475); secrets only for matching items. */
     fun autofillLogins(target: app.gitpass.android.autofill.AutofillTarget): List<AutofillCredential> = throw UnsupportedOperationException()
+    /** Passkey provider (#477): all rules and crypto run in gitpass-core. */
+    fun passkeyEntries(caller: app.gitpass.core.PasskeyCaller, requestJson: String): List<app.gitpass.core.PasskeyEntry> = throw UnsupportedOperationException()
+    fun passkeyRegister(caller: app.gitpass.core.PasskeyCaller, requestJson: String, vaultId: String?): String = throw UnsupportedOperationException()
+    fun passkeyAssert(caller: app.gitpass.core.PasskeyCaller, requestJson: String, credentialId: String, clientDataHash: ByteArray?): String = throw UnsupportedOperationException()
     /** Pull, merge and push with GitHub on the shared core engine; honour [cancel]. */
     fun syncGitHub(target: SyncTarget, token: String, cancel: SyncCancel): SyncOutcome = throw UnsupportedOperationException()
     fun close()

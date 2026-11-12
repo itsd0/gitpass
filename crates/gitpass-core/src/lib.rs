@@ -11,6 +11,7 @@ pub mod device;
 pub mod fsutil;
 pub mod gen_history;
 pub mod origin;
+pub mod webauthn;
 pub mod generate;
 pub mod keys;
 pub mod import;

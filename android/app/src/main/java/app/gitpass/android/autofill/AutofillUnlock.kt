@@ -48,13 +48,17 @@ object AutofillTags {
 }
 
 /**
- * Unlock step shared by the fill and save activities (#475): biometric
- * unlock when it is set up (#473), otherwise Master Password + Secret Key.
- * Calls [onUnlocked] on the main thread once the session is open. Nothing
- * from the vault is shown before that.
+ * Unlock step shared by the fill and save activities (#475) and the passkey
+ * provider (#477): biometric unlock when it is set up (#473), otherwise
+ * Master Password + Secret Key. Calls [onUnlocked] on the main thread once
+ * the session is open. Nothing from the vault is shown before that.
+ *
+ * With [verifyOnly] (the vault is already open) the same credentials are
+ * checked again without touching the open session, so the user is verified
+ * freshly for this request.
  */
 @Composable
-fun AutofillUnlock(app: GitpassApplication, title: String, target: String, onUnlocked: () -> Unit, onCancel: () -> Unit) {
+fun AutofillUnlock(app: GitpassApplication, title: String, target: String, onUnlocked: () -> Unit, onCancel: () -> Unit, verifyOnly: Boolean = false) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var password by remember { mutableStateOf("") }
@@ -102,7 +106,7 @@ fun AutofillUnlock(app: GitpassApplication, title: String, target: String, onUnl
                         val key = try { quick.finishUnlock(result.cipher) } catch (_: QuickUnlockInvalidatedException) { busy = false; dropQuick(); return@authenticate }
                         scope.launch(start = CoroutineStart.ATOMIC) {
                             val outcome = try {
-                                withContext(Dispatchers.IO) { runCatching { app.session.unlockWithKey(root, key) } }
+                                withContext(Dispatchers.IO) { runCatching { if (verifyOnly) app.session.verifyWithKey(root, key) else app.session.unlockWithKey(root, key) } }
                             } finally { key.fill(0) }
                             busy = false
                             outcome.onSuccess { onUnlocked() }.onFailure { e -> if (e is QuickUnlockStaleException) dropQuick() else error = failure(e) }
@@ -135,7 +139,7 @@ fun AutofillUnlock(app: GitpassApplication, title: String, target: String, onUnl
                 val p = password
                 val s = secretKey
                 scope.launch {
-                    val outcome = withContext(Dispatchers.IO) { runCatching { app.session.unlock(root, p, s) } }
+                    val outcome = withContext(Dispatchers.IO) { runCatching { if (verifyOnly) app.session.verify(root, p, s) else app.session.unlock(root, p, s) } }
                     busy = false
                     password = ""
                     secretKey = ""
