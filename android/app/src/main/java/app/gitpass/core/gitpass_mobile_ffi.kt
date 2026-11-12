@@ -1186,7 +1186,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_set_favorite() != 52982.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_sync_github() != 13303.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_sync_github() != 63303.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_update_item() != 43322.toShort()) {
@@ -2227,7 +2227,7 @@ public interface VaultInterface {
      * repository is initialized with this vault. The token must be a
      * fine-grained PAT (`github_pat_…`) with Contents read/write on the repo.
      */
-    fun `syncGithub`(`target`: GitHubSyncTarget, `token`: kotlin.String, `transport`: HttpTransport, `cancellation`: SyncCancellation): SyncReport
+    fun `syncGithub`(`target`: GitHubSyncTarget, `token`: kotlin.String, `transport`: HttpTransport, `cancellation`: SyncCancellation): GitHubSyncReport
     
     fun `updateItem`(`vaultId`: kotlin.String, `itemId`: kotlin.String, `input`: ItemInput)
     
@@ -2475,8 +2475,8 @@ open class Vault: Disposable, AutoCloseable, VaultInterface
      * repository is initialized with this vault. The token must be a
      * fine-grained PAT (`github_pat_…`) with Contents read/write on the repo.
      */
-    @Throws(GitpassException::class)override fun `syncGithub`(`target`: GitHubSyncTarget, `token`: kotlin.String, `transport`: HttpTransport, `cancellation`: SyncCancellation): SyncReport {
-            return FfiConverterTypeSyncReport.lift(
+    @Throws(GitpassException::class)override fun `syncGithub`(`target`: GitHubSyncTarget, `token`: kotlin.String, `transport`: HttpTransport, `cancellation`: SyncCancellation): GitHubSyncReport {
+            return FfiConverterTypeGitHubSyncReport.lift(
     callWithPointer {
     uniffiRustCallWithError(GitpassException) { _status ->
     UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_method_vault_sync_github(
@@ -2690,6 +2690,83 @@ public object FfiConverterTypeFormatVersion: FfiConverterRustBuffer<FormatVersio
     override fun write(value: FormatVersion, buf: ByteBuffer) {
             FfiConverterUInt.write(value.`minRead`, buf)
             FfiConverterUInt.write(value.`currentWrite`, buf)
+    }
+}
+
+
+
+/**
+ * What a sync did. Ids and field names only — never item data.
+ */
+data class GitHubSyncReport (
+    /**
+     * Remote head after the sync.
+     */
+    var `head`: kotlin.String, 
+    /**
+     * A commit was pushed.
+     */
+    var `pushed`: kotlin.Boolean, 
+    /**
+     * The local vault changed (remote edits/deletes applied).
+     */
+    var `localChanged`: kotlin.Boolean, 
+    /**
+     * Conflicts, already resolved fail-safe; one line each
+     * (`vault/item: kind`).
+     */
+    var `conflicts`: List<kotlin.String>, 
+    /**
+     * Items field-merged with the remote.
+     */
+    var `mergedItems`: kotlin.UInt, 
+    /**
+     * Local-only items that were pushed.
+     */
+    var `localOnlyItems`: kotlin.UInt, 
+    /**
+     * Attempts used (> 1 when the remote moved concurrently).
+     */
+    var `attempts`: kotlin.UInt
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypeGitHubSyncReport: FfiConverterRustBuffer<GitHubSyncReport> {
+    override fun read(buf: ByteBuffer): GitHubSyncReport {
+        return GitHubSyncReport(
+            FfiConverterString.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterBoolean.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+            FfiConverterUInt.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: GitHubSyncReport) = (
+            FfiConverterString.allocationSize(value.`head`) +
+            FfiConverterBoolean.allocationSize(value.`pushed`) +
+            FfiConverterBoolean.allocationSize(value.`localChanged`) +
+            FfiConverterSequenceString.allocationSize(value.`conflicts`) +
+            FfiConverterUInt.allocationSize(value.`mergedItems`) +
+            FfiConverterUInt.allocationSize(value.`localOnlyItems`) +
+            FfiConverterUInt.allocationSize(value.`attempts`)
+    )
+
+    override fun write(value: GitHubSyncReport, buf: ByteBuffer) {
+            FfiConverterString.write(value.`head`, buf)
+            FfiConverterBoolean.write(value.`pushed`, buf)
+            FfiConverterBoolean.write(value.`localChanged`, buf)
+            FfiConverterSequenceString.write(value.`conflicts`, buf)
+            FfiConverterUInt.write(value.`mergedItems`, buf)
+            FfiConverterUInt.write(value.`localOnlyItems`, buf)
+            FfiConverterUInt.write(value.`attempts`, buf)
     }
 }
 
@@ -3108,83 +3185,6 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
             FfiConverterBoolean.write(value.`deleted`, buf)
             FfiConverterString.write(value.`updatedAt`, buf)
             FfiConverterBoolean.write(value.`hasTotp`, buf)
-    }
-}
-
-
-
-/**
- * What a sync did. Ids and field names only — never item data.
- */
-data class SyncReport (
-    /**
-     * Remote head after the sync.
-     */
-    var `head`: kotlin.String, 
-    /**
-     * A commit was pushed.
-     */
-    var `pushed`: kotlin.Boolean, 
-    /**
-     * The local vault changed (remote edits/deletes applied).
-     */
-    var `localChanged`: kotlin.Boolean, 
-    /**
-     * Conflicts, already resolved fail-safe; one line each
-     * (`vault/item: kind`).
-     */
-    var `conflicts`: List<kotlin.String>, 
-    /**
-     * Items field-merged with the remote.
-     */
-    var `mergedItems`: kotlin.UInt, 
-    /**
-     * Local-only items that were pushed.
-     */
-    var `localOnlyItems`: kotlin.UInt, 
-    /**
-     * Attempts used (> 1 when the remote moved concurrently).
-     */
-    var `attempts`: kotlin.UInt
-) {
-    
-    companion object
-}
-
-/**
- * @suppress
- */
-public object FfiConverterTypeSyncReport: FfiConverterRustBuffer<SyncReport> {
-    override fun read(buf: ByteBuffer): SyncReport {
-        return SyncReport(
-            FfiConverterString.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterBoolean.read(buf),
-            FfiConverterSequenceString.read(buf),
-            FfiConverterUInt.read(buf),
-            FfiConverterUInt.read(buf),
-            FfiConverterUInt.read(buf),
-        )
-    }
-
-    override fun allocationSize(value: SyncReport) = (
-            FfiConverterString.allocationSize(value.`head`) +
-            FfiConverterBoolean.allocationSize(value.`pushed`) +
-            FfiConverterBoolean.allocationSize(value.`localChanged`) +
-            FfiConverterSequenceString.allocationSize(value.`conflicts`) +
-            FfiConverterUInt.allocationSize(value.`mergedItems`) +
-            FfiConverterUInt.allocationSize(value.`localOnlyItems`) +
-            FfiConverterUInt.allocationSize(value.`attempts`)
-    )
-
-    override fun write(value: SyncReport, buf: ByteBuffer) {
-            FfiConverterString.write(value.`head`, buf)
-            FfiConverterBoolean.write(value.`pushed`, buf)
-            FfiConverterBoolean.write(value.`localChanged`, buf)
-            FfiConverterSequenceString.write(value.`conflicts`, buf)
-            FfiConverterUInt.write(value.`mergedItems`, buf)
-            FfiConverterUInt.write(value.`localOnlyItems`, buf)
-            FfiConverterUInt.write(value.`attempts`, buf)
     }
 }
 

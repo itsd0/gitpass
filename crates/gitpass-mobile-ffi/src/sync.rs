@@ -121,7 +121,7 @@ pub struct GitHubSyncTarget {
 
 /// What a sync did. Ids and field names only — never item data.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct SyncReport {
+pub struct GitHubSyncReport {
     /// Remote head after the sync.
     pub head: String,
     /// A commit was pushed.
@@ -216,7 +216,7 @@ impl Vault {
         token: String,
         transport: Arc<dyn HttpTransport>,
         cancellation: Arc<SyncCancellation>,
-    ) -> Result<SyncReport, GitpassError> {
+    ) -> Result<GitHubSyncReport, GitpassError> {
         let token = zeroize::Zeroizing::new(token);
         let repo_ref = GitHubRepoRef::new(&target.owner, &target.repo, &target.branch)
             .map_err(|_| GitpassError::Generic(GitHubApiError::InvalidConfig.to_string()))?;
@@ -232,7 +232,7 @@ impl Vault {
                 sync_error(&e)
             }
         })?;
-        Ok(SyncReport {
+        Ok(GitHubSyncReport {
             head: out.head,
             pushed: out.pushed,
             local_changed: out.local_changed,

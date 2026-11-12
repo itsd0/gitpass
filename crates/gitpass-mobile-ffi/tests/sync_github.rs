@@ -222,7 +222,7 @@ fn open(root: &Path, sk: &str) -> Arc<Vault> {
     open_vault(root.to_str().unwrap().into(), PW.into(), sk.into()).unwrap()
 }
 
-fn sync(v: &Vault, gh: &FakeGitHub) -> Result<SyncReport, GitpassError> {
+fn sync(v: &Vault, gh: &FakeGitHub) -> Result<GitHubSyncReport, GitpassError> {
     v.sync_github(target(), TOKEN.into(), Arc::new(gh.clone()), SyncCancellation::new())
 }
 
