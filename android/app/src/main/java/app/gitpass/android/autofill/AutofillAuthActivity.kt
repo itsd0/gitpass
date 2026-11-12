@@ -107,6 +107,7 @@ class AutofillAuthActivity : ComponentActivity() {
             response.addDataset(dataset.build())
         }
         setResult(Activity.RESULT_OK, Intent().putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, response.build()))
+        lastResultHadFillResponse = true
         finish()
     }
 
@@ -130,6 +131,12 @@ class AutofillAuthActivity : ComponentActivity() {
 
         /** Test hook: how many datasets the last request returned. Never holds values. */
         @Volatile var lastDatasetCount: Int = -1
+
+        /**
+         * Test hook: true once a FillResponse was set as the result. (The response itself can be parceled only once,
+         * which ActivityScenario's result plumbing would break, and it holds secrets, so it is never kept here.)
+         */
+        @Volatile var lastResultHadFillResponse: Boolean = false
 
         /**
          * The target this request is for. When the framework attached the

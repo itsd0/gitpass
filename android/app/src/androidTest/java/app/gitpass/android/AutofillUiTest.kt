@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.lifecycle.Lifecycle
 import androidx.test.core.app.ActivityScenario
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
@@ -79,15 +80,18 @@ class AutofillUiTest {
 
     @Test fun matchingLoginIsReturnedOnlyAfterUnlockAndTheVaultLocksAgain() {
         AutofillAuthActivity.lastDatasetCount = -1
-        ActivityScenario.launchActivityForResult<AutofillAuthActivity>(fillIntent(AutofillTarget("https://example.com", null))).use { scenario ->
+        AutofillAuthActivity.lastResultHadFillResponse = false
+        // launch (not launchActivityForResult): the FillResponse's dataset list can be parceled only once, and
+        // ActivityScenario re-parcels results; the autofill framework parcels it exactly once.
+        ActivityScenario.launch<AutofillAuthActivity>(fillIntent(AutofillTarget("https://example.com", null))).use { scenario ->
             rule.onNodeWithText("Example").assertDoesNotExist()
             assertEquals(0, gateway.lookups)
+            assertFalse(AutofillAuthActivity.lastResultHadFillResponse)
             unlock()
             rule.waitUntil(10_000) { AutofillAuthActivity.lastDatasetCount >= 0 }
             assertEquals(1, AutofillAuthActivity.lastDatasetCount)
-            val result = scenario.result
-            assertEquals(Activity.RESULT_OK, result.resultCode)
-            assertNotNull(result.resultData.extras?.get(AutofillManager.EXTRA_AUTHENTICATION_RESULT))
+            assertTrue("FillResponse delivered as the auth result", AutofillAuthActivity.lastResultHadFillResponse)
+            rule.waitUntil(10_000) { scenario.state == Lifecycle.State.DESTROYED }
         }
         assertFalse("vault locked again after autofill", app.session.isUnlocked())
     }
