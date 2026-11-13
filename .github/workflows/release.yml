@@ -16,6 +16,9 @@ name: Release
 # identity) + APPLE_CERTIFICATE_PASSWORD, the bundle is signed with that identity (not Developer ID, not
 # notarized). Without them a dry run is ad-hoc signed ("-"), and a tag release FAILS rather than silently
 # changing the app's signing identity (see docs/RELEASE.md).
+# Android (#479): the `android` job builds a release APK + AAB signed with the owner's upload keystore (secrets
+# ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD; missing secrets fail
+# the job, also on a dry run). On a tag, `publish` attaches them to the release; a dry run keeps them as artifacts.
 on:
   push:
     tags: ["v*"]
@@ -139,9 +142,146 @@ jobs:
             apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz*
           if-no-files-found: error
 
+  android:
+    name: android (signed release)
+    if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0'
+    runs-on: ubuntu-24.04
+    # `release` environment: same deployment rules as the desktop builds (v* tags and main).
+    environment: release
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: never
+      NDK_VERSION: 27.1.12297006
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: preflight (Android signing secrets)
+        # Fail before the long build. Only the names of missing secrets are printed, never values.
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          missing=()
+          [ -n "$KS_B64" ] || missing+=(ANDROID_KEYSTORE_BASE64)
+          [ -n "$KS_PASSWORD" ] || missing+=(ANDROID_KEYSTORE_PASSWORD)
+          [ -n "$KEY_ALIAS" ] || missing+=(ANDROID_KEY_ALIAS)
+          [ -n "$KEY_PASSWORD" ] || missing+=(ANDROID_KEY_PASSWORD)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Android signing secrets are not set: ${missing[*]} (see docs/RELEASE.md, 'Android release signing')"
+            exit 1
+          fi
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: '21'
+      # No rust-cache in release builds: nothing restored from a cache ends up in a signed artifact.
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable branch; version pinned below
+        with:
+          toolchain: "1.90.0"  # = RUST_TOOLCHAIN in ci.yml and android/scripts/build-rust.sh
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-ndk@4.1.2
+      - name: Android NDK
+        run: |
+          if [ ! -d "$ANDROID_HOME/ndk/$NDK_VERSION" ]; then
+            echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$NDK_VERSION" >/dev/null
+          fi
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "BUILD_TOOLS=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)" >> "$GITHUB_ENV"
+      - name: build native libraries + UniFFI bindings
+        run: |
+          ./android/scripts/build-rust.sh
+          if [ -n "$(git status --porcelain android/app/src/main/java)" ]; then
+            echo "::error::generated UniFFI Kotlin bindings differ from the committed ones"
+            exit 1
+          fi
+      - name: decode keystore
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          KS="$RUNNER_TEMP/gitpass-upload.jks"
+          ( umask 077; printf %s "$KS_B64" | base64 --decode > "$KS" ) \
+            || { echo "::error::ANDROID_KEYSTORE_BASE64 is not valid base64"; exit 1; }
+          keytool -list -keystore "$KS" -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null 2>&1 \
+            || { echo "::error::the keystore cannot be opened with ANDROID_KEYSTORE_PASSWORD or has no entry ANDROID_KEY_ALIAS"; exit 1; }
+          echo "GITPASS_ANDROID_KEYSTORE=$KS" >> "$GITHUB_ENV"
+      - name: build signed release APK + AAB
+        working-directory: android
+        env:
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease bundleRelease --no-daemon --stacktrace
+      - name: delete keystore
+        if: always()
+        run: rm -f "$RUNNER_TEMP/gitpass-upload.jks"
+      - name: verify signatures, alignment, version + checksums
+        run: |
+          APK=android/app/build/outputs/apk/release/app-release.apk
+          AAB=android/app/build/outputs/bundle/release/app-release.aab
+          test -s "$APK" && test -s "$AAB" || { echo "::error::release APK or AAB missing"; exit 1; }
+          # APK: v2 + v3 signatures, 4-byte zipalign with 16 KB page alignment for uncompressed .so files.
+          out="$("$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$APK")"
+          grep -E "^Verified using|^Signer #1 certificate (DN|SHA-256)" <<<"$out"
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" <<<"$out" || { echo "::error::APK is not v2-signed"; exit 1; }
+          grep -q "Verified using v3 scheme (APK Signature Scheme v3): true" <<<"$out" || { echo "::error::APK is not v3-signed"; exit 1; }
+          "$BUILD_TOOLS/zipalign" -c -P 16 4 "$APK" || { echo "::error::APK is not zipaligned (-P 16)"; exit 1; }
+          # (no -strict: a self-signed upload certificate is expected and would fail it)
+          grep -q "^jar verified" <<<"$(jarsigner -verify "$AAB")" || { echo "::error::AAB is not signed"; exit 1; }
+          # Version: the APK carries the workspace version; on a tag it must match the tag.
+          badging="$("$BUILD_TOOLS/aapt2" dump badging "$APK")"
+          grep "^package:" <<<"$badging"
+          vn="$(sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p" <<<"$badging")"
+          [ -n "$vn" ] || { echo "::error::cannot read versionName from the APK"; exit 1; }
+          if [[ "$GITHUB_REF" == refs/tags/v* ]] && [ "$vn" != "${GITHUB_REF_NAME#v}" ]; then
+            echo "::error::APK versionName $vn does not match tag $GITHUB_REF_NAME (bump the workspace version in Cargo.toml)"
+            exit 1
+          fi
+          # Native libraries: required ABIs present, 16 KB ELF segment alignment kept.
+          listing="$(unzip -l "$APK")"
+          for lib in lib/arm64-v8a/libgitpass_mobile_ffi.so lib/x86_64/libgitpass_mobile_ffi.so \
+                     lib/arm64-v8a/libjnidispatch.so lib/x86_64/libjnidispatch.so; do
+            grep -qF "$lib" <<<"$listing" || { echo "::error::$lib is missing from the APK"; exit 1; }
+          done
+          X="$(mktemp -d)"; unzip -q "$APK" "lib/*/*.so" -d "$X"
+          python3 - "$X" <<'EOF'
+          import glob, subprocess, sys
+          for so in glob.glob(sys.argv[1] + '/lib/*/*.so'):
+              for line in subprocess.check_output(['readelf', '-lW', so], text=True).splitlines():
+                  p = line.split()
+                  if p and p[0] in ('LOAD', 'GNU_RELRO'):
+                      off, vaddr = int(p[1], 16), int(p[2], 16)
+                      if p[0] == 'LOAD' and int(p[-1], 16) < 16384:
+                          sys.exit(f'::error::{so}: LOAD alignment < 16 KB')
+                      if off % 16384 != vaddr % 16384:
+                          sys.exit(f'::error::{so}: {p[0]} offset/vaddr not congruent mod 16 KB')
+          print('native libraries: 16 KB aligned')
+          EOF
+          rm -rf "$X"
+          mkdir dist-android
+          cp "$APK" "dist-android/gitpass-android-$vn.apk"
+          cp "$AAB" "dist-android/gitpass-android-$vn.aab"
+          (cd dist-android && sha256sum "gitpass-android-$vn.apk" "gitpass-android-$vn.aab" | tee "gitpass-android-$vn.sha256")
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: gitpass-android-release
+          path: dist-android/*
+          if-no-files-found: error
+
   publish:
     name: publish release
-    needs: macos
+    needs: [macos, android]
     if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: release
@@ -164,6 +304,22 @@ jobs:
             [ -s "$f" ] || { echo "::error::missing release asset $f"; exit 1; }
           done
           jq -e --arg v "$v" '.version == $v and (.platforms | has("darwin-aarch64") and has("darwin-x86_64"))' latest.json
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: gitpass-android-release
+          path: dist-android
+      - name: attach Android APK + AAB on itsd0/gitpass
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          v="${TAG#v}"
+          cd dist-android
+          for f in "gitpass-android-$v.apk" "gitpass-android-$v.aab" "gitpass-android-$v.sha256"; do
+            [ -s "$f" ] || { echo "::error::missing Android artifact $f"; exit 1; }
+          done
+          sha256sum -c "gitpass-android-$v.sha256"
+          gh release upload "$TAG" -R itsd0/gitpass --clobber \
+            "gitpass-android-$v.apk" "gitpass-android-$v.aab" "gitpass-android-$v.sha256"
       - name: publish on itsd0/gitpass
         env:
           GH_TOKEN: ${{ github.token }}

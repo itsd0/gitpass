@@ -4,6 +4,38 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// App version = workspace version in the root Cargo.toml ([workspace.package] version), so the release
+// PR that bumps the Rust crates also bumps the APK (#479). versionCode = major*10000 + minor*100 + patch;
+// a pre-release suffix (-rc1) does not change the code.
+val workspaceVersion: String = run {
+    val cargo = rootProject.file("../Cargo.toml").readText()
+    val section = cargo.substringAfter("[workspace.package]", "")
+    Regex("""(?m)^version\s*=\s*"([^"]+)"""").find(section)?.groupValues?.get(1)
+        ?: throw GradleException("version not found under [workspace.package] in Cargo.toml")
+}
+val workspaceVersionCode: Int = run {
+    val m = Regex("""^(\d+)\.(\d+)\.(\d+)""").find(workspaceVersion)
+        ?: throw GradleException("workspace version '$workspaceVersion' is not x.y.z")
+    val (major, minor, patch) = m.destructured.toList().map { it.toInt() }
+    if (minor > 99 || patch > 99) throw GradleException("minor/patch must be < 100 for versionCode")
+    major * 10000 + minor * 100 + patch
+}
+
+// Release signing (#479): never committed. Read from environment variables (CI) or Gradle properties
+// (e.g. ~/.gradle/gradle.properties on the owner's Mac). Without them a release build is unsigned.
+fun signingValue(env: String, prop: String): String? =
+    System.getenv(env)?.takeIf { it.isNotEmpty() } ?: (findProperty(prop) as String?)?.takeIf { it.isNotEmpty() }
+val releaseKeystore = signingValue("GITPASS_ANDROID_KEYSTORE", "gitpass.android.keystore")
+val releaseSigningValues = listOf(
+    releaseKeystore,
+    signingValue("ANDROID_KEYSTORE_PASSWORD", "gitpass.android.keystorePassword"),
+    signingValue("ANDROID_KEY_ALIAS", "gitpass.android.keyAlias"),
+    signingValue("ANDROID_KEY_PASSWORD", "gitpass.android.keyPassword"),
+)
+if (releaseSigningValues.any { it != null } && releaseSigningValues.any { it == null }) {
+    throw GradleException("Android release signing is partly configured: set the keystore path, keystore password, key alias and key password, or none of them")
+}
+
 android {
     namespace = "app.gitpass.android"
     compileSdk = 35
@@ -12,8 +44,8 @@ android {
         applicationId = "app.gitpass.android"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = workspaceVersionCode
+        versionName = workspaceVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
@@ -21,8 +53,24 @@ android {
         }
     }
 
+    signingConfigs {
+        if (releaseSigningValues.all { it != null }) {
+            create("release") {
+                storeFile = file(releaseKeystore!!)
+                storePassword = releaseSigningValues[1]
+                keyAlias = releaseSigningValues[2]
+                keyPassword = releaseSigningValues[3]
+                // minSdk 26: APK Signature Scheme v2 + v3 (v1/JAR signing is not needed).
+                enableV1Signing = false
+                enableV2Signing = true
+                enableV3Signing = true
+            }
+        }
+    }
+
     buildTypes {
         release {
+            signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

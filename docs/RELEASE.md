@@ -8,6 +8,8 @@
   Release on **`itsd0/gitpass`** (this repo, same tag) with the installers, updater artifacts (`*.sig`) and `latest.json`;
   the `publish` job then publishes it as Latest (no mirror to `itsd0/gitpass-releases` any more). Also builds the CLI and
   `gitpass-host` binaries as workflow artifacts. `workflow_dispatch` builds the same things as artifacts only.
+  The `android` job builds a signed release APK + AAB (see [Android release signing](#android-release-signing));
+  on a tag, `publish` attaches them and a `.sha256` file to the release.
 
 ## Platform support matrix
 | Feature | macOS | Linux | Windows |
@@ -140,3 +142,53 @@ All workflows run on **GitHub-hosted runners**; the former self-hosted Mac runne
 - Tests run with `HOME` set to a temp dir.
 - Windows/Linux builds are hosted (cost minutes) and only run via
   `gh workflow run release.yml -f include_windows_linux=true` (artifacts only, not published).
+
+### Android release signing
+
+`release.yml`'s `android` job (#479) builds `gitpass-android-X.Y.Z.apk` (APK Signature Scheme v2 + v3,
+zipaligned, 16 KB ELF alignment checked) and `gitpass-android-X.Y.Z.aab`, plus `gitpass-android-X.Y.Z.sha256`.
+On a `v*` tag the `publish` job attaches all three to the release on `itsd0/gitpass`. A dry run
+(`gh workflow run release.yml -R itsd0/gitpass` on `main`) keeps them as the `gitpass-android-release` workflow
+artifact. The job runs in the `release` environment and **fails if any of the four secrets is missing**, also on
+a dry run.
+
+- **Version:** `versionName` is the workspace version (`[workspace.package] version` in the root `Cargo.toml`), and
+  `versionCode` is `major*10000 + minor*100 + patch` (0.6.8 → 608). Bumping the Cargo version in the release PR
+  bumps the APK. On a tag the job fails when the APK version differs from the tag.
+- **Keystore:** never committed and never on a runner disk longer than the job. CI decodes it to `$RUNNER_TEMP`
+  and deletes it in an `always()` step. Gradle reads the signing config only from environment variables
+  (`GITPASS_ANDROID_KEYSTORE`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`) or the
+  Gradle properties `gitpass.android.keystore`, `gitpass.android.keystorePassword`, `gitpass.android.keyAlias` and
+  `gitpass.android.keyPassword`. Without any of them a local `./gradlew assembleRelease` builds an unsigned APK; a
+  partial set fails the build.
+
+**One-time setup by the owner (on the Mac).** Agents never create the keystore or set the secrets.
+
+1. Generate the upload keystore. `keytool` ships with any JDK (`brew install --cask temurin` or Android Studio's
+   bundled JBR). It prompts for the password, so the password never lands in shell history:
+
+   ```sh
+   keytool -genkeypair -v -storetype PKCS12 -keystore ~/gitpass-upload.jks -alias gitpass-upload \
+     -keyalg RSA -keysize 4096 -validity 10000 -dname "CN=gitpass, O=itsd0"
+   ```
+
+   With PKCS12 the key password is the keystore password, so `ANDROID_KEY_PASSWORD` gets the same value as
+   `ANDROID_KEYSTORE_PASSWORD`.
+2. Note the certificate fingerprint (this SHA-256 identifies the app, e.g. in Digital Asset Links):
+   `keytool -list -v -keystore ~/gitpass-upload.jks -alias gitpass-upload`.
+3. **Back it up before using it.** Copy `gitpass-upload.jks` to at least two offline places (e.g. an encrypted
+   USB drive and an encrypted cloud or password-manager attachment). Store the password separately from the file.
+   If the keystore or its password is lost, installed copies can never be updated: every user has to uninstall
+   (losing the on-device vault data) and install a build with a new key.
+4. Set the four secrets on the `release` environment. `gh secret set` prompts for each value:
+
+   ```sh
+   base64 -i ~/gitpass-upload.jks | gh secret set ANDROID_KEYSTORE_BASE64 -R itsd0/gitpass --env release
+   gh secret set ANDROID_KEYSTORE_PASSWORD -R itsd0/gitpass --env release
+   gh secret set ANDROID_KEY_ALIAS -R itsd0/gitpass --env release      # gitpass-upload
+   gh secret set ANDROID_KEY_PASSWORD -R itsd0/gitpass --env release   # same as the keystore password
+   ```
+5. Check with a dry run on `main`, and keep the keystore only in the backups (not in the repo or `~/Downloads`).
+
+A phone that has a CI **debug** build installed cannot update to the release-signed APK (different signer).
+Uninstall the debug build first; this deletes its local vault data.

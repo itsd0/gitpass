@@ -13,3 +13,7 @@ ios/Generated/
 ios/Frameworks/
 ios/Gitpass.xcodeproj/
 ios/*.xcworkspace/
+
+# Android signing material (#479): never commit a keystore
+*.jks
+*.keystore
