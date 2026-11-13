@@ -89,10 +89,13 @@ class AutofillAuthActivity : ComponentActivity() {
         } finally {
             if (unlockedHere) app.session.lock()
         }
-        lastDatasetCount = plans.size
+        // Test hooks: lastDatasetCount is the "request handled" signal tests wait on, so it is written last, after
+        // the vault was locked (finally above) and after the result. Publishing it earlier let a waiting test read
+        // lastResultHadFillResponse before it was set (#485).
         if (plans.isEmpty()) {
             message = getString(R.string.autofill_no_match, target.label)
             if (!unlockedHere && app.session.isUnlocked()) cancel(app) // nothing to show over an already-open vault
+            lastDatasetCount = 0
             return
         }
         val response = FillResponse.Builder()
@@ -108,6 +111,7 @@ class AutofillAuthActivity : ComponentActivity() {
         }
         setResult(Activity.RESULT_OK, Intent().putExtra(AutofillManager.EXTRA_AUTHENTICATION_RESULT, response.build()))
         lastResultHadFillResponse = true
+        lastDatasetCount = plans.size
         finish()
     }
 
