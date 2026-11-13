@@ -125,7 +125,7 @@ placeholder instead of claiming the file exists.
 ### Runners and the `release` environment (since 0.6.8)
 
 All workflows run on **GitHub-hosted runners**; the former self-hosted Mac runner was removed. CI and iOS use
-`ubuntu-latest` / `macos-latest`; `release.yml` builds macOS arm64 and x64 on `macos-14` (x64 is cross-compiled).
+`ubuntu-latest` / `macos-latest`; `release.yml` builds macOS arm64 on `macos-15` and x64 natively on `macos-15-intel` (`macos-14` was retired on 2026-11-02, #483).
 
 - Desktop builds (tag and dry run) and the publish job run in the `release` environment, whose deployment rules
   allow `v*` tags and the `main` branch (needed so dry runs get the signing certificate). Publishing is tag-only.
