@@ -22,6 +22,28 @@ final class GitpassTests: XCTestCase {
         XCTAssertFalse(BridgeCompat.isCompatible(apiLevel: BridgeCompat.expectedApiLevel, minRead: 2, currentWrite: BridgeCompat.expectedFormat + 1))
     }
 
+    func testPairingVectorRoundTrip() throws {
+        let opened = try pairingTestVectorOpen()
+        XCTAssertEqual(opened.repoOwner(), "fake-owner")
+        XCTAssertEqual(opened.repoName(), "fake-vault")
+        XCTAssertEqual(opened.branch(), "main")
+        XCTAssertEqual(opened.accountId(), "00000000-0000-4000-8000-000000000001")
+        XCTAssertEqual(opened.tokenKind(), "fine_grained_pat")
+        XCTAssertEqual(opened.syncToken(), "github_pat_FAKE_pairing_test_vector")
+        XCTAssertTrue(opened.secretKey().hasPrefix("A3-"))
+        XCTAssertFalse(opened.syncToken().lowercased().contains("password"))
+        // Never log the object: description must not include the PAT or Secret Key.
+        let rendered = String(describing: opened)
+        XCTAssertFalse(rendered.contains("github_pat_"))
+        XCTAssertFalse(rendered.contains(opened.secretKey()))
+        let vector = try pairingTestVector()
+        XCTAssertTrue(vector.contains("gitpass-pair:1:offer:"))
+        XCTAssertTrue(vector.contains("gitpass-pair:1:grant:"))
+        XCTAssertTrue(vector.contains("fine_grained_pat"))
+        XCTAssertFalse(vector.contains("FAKE-master-password"))
+        XCTAssertFalse(vector.contains("password"))
+    }
+
     func testDefaultUnlockDoesNotRewriteSyncedFiles() throws {
         let options = defaultUnlockOptions()
         XCTAssertFalse(options.registerDevice)
