@@ -91,6 +91,8 @@ class AutofillUiTest {
             rule.waitUntil(10_000) { AutofillAuthActivity.lastDatasetCount >= 0 }
             assertEquals(1, AutofillAuthActivity.lastDatasetCount)
             assertTrue("FillResponse delivered as the auth result", AutofillAuthActivity.lastResultHadFillResponse)
+            // The activity locks before it publishes the result (#485), not only once it is destroyed.
+            assertFalse("vault already locked when the fill result is published", app.session.isUnlocked())
             rule.waitUntil(10_000) { scenario.state == Lifecycle.State.DESTROYED }
         }
         assertFalse("vault locked again after autofill", app.session.isUnlocked())

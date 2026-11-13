@@ -352,7 +352,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -la /dev/kvm || { echo "::error::/dev/kvm not found or accessible"; exit 1; }
-      - name: Launch API 35 16-KB emulator & run instrumented smoke tests
+      - name: Launch API 36 16-KB emulator & run instrumented smoke tests
         run: |
           mkdir -p "$RUNNER_TEMP/android-diagnostics"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
@@ -362,8 +362,13 @@ jobs:
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
 
-          echo "Installing system-images;android-35;google_apis_ps16k;x86_64..."
-          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-35;google_apis_ps16k;x86_64"
+          # Android 16 (API 36) 16 KB image (#485). The API 35 ps16k x86_64 image (the pre-release 16 KB image) crashes
+          # at random in ART and native code across processes (system_server, systemui, GMS, Gboard, our app's GC and
+          # JIT threads): 2+ native crashes per run even on green runs, so a run fails whenever one lands in our app
+          # ("Process crashed" / "System has crashed"). The app still targets and compiles against API 35.
+          SYSTEM_IMAGE="system-images;android-36;google_apis_ps16k;x86_64"
+          echo "Installing $SYSTEM_IMAGE..."
+          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "$SYSTEM_IMAGE"
 
           # The hardware profile only sets screen/RAM defaults; page size comes from the
           # ps16k system image. Runner cmdline-tools may not ship newer profiles (pixel_8 is
@@ -396,18 +401,21 @@ jobs:
           fi
 
           echo "no" | "$AVDMANAGER" create avd \
-            --name "test_api35_16k" \
-            --package "system-images;android-35;google_apis_ps16k;x86_64" \
+            --name "test_api36_16k" \
+            --package "$SYSTEM_IMAGE" \
             "${DEVICE_ARGS[@]}" \
             --force
 
           echo "Configured AVDs:"
           "$ANDROID_HOME/emulator/emulator" -list-avds
 
+          # 6 GB guest RAM (#485): at 4 GB lowmemorykiller killed ~90 processes per run (including the test
+          # helper process), and ART's mark-compact GC then segfaulted (MarkCompact::ScanObject) in our app and in
+          # system_server/systemui -> "Process crashed" / "System has crashed". The kill count is logged per attempt.
           "$ANDROID_HOME/emulator/emulator" \
-            -avd test_api35_16k \
+            -avd test_api36_16k \
             -no-window \
-            -memory 4096 \
+            -memory 6144 \
             -no-audio \
             -no-boot-anim \
             -gpu swiftshader_indirect \
@@ -526,6 +534,22 @@ jobs:
             if [ -d app/build/reports/androidTests/connected ]; then
               cp -r app/build/reports/androidTests/connected "$RUNNER_TEMP/android-diagnostics/reports-attempt-$attempt" || true
             fi
+            if [ -d app/build/outputs/androidTest-results/connected ]; then
+              cp -r app/build/outputs/androidTest-results/connected "$RUNNER_TEMP/android-diagnostics/results-attempt-$attempt" || true
+            fi
+            echo "lowmemorykiller kills during attempt $attempt: $(grep -c 'lowmemorykiller: Kill' "$RUNNER_TEMP/android-diagnostics/logcat-attempt-$attempt.txt" || true)"
+            if [ "$rc" -ne 0 ]; then
+              # Put the failure messages in the job log (#485): Gradle only prints the test names.
+              python3 - "$RUNNER_TEMP/android-diagnostics/results-attempt-$attempt" <<'EOF' || true
+          import glob, sys, xml.etree.ElementTree as ET
+          for f in glob.glob(sys.argv[1] + '/**/*.xml', recursive=True):
+              for case in ET.parse(f).getroot().iter('testcase'):
+                  for bad in list(case.findall('failure')) + list(case.findall('error')):
+                      text = (bad.text or bad.get('message') or '').strip().splitlines()
+                      print(f"::error title={case.get('classname')}.{case.get('name')}::" + ' | '.join(text[:6]))
+          EOF
+              grep -E "F DEBUG +: (Cmdline|signal|Cause|      #0[0-2] )" "$RUNNER_TEMP/android-diagnostics/logcat-attempt-$attempt.txt" | head -40 || true
+            fi
             if [ "$rc" -eq 0 ]; then
               [ "$attempt" -gt 1 ] && echo "::warning::Instrumented tests passed on automatic retry after an emulator-level crash (#467); see diagnostics."
               exit 0
@@ -552,6 +576,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/android-diagnostics"
           timeout 15 adb devices -l > "$RUNNER_TEMP/android-diagnostics/adb-devices-final.txt" 2>&1 || true
           timeout 15 adb logcat -d > "$RUNNER_TEMP/android-diagnostics/logcat-final.txt" 2>&1 || true
+          # Native crash tombstones (ART GC / system_server SIGSEGV, #485); needs root on the userdebug image.
+          if timeout 30 adb root >/dev/null 2>&1 && timeout 60 adb wait-for-device; then
+            timeout 60 adb pull /data/tombstones "$RUNNER_TEMP/android-diagnostics/tombstones" >/dev/null 2>&1 || true
+          fi
           echo "Stopping emulator..."
           timeout 20 adb emu kill 2>/dev/null || true
           if [ -n "${EMU_PID:-}" ]; then
@@ -575,6 +603,19 @@ jobs:
             android/app/build/reports/lint-results-debug.html
             ${{ runner.temp }}/android-diagnostics/
           retention-days: 7
+          if-no-files-found: warn
+      # Failure-only, separately named so a red run's reports are easy to find (#485): instrumented test
+      # results (XML), HTML reports, logcat per attempt, emulator log and native crash tombstones.
+      - name: Upload instrumented test diagnostics (on failure)
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: failure()
+        with:
+          name: android-test-diagnostics-${{ github.run_attempt }}
+          path: |
+            android/app/build/outputs/androidTest-results/connected/
+            android/app/build/reports/androidTests/connected/
+            ${{ runner.temp }}/android-diagnostics/
+          retention-days: 14
           if-no-files-found: warn
 
   ci-ok:

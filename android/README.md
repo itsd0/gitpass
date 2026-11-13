@@ -274,7 +274,7 @@ with **Contents: read and write**. JVM strings cannot be reliably wiped.
 **Tests.** Rust: `crates/gitpass-mobile-ffi/tests/sync_github.rs` (bridge →
 core engine → in-process fake GitHub). JVM: `GitHubSyncTransportTest`,
 `SyncSettingsStoreTest`, `SyncCoordinatorTest` (fake transport, fake cipher,
-manual scheduler). Instrumented (API 35 16 KB emulator): `SyncStatusUiTest`
+manual scheduler). Instrumented (API 36 16 KB emulator): `SyncStatusUiTest`
 (status flow on the real screens with a test-only Keystore key and a faked
 engine boundary) and `SyncPlatformTest` (Keystore sealing, PATCH support of
 the platform HTTPS stack). No network, no real repository, fake data only.
@@ -458,7 +458,7 @@ again in the activity that creates or signs.
 Asset Links, request parsing, create/sign with built and supplied client
 data, cross-RP refusal) and `crates/gitpass-mobile-ffi/tests/passkey.rs`. JVM:
 `CallerIdentityTest`, `HttpsAssetLinksTest`, `PasskeyBrokerTest`,
-`PasskeySessionTest`. Instrumented (CI API 35
+`PasskeySessionTest`. Instrumented (CI API 36
 emulator): `PasskeyBridgeTest` (real native create/list/sign on a v5 fixture
 copy) and `PasskeyProviderUiTest` (Android 14+: framework request extras;
 nothing before verification, refusals before any unlock, the unlock action
