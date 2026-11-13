@@ -45,7 +45,11 @@ class PairingSetupUiTest {
     }
 
     private fun waitTag(tag: String) = compose.waitUntil(20_000) { compose.onAllNodesWithTag(tag).fetchSemanticsNodes().isNotEmpty() }
-    private fun inject(text: String) = assertTrue(PairingScanInjector.frames.tryEmit(text))
+    // A shared flow drops values with no collector, so wait until the scanner on screen is collecting.
+    private fun inject(text: String) {
+        compose.waitUntil(20_000) { PairingScanInjector.frames.subscriptionCount.value > 0 }
+        assertTrue(PairingScanInjector.frames.tryEmit(text))
+    }
 
     @Test fun pairsWithTheDesktopCodeThenPullsWithOnlyTheTypedMasterPassword() {
         val directory = File(app.cacheDir, "fake-pair-ui-${UUID.randomUUID()}").apply { mkdirs() }
