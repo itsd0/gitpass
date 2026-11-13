@@ -130,6 +130,11 @@ dependencies {
     implementation(libs.androidx.material3)
     // Passkey CredentialProviderService (#477); the provider classes are only used on API 34+.
     implementation(libs.androidx.credentials)
+    // QR device pairing (#458): CameraX preview + analysis, ZXing core to encode/decode QR (on-device only).
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
+    implementation(libs.zxing.core)
 
     // JNA AAR dependency required by UniFFI generated Kotlin bindings (pinned in libs.versions.toml)
     implementation(libs.net.java.dev.jna) {

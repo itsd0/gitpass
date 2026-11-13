@@ -122,4 +122,27 @@
     <string name="passkey_failed">คำขอพาสคีย์ไม่สำเร็จ โปรดลองอีกครั้ง</string>
     <string name="passkey_none">ไม่มีพาสคีย์ของ gitpass สำหรับ %1$s</string>
     <string name="passkey_setting">การตั้งค่าพาสคีย์</string>
+    <!-- QR pairing (#458): drafted by grokbot, needs native Thai review -->
+    <string name="pair_start">ตั้งค่าด้วย QR</string>
+    <string name="pair_title">ตั้งค่าด้วย QR</string>
+    <string name="pair_show_offer">บนคอมพิวเตอร์ เปิด gitpass แล้วไปที่ การตั้งค่า → อุปกรณ์ → เพิ่มอุปกรณ์ ถือ QR code นี้ไว้หน้ากล้องของคอมพิวเตอร์ แล้วแตะถัดไป</string>
+    <string name="pair_expires_in">หมดอายุใน %1$d วินาที</string>
+    <string name="pair_next_scan">ถัดไป: สแกนรหัสบนคอมพิวเตอร์</string>
+    <string name="pair_scan_announce">หันกล้องไปที่ QR code บนคอมพิวเตอร์</string>
+    <string name="pair_type_code">พิมพ์รหัสนี้บนคอมพิวเตอร์:</string>
+    <string name="pair_next_grant">ถัดไป: สแกนรหัสสุดท้าย</string>
+    <string name="pair_scan_grant">หันกล้องไปที่ QR code ใหม่บนคอมพิวเตอร์</string>
+    <string name="pair_received">ได้รับการตั้งค่าซิงก์สำหรับ %1$s (%2$s) แล้ว</string>
+    <string name="pair_password_hint">พิมพ์รหัสผ่านหลักเพื่อเสร็จสิ้น การจับคู่จะไม่ส่งรหัสผ่านหลักไปเด็ดขาด</string>
+    <string name="pair_finish">ดาวน์โหลดและตั้งค่า</string>
+    <string name="pair_pull_failed">ตั้งค่าไม่สำเร็จ ตรวจสอบรหัสผ่านหลักและเครือข่าย แล้วลองอีกครั้ง บัญชีที่มีอยู่จะยังคงอยู่</string>
+    <string name="pair_expired">คำขอจับคู่นี้หมดอายุแล้ว เริ่มใหม่</string>
+    <string name="pair_used">คำขอจับคู่นี้ถูกใช้ไปแล้ว เริ่มใหม่</string>
+    <string name="pair_too_many">ใส่รหัสผิดหลายครั้งเกินไป เริ่มใหม่</string>
+    <string name="pair_mismatch">รหัสไม่ตรงกัน เริ่มใหม่</string>
+    <string name="pair_failed">จับคู่ไม่สำเร็จ เริ่มใหม่</string>
+    <string name="pair_wrong_qr">นี่ไม่ใช่ QR code ที่ขั้นตอนนี้ต้องการ</string>
+    <string name="pair_restart">เริ่มใหม่</string>
+    <string name="pair_camera_unavailable">ใช้กล้องไม่ได้ อนุญาตให้ gitpass เข้าถึงกล้องในการตั้งค่า</string>
+    <string name="pair_qr_description">QR code สำหรับจับคู่</string>
 </resources>

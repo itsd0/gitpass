@@ -121,4 +121,27 @@
     <string name="passkey_failed">The passkey request didn\'t work. Try again.</string>
     <string name="passkey_none">No gitpass passkey for %1$s.</string>
     <string name="passkey_setting">Passkey settings</string>
+    <!-- QR device pairing (#458) -->
+    <string name="pair_start">Set up with QR</string>
+    <string name="pair_title">Set up with QR</string>
+    <string name="pair_show_offer">On your computer, open gitpass, then Settings → Devices → Add device. Hold this QR code up to the computer’s camera, then tap Next.</string>
+    <string name="pair_expires_in">Expires in %1$d s</string>
+    <string name="pair_next_scan">Next: scan the computer’s code</string>
+    <string name="pair_scan_announce">Point the camera at the QR code on the computer.</string>
+    <string name="pair_type_code">Type this code on the computer:</string>
+    <string name="pair_next_grant">Next: scan the final code</string>
+    <string name="pair_scan_grant">Point the camera at the new QR code on the computer.</string>
+    <string name="pair_received">Received sync settings for %1$s (%2$s).</string>
+    <string name="pair_password_hint">Type your Master Password to finish. Pairing never sends it.</string>
+    <string name="pair_finish">Download and set up</string>
+    <string name="pair_pull_failed">Setup failed. Check your Master Password and the network, then try again. Existing accounts are preserved.</string>
+    <string name="pair_expired">This pairing request expired. Start again.</string>
+    <string name="pair_used">This pairing request was already used. Start again.</string>
+    <string name="pair_too_many">Too many wrong codes. Start again.</string>
+    <string name="pair_mismatch">The codes did not match. Start again.</string>
+    <string name="pair_failed">Pairing failed. Start again.</string>
+    <string name="pair_wrong_qr">That is not the QR code this step needs.</string>
+    <string name="pair_restart">Start again</string>
+    <string name="pair_camera_unavailable">The camera is not available. Allow camera access for gitpass in Settings.</string>
+    <string name="pair_qr_description">Pairing QR code</string>
 </resources>
