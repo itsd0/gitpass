@@ -22,6 +22,12 @@ import kotlinx.coroutines.withContext
 /** Not saveable: all credential fields disappear on lock, background, cancel or Activity disposal. */
 @Composable
 fun FirstPullScreen(app: GitpassApplication, epoch: Long, padding: PaddingValues, onCancel: () -> Unit) {
+    var pairing by remember { mutableStateOf(false) }
+    if (pairing) {
+        // Set up with QR (#458): pairing fills repo, token and Secret Key; only the Master Password is typed.
+        PairingSetupScreen(app, epoch, padding) { pairing = false }
+        return
+    }
     var owner by remember { mutableStateOf("") }
     var repo by remember { mutableStateOf("") }
     var branch by remember { mutableStateOf("") }
@@ -38,6 +44,9 @@ fun FirstPullScreen(app: GitpassApplication, epoch: Long, padding: PaddingValues
     Column(Modifier.fillMaxSize().padding(padding).padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(R.string.first_pull), style = MaterialTheme.typography.headlineSmall)
+        Button(enabled = !running, onClick = { token = ""; password = ""; secret = ""; pairing = true }, modifier = Modifier.testTag("pair-start")) {
+            Text(stringResource(R.string.pair_start))
+        }
         Text(stringResource(R.string.first_pull_scope))
         Text(stringResource(R.string.first_pull_permission))
         OutlinedTextField(owner, { owner = it }, label = { Text(stringResource(R.string.repository_owner)) }, enabled = !running, singleLine = true, modifier = Modifier.testTag("pull-owner"))

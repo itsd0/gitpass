@@ -11,6 +11,7 @@ import app.gitpass.android.session.AccountSetup
 import app.gitpass.android.session.BridgeCompat
 import app.gitpass.android.session.FfiVaultGateway
 import app.gitpass.android.session.PendingSecret
+import app.gitpass.android.session.SyncTarget
 import app.gitpass.android.session.VaultGateway
 import app.gitpass.android.session.VaultSession
 import java.io.File
@@ -104,6 +105,20 @@ class GitpassApplication : Application() {
             attempt.close()
         }
     }
+
+    /**
+     * First pull with what QR device pairing delivered (#458): repo, branch, sync token and Secret Key
+     * from the pairing grant, Master Password typed by the person. After the new account is installed,
+     * the repo and token are kept for two-way sync (token sealed with the Keystore cipher, #455).
+     * The Secret Key and Master Password are not stored. IO-thread only.
+     */
+    fun firstPullPaired(selection: RepositorySelection, token: String, password: String, secret: String, epoch: Long) {
+        firstPull(selection, token, password, secret, epoch)
+        syncSettings.save(SyncTarget(selection.owner, selection.repository, selection.branch), token)
+    }
+
+    /** Pairing replay records (session ids and expiries only, #457). Not backed up. */
+    val pairingStateDir: File get() = File(noBackupFilesDir, "pairing").apply { mkdirs() }
 
     fun selectLocalAccount(name: String, epoch: Long) {
         if (accountSelectionDamaged) throw FirstPullFailure("Account selection cannot be read; existing data was preserved")

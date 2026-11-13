@@ -122,4 +122,27 @@
     <string name="passkey_failed">passkey တောင်းဆိုမှု မအောင်မြင်ပါ။ ထပ်စမ်းကြည့်ပါ။</string>
     <string name="passkey_none">%1$s အတွက် gitpass passkey မရှိပါ။</string>
     <string name="passkey_setting">Passkey ဆက်တင်များ</string>
+    <!-- QR pairing (#458): drafted by grokbot, needs native Burmese review -->
+    <string name="pair_start">QR ဖြင့် စတင်သတ်မှတ်ရန်</string>
+    <string name="pair_title">QR ဖြင့် စတင်သတ်မှတ်ရန်</string>
+    <string name="pair_show_offer">သင့်ကွန်ပျူတာတွင် gitpass ကိုဖွင့်ပြီး ဆက်တင်များ → စက်များ → စက် ထည့်ရန် ကို သွားပါ။ ဤ QR ကုဒ်ကို ကွန်ပျူတာ၏ ကင်မရာရှေ့တွင် ကိုင်ထားပြီး ရှေ့ဆက်ရန် ကိုနှိပ်ပါ။</string>
+    <string name="pair_expires_in">%1$d စက္ကန့်အတွင်း သက်တမ်းကုန်မည်</string>
+    <string name="pair_next_scan">ရှေ့ဆက်ရန် − ကွန်ပျူတာ၏ ကုဒ်ကို စကင်ဖတ်ရန်</string>
+    <string name="pair_scan_announce">ကင်မရာကို ကွန်ပျူတာပေါ်ရှိ QR ကုဒ်ဆီ ချိန်ပါ။</string>
+    <string name="pair_type_code">ဤကုဒ်ကို ကွန်ပျူတာတွင် ရိုက်ထည့်ပါ −</string>
+    <string name="pair_next_grant">ရှေ့ဆက်ရန် − နောက်ဆုံးကုဒ်ကို စကင်ဖတ်ရန်</string>
+    <string name="pair_scan_grant">ကင်မရာကို ကွန်ပျူတာပေါ်ရှိ QR ကုဒ်အသစ်ဆီ ချိန်ပါ။</string>
+    <string name="pair_received">%1$s (%2$s) အတွက် sync ဆက်တင်များ ရရှိပါပြီ။</string>
+    <string name="pair_password_hint">ပြီးဆုံးရန် သင့် မာစတာ စကားဝှက်ကို ရိုက်ထည့်ပါ။ ချိတ်ဆက်ခြင်းက ၎င်းကို ဘယ်တော့မှ မပို့ပါ။</string>
+    <string name="pair_finish">ရယူပြီး သတ်မှတ်ရန်</string>
+    <string name="pair_pull_failed">သတ်မှတ်ခြင်း မအောင်မြင်ပါ။ မာစတာ စကားဝှက်နှင့် ကွန်ရက်ကို စစ်ပြီး ထပ်ကြိုးစားပါ။ ရှိပြီးသား account များကို ထိန်းသိမ်းထားပါသည်။</string>
+    <string name="pair_expired">ဤချိတ်ဆက်မှု တောင်းဆိုချက် သက်တမ်းကုန်သွားပါပြီ။ အစမှ ပြန်စပါ။</string>
+    <string name="pair_used">ဤချိတ်ဆက်မှု တောင်းဆိုချက်ကို သုံးပြီးပါပြီ။ အစမှ ပြန်စပါ။</string>
+    <string name="pair_too_many">ကုဒ်အမှား အကြိမ်များလွန်းသည်။ အစမှ ပြန်စပါ။</string>
+    <string name="pair_mismatch">ကုဒ်များ မကိုက်ညီပါ။ အစမှ ပြန်စပါ။</string>
+    <string name="pair_failed">ချိတ်ဆက်ခြင်း မအောင်မြင်ပါ။ အစမှ ပြန်စပါ။</string>
+    <string name="pair_wrong_qr">ဤအဆင့်အတွက် လိုအပ်သော QR ကုဒ် မဟုတ်ပါ။</string>
+    <string name="pair_restart">အစမှ ပြန်စရန်</string>
+    <string name="pair_camera_unavailable">ကင်မရာ မရနိုင်ပါ။ ဆက်တင်များတွင် gitpass အတွက် ကင်မရာခွင့်ပြုပါ။</string>
+    <string name="pair_qr_description">ချိတ်ဆက်ရန် QR ကုဒ်</string>
 </resources>
