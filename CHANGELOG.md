@@ -9,6 +9,13 @@
   fine-grained sync token. The master password is not in the payload, and the desktop API does not
   return its own code. Core (`pairing.rs`), the desktop host session, and the mobile bridge
   (`FFI_API_LEVEL` 8) expose it. Pairing screens are not in this change.
+- QR pairing screens (#458): desktop Settings → Devices → **Add device** reads the new phone's
+  QR with the camera, shows its own QR, takes the 6-digit code typed from the phone and then shows
+  the encrypted grant. Android First pull → **Set up with QR** shows the phone's QR, scans the
+  desktop's, shows the code, and after the grant asks only for the Master Password, then pulls and
+  keeps the repository and token for two-way sync. The desktop can take a fine-grained token for
+  the new device that is held in memory only. macOS asks for camera access once. iOS pairing is not
+  in this release.
 
 ## 0.7.0 — 2026-11-13
 
