@@ -5,8 +5,8 @@ name: Release
 # workflow_dispatch -> DRY RUN: same builds incl. updater signing (.sig), uploaded as workflow artifacts only;
 # nothing is published and no tag is created.
 #
-# Runners: everything runs on GitHub-hosted runners. macOS arm64 and x64 both build on macos-14 (Apple
-# Silicon); x64 is cross-compiled with --target x86_64-apple-darwin, as on the former release Mac.
+# Runners: everything runs on GitHub-hosted runners. macOS arm64 builds on macos-15 (Apple Silicon) and x64 on
+# macos-15-intel (Intel), both with an explicit --target. macos-14 was retired on 2026-11-02 (#483).
 # Every job is guarded so it runs only in itsd0/gitpass (never a fork) and only when the owner itsd0 pushed the
 # v* tag or dispatched the run; there is no pull_request trigger, so fork PRs never see these secrets.
 # Desktop builds (tag and dry run) and publishing run in the `release` environment (deployment rules: v* tags
@@ -51,8 +51,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: macos-arm64, os: macos-14, target: aarch64-apple-darwin, args: "--target aarch64-apple-darwin --bundles app,dmg" }
-          - { name: macos-x64, os: macos-14, target: x86_64-apple-darwin, args: "--target x86_64-apple-darwin --bundles app,dmg" }
+          - { name: macos-arm64, os: macos-15, target: aarch64-apple-darwin, args: "--target aarch64-apple-darwin --bundles app,dmg" }
+          - { name: macos-x64, os: macos-15-intel, target: x86_64-apple-darwin, args: "--target x86_64-apple-darwin --bundles app,dmg" }
     env:
       TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
       TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}  # empty for the current unencrypted key
@@ -380,7 +380,7 @@ jobs:
   cli-host:
     name: cli + native host (macOS arm64)
     if: github.repository == 'itsd0/gitpass' && github.actor == 'itsd0' && github.triggering_actor == 'itsd0'
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
