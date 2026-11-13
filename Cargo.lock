@@ -1112,7 +1112,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-cli"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "arboard",
@@ -1131,7 +1131,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-core"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "aes",
  "anyhow",
@@ -1172,7 +1172,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-gui-core"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -1194,7 +1194,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-host"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "dirs",
@@ -1210,7 +1210,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-mobile-ffi"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "base64",
@@ -1224,7 +1224,7 @@ dependencies = [
 
 [[package]]
 name = "gitpass-pasteboard"
-version = "0.6.8"
+version = "0.7.0"
 dependencies = [
  "anyhow",
  "objc2",
