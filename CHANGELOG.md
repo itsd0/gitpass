@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.7.1 — 2026-11-13
+
+### Highlights
+- **QR device pairing.** Add an Android phone from the desktop app with QR codes instead of
+  typing the repository, token and Secret Key: Settings → Devices → Add device on the desktop,
+  First pull → Set up with QR on the phone. The phone shows a 6-digit code that you type on the
+  desktop before anything secret is released. The pairing payload is end-to-end encrypted for that
+  phone, expires after two minutes and works once. Your Master Password is never part of pairing:
+  you type it on the phone (#457, #458).
+- iOS pairing is not in this release; set up iOS with a fine-grained token as in 0.7.0.
+
 ### Added
 - QR device pairing protocol (#457): the new device shows an ephemeral X25519 public key, the phone
   shows a 6-digit code derived from the transcript, and the person types that code on the desktop.

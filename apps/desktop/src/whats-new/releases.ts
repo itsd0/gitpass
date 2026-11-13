@@ -121,6 +121,56 @@ const HIGHLIGHTS_0_6_6: WhatsNewHighlight[] = [
 
 export const RELEASES: ReleaseHighlights[] = [
   {
+    version: '0.7.1',
+    highlights: [
+      {
+        id: 'qr-device-pairing',
+        icon: QrCode,
+        title: {
+          en: 'Add a Phone with a QR Code',
+          my: 'QR ကုဒ်ဖြင့် ဖုန်းထည့်ခြင်း',
+          th: 'เพิ่มโทรศัพท์ด้วย QR code',
+        },
+        description: {
+          en: 'Set up gitpass on an Android phone by scanning QR codes and confirming a 6-digit code. Your Master Password is never sent: you type it on the phone.',
+          my: 'QR ကုဒ်များကို စကင်ဖတ်ပြီး ဂဏန်း ၆ လုံး ကုဒ်ကို အတည်ပြုခြင်းဖြင့် Android ဖုန်းတွင် gitpass ကို သတ်မှတ်ပါ။ သင့် မာစတာ စကားဝှက်ကို ဘယ်တော့မှ မပို့ပါ- ဖုန်းပေါ်တွင် ကိုယ်တိုင် ရိုက်ထည့်ရပါမည်။',
+          th: 'ตั้งค่า gitpass บนโทรศัพท์ Android ด้วยการสแกน QR code และยืนยันรหัส 6 หลัก รหัสผ่านหลักจะไม่ถูกส่งไปเด็ดขาด คุณพิมพ์เองบนโทรศัพท์',
+        },
+        showMe: {
+          route: { name: 'settings', tab: 'devices' },
+        },
+      },
+      {
+        id: 'qr-phone-setup',
+        icon: Smartphone,
+        title: {
+          en: 'Set Up Android in a Few Steps',
+          my: 'Android ကို အဆင့်အနည်းငယ်ဖြင့် သတ်မှတ်ခြင်း',
+          th: 'ตั้งค่า Android ได้ในไม่กี่ขั้นตอน',
+        },
+        description: {
+          en: 'On the phone, choose Set up with QR on the first pull screen. The repository, Secret Key and sync token arrive encrypted, so two-way sync is ready after the first pull.',
+          my: 'ဖုန်းတွင် ပထမဆုံး pull မျက်နှာပြင်ရှိ Set up with QR ကို ရွေးပါ။ repository၊ Secret Key နှင့် sync token တို့ကို ကုဒ်ဝှက်ပြီး ပို့သဖြင့် ပထမဆုံး pull ပြီးနောက် နှစ်ဖက်စလုံး sync အသင့်ဖြစ်ပါသည်။',
+          th: 'บนโทรศัพท์ ให้เลือก Set up with QR ในหน้าดึงข้อมูลครั้งแรก รีโพสิทอรี Secret Key และโทเค็นซิงก์จะถูกส่งมาแบบเข้ารหัส จึงพร้อมซิงก์สองทางหลังดึงข้อมูลครั้งแรก',
+        },
+      },
+      {
+        id: 'qr-pairing-safety',
+        icon: ShieldCheck,
+        title: {
+          en: 'One-Time, Short-Lived Codes',
+          my: 'တစ်ကြိမ်သုံး၊ သက်တမ်းတို ကုဒ်များ',
+          th: 'รหัสใช้ครั้งเดียวและมีอายุสั้น',
+        },
+        description: {
+          en: 'Each pairing expires after two minutes and works once. Nothing secret is shown until you type the code from the phone, and three wrong codes end the session.',
+          my: 'pairing တစ်ခုစီသည် နှစ်မိနစ်အကြာတွင် သက်တမ်းကုန်ပြီး တစ်ကြိမ်သာ အသုံးပြုနိုင်သည်။ ဖုန်းမှ ကုဒ်ကို မရိုက်ထည့်မချင်း လျှို့ဝှက်အရာ မပြပါ၊ ကုဒ်မှား သုံးကြိမ်ဆိုလျှင် session ပြီးဆုံးပါသည်။',
+          th: 'การจับคู่แต่ละครั้งหมดอายุใน 2 นาทีและใช้ได้ครั้งเดียว จะไม่แสดงข้อมูลลับจนกว่าคุณพิมพ์รหัสจากโทรศัพท์ และใส่รหัสผิด 3 ครั้งจะยุติเซสชัน',
+        },
+      },
+    ],
+  },
+  {
     version: '0.7.0',
     highlights: [
       {
