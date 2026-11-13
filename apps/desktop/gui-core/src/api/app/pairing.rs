@@ -32,7 +32,7 @@ const SYNC_TOKEN_FILE: &str = ".gitpass-sync-token";
 
 /// Owner, repository and branch from the vault's `origin` (#454) plus the fine-grained PAT
 /// in `.gitpass-sync-token`. Errors are fixed strings and do not include the token or the URL.
-fn load_github_sync(root: &Path) -> Result<(String, String, String, String)> {
+fn load_github_repo(root: &Path) -> Result<(String, String, String)> {
     let url = super::sync::git(root, &["remote", "get-url", "origin"])
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow!("sync is not configured"))?;
@@ -40,6 +40,11 @@ fn load_github_sync(root: &Path) -> Result<(String, String, String, String)> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow!("sync is not configured"))?;
     let (owner, repo) = github_owner_repo(&url).ok_or_else(|| anyhow!("sync is not configured"))?;
+    Ok((owner, repo, branch))
+}
+
+fn load_github_sync(root: &Path) -> Result<(String, String, String, String)> {
+    let (owner, repo, branch) = load_github_repo(root)?;
     gitpass_core::device::ensure_ignored(root, SYNC_TOKEN_FILE)
         .map_err(|_| anyhow!("sync token is not configured"))?;
     let raw = std::fs::read_to_string(root.join(SYNC_TOKEN_FILE))
@@ -71,8 +76,24 @@ impl App {
     /// Accept a joiner offer. Returns the announce QR only. The phone shows the code; the person
     /// types it into [`App::pairing_host_release`]. Repo and token come from the stored sync config.
     pub fn pairing_host_prepare(&self, offer: &str) -> Result<PairingHostPrepared> {
+        self.pairing_host_prepare_with(offer, None)
+    }
+
+    /// Like [`App::pairing_host_prepare`], with an optional fine-grained PAT typed into the
+    /// Add device dialog (#458). Desktop sync uses the system git credentials and does not store
+    /// a token, so the dialog can supply one for the new device. It is held in memory for this
+    /// session only and never written to disk. Owner, repository and branch still come from the
+    /// vault's `origin`. Without a typed token, `.gitpass-sync-token` is used.
+    pub fn pairing_host_prepare_with(&self, offer: &str, typed_token: Option<&str>) -> Result<PairingHostPrepared> {
+        let typed_token = typed_token.map(str::trim).filter(|t| !t.is_empty());
         let (account_id, secret, owner, repo, branch, token) = self.with(|u| {
-            let (owner, repo, branch, token) = load_github_sync(&u.session.root)?;
+            let (owner, repo, branch, token) = match typed_token {
+                Some(t) => {
+                    let (owner, repo, branch) = load_github_repo(&u.session.root)?;
+                    (owner, repo, branch, t.to_string())
+                }
+                None => load_github_sync(&u.session.root)?,
+            };
             Ok((
                 u.session.fmt.account_id.clone(),
                 SecretKey(u.secret.0),
@@ -173,6 +194,17 @@ impl App {
                 Step::Refuse(e) => Err(e.into()),
             }
         })
+    }
+
+    /// Read a pairing `offer` from a camera frame or image (base64 or data URL). Returns the
+    /// offer text only: it carries the new device's public key and session id, no secrets.
+    /// Any other QR content is refused without echoing it.
+    pub fn pairing_scan_offer(&self, data_base64: &str) -> Result<String> {
+        let text = crate::qr::decode_qr_text_base64(data_base64)?;
+        match pairing::message_kind(text.trim()) {
+            Ok(pairing::PairingKind::Offer) => Ok(text.trim().to_string()),
+            _ => Err(anyhow!("This QR code isn't a gitpass pairing code")),
+        }
     }
 
     /// Drop the host session and allow the same offer to be accepted again until it expires.

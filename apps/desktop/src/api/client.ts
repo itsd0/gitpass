@@ -91,6 +91,13 @@ export const api = {
   acceptShare: (a:{path:string}) => call<T.VaultInfo>('accept_share', a),
   listDevices: () => call<T.DeviceInfo[]>('list_devices'),
   revokeDevice: (a:{id:string; rotateCredentials:boolean}) => call<void>('revoke_device', a),
+  /** QR pairing (#458): decode the phone's offer QR from a camera frame or image (base64/data URL). */
+  pairingScanOffer: (a:{dataBase64:string}) => call<string>('pairing_scan_offer', a),
+  /** Accept the phone's offer; returns the announce QR. `token` is an optional fine-grained PAT held in memory only. */
+  pairingHostPrepare: (a:{offer:string; token?:string|null}) => call<T.PairingHostPrepared>('pairing_host_prepare', a),
+  /** Release the grant QR once `code` (shown on the phone) matches. The desktop never shows its own code. */
+  pairingHostRelease: (a:{code:string}) => call<string>('pairing_host_release', a),
+  pairingHostCancel: () => call<void>('pairing_host_cancel'),
   getSettings: () => call<T.Settings>('get_settings'),
   setSettings: (a:{settings:T.Settings}) => call<T.Settings>('set_settings', a),
   changePassword: (a:{current:string; next:string}) => call<void>('change_password', a),
