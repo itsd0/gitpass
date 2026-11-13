@@ -404,6 +404,9 @@ jobs:
           echo "Configured AVDs:"
           "$ANDROID_HOME/emulator/emulator" -list-avds
 
+          # 6 GB guest RAM (#485): at 4 GB lowmemorykiller killed ~90 processes per run (including the test
+          # helper process), and ART's mark-compact GC then segfaulted (MarkCompact::ScanObject) in our app and in
+          # system_server/systemui -> "Process crashed" / "System has crashed". The kill count is logged per attempt.
           "$ANDROID_HOME/emulator/emulator" \
             -avd test_api35_16k \
             -no-window \
@@ -507,50 +510,6 @@ jobs:
             timeout 15 adb logcat -d > "$RUNNER_TEMP/android-diagnostics/logcat-services-timeout.txt" 2>&1 || true
             return 1
           }
-          wait_system_ready
-
-          # ART's userfaultfd mark-compact GC (CMC) on this ps16k image segfaults under memory pressure
-          # (MarkCompact::ScanObject null dereference on HeapTaskDaemon), killing our app mid-test and also
-          # system_server, systemui and com.google.android.as ("Process crashed" / "System has crashed", #485).
-          # Force ART's concurrent-copying GC instead: ART reads this flag from odrefresh's boot-time cache-info,
-          # so it takes effect after one reboot. Emulator-only test setting; the app is unchanged.
-          adb_root() {
-            for _ in $(seq 1 20); do
-              timeout 30 adb root >/dev/null 2>&1 || true
-              timeout 60 adb wait-for-device || true
-              [ "$(timeout 15 adb shell id -u 2>/dev/null | tr -d '\r')" = "0" ] && return 0
-              sleep 3
-            done
-            echo "::error::adb root did not take effect on the emulator."
-            return 1
-          }
-          adb_root
-          BOOT_ID="$(adb shell cat /proc/sys/kernel/random/boot_id | tr -d '\r')"
-          adb shell setprop persist.device_config.runtime_native_boot.force_disable_uffd_gc true
-          [ "$(adb shell getprop persist.device_config.runtime_native_boot.force_disable_uffd_gc | tr -d '\r')" = "true" ] \
-            || { echo "::error::could not set force_disable_uffd_gc"; exit 1; }
-          adb reboot || true
-          timeout 120 adb wait-for-disconnect || true
-          rebooted=0
-          for i in $(seq 1 420); do
-            if [ "$(timeout 10 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ] \
-              && [ "$(timeout 10 adb shell cat /proc/sys/kernel/random/boot_id 2>/dev/null | tr -d '\r')" != "$BOOT_ID" ]; then
-              rebooted=1; echo "Rebooted with uffd GC disabled after ${i}s."; break
-            fi
-            sleep 1
-          done
-          [ "$rebooted" -eq 1 ] || { echo "::error::Emulator did not finish rebooting after disabling the uffd GC."; exit 1; }
-          wait_system_ready
-          adb_root
-          CACHE_INFO="$(adb shell cat /data/misc/apexdata/com.android.art/dalvik-cache/cache-info.xml 2>/dev/null | tr -d '\r')"
-          if ! grep -Eq 'force_disable_uffd_gc"[[:space:]]+v="true"' <<<"$CACHE_INFO"; then
-            echo "::error::ART cache-info does not record force_disable_uffd_gc=true; the emulator would still use the crashing uffd GC."
-            exit 1
-          fi
-          SS_PID="$(adb shell pidof system_server | tr -d '\r')"
-          echo "GC check: cache-info has force_disable_uffd_gc=true; system_server region-space (CC GC) mappings: $(adb shell grep -c 'region space' "/proc/$SS_PID/maps" 2>/dev/null | tr -d '\r')"
-          timeout 30 adb unroot >/dev/null 2>&1 || true
-          timeout 60 adb wait-for-device
           wait_system_ready
 
           # One automatic retry, ONLY for emulator/system-level crashes (#467). A genuine test
