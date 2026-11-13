@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Smartphone } from 'lucide-react';
+import { Plus, Smartphone } from 'lucide-react';
 import { api } from '../../../api/client';
 import { DeviceInfo } from '../../../api/types';
 import { cn } from '../../../lib/utils';
@@ -7,6 +7,7 @@ import { Badge, Button, Modal, Skeleton, toast } from '../../../ui';
 import { useT } from '../../../i18n';
 import { SettingsSection, SettingsRow } from '../SettingsSection';
 import { errMsg } from '../shared';
+import { AddDeviceDialog } from '../devices/AddDeviceDialog';
 
 export function DevicesTab({ highlightedId }: { highlightedId?: string | null }) {
   const t = useT();
@@ -14,6 +15,7 @@ export function DevicesTab({ highlightedId }: { highlightedId?: string | null })
   const [target, setTarget] = useState<DeviceInfo | null>(null);
   const [rotate, setRotate] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [adding, setAdding] = useState(false);
   const load = () =>
     api
       .listDevices()
@@ -26,9 +28,33 @@ export function DevicesTab({ highlightedId }: { highlightedId?: string | null })
     load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!list) return <Skeleton className="h-24" />;
-  if (!list.length) return <p className="py-6 text-sm text-muted">{t('devices.empty')}</p>;
+  const addDevice = (
+    <>
+      <div className="mb-3 flex justify-end">
+        <Button size="sm" onClick={() => setAdding(true)} data-testid="add-device">
+          <Plus className="mr-1 h-4 w-4" aria-hidden />
+          {t('devices.addDevice')}
+        </Button>
+      </div>
+      <AddDeviceDialog
+        open={adding}
+        onClose={(paired) => {
+          setAdding(false);
+          if (paired) load();
+        }}
+      />
+    </>
+  );
+  if (!list.length)
+    return (
+      <>
+        {addDevice}
+        <p className="py-6 text-sm text-muted">{t('devices.empty')}</p>
+      </>
+    );
   return (
     <>
+      {addDevice}
       <SettingsSection id="setting-devices" title={t('settings.sectionDevices')} className={cn(highlightedId === 'setting-devices' && 'rounded-lg bg-accent/15 ring-2 ring-accent')}>
         {list.map((d) => (
           <SettingsRow

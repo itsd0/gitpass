@@ -69,6 +69,17 @@ pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>)
         other => Err(format!("unknown scan source {other}")),
     }
 }
+/// QR device pairing, desktop host role (#457/#458). The desktop never returns its own code.
+/// A camera frame or image; returns the phone's `offer` text only (public key + session id).
+#[tauri::command(async)] pub fn pairing_scan_offer(s: State<'_, App>, data_base64: String) -> R<String> { s.pairing_scan_offer(&data_base64).map_err(e) }
+/// `token` is an optional fine-grained PAT typed in the dialog; held in memory, never stored.
+#[tauri::command(async)] pub fn pairing_host_prepare(s: State<'_, App>, offer: String, token: Option<String>) -> R<a::PairingHostPrepared> {
+    let token = token.map(Zeroizing::new);
+    s.pairing_host_prepare_with(&offer, token.as_deref().map(|t| t.as_str())).map_err(e)
+}
+/// Returns the `grant` QR text once `code` (typed from the phone) matches.
+#[tauri::command(async)] pub fn pairing_host_release(s: State<'_, App>, code: String) -> R<String> { s.pairing_host_release(&code).map_err(e) }
+#[tauri::command(async)] pub fn pairing_host_cancel(s: State<'_, App>) -> R<()> { s.pairing_host_cancel().map_err(e) }
 #[tauri::command] pub fn create_item(s: State<App>, input: a::ItemInput) -> R<a::ItemSummary> { s.create_item(&input).map_err(e) }
 #[tauri::command] pub fn update_item(s: State<App>, item_id: String, input: a::ItemInput) -> R<a::ItemSummary> { s.update_item(&item_id, &input).map_err(e) }
 #[tauri::command] pub fn set_favorite(s: State<App>, vault_id: String, item_id: String, favorite: bool) -> R<()> { s.set_favorite(&vault_id, &item_id, favorite).map_err(e) }

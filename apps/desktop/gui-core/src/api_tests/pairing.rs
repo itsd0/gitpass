@@ -119,3 +119,68 @@ fn lock_cancels_an_in_progress_host_so_the_offer_can_be_retried() {
         "no pairing in progress"
     );
 }
+
+fn configure_remote_only(vault: &Path) {
+    let git = |args: &[&str]| {
+        let out = Command::new("git").arg("-C").arg(vault).args(args).output().unwrap();
+        assert!(out.status.success(), "{args:?} {}", String::from_utf8_lossy(&out.stderr));
+    };
+    git(&["init", "-b", "main"]);
+    git(&["remote", "add", "origin", "https://github.com/fake-owner/fake-vault.git"]);
+}
+
+#[test]
+fn typed_token_is_used_in_memory_and_never_written() {
+    let e = env();
+    configure_remote_only(e._vault.path());
+    let now = pairing::now_unix();
+    let mut joiner = JoinerSession::begin(now).unwrap();
+    // No stored token and none typed: a fixed error.
+    let none = e.app.pairing_host_prepare_with(&joiner.offer(), Some("  ")).unwrap_err();
+    assert_eq!(none.to_string(), "sync token is not configured");
+    let prepared = e.app.pairing_host_prepare_with(&joiner.offer(), Some(TOKEN)).unwrap();
+    let code = joiner.read_announce(&prepared.announce, now).unwrap();
+    let grant = e.app.pairing_host_release(&code).unwrap();
+    let payload = joiner
+        .open(&grant, &code, now, &mut pairing::ConsumedPairings::default())
+        .unwrap();
+    assert_eq!(&payload.sync_token[..], TOKEN);
+    assert_eq!(payload.repo_owner, "fake-owner");
+    assert!(!e._vault.path().join(".gitpass-sync-token").exists());
+    for dir in [e._vault.path(), e._cfg.path()] {
+        for f in std::fs::read_dir(dir).unwrap().flatten() {
+            if f.path().is_file() {
+                let bytes = std::fs::read(f.path()).unwrap();
+                assert!(!String::from_utf8_lossy(&bytes).contains(TOKEN), "token written to {:?}", f.file_name());
+            }
+        }
+    }
+}
+
+#[test]
+fn typed_classic_token_is_refused_without_echoing_it() {
+    let e = env();
+    configure_remote_only(e._vault.path());
+    let joiner = JoinerSession::begin(pairing::now_unix()).unwrap();
+    let err = e.app.pairing_host_prepare_with(&joiner.offer(), Some("ghp_FAKE0123456789abcdef")).unwrap_err();
+    assert_eq!(err.to_string(), "pairing payload field rejected");
+    assert!(!err.to_string().contains("ghp_"));
+}
+
+const OFFER_TEXT: &str = "gitpass-pair:1:offer:MzMzMzMzMzMzMzMzMzMzMw.AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA.1700000120";
+const OFFER_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAALQAAAC0AQAAAAAVtjufAAABw0lEQVR4nNWYsZFtNwxDj3acQx1s/2W9DsAKjgOtA4+/E5uBrUABAwwvBQLkPfKrM1+/DMN/L37OufeeO8OZGe45567hYzQg0pC8QLfwf4MTEK53SuYFduvWA9zK93zff4Hz1/MbALdXGNIjdxP/CyxmZvgGesHu4R8P5E+hgXz26iPA/ZD5Zrwgi/2FKdC01Vgx7PHzyOVDDikDl3LDWn2wMWmDFGpTXcsf0yraqsWExf5FmiQpUlShm/mTWNqgoJDV/EuCtdE07aq+fQFthpvhEi7M6a4+U4MNtrW7/EEskgStuMmfL3JyEfl8mPM9mfwjnL/NP7WVkoCtySZ/khAgNikku/z3Ga5Eq22TTfxq0pCk0NQs6w/t41Assozfn7s10dcJm/mL1vokLim7+ZdXl/74cDf150lCYqO1gbDKnzzCpy19j7zK/6RaME1egF1/aVRtodBtfyRtIE1R3iet6nOewEX5Yxra1B9Fk1enxCy+79tfOMOHzD0HLqvzfxRg+AykQ2dW96PnK4+ib9pd7K+feGduO/RIy17+b39pTpzcHm+47uG//YWbud/Mj8rdVX+HvAGI5zbZ9JfzP/8/8DsOXqV2GQ3TNgAAAABJRU5ErkJggg==";
+const OTHER_PNG: &str = "iVBORw0KGgoAAAANSUhEUgAAAIQAAACEAQAAAAB5P74KAAABDUlEQVR4nL2WQYpdMQwES8Pfl28w9z/Wu0H7BJ3FT2ASCAw2iVa2QIXckpCn/G77gz/t/3pmZu3FXrNmZh1zbPHBFNvTfF4wMgJkjRccgF32+n7U3zyyB9Ydp2EHVkNzypkO+POyweeMQ9sWUmvb5pQj2EhS8JxDTG1BrMecVhKTEo/fNV27bFnwAB7OKQ3RtGmbC32sJRG40seCBXpTrw9YzV5J99TntJ+pwaqpV/rQprUG9FSfF+4lsENZ5LjuYhIttrmpOxgDIDdz0ULEN/FYZ7ABozfzbqsmjb3qZ/Q9YiAX/fy2fO7k4XQPvn4dxs8Nx/3z3hclBCF3+2ITgOVxPi++fFz63ah/5/kBf0XIq5Ta6Q4AAAAASUVORK5CYII=";
+
+#[test]
+fn scan_offer_returns_only_pairing_offers() {
+    let e = env();
+    assert_eq!(e.app.pairing_scan_offer(OFFER_PNG).unwrap(), OFFER_TEXT);
+    assert_eq!(
+        e.app.pairing_scan_offer(&format!("data:image/png;base64,{OFFER_PNG}")).unwrap(),
+        OFFER_TEXT
+    );
+    let other = e.app.pairing_scan_offer(OTHER_PNG).unwrap_err().to_string();
+    assert_eq!(other, "This QR code isn't a gitpass pairing code");
+    assert!(!other.contains("example.invalid"));
+    assert_eq!(e.app.pairing_scan_offer("bm90IGFuIGltYWdl").unwrap_err().to_string(), "No QR code found");
+}

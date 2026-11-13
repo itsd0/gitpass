@@ -1035,6 +1035,14 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   accept_share: () => { const v: T.VaultInfo = { id: uid('v'), name: 'Accepted Share (demo)', description: null, itemCount: 0, shared: true, members: [SELF], icon: null, color: '#22c55e' }; vaults.push(v); return delay(v); },
   list_devices: () => delay(devices),
   revoke_device: (a: { id: string }) => { const d = devices.find((x) => x.id === a.id); if (d) d.revoked = true; return delay(undefined); },
+  // QR pairing (#458). The mock phone code is 123456; real codes come from the phone only.
+  pairing_scan_offer: (a: { dataBase64: string }) =>
+    /offer/.test(a.dataBase64) ? delay('gitpass-pair:1:offer:mock') : Promise.reject(new Error('No QR code found')),
+  pairing_host_prepare: (a: { offer: string; token?: string | null }) =>
+    a.offer.startsWith('gitpass-pair:1:offer:') ? delay({ announce: 'gitpass-pair:1:announce:mock', expiresAt: Math.floor(Date.now() / 1000) + 120 }) : Promise.reject(new Error('unrecognized pairing message')),
+  pairing_host_release: (a: { code: string }) =>
+    a.code === '123456' ? delay('gitpass-pair:1:grant:mock') : Promise.reject(new Error('pairing verification code does not match')),
+  pairing_host_cancel: () => delay(undefined),
   get_settings: () => delay(settings),
   set_settings: (a: { settings: T.Settings }) => { settings = { ...a.settings }; return delay(settings); },
   change_password: (a: { current: string; next: string }) => (!a.current || !a.next ? Promise.reject(new Error('both passwords required')) : delay(undefined, 300)),

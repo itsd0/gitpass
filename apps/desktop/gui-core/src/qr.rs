@@ -118,8 +118,8 @@ pub fn parse_totp_uri(raw: &str) -> Result<ScannedTotp> {
     })
 }
 
-/// Decode a QR code from a DynamicImage.
-pub fn decode_qr_image(img: &image::DynamicImage) -> Result<ScannedTotp> {
+/// Text of the first decodable QR code in an image. Fixed error strings only.
+pub fn decode_qr_text_image(img: &image::DynamicImage) -> Result<String> {
     let luma = img.to_luma8();
     let mut prepared = rqrr::PreparedImage::prepare(luma);
     let grids = prepared.detect_grids();
@@ -129,11 +129,34 @@ pub fn decode_qr_image(img: &image::DynamicImage) -> Result<ScannedTotp> {
     for grid in &grids {
         let mut content = Vec::new();
         if grid.decode_to(&mut content).is_ok() {
-            let s = String::from_utf8(content).map_err(|_| anyhow!("This QR code isn't a one-time code"))?;
-            return parse_totp_uri(&s);
+            return String::from_utf8(content).map_err(|_| anyhow!("This QR code isn't text"));
         }
     }
     bail!("No QR code found");
+}
+
+/// Text of the first QR code in a base64 image or data URL (PNG, JPEG, etc.).
+pub fn decode_qr_text_base64(data: &str) -> Result<String> {
+    let raw = if let Some((_, b64)) = data.split_once(";base64,") {
+        b64
+    } else {
+        data
+    };
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(raw.trim())
+        .or_else(|_| base64::engine::general_purpose::URL_SAFE.decode(raw.trim()))
+        .map_err(|_| anyhow!("No QR code found"))?;
+    let img = image::load_from_memory(&bytes).map_err(|_| anyhow!("No QR code found"))?;
+    decode_qr_text_image(&img)
+}
+
+/// Decode a QR code from a DynamicImage.
+pub fn decode_qr_image(img: &image::DynamicImage) -> Result<ScannedTotp> {
+    let s = decode_qr_text_image(img).map_err(|e| {
+        if e.to_string() == "No QR code found" { e } else { anyhow!("This QR code isn't a one-time code") }
+    })?;
+    parse_totp_uri(&s)
 }
 
 /// Decode a QR code from encoded image bytes (PNG, JPEG, etc.).
