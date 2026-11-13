@@ -6,9 +6,11 @@ import {
   PanelLeftClose,
   Puzzle,
   QrCode,
+  RefreshCw,
   Search,
   ShieldAlert,
   ShieldCheck,
+  Smartphone,
   Terminal,
 } from 'lucide-react';
 import type { ReleaseHighlights, WhatsNewHighlight } from './types';
@@ -118,6 +120,56 @@ const HIGHLIGHTS_0_6_6: WhatsNewHighlight[] = [
 ];
 
 export const RELEASES: ReleaseHighlights[] = [
+  {
+    version: '0.7.0',
+    highlights: [
+      {
+        id: 'android-companion',
+        icon: Smartphone,
+        title: {
+          en: 'gitpass for Android',
+          my: 'Android အတွက် gitpass',
+          th: 'gitpass สำหรับ Android',
+        },
+        description: {
+          en: 'The first Android release: two-way sync, biometric unlock, password Autofill, and passkeys on Android 14 and later.',
+          my: 'ပထမဆုံး Android ထုတ်ဝေမှု- နှစ်ဘက်စလုံး sync၊ ဇီဝမက်ထရစ်ဖြင့် သော့ဖွင့်ခြင်း၊ စကားဝှက် Autofill နှင့် Android 14 နှင့်အထက်တွင် passkey များ။',
+          th: 'Android รุ่นแรก: ซิงค์สองทาง ปลดล็อกด้วยไบโอเมตริก ป้อนรหัสผ่านอัตโนมัติ และพาสคีย์บน Android 14 ขึ้นไป',
+        },
+      },
+      {
+        id: 'shared-sync-engine',
+        icon: RefreshCw,
+        title: {
+          en: 'One Sync Engine, Everywhere',
+          my: 'Sync engine တစ်ခုတည်းကို နေရာတိုင်းတွင်',
+          th: 'เอนจินซิงค์เดียวกันทุกที่',
+        },
+        description: {
+          en: 'iOS and Android now sync with the same Rust engine. On iOS, set up sync again with a fine-grained personal access token.',
+          my: 'iOS နှင့် Android သည် ယခု Rust engine တစ်ခုတည်းဖြင့် sync လုပ်ပါသည်။ iOS တွင် fine-grained personal access token ဖြင့် sync ကို ပြန်လည်သတ်မှတ်ပါ။',
+          th: 'iOS และ Android ซิงค์ด้วยเอนจิน Rust ตัวเดียวกันแล้ว บน iOS ให้ตั้งค่าซิงค์ใหม่ด้วย fine-grained personal access token',
+        },
+      },
+      {
+        id: 'reused-old-password',
+        icon: ShieldAlert,
+        title: {
+          en: 'Reused Old Passwords',
+          my: 'ပြန်သုံးထားသော စကားဝှက်ဟောင်းများ',
+          th: 'รหัสผ่านเก่าที่ถูกนำกลับมาใช้',
+        },
+        description: {
+          en: 'Watchtower now flags a login whose password matches one you retired earlier.',
+          my: 'ယခင်က အသုံးမပြုတော့သော စကားဝှက်နှင့် တူညီသည့် login ကို Watchtower က ယခု သတိပေးပါသည်။',
+          th: 'Watchtower จะแจ้งเตือนล็อกอินที่ใช้รหัสผ่านซ้ำกับรหัสผ่านที่คุณเลิกใช้ไปแล้ว',
+        },
+        showMe: {
+          route: { name: 'watchtower' },
+        },
+      },
+    ],
+  },
   {
     version: '0.6.8',
     highlights: [

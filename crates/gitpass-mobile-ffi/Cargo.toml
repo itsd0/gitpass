@@ -11,7 +11,7 @@ name = "gitpass_mobile_ffi"
 crate-type = ["rlib", "staticlib", "cdylib"]
 
 [dependencies]
-gitpass-core = { version = "0.6.8", path = "../gitpass-core" }
+gitpass-core = { version = "0.7.0", path = "../gitpass-core" }
 uniffi = { version = "0.29", features = ["build", "cli"] }
 anyhow = "1"
 serde_json = "1"
@@ -21,4 +21,4 @@ zeroize = "1"
 [dev-dependencies]
 tempfile = "3"
 base64 = "0.22"
-gitpass-core = { version = "0.6.8", path = "../gitpass-core", features = ["test-fixtures"] }
+gitpass-core = { version = "0.7.0", path = "../gitpass-core", features = ["test-fixtures"] }

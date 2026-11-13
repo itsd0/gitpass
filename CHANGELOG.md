@@ -2,6 +2,28 @@
 
 ## Unreleased
 
+## 0.7.0 — 2026-11-13
+
+### Highlights
+- **Shared Rust sync engine.** Two-way GitHub sync (three-way merge, delete
+  propagation, conflict copies, rollback refusal) now lives in `gitpass-core`
+  and is used by iOS and Android through the shared mobile bridge (#452, #455,
+  #456).
+- **iOS: fine-grained personal access token (breaking).** The OAuth device
+  flow and the hardcoded default repository are gone. After updating, set up
+  sync again on iOS: enter the owner, repository, branch and a fine-grained
+  PAT with access to that repository only (#456).
+- **First Android release.** The Android companion app gets two-way sync,
+  opt-in biometric unlock, password Autofill, and a passkey provider for
+  Credential Manager. The passkey provider is available on Android 14 and
+  later (API 34+) only. It is absent on older versions (#455, #473, #475,
+  #477).
+- **Signed Android release assets.** Releases now include a signed APK, an
+  AAB and a SHA-256 checksum file (#479). A phone with a CI debug build must
+  uninstall it before installing the signed APK (different signer), and that
+  removes the local vault data on the phone.
+- **Coming in 0.7.1:** QR device pairing.
+
 ### Added
 - Signed Android release build in `release.yml` (#479): on `v*` tags a release
   APK (APK Signature Scheme v2 + v3, zipaligned, 16 KB ELF alignment checked)
