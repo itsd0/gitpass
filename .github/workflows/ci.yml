@@ -352,7 +352,7 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           ls -la /dev/kvm || { echo "::error::/dev/kvm not found or accessible"; exit 1; }
-      - name: Launch API 35 16-KB emulator & run instrumented smoke tests
+      - name: Launch API 36 16-KB emulator & run instrumented smoke tests
         run: |
           mkdir -p "$RUNNER_TEMP/android-diagnostics"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
@@ -362,8 +362,13 @@ jobs:
           export ANDROID_AVD_HOME="$HOME/.android/avd"
           mkdir -p "$ANDROID_AVD_HOME"
 
-          echo "Installing system-images;android-35;google_apis_ps16k;x86_64..."
-          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "system-images;android-35;google_apis_ps16k;x86_64"
+          # Android 16 (API 36) 16 KB image (#485). The API 35 ps16k x86_64 image (the pre-release 16 KB image) crashes
+          # at random in ART and native code across processes (system_server, systemui, GMS, Gboard, our app's GC and
+          # JIT threads): 2+ native crashes per run even on green runs, so a run fails whenever one lands in our app
+          # ("Process crashed" / "System has crashed"). The app still targets and compiles against API 35.
+          SYSTEM_IMAGE="system-images;android-36;google_apis_ps16k;x86_64"
+          echo "Installing $SYSTEM_IMAGE..."
+          echo "y" | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "$SYSTEM_IMAGE"
 
           # The hardware profile only sets screen/RAM defaults; page size comes from the
           # ps16k system image. Runner cmdline-tools may not ship newer profiles (pixel_8 is
@@ -396,8 +401,8 @@ jobs:
           fi
 
           echo "no" | "$AVDMANAGER" create avd \
-            --name "test_api35_16k" \
-            --package "system-images;android-35;google_apis_ps16k;x86_64" \
+            --name "test_api36_16k" \
+            --package "$SYSTEM_IMAGE" \
             "${DEVICE_ARGS[@]}" \
             --force
 
@@ -408,7 +413,7 @@ jobs:
           # helper process), and ART's mark-compact GC then segfaulted (MarkCompact::ScanObject) in our app and in
           # system_server/systemui -> "Process crashed" / "System has crashed". The kill count is logged per attempt.
           "$ANDROID_HOME/emulator/emulator" \
-            -avd test_api35_16k \
+            -avd test_api36_16k \
             -no-window \
             -memory 6144 \
             -no-audio \
