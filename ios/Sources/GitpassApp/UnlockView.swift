@@ -10,6 +10,7 @@ struct UnlockView: View {
     @State private var createdSecret: String?
     @State private var showingSecretAlert = false
     @State private var showingSync = false
+    @State private var showingPairing = false
 
     private var canUnlock: Bool {
         !password.isEmpty && !secretKey.isEmpty
@@ -114,6 +115,13 @@ struct UnlockView: View {
                             showingSync = true
                         }
                         .font(.footnote)
+                        if !store.vaultExists {
+                            Button(String(localized: "Set up with QR")) {
+                                showingPairing = true
+                            }
+                            .font(.footnote)
+                            .accessibilityIdentifier("pair-setup")
+                        }
                     }
                 }
                 .padding()
@@ -121,6 +129,10 @@ struct UnlockView: View {
             .gitpassBackground()
             .sheet(isPresented: $showingSync) {
                 SyncSetupView()
+                    .environmentObject(store)
+            }
+            .sheet(isPresented: $showingPairing) {
+                PairingSetupView()
                     .environmentObject(store)
             }
             .navigationTitle("gitpass")

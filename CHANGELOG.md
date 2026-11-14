@@ -12,6 +12,9 @@
 - Android pairing (#491, part): the phone scans the desktop QR, connects on the local
   network, and shows the 6-digit code. The Master Password is typed on the phone, then the
   first pull runs. Replaces the Android screens from #488.
+- iOS pairing (#491, part): the phone scans the desktop QR with the camera, connects on the
+  local network, and shows the 6-digit code. The Master Password is typed on the phone, then
+  the first pull runs. Adds the iOS flow from #491.
 
 ## 0.7.0 — 2026-11-13
 
