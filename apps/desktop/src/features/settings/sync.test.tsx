@@ -89,6 +89,29 @@ describe('Settings → Sync connect form', () => {
     await waitFor(() => expect(d).toHaveBeenCalled());
     expect(await screen.findByRole('form', { name: 'Connect GitHub' })).toBeTruthy();
   });
+  it('saves a sync token without showing it back, and remove restores the prompt', async () => {
+    vi.spyOn(api, 'syncStatus').mockResolvedValue(connected);
+    vi.spyOn(api, 'syncTokenSaved').mockResolvedValue(false);
+    const save = vi.spyOn(api, 'saveSyncToken').mockResolvedValue(undefined);
+    const remove = vi.spyOn(api, 'removeSyncToken').mockResolvedValue(undefined);
+    const u = userEvent.setup();
+    render(<SyncPanel />);
+    const input = await screen.findByLabelText('Fine-grained personal access token');
+    const saveBtn = screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement;
+    expect(saveBtn.disabled).toBe(true);
+    await u.type(input, '   ');
+    expect(saveBtn.disabled).toBe(true);
+    await u.clear(input);
+    await u.type(input, 'github_pat_FAKE_saved_ui');
+    await u.click(saveBtn);
+    await waitFor(() => expect(save).toHaveBeenCalledWith({ token: 'github_pat_FAKE_saved_ui' }));
+    expect(await screen.findByText('A sync token is saved on this Mac.')).toBeTruthy();
+    expect(document.body.textContent).not.toContain('github_pat_FAKE_saved_ui');
+    await u.click(screen.getByRole('button', { name: 'Remove saved token' }));
+    await waitFor(() => expect(remove).toHaveBeenCalled());
+    expect(await screen.findByRole('form', { name: 'Save sync token on this Mac' })).toBeTruthy();
+    expect(screen.queryByText('A sync token is saved on this Mac.')).toBeNull();
+  });
 });
 
 describe('Home onboarding repo card', () => {
