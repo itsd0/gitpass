@@ -206,7 +206,7 @@ final class PairingSessionTests: XCTestCase {
         XCTAssertTrue(shape, "code shape")
         XCTAssertFalse(String(describing: connected).contains(connected.code), "code rendered")
         do {
-            try peer.confirm(connected.code)
+            try peer.confirm(code: connected.code)
         } catch {
             XCTFail("confirm failed")
             return
