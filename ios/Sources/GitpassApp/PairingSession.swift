@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Network
 
@@ -114,11 +115,22 @@ func isDesktopQr(_ text: String) -> Bool {
 func pairingNumericHost(_ host: String) -> NWEndpoint.Host? {
     if host.isEmpty || host.count > 64 { return nil }
     if pairingIPv4(host) != nil { return NWEndpoint.Host(host) }
-    let hex = Set("0123456789abcdefABCDEF:")
-    guard host.contains(":"), host.allSatisfy({ hex.contains($0) }), let v6 = IPv6Address(host) else { return nil }
-    let bytes = pairingAddressBytes(v6.rawValue)
-    if bytes.allSatisfy({ $0 == 0 }) || bytes.first == 0xFF { return nil }
+    guard let bytes = pairingIPv6Bytes(host) else { return nil }
+    if bytes.allSatisfy({ $0 == 0 }) || bytes[0] == 0xFF { return nil }
     return NWEndpoint.Host(host)
+}
+
+/// `inet_pton` fills the 16 address bytes. `IPv6Address.rawValue` is not those bytes on this SDK.
+private func pairingIPv6Bytes(_ host: String) -> [UInt8]? {
+    let hex = Set("0123456789abcdefABCDEF:")
+    guard host.contains(":"), host.allSatisfy({ hex.contains($0) }) else { return nil }
+    var bytes = [UInt8](repeating: 0, count: 16)
+    let ok = bytes.withUnsafeMutableBytes { raw -> Int32 in
+        guard let base = raw.baseAddress else { return 0 }
+        return host.withCString { inet_pton(AF_INET6, $0, base) }
+    }
+    guard ok == 1 else { return nil }
+    return bytes
 }
 
 private func pairingIPv4(_ host: String) -> IPv4Address? {
@@ -134,10 +146,6 @@ private func pairingIPv4(_ host: String) -> IPv4Address? {
     if nums.allSatisfy({ $0 == 0 }) || nums.allSatisfy({ $0 == 255 }) { return nil }
     if nums[0] >= 224 && nums[0] <= 239 { return nil }
     return IPv4Address("\(nums[0]).\(nums[1]).\(nums[2]).\(nums[3])")
-}
-
-private func pairingAddressBytes<T>(_ value: T) -> [UInt8] {
-    withUnsafeBytes(of: value) { Array($0) }
 }
 
 protocol PairingLink: AnyObject {
