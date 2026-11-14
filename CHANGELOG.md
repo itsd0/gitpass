@@ -3,12 +3,12 @@
 ## Unreleased
 
 ### Added
-- QR device pairing protocol (#457): the new device shows an ephemeral X25519 public key, the phone
-  shows a 6-digit code derived from the transcript, and the person types that code on the desktop.
-  Only then does the desktop release an XChaCha20-Poly1305 grant carrying the repo, Secret Key and
-  fine-grained sync token. The master password is not in the payload, and the desktop API does not
-  return its own code. Core (`pairing.rs`), the desktop host session, and the mobile bridge
-  (`FFI_API_LEVEL` 8) expose it. Pairing screens are not in this change.
+- Pairing v2 (#491, part): the desktop shows a QR with no secrets. The phone commits to its
+  ephemeral key before the desktop reveals a nonce, then shows a 6-digit code bound to the full
+  transcript. The person types that code on the desktop, which compares it in constant time and
+  only then releases an XChaCha20-Poly1305 grant. The master password is not in any message, and
+  the desktop API does not return its own code. Replaces the v1 QR frames from #457. Bridge
+  `FFI_API_LEVEL` 9. The LAN transport and the pairing screens are separate changes.
 
 ## 0.7.0 — 2026-11-13
 

@@ -858,6 +858,14 @@ internal open class UniffiVTableCallbackInterfaceHttpTransport(
 
 
 
+
+
+
+
+
+
+
+
 // For large crates we prevent `MethodTooLargeException` (see #2340)
 // N.B. the name of the extension is very misleading, since it is 
 // rather `InterfaceTooLargeException`, caused by too many methods 
@@ -899,19 +907,27 @@ fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with_quick_unlock_key(
 ): Short
-fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_accept(
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_begin(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_cancel(
 ): Short
-fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_release(
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_confirm(
 ): Short
-fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_begin(
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_push(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_cancel(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_code(
 ): Short
-fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_open(
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_endpoint(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_finish(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_phase(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_push(
+): Short
+fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_start(
 ): Short
 fun uniffi_gitpass_mobile_ffi_checksum_func_pairing_test_vector(
 ): Short
@@ -1069,7 +1085,7 @@ fun uniffi_gitpass_mobile_ffi_fn_clone_pairinghostinput(`ptr`: Pointer,uniffi_ou
 ): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_free_pairinghostinput(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_gitpass_mobile_ffi_fn_constructor_pairinghostinput_new(`stateDir`: RustBuffer.ByValue,`offer`: RustBuffer.ByValue,`accountId`: RustBuffer.ByValue,`repoOwner`: RustBuffer.ByValue,`repoName`: RustBuffer.ByValue,`branch`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,`syncToken`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_constructor_pairinghostinput_new(`stateDir`: RustBuffer.ByValue,`accountId`: RustBuffer.ByValue,`repoOwner`: RustBuffer.ByValue,`repoName`: RustBuffer.ByValue,`branch`: RustBuffer.ByValue,`secretKey`: RustBuffer.ByValue,`syncToken`: RustBuffer.ByValue,`addressesJson`: RustBuffer.ByValue,`port`: Short,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_clone_synccancellation(`ptr`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
@@ -1145,20 +1161,28 @@ fun uniffi_gitpass_mobile_ffi_fn_func_open_vault_with(`root`: RustBuffer.ByValue
 ): Pointer
 fun uniffi_gitpass_mobile_ffi_fn_func_open_vault_with_quick_unlock_key(`root`: RustBuffer.ByValue,`key`: RustBuffer.ByValue,`options`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
-fun uniffi_gitpass_mobile_ffi_fn_func_pairing_host_accept(`input`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_host_begin(`input`: Pointer,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_pairing_host_cancel(`stateDir`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_gitpass_mobile_ffi_fn_func_pairing_host_release(`stateDir`: RustBuffer.ByValue,`code`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_host_confirm(`stateDir`: RustBuffer.ByValue,`code`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_begin(uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_host_push(`stateDir`: RustBuffer.ByValue,`chunk`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_cancel(uniffi_out_err: UniffiRustCallStatus, 
 ): Unit
-fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_code(`announce`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_code(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
-fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_open(`stateDir`: RustBuffer.ByValue,`grant`: RustBuffer.ByValue,`code`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_endpoint(uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_finish(`stateDir`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
 ): Pointer
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_phase(uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_push(`chunk`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
+fun uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_start(`qr`: RustBuffer.ByValue,`stateDir`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_pairing_test_vector(uniffi_out_err: UniffiRustCallStatus, 
 ): RustBuffer.ByValue
 fun uniffi_gitpass_mobile_ffi_fn_func_pairing_test_vector_open(uniffi_out_err: UniffiRustCallStatus, 
@@ -1342,31 +1366,43 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_open_vault_with_quick_unlock_key() != 48988.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_accept() != 27246.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_begin() != 15244.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_cancel() != 7288.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_cancel() != 64468.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_release() != 50616.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_confirm() != 43115.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_begin() != 50517.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_host_push() != 35092.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_cancel() != 157.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_cancel() != 8847.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_code() != 64150.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_code() != 18958.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_open() != 21757.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_endpoint() != 63518.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_test_vector() != 49933.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_finish() != 51694.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_test_vector_open() != 37902.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_phase() != 16679.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_push() != 58075.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_joiner_start() != 4015.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_test_vector() != 30768.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_func_pairing_test_vector_open() != 8679.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_func_passkey_app_rp_host() != 17044.toShort()) {
@@ -1471,7 +1507,7 @@ private fun uniffiCheckApiChecksums(lib: IntegrityCheckingUniffiLib) {
     if (lib.uniffi_gitpass_mobile_ffi_checksum_method_vault_update_item() != 43322.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
-    if (lib.uniffi_gitpass_mobile_ffi_checksum_constructor_pairinghostinput_new() != 64616.toShort()) {
+    if (lib.uniffi_gitpass_mobile_ffi_checksum_constructor_pairinghostinput_new() != 15790.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_gitpass_mobile_ffi_checksum_constructor_synccancellation_new() != 4632.toShort()) {
@@ -2596,13 +2632,13 @@ open class PairingHostInput: Disposable, AutoCloseable, PairingHostInputInterfac
         this.cleanable = UniffiLib.CLEANER.register(this, UniffiCleanAction(pointer))
     }
     /**
-     * Foreign constructor. The argument count is the pairing input; secrets are wiped after accept.
+     * Foreign constructor. Secrets are wiped after the host session is built.
      */
-    constructor(`stateDir`: kotlin.String, `offer`: kotlin.String, `accountId`: kotlin.String, `repoOwner`: kotlin.String, `repoName`: kotlin.String, `branch`: kotlin.String, `secretKey`: kotlin.String, `syncToken`: kotlin.String) :
+    constructor(`stateDir`: kotlin.String, `accountId`: kotlin.String, `repoOwner`: kotlin.String, `repoName`: kotlin.String, `branch`: kotlin.String, `secretKey`: kotlin.String, `syncToken`: kotlin.String, `addressesJson`: kotlin.String, `port`: kotlin.UShort) :
         this(
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_constructor_pairinghostinput_new(
-        FfiConverterString.lower(`stateDir`),FfiConverterString.lower(`offer`),FfiConverterString.lower(`accountId`),FfiConverterString.lower(`repoOwner`),FfiConverterString.lower(`repoName`),FfiConverterString.lower(`branch`),FfiConverterString.lower(`secretKey`),FfiConverterString.lower(`syncToken`),_status)
+        FfiConverterString.lower(`stateDir`),FfiConverterString.lower(`accountId`),FfiConverterString.lower(`repoOwner`),FfiConverterString.lower(`repoName`),FfiConverterString.lower(`branch`),FfiConverterString.lower(`secretKey`),FfiConverterString.lower(`syncToken`),FfiConverterString.lower(`addressesJson`),FfiConverterUShort.lower(`port`),_status)
 }
     )
 
@@ -4256,11 +4292,92 @@ public object FfiConverterTypeItemSummary: FfiConverterRustBuffer<ItemSummary> {
 
 
 /**
- * What the desktop shows: the announce QR and when it expires. No code.
+ * One step of the byte stream. `error` is empty on success and is otherwise a fixed string.
+ * `outbound` is what the platform writes next, including a fail frame.
+ */
+data class PairingDrive (
+    var `outbound`: kotlin.ByteArray, 
+    var `phase`: kotlin.String, 
+    var `error`: kotlin.String
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePairingDrive: FfiConverterRustBuffer<PairingDrive> {
+    override fun read(buf: ByteBuffer): PairingDrive {
+        return PairingDrive(
+            FfiConverterByteArray.read(buf),
+            FfiConverterString.read(buf),
+            FfiConverterString.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PairingDrive) = (
+            FfiConverterByteArray.allocationSize(value.`outbound`) +
+            FfiConverterString.allocationSize(value.`phase`) +
+            FfiConverterString.allocationSize(value.`error`)
+    )
+
+    override fun write(value: PairingDrive, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`outbound`, buf)
+            FfiConverterString.write(value.`phase`, buf)
+            FfiConverterString.write(value.`error`, buf)
+    }
+}
+
+
+
+/**
+ * Where the phone connects. Addresses are the IPs from the QR, not names.
+ */
+data class PairingEndpoint (
+    var `port`: kotlin.UShort, 
+    var `addresses`: List<kotlin.String>, 
+    var `expiresAt`: kotlin.Long
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePairingEndpoint: FfiConverterRustBuffer<PairingEndpoint> {
+    override fun read(buf: ByteBuffer): PairingEndpoint {
+        return PairingEndpoint(
+            FfiConverterUShort.read(buf),
+            FfiConverterSequenceString.read(buf),
+            FfiConverterLong.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PairingEndpoint) = (
+            FfiConverterUShort.allocationSize(value.`port`) +
+            FfiConverterSequenceString.allocationSize(value.`addresses`) +
+            FfiConverterLong.allocationSize(value.`expiresAt`)
+    )
+
+    override fun write(value: PairingEndpoint, buf: ByteBuffer) {
+            FfiConverterUShort.write(value.`port`, buf)
+            FfiConverterSequenceString.write(value.`addresses`, buf)
+            FfiConverterLong.write(value.`expiresAt`, buf)
+    }
+}
+
+
+
+/**
+ * What the desktop shows. There is no code field.
  */
 data class PairingHostView (
-    var `announce`: kotlin.String, 
-    var `expiresAt`: kotlin.Long
+    var `qr`: kotlin.String, 
+    var `expiresAt`: kotlin.Long, 
+    var `port`: kotlin.UShort, 
+    var `addresses`: List<kotlin.String>
 ) {
     
     companion object
@@ -4274,17 +4391,23 @@ public object FfiConverterTypePairingHostView: FfiConverterRustBuffer<PairingHos
         return PairingHostView(
             FfiConverterString.read(buf),
             FfiConverterLong.read(buf),
+            FfiConverterUShort.read(buf),
+            FfiConverterSequenceString.read(buf),
         )
     }
 
     override fun allocationSize(value: PairingHostView) = (
-            FfiConverterString.allocationSize(value.`announce`) +
-            FfiConverterLong.allocationSize(value.`expiresAt`)
+            FfiConverterString.allocationSize(value.`qr`) +
+            FfiConverterLong.allocationSize(value.`expiresAt`) +
+            FfiConverterUShort.allocationSize(value.`port`) +
+            FfiConverterSequenceString.allocationSize(value.`addresses`)
     )
 
     override fun write(value: PairingHostView, buf: ByteBuffer) {
-            FfiConverterString.write(value.`announce`, buf)
+            FfiConverterString.write(value.`qr`, buf)
             FfiConverterLong.write(value.`expiresAt`, buf)
+            FfiConverterUShort.write(value.`port`, buf)
+            FfiConverterSequenceString.write(value.`addresses`, buf)
     }
 }
 
@@ -5266,10 +5389,13 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     }
     
 
-    @Throws(GitpassException::class) fun `pairingHostAccept`(`input`: PairingHostInput): PairingHostView {
+        /**
+         * Start the desktop side. The returned view has the QR and no code.
+         */
+    @Throws(GitpassException::class) fun `pairingHostBegin`(`input`: PairingHostInput): PairingHostView {
             return FfiConverterTypePairingHostView.lift(
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_host_accept(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_host_begin(
         FfiConverterTypePairingHostInput.lower(`input`),_status)
 }
     )
@@ -5277,7 +5403,7 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     
 
         /**
-         * Drop the host session when `state_dir` is the directory that accepted it.
+         * Drop the host session only when `state_dir` is the one that started it.
          */
     @Throws(GitpassException::class) fun `pairingHostCancel`(`stateDir`: kotlin.String)
         = 
@@ -5288,29 +5414,26 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     
     
 
-    @Throws(GitpassException::class) fun `pairingHostRelease`(`stateDir`: kotlin.String, `code`: kotlin.String): kotlin.String {
-            return FfiConverterString.lift(
+    @Throws(GitpassException::class) fun `pairingHostConfirm`(`stateDir`: kotlin.String, `code`: kotlin.String): PairingDrive {
+            return FfiConverterTypePairingDrive.lift(
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_host_release(
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_host_confirm(
         FfiConverterString.lower(`stateDir`),FfiConverterString.lower(`code`),_status)
 }
     )
     }
     
 
-    @Throws(GitpassException::class) fun `pairingJoinerBegin`(): kotlin.String {
-            return FfiConverterString.lift(
+    @Throws(GitpassException::class) fun `pairingHostPush`(`stateDir`: kotlin.String, `chunk`: kotlin.ByteArray): PairingDrive {
+            return FfiConverterTypePairingDrive.lift(
     uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_begin(
-        _status)
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_host_push(
+        FfiConverterString.lower(`stateDir`),FfiConverterByteArray.lower(`chunk`),_status)
 }
     )
     }
     
-
-        /**
-         * Forget the joiner's ephemeral private key.
-         */ fun `pairingJoinerCancel`()
+ fun `pairingJoinerCancel`()
         = 
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_cancel(
@@ -5322,29 +5445,81 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
         /**
          * Code for the phone to display. The desktop does not have a matching call.
          */
-    @Throws(GitpassException::class) fun `pairingJoinerCode`(`announce`: kotlin.String): kotlin.String {
+    @Throws(GitpassException::class) fun `pairingJoinerCode`(): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCallWithError(GitpassException) { _status ->
     UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_code(
-        FfiConverterString.lower(`announce`),_status)
-}
-    )
-    }
-    
-
-    @Throws(GitpassException::class) fun `pairingJoinerOpen`(`stateDir`: kotlin.String, `grant`: kotlin.String, `code`: kotlin.String): PairedSync {
-            return FfiConverterTypePairedSync.lift(
-    uniffiRustCallWithError(GitpassException) { _status ->
-    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_open(
-        FfiConverterString.lower(`stateDir`),FfiConverterString.lower(`grant`),FfiConverterString.lower(`code`),_status)
+        _status)
 }
     )
     }
     
 
         /**
-         * Synthetic vector JSON. Fake token and Secret Key only. `code` is what the phone would show.
+         * IPs and port from the scanned QR. No secrets.
          */
+    @Throws(GitpassException::class) fun `pairingJoinerEndpoint`(): PairingEndpoint {
+            return FfiConverterTypePairingEndpoint.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_endpoint(
+        _status)
+}
+    )
+    }
+    
+
+        /**
+         * Persist the single-use record and return the opened grant. Never log the result.
+         */
+    @Throws(GitpassException::class) fun `pairingJoinerFinish`(`stateDir`: kotlin.String): PairedSync {
+            return FfiConverterTypePairedSync.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_finish(
+        FfiConverterString.lower(`stateDir`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Phase: `wait`, `code`, `done` or `failed`.
+         */ fun `pairingJoinerPhase`(): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_phase(
+        _status)
+}
+    )
+    }
+    
+
+        /**
+         * Feed bytes read from the socket. Returns the next bytes to write.
+         */
+    @Throws(GitpassException::class) fun `pairingJoinerPush`(`chunk`: kotlin.ByteArray): PairingDrive {
+            return FfiConverterTypePairingDrive.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_push(
+        FfiConverterByteArray.lower(`chunk`),_status)
+}
+    )
+    }
+    
+
+        /**
+         * Scan result: keep the session and return the first frame to write.
+         * `state_dir` is the phone's replay record (session ids only).
+         */
+    @Throws(GitpassException::class) fun `pairingJoinerStart`(`qr`: kotlin.String, `stateDir`: kotlin.String): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(GitpassException) { _status ->
+    UniffiLib.INSTANCE.uniffi_gitpass_mobile_ffi_fn_func_pairing_joiner_start(
+        FfiConverterString.lower(`qr`),FfiConverterString.lower(`stateDir`),_status)
+}
+    )
+    }
+    
+
     @Throws(GitpassException::class) fun `pairingTestVector`(): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCallWithError(GitpassException) { _status ->
@@ -5355,9 +5530,6 @@ public object FfiConverterSequenceTypeVaultInfo: FfiConverterRustBuffer<List<Vau
     }
     
 
-        /**
-         * Open the synthetic vector inside core and return the payload fields.
-         */
     @Throws(GitpassException::class) fun `pairingTestVectorOpen`(): PairedSync {
             return FfiConverterTypePairedSync.lift(
     uniffiRustCallWithError(GitpassException) { _status ->

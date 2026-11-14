@@ -33,8 +33,9 @@ mod pairing;
 mod sync;
 pub use first_pull::validate_first_pull_snapshot;
 pub use pairing::{
-    pairing_host_accept, pairing_host_cancel, pairing_host_release, pairing_joiner_begin, pairing_joiner_cancel,
-    pairing_joiner_code, pairing_joiner_open, pairing_test_vector, pairing_test_vector_open, PairedSync,
+    pairing_host_begin, pairing_host_cancel, pairing_host_confirm, pairing_host_push, pairing_joiner_cancel,
+    pairing_joiner_code, pairing_joiner_endpoint, pairing_joiner_finish, pairing_joiner_phase, pairing_joiner_push,
+    pairing_joiner_start, pairing_test_vector, pairing_test_vector_open, PairedSync, PairingDrive, PairingEndpoint,
     PairingHostInput, PairingHostView,
 };
 pub use sync::{
@@ -517,8 +518,10 @@ impl Vault {
 /// Level 7: passkey provider (`PasskeyCaller`, `passkey_request_info`,
 /// `passkey_app_rp_host`, `passkey_verify_caller`, `Vault::passkey_entries`,
 /// `Vault::passkey_register`, `Vault::passkey_assert`) on `gitpass_core::webauthn` (#477).
-/// Level 8: QR pairing (#457). The desktop does not receive its own code.
-pub const FFI_API_LEVEL: u32 = 8;
+/// Level 8: QR pairing v1 (#457). Replaced before any release by level 9.
+/// Level 9: pairing v2 (#491). The phone scans a secret-free QR, the code is
+/// commitment-bound, and the desktop does not receive its own code.
+pub const FFI_API_LEVEL: u32 = 9;
 
 /// Bridge version: the crate (= workspace) version plus the API level.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
