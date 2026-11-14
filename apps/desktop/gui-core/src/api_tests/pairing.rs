@@ -486,3 +486,11 @@ fn a_stored_token_wins_and_a_classic_token_is_not_echoed() {
     assert!(!text.contains("ghp_"));
     assert!(!e._vault.path().join(".gitpass-sync-token").exists());
 }
+
+#[test]
+fn pairing_status_json_is_phase_and_error_only() {
+    let status = PairingStatus { phase: "done".into(), error: None };
+    let json = serde_json::to_string(&status).unwrap();
+    assert_eq!(json, r#"{"phase":"done","error":null}"#);
+    assert!(!json.contains("outbound"));
+}
