@@ -15,7 +15,9 @@ name: Release
 # macOS code signing: with secrets APPLE_CERTIFICATE (base64 .p12 of the self-signed "gitpass Local Signing"
 # identity) + APPLE_CERTIFICATE_PASSWORD, the bundle is signed with that identity (not Developer ID, not
 # notarized). Without them a dry run is ad-hoc signed ("-"), and a tag release FAILS rather than silently
-# changing the app's signing identity (see docs/RELEASE.md).
+# changing the app's signing identity (see docs/RELEASE.md). After a real signature, the
+# designated requirement must still pin the leaf hash in apps/desktop/src-tauri/macos-leaf-sha1.txt.
+# An ad-hoc dry run skips that check with a warning. A tag release cannot skip it.
 # Android (#479): the `android` job builds a release APK + AAB signed with the owner's upload keystore (secrets
 # ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD; missing secrets fail
 # the job, also on a dry run). On a tag, `publish` attaches them to the release; a dry run keeps them as artifacts.
@@ -134,6 +136,10 @@ jobs:
           ls -l "$b"/dmg/*.dmg "$b"/macos/*.app.tar.gz "$b"/macos/*.app.tar.gz.sig
           for f in "$b"/macos/*.app.tar.gz.sig; do [ -s "$f" ] || { echo "::error::empty $f"; exit 1; }; done
           codesign -dv "$b"/macos/*.app 2>&1 | grep -E "Identifier|Signature|Authority|TeamIdentifier" || true
+      - name: check designated requirement leaf
+        run: |
+          app=(apps/desktop/src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app)
+          scripts/check-macos-designated-requirement.sh "${app[0]}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: gitpass-desktop-${{ matrix.name }}
