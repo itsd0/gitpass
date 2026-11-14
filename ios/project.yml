@@ -34,6 +34,8 @@ targets:
         CFBundleShortVersionString: "0.1.0"
         CFBundleVersion: "1"
         NSFaceIDUsageDescription: Face ID unlocks your gitpass vault without typing the master password.
+        NSCameraUsageDescription: gitpass uses the camera to scan the pairing QR code shown on your computer.
+        NSLocalNetworkUsageDescription: gitpass connects to your computer on the local network to finish pairing.
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
@@ -56,6 +58,8 @@ targets:
       # Static library XCFramework: link only, nothing to embed.
       - framework: Frameworks/GitpassCore.xcframework
         embed: false
+      - sdk: Network.framework
+      - sdk: AVFoundation.framework
       # Ship the AutoFill extension inside the app (PlugIns/).
       - target: GitpassAutoFill
         embed: true
@@ -101,6 +105,9 @@ targets:
       - path: Sources/GitpassApp/Keychain.swift
       - path: Sources/GitpassApp/SyncService.swift
       - path: Sources/GitpassApp/BridgeCompat.swift
+      # Pairing session (no SwiftUI). The screen stays in the app target;
+      # the iOS CI test action runs this target, so the loopback lives here.
+      - path: Sources/GitpassApp/PairingSession.swift
       # Shared encrypted fixtures (issue #451): single canonical copy under
       # crates/gitpass-core/tests/fixtures/shared, copied into the test
       # bundle as a folder reference (`shared/v2…v5`, see
@@ -119,6 +126,7 @@ targets:
       - target: GitpassApp
       - framework: Frameworks/GitpassCore.xcframework
         embed: false
+      - sdk: Network.framework
 schemes:
   Gitpass:
     build:

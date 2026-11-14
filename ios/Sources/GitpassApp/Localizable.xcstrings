@@ -1760,6 +1760,443 @@
           }
         }
       }
+    },
+    "Set up with QR": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set up with QR"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "QR ဖြင့် စတင်မည်"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ตั้งค่าด้วย QR"
+          }
+        }
+      }
+    },
+    "Set up this phone": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Set up this phone"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ဤဖုန်းကို စတင်သတ်မှတ်မည်"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ตั้งค่าโทรศัพท์นี้"
+          }
+        }
+      }
+    },
+    "Scan the QR code on the computer.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Scan the QR code on the computer."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ကွန်ပျူတာပေါ်က QR ကုဒ်ကို စကန်ဖတ်ပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "สแกนคิวอาร์โค้ดบนคอมพิวเตอร์"
+          }
+        }
+      }
+    },
+    "Connecting to the computer.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connecting to the computer."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ကွန်ပျူတာနှင့် ချိတ်ဆက်နေသည်။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "กำลังเชื่อมต่อกับคอมพิวเตอร์"
+          }
+        }
+      }
+    },
+    "Type this code on the computer. It is not a password.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type this code on the computer. It is not a password."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ဤကုဒ်ကို ကွန်ပျူတာတွင် ရိုက်ထည့်ပါ။ ၎င်းသည် စကားဝှက်မဟုတ်ပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "พิมพ์รหัสนี้บนคอมพิวเตอร์ รหัสนี้ไม่ใช่รหัสผ่าน"
+          }
+        }
+      }
+    },
+    "Waiting for the computer.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Waiting for the computer."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ကွန်ပျူတာကို စောင့်နေသည်။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "กำลังรอคอมพิวเตอร์"
+          }
+        }
+      }
+    },
+    "Time left %lld s": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Time left %lld s"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ကျန်ချိန် %lld စက္ကန့်"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "เหลือเวลา %lld วินาที"
+          }
+        }
+      }
+    },
+    "Type the Master Password on this phone. It stays on this phone.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Type the Master Password on this phone. It stays on this phone."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ပင်မစကားဝှက်ကို ဤဖုန်းတွင် ရိုက်ထည့်ပါ။ ၎င်းသည် ဤဖုန်းထဲတွင်သာ ရှိသည်။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "พิมพ์รหัสผ่านหลักบนโทรศัพท์นี้ รหัสผ่านอยู่บนโทรศัพท์นี้เท่านั้น"
+          }
+        }
+      }
+    },
+    "This phone can sync %@ (%@).": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This phone can sync %@ (%@)."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ဤဖုန်းသည် %@ (%@) ကို စင့်ခ်လုပ်နိုင်သည်။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "โทรศัพท์นี้ซิงค์ %@ (%@) ได้"
+          }
+        }
+      }
+    },
+    "Finish setup": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finish setup"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "စတင်သတ်မှတ်မှု ပြီးမည်"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ตั้งค่าให้เสร็จ"
+          }
+        }
+      }
+    },
+    "That QR code expired. Start again on the computer.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "That QR code expired. Start again on the computer."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "QR ကုဒ် သက်တမ်းကုန်ပါပြီ။ ကွန်ပျူတာတွင် ပြန်စပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "คิวอาร์โค้ดหมดอายุ เริ่มใหม่บนคอมพิวเตอร์"
+          }
+        }
+      }
+    },
+    "The phone could not connect. Use the same Wi-Fi, and not a guest network that isolates devices.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The phone could not connect. Use the same Wi-Fi, and not a guest network that isolates devices."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ဖုန်း ချိတ်ဆက်၍ မရပါ။ တူညီသော Wi-Fi ကို သုံးပါ။ စက်များကို ခွဲထားသော ဧည့်သည်ကွန်ရက် မဖြစ်ပါစေနှင့်။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "โทรศัพท์เชื่อมต่อไม่ได้ ใช้ Wi-Fi เดียวกัน และอย่าใช้เครือข่ายแขกที่แยกอุปกรณ์ออกจากกัน"
+          }
+        }
+      }
+    },
+    "Pairing timed out. Start again on the computer.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pairing timed out. Start again on the computer."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ချိတ်ဆက်ချိန် ကုန်ပါပြီ။ ကွန်ပျူတာတွင် ပြန်စပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "หมดเวลาจับคู่ เริ่มใหม่บนคอมพิวเตอร์"
+          }
+        }
+      }
+    },
+    "The connection closed. Start again.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The connection closed. Start again."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ချိတ်ဆက်မှု ပိတ်သွားသည်။ ပြန်စပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "การเชื่อมต่อถูกปิด เริ่มใหม่"
+          }
+        }
+      }
+    },
+    "Pairing failed. Start again.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pairing failed. Start again."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ပြန်စပါ။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "จับคู่ไม่สำเร็จ เริ่มใหม่"
+          }
+        }
+      }
+    },
+    "The vault could not be downloaded. Existing data was kept.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The vault could not be downloaded. Existing data was kept."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "သိုလှောင်ခန်းကို ဒေါင်းလုဒ်လုပ်၍ မရပါ။ ရှိပြီးသား ဒေတာကို ထိန်းထားသည်။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ดาวน์โหลดคลังไม่ได้ ข้อมูลเดิมยังอยู่"
+          }
+        }
+      }
+    },
+    "The camera is not available. Pairing needs it to scan the QR code.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The camera is not available. Pairing needs it to scan the QR code."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ကင်မရာ မရနိုင်ပါ။ QR ကုဒ် စကန်ဖတ်ရန် လိုအပ်သည်။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "กล้องใช้ไม่ได้ การจับคู่ต้องใช้กล้องสแกนคิวอาร์โค้ด"
+          }
+        }
+      }
+    },
+    "Start again": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start again"
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "ပြန်စမည်"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "เริ่มใหม่"
+          }
+        }
+      }
+    },
+    "Downloading the vault.": {
+      "comment": "TODO(i18n-review) Pairing v2 (#491).",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Downloading the vault."
+          }
+        },
+        "my": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "သိုလှောင်ခန်းကို ဒေါင်းလုဒ်လုပ်နေသည်။"
+          }
+        },
+        "th": {
+          "stringUnit": {
+            "state": "needs_review",
+            "value": "กำลังดาวน์โหลดคลัง"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

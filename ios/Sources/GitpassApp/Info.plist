@@ -22,6 +22,10 @@
 	<string>1</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Face ID unlocks your gitpass vault without typing the master password.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>gitpass uses the camera to scan the pairing QR code shown on your computer.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>gitpass connects to your computer on the local network to finish pairing.</string>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UISupportedInterfaceOrientations</key>

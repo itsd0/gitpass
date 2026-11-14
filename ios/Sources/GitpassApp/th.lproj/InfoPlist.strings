@@ -1,0 +1,3 @@
+/* TODO(i18n-review) Pairing v2 (#491). */
+"NSCameraUsageDescription" = "gitpass ใช้กล้องเพื่อสแกนคิวอาร์โค้ดสำหรับจับคู่ที่แสดงบนคอมพิวเตอร์";
+"NSLocalNetworkUsageDescription" = "gitpass เชื่อมต่อกับคอมพิวเตอร์บนเครือข่ายท้องถิ่นเพื่อจับคู่ให้เสร็จ";
