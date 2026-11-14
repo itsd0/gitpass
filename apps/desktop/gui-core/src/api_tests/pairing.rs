@@ -562,6 +562,50 @@ fn saved_sync_token_is_private_ignored_and_preferred() {
     assert!(!missing.contains(saved) && !missing.contains(TYPED));
 }
 
+fn tree_has_name(root: &Path, name: &str) -> bool {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            if entry.file_name().to_str() == Some(name) { return true; }
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) { stack.push(entry.path()); }
+        }
+    }
+    false
+}
+
+#[test]
+fn removed_sync_token_leaves_no_copy_under_the_vault() {
+    let e = env();
+    let bare = tempfile::tempdir().unwrap();
+    let ok = Command::new("git")
+        .args(["init", "--bare", "-q", "-b", "main"])
+        .arg(bare.path())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !ok {
+        eprintln!("git unavailable; skipping");
+        return;
+    }
+    let root = e._vault.path();
+    let init = Command::new("git").arg("-C").arg(root).args(["init", "-q", "-b", "main"]).status().unwrap();
+    assert!(init.success());
+    for (k, v) in [("user.email", "t@example.invalid"), ("user.name", "test")] {
+        let st = Command::new("git").arg("-C").arg(root).args(["config", k, v]).status().unwrap();
+        assert!(st.success());
+    }
+    e.app.save_sync_token("github_pat_FAKE_backup_excluded").unwrap();
+    e.app.remote_connect_opts(&bare.path().display().to_string(), true).unwrap();
+    e.app.sync(false).unwrap();
+    let saw_backup = std::fs::read_dir(root).unwrap().flatten().any(|ent| {
+        ent.file_name().to_str().is_some_and(|n| n.starts_with(".gitpass-backup-"))
+    });
+    assert!(saw_backup, "sync did not take a backup");
+    e.app.remove_sync_token().unwrap();
+    assert!(!tree_has_name(root, ".gitpass-sync-token"));
+}
+
 #[test]
 fn pairing_status_json_is_phase_and_error_only() {
     let status = PairingStatus { phase: "done".into(), error: None };
