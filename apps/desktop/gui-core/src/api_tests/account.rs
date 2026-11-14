@@ -96,6 +96,39 @@ fn create_account_and_biometric_unlock() {
 }
 
 #[test]
+fn unlock_without_secret_key_file_needs_typed_key() {
+    let root = tempfile::tempdir().unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let dir = root.path().join("v");
+    let app = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default())).with_biometric(Box::new(MemBio(Default::default())));
+    app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
+    // Created without saving secret.key to disk.
+    let r = app.create_account(&dir.display().to_string(), "correct horse", false).unwrap();
+    assert!(!dir.join("secret.key").exists());
+    app.lock();
+    let st = app.status().unwrap();
+    assert!(!st.unlocked && st.vault_exists && !st.secret_key_on_disk);
+    // Empty Secret Key field: fixed message, no vault path leaked.
+    let err = app.unlock(&dir.display().to_string(), "correct horse", None).unwrap_err().to_string();
+    assert!(err.starts_with("secret key required"), "{err}");
+    assert!(!err.contains(&dir.display().to_string()), "{err}");
+    // A typed key still unlocks.
+    assert!(app.unlock(&dir.display().to_string(), "correct horse", Some(&r.secret_key)).unwrap().unlocked);
+    // While unlocked the on-disk flag is false (the field only describes the locked state).
+    assert!(!app.status().unwrap().secret_key_on_disk);
+    app.lock();
+    // With secret.key saved on disk, unlock without a typed key works and status reports it.
+    let dir2 = root.path().join("v2");
+    let app2 = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default()));
+    app2.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
+    app2.create_account(&dir2.display().to_string(), "correct horse", true).unwrap();
+    assert!(dir2.join("secret.key").exists());
+    app2.lock();
+    assert!(app2.status().unwrap().secret_key_on_disk);
+    assert!(app2.unlock(&dir2.display().to_string(), "correct horse", None).unwrap().unlocked);
+}
+
+#[test]
 fn emergency_kit_data_reveal_rules() {
     let root = tempfile::tempdir().unwrap();
     let cfg = tempfile::tempdir().unwrap();
