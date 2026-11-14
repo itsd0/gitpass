@@ -1,6 +1,6 @@
 # gitpass threat model
 
-Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted vault syncs through a private git repo. Client-side only: there are no gitpass servers. Targets macOS (desktop app, CLI, iOS) and Chromium (MV3 extension). No infrastructure-as-code exists; the only external infrastructure is GitHub (the vault remote, CI, and release/update feed on `itsd0/gitpass` releases). `SECURITY.md` is a disclosure policy only; the crypto design is in `README.md`.
+Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted vault syncs through a private git repo. Client-side only: there are no gitpass servers. Targets macOS (desktop app, CLI, iOS) and Chromium (MV3 extension). An Android companion is in staged development and is not a supported production app. No infrastructure-as-code exists; the only external infrastructure is GitHub (the vault remote, CI, and release/update feed on `itsd0/gitpass` releases). `SECURITY.md` is a disclosure policy only; the crypto design is in `README.md`. Pairing v2 is in [docs/PAIRING.md](docs/PAIRING.md).
 
 ## Owner's decisions
 - **Attackers:** every attacker below matters; none is ruled out.
@@ -11,12 +11,13 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 ## Components
 | Name | Code | Notes |
 |---|---|---|
-| **core** | `crates/gitpass-core` | Vault format v5 (reads v2+; `init` writes v2, bumped to v5 on keyset re-wrap), crypto (`crypto.rs`, `keys.rs`), store/manifest/epoch (`store/`), merge/sync/remote (`merge.rs`, `sync.rs`, `remote.rs`), import, audit/HIBP, passkeys, SSH keys, TOTP, sharing (X25519 sealbox + Ed25519 share signatures), QR device pairing (`pairing.rs`) |
+| **core** | `crates/gitpass-core` | Vault format v5 (reads v2+; `init` writes v2, bumped to v5 on keyset re-wrap), crypto (`crypto.rs`, `keys.rs`), store/manifest/epoch (`store/`), merge/sync/remote (`merge.rs`, `sync.rs`, `remote.rs`), import, audit/HIBP, passkeys, SSH keys, TOTP, sharing (X25519 sealbox + Ed25519 share signatures), pairing v2 (`pairing.rs`; the crate does not open sockets) |
 | **cli** | `crates/gitpass-cli`, `crates/gitpass-pasteboard` | `gitpass` binary: `run`/`inject` secret injection into child env, ssh agent, import/export, clipboard |
 | **native-host** | `crates/gitpass-host` | Native-messaging host for the extension; origin matching (`origin.rs`), request handler (`handler.rs`), install manifests (`install.rs`), bridge to desktop agent |
 | **extension** | `extension/` | MV3 service worker (`background.js`, `bg-*.js`), content scripts on all https pages (`content.js`, `lib/forms.js`, `lib/passkey-main.js` in MAIN world, `lib/passkey-bridge.js`), popup, options |
 | **desktop** | `apps/desktop/gui-core`, `apps/desktop/src-tauri`, `apps/desktop/src` | Tauri app: Rust API (`api/`), browser agent UNIX socket (`agent.rs`), ssh-agent (`ssh_agent.rs`), favicon fetcher (`favicon.rs`), Touch ID/Keychain (`biometric.rs`), updater, React UI |
-| **ios** | `ios/`, `crates/gitpass-mobile-ffi` | SwiftUI app + AutoFill credential provider via UniFFI |
+| **ios** | `ios/`, `crates/gitpass-mobile-ffi` | SwiftUI app + AutoFill credential provider via UniFFI. Pairing scans the desktop QR and opens a raw TCP connection |
+| **android** | `android/`, `crates/gitpass-mobile-ffi` | Staged companion, not a supported production app. Pairing uses the same bridge. Passkeys are Android 14+ only |
 | **release** | `.github/workflows`, `docs/RELEASE.md`, `scripts/`, `tauri.conf.json` updater | Build, signing, minisign-verified auto-update from `itsd0/gitpass` releases |
 
 ## Trust boundaries and entry points
@@ -27,7 +28,7 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 5. **Imported / shared data.** Import files (`import.rs`), shared vaults/items from other identities (signed shares; sender identity verified out of band), SSH keys, otpauth URIs.
 6. **Network fetches.** Favicon fetcher (https-only, public-IP-only, no redirects, size cap), HIBP k-anonymity audit, updater feed.
 7. **Device / OS.** Keychain, Touch ID gating, pasteboard (concealed/transient types), iOS AutoFill extension, files under `~/.gitpass` and `~/Library/Application Support/gitpass`.
-8. **QR device pairing.** A new phone learns the Secret Key and a sync token from QR frames shown by an already-unlocked desktop. There is no gitpass server. The master password is not in any frame; the person types it on the new device. See [Device pairing](#device-pairing).
+8. **LAN device pairing.** An already-unlocked desktop shows one QR. The phone scans it and connects to a numeric address in that QR over raw TCP on the local network. There is no gitpass server and no mailbox in the sync repo. The master password is not in the QR or in any frame; the person types it on the new phone. See [Device pairing](#device-pairing).
 
 ## Assets (all equal priority)
 - Master password, Secret Key (`secret.key` / Emergency Kit), AUK, Account Key, vault keys, device keys, X25519/Ed25519 identity secrets.
@@ -42,7 +43,7 @@ Personal, single-owner (@itsd0) zero-knowledge password manager whose encrypted 
 - Other apps or malware running as the same macOS user.
 - Thief with a stolen or lost (locked) device.
 - Sender of a malicious import file or shared vault.
-- Network attacker (MITM on favicon/HIBP/update traffic).
+- Network attacker (MITM on favicon/HIBP/update traffic, and anyone on the same LAN during pairing).
 - Supply chain (npm/crates dependencies, GitHub Actions).
 
 ## Existing controls
@@ -50,11 +51,19 @@ Argon2id (256 MiB, t=3, p=4) + Secret Key two-secret KDF; XChaCha20-Poly1305 eve
 
 ## Device pairing
 
-QR-only, three frames, no relay (`crates/gitpass-core/src/pairing.rs`). The new device generates an ephemeral X25519 key and shows only the public key (`offer`). The desktop generates its own ephemeral key afterwards and shows `announce` (its public key and the session id). Only the phone displays the 6-digit code derived from the transcript (X25519 shared secret, HKDF-SHA256, domain `gitpass/pair/v1/sas`). The person types that code on the desktop. The desktop API does not return a code, so a screen cannot confirm a value it just computed. The desktop emits `grant` — the ciphertext — only after the typed code matches, and the phone decrypts only after the typed code matches. Three wrong codes wipe the session. The AEAD is the same XChaCha20-Poly1305 envelope as the rest of the vault, with the transcript as AAD.
+Pairing v2 (#491) replaced the v1 offer/announce/grant frames. The sync-repo mailbox considered after #487 was not built: the phone connects directly to the desktop on the LAN. The byte layout is in [docs/PAIRING.md](docs/PAIRING.md). `crates/gitpass-core` does not open sockets. Swift, Kotlin and JavaScript only move opaque bytes.
 
-The payload is repo owner, repo name, branch, account id, Secret Key, a fine-grained GitHub PAT (`github_pat_…`) and `token_kind` (`fine_grained_pat`). It has no master-password field. The desktop reads the owner, repository, branch and token from the vault's git `origin` and the git-ignored `.gitpass-sync-token` file, not from pairing UI arguments. Low-order public keys are rejected. A session id is single-use for 24 hours after its two-minute expiry (`.gitpass-pairing-consumed.json`, git-ignored, ids and expiries only). Ephemeral private keys and the AEAD key are wiped when the grant is saved, the vault locks, or the session expires. Errors are fixed strings: they do not include the token, the Secret Key, the master password, or a filesystem path.
+The desktop, already unlocked, shows one QR (`gitpass-pair:2:qr:…`). The QR has no secrets. It does carry the session id, the expiry, the TCP port, up to eight numeric addresses, and the desktop's ephemeral X25519 public key. A photograph of the QR reveals those values and nothing else. Version 1 text is rejected.
 
-The desktop public key is not hash-committed before the phone shows the code. An attacker who can replace QR frames and grind ephemeral keys can search on the order of 10^6 keys for a 6-digit collision. The code is a short comparison string, not a commitment and not an encryption key. This also does not stop a person who confirms matching codes that an attacker swapped end to end (they are comparing the attacker's session with itself), or anyone who already holds the joiner's ephemeral private key. A photo of the grant is not enough. Registering the new phone in `devices.enc` happens later, when that phone is unlocked with the typed master password and the delivered Secret Key.
+The phone commits first: it sends `SHA-256(phone_pub || nonce_p)` and does not reveal either value yet. The desktop then reveals a fresh `nonce_d` and repeats its public key, which must match the QR. The phone opens the commitment. A different key fails the hash, so an active LAN peer gets one guess at the 6-digit code per session (at most 1 in 10^6), not an offline grind. The code is the first four bytes of the SAS key, as a big-endian integer modulo 1_000_000. It is a comparison string, not an encryption key. The desktop compares it in constant time and does not return its own copy. Three wrong codes wipe the session. The phone is not told that a code was wrong: a fail frame is either "expired" or a generic refusal.
+
+Both sides derive keys with HKDF-SHA256. The input is the X25519 shared secret (`was_contributory`; the all-zero output is rejected). The salt is `SHA-256` of the transcript. The info strings are `gitpass/pair/v2/aead` and `gitpass/pair/v2/sas`. The grant is the existing XChaCha20-Poly1305 envelope. Its additional data is `gitpass/pair/v2` concatenated with the salt. There is no TLS. The AEAD is the only protection on the TCP connection.
+
+The payload is version 2, account id, repo owner, repo name, branch, Secret Key, a fine-grained GitHub PAT (`github_pat_…`) and `token_kind` (`fine_grained_pat`). A `password` or `master_password` field is rejected. Classic `ghp_` tokens are rejected. The desktop reads the owner, repository, branch and token from the vault's git `origin` and the git-ignored `.gitpass-sync-token` file, not from pairing UI arguments. The listener binds LAN addresses only, never `0.0.0.0`, and the production listener skips loopback. The app is not sandboxed, so no `com.apple.security.network.server` entitlement was added. macOS may still ask to allow incoming connections; the screen says to allow that prompt. A guest network that isolates clients cannot be fixed in the protocol.
+
+The phone types the Master Password locally after the grant, then runs the existing first pull. That password is not in the QR, the frames, a log or an error. Session ids are single-use for 24 hours after the two-minute expiry (`.gitpass-pairing-consumed.json`, git-ignored, ids and expiries only). Ephemeral private keys are wiped when the grant is taken, the session fails, or it expires. Errors are fixed strings: they do not include the token, the Secret Key, the master password, or a filesystem path.
+
+What this does not stop: a person who types a code for a session they are looking at when that session is the attacker's (they are comparing the attacker's session with itself); an active peer who connects before the real phone and then gets the one guess; anyone who already holds the phone's ephemeral private key. Whoever connects first occupies the desktop's one session. Client isolation on the LAN is outside the protocol. Registering the new phone in `devices.enc` happens later, when that phone unlocks with the typed master password and the delivered Secret Key.
 
 ## Open questions
 - Should same-user local malware be treated as fully trusted (the agent token is readable by the user)? Currently in scope.

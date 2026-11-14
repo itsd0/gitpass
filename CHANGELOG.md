@@ -15,6 +15,8 @@
 - iOS pairing (#491, part): the phone scans the desktop QR with the camera, connects on the
   local network, and shows the 6-digit code. The Master Password is typed on the phone, then
   the first pull runs. Adds the iOS flow from #491.
+- Pairing v2 notes in `SECURITY_MODEL.md` and `docs/PAIRING.md` (#491, part). The v1
+  offer/announce/grant text is gone. The sync-repo mailbox was not built.
 
 ## 0.7.0 — 2026-11-13
 
