@@ -139,6 +139,80 @@ All workflows run on **GitHub-hosted runners**; the former self-hosted Mac runne
   `gh secret set APPLE_CERTIFICATE_PASSWORD -R itsd0/gitpass --env release`, and delete the `.p12` file. Until
   they are set, dry runs are ad-hoc signed and tag releases fail in preflight (so a release never silently
   changes the app's signing identity, which macOS uses for Keychain access).
+
+### Stable self-signed identity (Touch ID)
+
+The Touch ID item lives in the login keychain under the service `app.gitpass.desktop.biometric`
+(`apps/desktop/src-tauri/src/biometric.rs`). macOS ties that item's ACL to the app's designated
+requirement. For this identity the requirement is:
+
+```text
+identifier "dev.gitpass.desktop" and certificate leaf = H"<sha1 of the leaf>"
+```
+
+The leaf hash is not a secret. It is already visible on a signed `gitpass.app` via `codesign -d -r-`.
+The gitpass 0.7.1 arm64 and x64 release apps both embed the same public leaf
+(`CN=gitpass Local Signing`). Its SHA-1 is
+`4F62E0AD9F26BEDB25E81EF10DC1ABB416BDDC82`, stored in
+`apps/desktop/src-tauri/macos-leaf-sha1.txt`. That certificate is valid from
+26 October 2026 11:38:03 GMT until **23 October 2036 11:38:03 GMT**.
+
+`release.yml` runs `scripts/check-macos-designated-requirement.sh` after each macOS build.
+When `APPLE_SIGNING_IDENTITY` is the real name, the designated requirement must contain
+`identifier "dev.gitpass.desktop"` and `certificate leaf = H"4F62E0AD…"`. A mismatch fails
+the job. An ad-hoc dry run (`APPLE_SIGNING_IDENTITY=-`, no certificate in the environment)
+prints a warning and skips the check. A `v*` tag cannot take that skip: preflight already
+refuses a tag without the certificate, and the script fails if a tag is ad-hoc anyway.
+
+The certificate has to stay the same across updates. A new leaf — rotation, loss, or an
+ad-hoc build installed over the signed app — changes the designated requirement. The
+keychain item then no longer treats the app as its accessor. People see Keychain prompts
+or Touch ID stops releasing the item. Password unlock with the master password and the
+Secret Key still works. This is not an active failure on 0.7.1; Touch ID works after that
+update because the leaf did not change.
+
+**Rotation, when the owner chooses it.** Do this before 23 October 2036, or sooner if the
+certificate is lost. This document does not generate a certificate or change any secret.
+
+1. On the owner's Mac, create a replacement self-signed code-signing certificate the same
+   way as `scripts/macos-local-sign.md`. Keep the private key offline. Do not commit it.
+2. Export a `.p12` and replace the `release` environment secrets `APPLE_CERTIFICATE` and
+   `APPLE_CERTIFICATE_PASSWORD`. Delete the `.p12` from disk afterwards.
+3. Put the new leaf's SHA-1 in `apps/desktop/src-tauri/macos-leaf-sha1.txt`. The next
+   release fails the leaf check until that file matches the certificate that signed the app.
+4. After people install that build, Touch ID has to be turned off and on once in Settings.
+   Unlock first with the master password and the Secret Key (typed on that Mac; they are
+   not sent to the new device flow or written into the release). The new app then creates
+   a keychain item whose ACL matches the new requirement.
+
+**What the owner would provide for Developer ID and notarization.** Nothing here is created
+or uploaded by this change. All of it would be `release` environment secrets, set by the
+owner:
+
+- An Apple Developer Program membership, and the Team ID from that membership.
+- A Developer ID Application certificate, exported as a `.p12`, plus the `.p12` password.
+  Those would replace the current self-signed `APPLE_CERTIFICATE` and
+  `APPLE_CERTIFICATE_PASSWORD` values. The leaf check would then be updated to the new
+  requirement (Developer ID requirements use an Apple anchor, not this self-signed leaf).
+- For notarization, either an App Store Connect API key (key id, issuer id, and the `.p8`
+  contents) or an Apple ID with an app-specific password, for `notarytool`.
+- A decision to keep the bundle id `dev.gitpass.desktop` and the hardened runtime.
+
+Switching to that identity is the same user-visible step as a self-signed rotation: unlock
+with the master password and Secret Key, then turn Touch ID on again.
+
+**Proposal only (not implemented).** A data-protection keychain item with a
+keychain access group can keep working when the signing certificate changes, because the
+ACL follows the Team ID group instead of the leaf hash. That entitlement needs an Apple
+Team ID, so it waits on Developer ID (or another Apple-issued identity). The item would
+still be released only after biometry (`biometryCurrentSet`, or the current
+LocalAuthentication check). `SecItemAdd` with that access control fails today with
+`errSecMissingEntitlement` (-34018) on the self-signed identity; `biometric.rs` records
+why the login keychain is used instead. This change does not alter that storage, the
+biometric gate, or the vault. A follow-up, only after the owner has a Team ID, could add
+the group. Separately, when a Touch ID keychain read fails, the unlock screen should say
+to use the master password and Secret Key and then turn Touch ID on again. That message
+is not in this change.
 - Tests run with `HOME` set to a temp dir.
 - Windows/Linux builds are hosted (cost minutes) and only run via
   `gh workflow run release.yml -f include_windows_linux=true` (artifacts only, not published).
