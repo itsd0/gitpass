@@ -91,6 +91,11 @@ export const api = {
   acceptShare: (a:{path:string}) => call<T.VaultInfo>('accept_share', a),
   listDevices: () => call<T.DeviceInfo[]>('list_devices'),
   revokeDevice: (a:{id:string; rotateCredentials:boolean}) => call<void>('revoke_device', a),
+  /** Pairing v2: the desktop shows the QR. `token` is in-memory only when no token file exists. */
+  pairingHostListen: (a:{token?:string|null}) => call<T.PairingHostPrepared>('pairing_host_listen', a),
+  pairingHostAccept: () => call<void>('pairing_host_accept'),
+  pairingHostConfirm: (a:{code:string}) => call<T.PairingStatus>('pairing_host_confirm', a),
+  pairingHostCancel: () => call<void>('pairing_host_cancel'),
   getSettings: () => call<T.Settings>('get_settings'),
   setSettings: (a:{settings:T.Settings}) => call<T.Settings>('set_settings', a),
   changePassword: (a:{current:string; next:string}) => call<void>('change_password', a),

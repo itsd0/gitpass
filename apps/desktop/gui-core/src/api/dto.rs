@@ -433,4 +433,9 @@ pub struct EmergencyKitData { pub account_id: String, pub vault_path: String, pu
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SyncResult { pub message: String }
+/// What the desktop UI may see after a pairing code is checked.
+/// The grant bytes stay on the socket and are not a field here.
+#[derive(Serialize, Debug, Clone, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PairingStatus { pub phase: String, pub error: Option<String> }
 
