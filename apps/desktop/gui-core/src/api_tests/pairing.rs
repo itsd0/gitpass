@@ -488,6 +488,81 @@ fn a_stored_token_wins_and_a_classic_token_is_not_echoed() {
 }
 
 #[test]
+fn saved_sync_token_is_private_ignored_and_preferred() {
+    let e = env();
+    configure_remote(e._vault.path());
+    let path = e._vault.path().join(".gitpass-sync-token");
+    let ignore = e._vault.path().join(".gitignore");
+    let stripped = std::fs::read_to_string(&ignore).unwrap().replace(".gitpass-sync-token\n", "");
+    std::fs::write(&ignore, stripped).unwrap();
+    assert!(!std::fs::read_to_string(&ignore).unwrap().lines().any(|l| l.trim() == ".gitpass-sync-token"));
+
+    let saved = "github_pat_FAKE_saved_on_mac";
+    for bad in ["", "   ", "github_pat_FAKE\nTAIL", "github_pat_FAKE\0", "ghp_FAKE0123456789", "github_pat_"] {
+        let err = e.app.save_sync_token(bad).unwrap_err().to_string();
+        assert_eq!(err, "sync token was rejected");
+        assert!(!err.contains("github_pat_") && !err.contains("ghp_") && !err.contains("TAIL"), "{err}");
+        assert!(!path.exists());
+    }
+
+    e.app.save_sync_token(saved).unwrap();
+    assert!(e.app.sync_token_saved().unwrap());
+    assert!(std::fs::read_to_string(&ignore).unwrap().lines().any(|l| l.trim() == ".gitpass-sync-token"));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+    let porcelain = Command::new("git")
+        .arg("-C")
+        .arg(e._vault.path())
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    let status = String::from_utf8_lossy(&porcelain.stdout);
+    assert!(!status.contains(".gitpass-sync-token"), "{status}");
+    let ignored = Command::new("git")
+        .arg("-C")
+        .arg(e._vault.path())
+        .args(["check-ignore", "-q", ".gitpass-sync-token"])
+        .status()
+        .unwrap();
+    assert!(ignored.success());
+
+    let prepared = e
+        .app
+        .pairing_host_begin_with(&["127.0.0.1".into()], 27624, Some(TYPED))
+        .unwrap();
+    assert!(!prepared.qr.contains(saved));
+    assert!(!prepared.qr.contains(TYPED));
+    let now = pairing::now_unix();
+    let mut joiner = JoinerSession::from_qr(&prepared.qr, now, &mut pairing::ConsumedPairings::default()).unwrap();
+    let code = exchange(&e.app, &mut joiner, now);
+    let grant = e.app.pairing_host_confirm(&code).unwrap();
+    assert!(grant.error.is_none(), "grant step failed");
+    assert!(!String::from_utf8_lossy(&grant.outbound).contains(saved));
+    assert!(!String::from_utf8_lossy(&grant.outbound).contains(TYPED));
+    let opened = joiner.push(&grant.outbound, now);
+    assert!(opened.error.is_none(), "phone could not open the grant");
+    let payload = joiner.take_payload().unwrap();
+    assert_eq!(payload.sync_token.as_str(), saved);
+    e.app.pairing_host_cancel().unwrap();
+
+    e.app.remove_sync_token().unwrap();
+    assert!(!e.app.sync_token_saved().unwrap());
+    assert!(!path.exists());
+    e.app.remove_sync_token().unwrap();
+    let missing = e
+        .app
+        .pairing_host_begin_with(&["127.0.0.1".into()], 27625, None)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(missing, "sync token is not configured");
+    assert!(!missing.contains(saved) && !missing.contains(TYPED));
+}
+
+#[test]
 fn pairing_status_json_is_phase_and_error_only() {
     let status = PairingStatus { phase: "done".into(), error: None };
     let json = serde_json::to_string(&status).unwrap();

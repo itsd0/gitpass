@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { ExternalLink, GitMerge, GitBranch, Link2Off, RefreshCw } from 'lucide-react';
 import { api } from '../../api/client';
 import type { SyncStatus } from '../../api/types';
@@ -75,6 +75,66 @@ export function ConnectForm({ onConnected }: { onConnected: (s: SyncStatus) => v
   </form>;
 }
 
+function SyncTokenForm() {
+  const t = useT();
+  const [saved, setSaved] = useState<boolean | null>(null);
+  const [token, setToken] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(false);
+  useEffect(() => {
+    api.syncTokenSaved().then(setSaved).catch(() => setSaved(false));
+  }, []);
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (busy || !token.trim()) return;
+    setBusy(true);
+    setErr(false);
+    try {
+      await api.saveSyncToken({ token: token.trim() });
+      setToken('');
+      setSaved(true);
+    } catch {
+      setErr(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function remove() {
+    setBusy(true);
+    setErr(false);
+    try {
+      await api.removeSyncToken();
+      setToken('');
+      setSaved(false);
+    } catch {
+      setErr(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (saved == null) return null;
+  if (saved) {
+    return (
+      <div className="mt-4 rounded-lg border border-border p-4">
+        <p className="text-sm">{t('sync.tokenSaved')}</p>
+        <Button variant="outline" className="mt-3" disabled={busy} onClick={() => void remove()}>{t('sync.removeToken')}</Button>
+        {err && <p role="alert" className="mt-2 text-sm text-danger">{t('sync.tokenRejected')}</p>}
+      </div>
+    );
+  }
+  return (
+    <form aria-label={t('sync.saveToken')} className="mt-4 rounded-lg border border-border p-4" onSubmit={(e) => void save(e)}>
+      <div className="text-sm font-medium">{t('sync.saveToken')}</div>
+      <p className="mt-1 text-xs text-muted">{t('sync.saveTokenHelp')}</p>
+      <button type="button" className="mt-1 text-xs text-accent underline" onClick={() => void api.openGithubFineGrainedTokenPage().catch(() => {})}>{t('devices.add.openTokenPage')}</button>
+      <label className="mt-3 block text-xs font-medium" htmlFor="sync-token">{t('devices.add.tokenLabel')}</label>
+      <Input id="sync-token" type="password" autoComplete="off" className="mt-1" value={token} disabled={busy} onChange={(e) => setToken(e.target.value)} />
+      {err && <p role="alert" className="mt-2 text-sm text-danger">{t('sync.tokenRejected')}</p>}
+      <Button type="submit" className="mt-3" disabled={busy || !token.trim()}>{busy ? t('sync.tokenSaving') : t('sync.tokenSave')}</Button>
+    </form>
+  );
+}
+
 export function SyncPanel({ highlightedId }: { highlightedId?: string | null } = {}) {
   const t = useT(); const { patch } = useOnboarding();
   const [st, setSt] = useState<SyncStatus | null>(null); const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
@@ -104,6 +164,7 @@ export function SyncPanel({ highlightedId }: { highlightedId?: string | null } =
         </div>
       </SettingsRow>
     </SettingsSection>
+    <SyncTokenForm />
     <div className="mt-4 flex flex-wrap gap-2">
       <Button variant="default" disabled={busy} onClick={() => run(false)}>
         <RefreshCw className={cn('h-4 w-4', busy && 'motion-safe:animate-spin')} aria-hidden />{t('sync.now')}

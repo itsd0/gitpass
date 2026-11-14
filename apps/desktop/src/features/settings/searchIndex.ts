@@ -182,7 +182,7 @@ export const SEARCHABLE_SETTINGS: SearchableSetting[] = [
     tab: 'sync',
     labelKey: 'settings.sync',
     descriptionKey: 'sync.remote',
-    keywords: ['git', 'github', 'remote', 'repository', 'backup', 'merge', 'disconnect'],
+    keywords: ['git', 'github', 'remote', 'repository', 'backup', 'merge', 'disconnect', 'token'],
   },
   // SSH Agent
   {

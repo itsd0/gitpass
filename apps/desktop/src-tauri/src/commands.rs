@@ -159,6 +159,15 @@ pub fn apply_content_protection(app: &tauri::AppHandle, on: bool) {
 }
 #[tauri::command(async)] pub fn rotate_secret_key(s: State<'_, App>) -> R<a::RotateResult> { s.rotate_secret_key().map_err(e) }
 #[tauri::command(async)] pub fn sync_status(s: State<'_, App>) -> R<a::SyncStatus> { s.sync_status().map_err(e) }
+/// True when a usable sync token file exists. The token is never returned.
+#[tauri::command] pub fn sync_token_saved(s: State<App>) -> R<bool> { s.sync_token_saved().map_err(e) }
+/// Write the git-ignored sync token (mode 0600). The value is not echoed.
+#[tauri::command(async)] pub fn save_sync_token(s: State<'_, App>, token: String) -> R<()> {
+    let token = Zeroizing::new(token);
+    s.save_sync_token(&token).map_err(e)
+}
+/// Delete the saved sync token.
+#[tauri::command] pub fn remove_sync_token(s: State<App>) -> R<()> { s.remove_sync_token().map_err(e) }
 #[tauri::command(async)] pub fn remote_connect(s: State<'_, App>, url: String) -> R<a::SyncStatus> { s.remote_connect(&url).map_err(e) }
 /// Open an https URL in the default browser. Only HTTPS is allowed; callers pass URLs derived in
 /// Rust (never raw webview input) and the argument is never routed through a shell.
@@ -171,6 +180,10 @@ fn open_external(url: &str) -> R<()> {
 }
 /// Open https://github.com/new (fixed URL; no user input reaches the shell) in the default browser.
 #[tauri::command] pub fn open_new_repo_page() -> R<()> { open_external("https://github.com/new") }
+/// Open GitHub's fine-grained token page (fixed URL; no user input reaches the shell).
+#[tauri::command] pub fn open_github_fine_grained_token_page() -> R<()> {
+    open_external("https://github.com/settings/personal-access-tokens/new")
+}
 /// Open GitHub's "New SSH key" page (fixed URL; no user input reaches the shell) in the default browser.
 #[tauri::command] pub fn open_github_ssh_keys_page() -> R<()> { open_external("https://github.com/settings/ssh/new") }
 /// Open the site's standard change-password page for an item. The URL is derived in Rust from the
