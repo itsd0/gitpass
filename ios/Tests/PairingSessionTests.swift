@@ -366,7 +366,7 @@ private final class PairingHostPeer {
         if listenFD < 0 { throw PairingLinkError.connect }
         let port: UInt16
         do {
-            port = try bindLoopback()
+            port = try Self.bindLoopback(listenFD)
         } catch {
             Darwin.close(listenFD)
             listenFD = -1
@@ -430,7 +430,7 @@ private final class PairingHostPeer {
         pairingJoinerCancel()
     }
 
-    private func bindLoopback() throws -> UInt16 {
+    private static func bindLoopback(_ listenFD: Int32) throws -> UInt16 {
         var one: Int32 = 1
         setsockopt(listenFD, SOL_SOCKET, SO_REUSEADDR, &one, socklen_t(MemoryLayout.size(ofValue: one)))
         setsockopt(listenFD, SOL_SOCKET, SO_NOSIGPIPE, &one, socklen_t(MemoryLayout.size(ofValue: one)))
@@ -539,9 +539,10 @@ private final class PairingHostPeer {
         let rc = withUnsafeMutablePointer(to: &pfd) { poll($0, nfds_t(1), 200) }
         if rc == 0 { return 0 }
         if rc < 0 { return errno == EINTR ? 0 : -1 }
+        let count = buf.count
         let n = buf.withUnsafeMutableBytes { raw -> Int in
             guard let base = raw.baseAddress else { return -1 }
-            return Darwin.read(fd, base, buf.count)
+            return Darwin.read(fd, base, count)
         }
         if n == 0 { return -1 }
         if n < 0 {
@@ -559,9 +560,10 @@ private final class PairingHostPeer {
             var pfd = pollfd(fd: fd, events: Int16(POLLOUT), revents: 0)
             let rc = withUnsafeMutablePointer(to: &pfd) { poll($0, nfds_t(1), 5_000) }
             if rc <= 0 { return false }
+            let total = bytes.count
             let n = bytes.withUnsafeBytes { raw -> Int in
                 guard let base = raw.baseAddress else { return -1 }
-                return Darwin.write(fd, base.advanced(by: sent), bytes.count - sent)
+                return Darwin.write(fd, base.advanced(by: sent), total - sent)
             }
             if n > 0 {
                 sent += n
