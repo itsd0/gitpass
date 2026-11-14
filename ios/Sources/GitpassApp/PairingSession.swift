@@ -110,14 +110,15 @@ func isDesktopQr(_ text: String) -> Bool {
 }
 
 /// A numeric address from the QR. Names are rejected so nothing here can start a DNS lookup.
+/// The host is the numeric string itself. Network treats that string as an address.
 func pairingNumericHost(_ host: String) -> NWEndpoint.Host? {
     if host.isEmpty || host.count > 64 { return nil }
-    if let v4 = pairingIPv4(host) { return NWEndpoint.Host(v4) }
+    if pairingIPv4(host) != nil { return NWEndpoint.Host(host) }
     let hex = Set("0123456789abcdefABCDEF:")
     guard host.contains(":"), host.allSatisfy({ hex.contains($0) }), let v6 = IPv6Address(host) else { return nil }
     let bytes = pairingAddressBytes(v6.rawValue)
     if bytes.allSatisfy({ $0 == 0 }) || bytes.first == 0xFF { return nil }
-    return NWEndpoint.Host(v6)
+    return NWEndpoint.Host(host)
 }
 
 private func pairingIPv4(_ host: String) -> IPv4Address? {

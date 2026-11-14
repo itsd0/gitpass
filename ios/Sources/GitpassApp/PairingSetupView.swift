@@ -242,7 +242,7 @@ final class PairingModel: ObservableObject {
         let mine = generation
         let token = held.token
         let secret = held.secret
-        let root = store.vaultRoot
+        let root = MainActor.assumeIsolated { store.vaultRoot }
         let cancellation = SyncCancellation()
         self.cancellation = cancellation
         Task.detached { [weak self] in
