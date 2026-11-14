@@ -121,6 +121,56 @@ const HIGHLIGHTS_0_6_6: WhatsNewHighlight[] = [
 
 export const RELEASES: ReleaseHighlights[] = [
   {
+    version: '0.7.1',
+    highlights: [
+      {
+        id: 'add-phone-qr',
+        icon: QrCode,
+        title: {
+          en: 'Add a phone from this Mac',
+          my: 'ဤ Mac မှ ဖုန်းထည့်ရန်',
+          th: 'เพิ่มโทรศัพท์จาก Mac เครื่องนี้',
+        },
+        description: {
+          en: 'This Mac shows a QR code. Scan it with gitpass on the phone, on the same Wi-Fi, then type the 6-digit code from the phone here.',
+          my: 'ဤ Mac တွင် QR ကုဒ် ပြမည်။ ဖုန်းတွင် gitpass ဖြင့် Wi-Fi တစ်ခုတည်းပေါ်မှ စကန်ဖတ်ပြီး ဖုန်း၏ ဂဏန်း ၆ လုံးကုဒ်ကို ဤနေရာတွင် ရိုက်ထည့်ပါ။',
+          th: 'Mac เครื่องนี้จะแสดงรหัส QR สแกนด้วย gitpass บนโทรศัพท์ใน Wi-Fi เดียวกัน แล้วพิมพ์รหัส 6 หลักจากโทรศัพท์ที่นี่',
+        },
+        showMe: {
+          route: { name: 'settings', tab: 'devices' },
+        },
+      },
+      {
+        id: 'phone-setup',
+        icon: Smartphone,
+        title: {
+          en: 'Set up the new phone',
+          my: 'ဖုန်းအသစ်ကို စတင်သတ်မှတ်ရန်',
+          th: 'ตั้งค่าโทรศัพท์ใหม่',
+        },
+        description: {
+          en: 'On Android or iOS, gitpass shows the code, asks for the Master Password on that phone, and downloads the vault.',
+          my: 'Android သို့မဟုတ် iOS တွင် gitpass သည် ကုဒ်ကို ပြပြီး ထိုဖုန်းပေါ်တွင် Master Password ကို တောင်းကာ သိုလှောင်ခန်းကို ဒေါင်းလုဒ်လုပ်သည်။',
+          th: 'บน Android หรือ iOS gitpass จะแสดงรหัส ขอ Master Password บนโทรศัพท์นั้น แล้วดาวน์โหลดคลัง',
+        },
+      },
+      {
+        id: 'password-stays-on-phone',
+        icon: ShieldCheck,
+        title: {
+          en: 'The Master Password stays on the phone',
+          my: 'Master Password သည် ဖုန်းပေါ်တွင်သာ ရှိသည်',
+          th: 'Master Password อยู่บนโทรศัพท์',
+        },
+        description: {
+          en: 'It is not in the QR code, and it is not sent over the network.',
+          my: '၎င်းသည် QR ကုဒ်ထဲတွင် မရှိသလို ကွန်ရက်ပေါ်သို့လည်း မပို့ပါ။',
+          th: 'มันไม่อยู่ในรหัส QR และไม่ถูกส่งผ่านเครือข่าย',
+        },
+      },
+    ],
+  },
+  {
     version: '0.7.0',
     highlights: [
       {

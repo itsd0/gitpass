@@ -2,13 +2,20 @@
 
 ## Unreleased
 
+## 0.7.1 — 2026-11-13
+
+### Highlights
+- **Add a phone on the local network.** The Mac shows a QR code with no secrets. The phone scans it on the same Wi-Fi and shows a 6-digit code. The person types that code on the Mac. The Master Password is typed on the phone and is not sent over the network (#491).
+- **Android and iOS setup.** Both phone apps scan the desktop QR. Passkeys stay Android 14+ only.
+- **Pairing notes.** `SECURITY_MODEL.md` and `docs/PAIRING.md` describe the protocol. The v1 frames and the sync-repo mailbox are not in this release.
+
 ### Added
 - Pairing v2 (#491, part): the desktop shows a QR with no secrets. The phone commits to its
   ephemeral key before the desktop reveals a nonce, then shows a 6-digit code bound to the full
   transcript. The person types that code on the desktop, which compares it in constant time and
   only then releases an XChaCha20-Poly1305 grant. The master password is not in any message, and
   the desktop API does not return its own code. Replaces the v1 QR frames from #457. Bridge
-  `FFI_API_LEVEL` 9. The LAN transport and the pairing screens are separate changes.
+  `FFI_API_LEVEL` 9. The LAN transport and the pairing screens are in this release.
 - Android pairing (#491, part): the phone scans the desktop QR, connects on the local
   network, and shows the 6-digit code. The Master Password is typed on the phone, then the
   first pull runs. Replaces the Android screens from #488.
@@ -38,7 +45,7 @@
   AAB and a SHA-256 checksum file (#479). A phone with a CI debug build must
   uninstall it before installing the signed APK (different signer), and that
   removes the local vault data on the phone.
-- **Coming in 0.7.1:** QR device pairing.
+- **QR device pairing** shipped in 0.7.1.
 
 ### Added
 - Signed Android release build in `release.yml` (#479): on `v*` tags a release
