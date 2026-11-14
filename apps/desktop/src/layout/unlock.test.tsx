@@ -341,6 +341,57 @@ describe("Unlock localization (en, my, th)", () => {
 
     vi.useRealTimers();
   });
+  it("requires the Secret Key on unlock when none is saved on disk", async () => {
+    vi.spyOn(api, "status").mockResolvedValue({
+      unlocked: false,
+      vaultPath: "/tmp/fake-vault",
+      account: null,
+      vaultExists: true,
+      biometricAvailable: true,
+      secretKeyOnDisk: false,
+    });
+    vi.spyOn(api, "unlock").mockRejectedValue(
+      new Error("secret key required: enter your Secret Key (from your Emergency Kit) or use Touch ID"),
+    );
+
+    useI18n.getState().setLang("en");
+    await act(async () => {
+      render(<Unlock />);
+    });
+
+    // Shown prominently without opening the advanced section, and the
+    // placeholder no longer says "optional".
+    expect(screen.getByPlaceholderText("Secret Key (A3-XXXXXX-…)")).toBeTruthy();
+    expect(screen.getByText("No Secret Key is saved on this Mac. Enter it from your Emergency Kit, or use Touch ID.")).toBeTruthy();
+
+    const pwInput = screen.getByPlaceholderText("Enter your password");
+    await act(async () => {
+      fireEvent.change(pwInput, { target: { value: "some-password" } });
+    });
+
+    // Unlock stays disabled until a Secret Key is entered.
+    const submitBtns = screen.getAllByRole("button", { name: "Unlock" });
+    expect(submitBtns.length).toBe(2);
+    expect((submitBtns[0] as HTMLButtonElement).disabled).toBe(true);
+    expect((submitBtns[1] as HTMLButtonElement).disabled).toBe(true);
+    // Touch ID remains available.
+    expect(screen.getByRole("button", { name: /Unlock with Touch ID/i })).toBeTruthy();
+
+    const skInput = screen.getByPlaceholderText("Secret Key (A3-XXXXXX-…)");
+    await act(async () => {
+      fireEvent.change(skInput, { target: { value: "A3-FAKE-KEY" } });
+    });
+    expect((submitBtns[1] as HTMLButtonElement).disabled).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(submitBtns[1]);
+    });
+
+    // The fixed backend error is shown as the localized message, not raw.
+    expect(screen.getByRole("alert").textContent).toBe(
+      "Enter your Secret Key (from your Emergency Kit) or use Touch ID.",
+    );
+  });
 });
 
 describe("Unlock focus while another app is in front", () => {

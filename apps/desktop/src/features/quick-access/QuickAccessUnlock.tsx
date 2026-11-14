@@ -110,7 +110,9 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
       onDone?.();
     } catch (x) {
       const msg = x instanceof Error ? x.message : String(x);
-      setErr(msg);
+      // Fixed backend message (contains no path); show the localized text.
+      if (msg.startsWith('secret key required')) setErr(t('unlock.errSecretKeyRequired'));
+      else setErr(msg);
     } finally {
       setPw('');
       setBusy(false);
