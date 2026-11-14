@@ -760,6 +760,8 @@ export const my: Partial<Record<Key, string>> = {
   "unlock.vaultFolder": "သော့ခတ်သေတ္တာ ဖိုဒါ",
   "unlock.secretKey": "Secret Key",
   "unlock.secretKeyPlaceholder": "Secret Key (A3-XXXXXX-…), ရွေးချယ်နိုင်သည်",
+  "unlock.secretKeyPlaceholderRequired": "Secret Key (A3-XXXXXX-…)",
+  "unlock.errSecretKeyRequired": "Emergency Kit မှ Secret Key ကို ရိုက်ထည့်ပါ၊ သို့မဟုတ် Touch ID ဖြင့် သော့ဖွင့်ပါ။",
   "unlock.errShortPassword": "မာစတာ စကားဝှက်သည် အနည်းဆုံး စာလုံး ၈ လုံး ရှိရပါမည်။",
   "unlock.errPasswordMismatch": "စကားဝှက်များ ကိုက်ညီမှု မရှိပါ။",
   "unlock.createTitle": "gitpass သော့ခတ်သေတ္တာ ဖန်တီးရန်",

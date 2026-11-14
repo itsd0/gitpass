@@ -384,6 +384,9 @@ pub struct UnlockState { pub unlocked: bool, pub vault_path: String, pub account
     #[serde(default)] pub vault_exists: bool,
     /// true when biometric unlock is enabled and supported on this machine.
     #[serde(default)] pub biometric_available: bool,
+    /// true only while locked, when this vault folder already has a `secret.key` file.
+    /// false when the vault is unlocked, missing, or has no Secret Key file.
+    #[serde(default)] pub secret_key_on_disk: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")] pub throttled_secs: Option<u64> }
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
