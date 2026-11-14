@@ -1,20 +1,29 @@
-//! Desktop host role for QR device pairing.
+//! Desktop host role for pairing v2.
 //!
-//! #458 shows `announce` as a QR on the desktop and the 6-digit code on the phone only.
-//! The person types that code here. This API never returns the desktop's code.
-//! Owner, repository, branch and the fine-grained PAT come from the vault's git `origin`
-//! (#454) and the git-ignored `.gitpass-sync-token` file, not from UI arguments.
+//! The desktop shows `qr` and never learns a code to display. The phone shows
+//! the 6-digit code; the person types it into [`App::pairing_host_confirm`].
+//! Owner, repository, branch and the fine-grained PAT come from the vault's git
+//! `origin` and the git-ignored `.gitpass-sync-token` file, not from UI arguments.
+//! This module does not open a socket. The LAN listener is a separate step.
 use super::super::dto::PairingHostPrepared;
 use super::App;
 use anyhow::{anyhow, Result};
 use gitpass_core::crypto::SecretKey;
-use gitpass_core::pairing::{self, HostSession, PairingError, PairingRequest};
+use gitpass_core::pairing::{self, HostSession, PairingError, PairingRequest, PairingStep};
 use std::path::Path;
 use std::sync::Mutex;
 
 #[derive(Default)]
 pub(crate) struct PairingHold {
     host: Option<HostSession>,
+}
+
+/// Bytes to write on the pairing connection, plus a fixed error string when the step failed.
+#[derive(Debug)]
+pub struct PairingTurn {
+    pub outbound: Vec<u8>,
+    pub phase: String,
+    pub error: Option<String>,
 }
 
 pub(crate) fn clear_host_on_lock(slots: &Mutex<PairingHold>, dir: &Path) {
@@ -30,7 +39,7 @@ pub(crate) fn clear_host_on_lock(slots: &Mutex<PairingHold>, dir: &Path) {
 
 const SYNC_TOKEN_FILE: &str = ".gitpass-sync-token";
 
-/// Owner, repository and branch from the vault's `origin` (#454) plus the fine-grained PAT
+/// Owner, repository and branch from the vault's `origin` plus the fine-grained PAT
 /// in `.gitpass-sync-token`. Errors are fixed strings and do not include the token or the URL.
 fn load_github_sync(root: &Path) -> Result<(String, String, String, String)> {
     let url = super::sync::git(root, &["remote", "get-url", "origin"])
@@ -67,10 +76,18 @@ fn github_owner_repo(url: &str) -> Option<(String, String)> {
     Some((owner.to_string(), repo.to_string()))
 }
 
+fn turn(step: PairingStep, phase: &str) -> PairingTurn {
+    let failed = step.error.is_some();
+    PairingTurn {
+        outbound: step.outbound,
+        phase: if failed { "failed".into() } else { phase.into() },
+        error: step.error.map(|e| e.to_string()),
+    }
+}
+
 impl App {
-    /// Accept a joiner offer. Returns the announce QR only. The phone shows the code; the person
-    /// types it into [`App::pairing_host_release`]. Repo and token come from the stored sync config.
-    pub fn pairing_host_prepare(&self, offer: &str) -> Result<PairingHostPrepared> {
+    /// Open a host session for `addresses` and `port`. Returns the QR only.
+    pub fn pairing_host_begin(&self, addresses: &[String], port: u16) -> Result<PairingHostPrepared> {
         let (account_id, secret, owner, repo, branch, token) = self.with(|u| {
             let (owner, repo, branch, token) = load_github_sync(&u.session.root)?;
             Ok((
@@ -86,96 +103,82 @@ impl App {
             let token = zeroize::Zeroizing::new(token);
             PairingRequest::new(&account_id, &owner, &repo, &branch, secret, &token)?
         };
-        // Save the replay record and store the session while the vault lock is held, so a lock
-        // cannot clear the session and then lose the race to the replay file. A failed accept
-        // puts the previous session back; the replay file is written only after success.
         self.with(|_| {
             let previous = {
                 let mut g = self.pairing.lock().map_err(|_| anyhow!("poisoned"))?;
                 g.host.take()
             };
-            let restore = |previous: Option<HostSession>| -> Result<()> {
-                if let Some(prev) = previous {
-                    self.pairing.lock().map_err(|_| anyhow!("poisoned"))?.host = Some(prev);
-                }
-                Ok(())
-            };
-            let mut consumed = match pairing::load_consumed(&self.settings_dir) {
-                Ok(c) => c,
-                Err(e) => {
-                    restore(previous)?;
-                    return Err(e.into());
-                }
-            };
+            let mut consumed = pairing::load_consumed(&self.settings_dir)?;
             if let Some(prev) = previous.as_ref() {
                 consumed.cancel_accept(prev.session_id());
             }
             let now = pairing::now_unix();
-            let host = match HostSession::accept(offer, request, now, &mut consumed) {
-                Ok(host) => host,
+            let (host, qr) = match HostSession::begin(addresses, port, request, now, &mut consumed) {
+                Ok(v) => v,
                 Err(e) => {
-                    restore(previous)?;
+                    if let Some(prev) = previous {
+                        self.pairing.lock().map_err(|_| anyhow!("poisoned"))?.host = Some(prev);
+                    }
                     return Err(e.into());
                 }
             };
-            let prepared = PairingHostPrepared {
-                announce: host.announce(),
-                expires_at: host.expires_at(),
-            };
             if let Err(e) = pairing::save_consumed(&self.settings_dir, &consumed) {
-                restore(previous)?;
+                if let Some(prev) = previous {
+                    self.pairing.lock().map_err(|_| anyhow!("poisoned"))?.host = Some(prev);
+                }
                 return Err(e.into());
             }
+            let prepared = PairingHostPrepared {
+                qr,
+                expires_at: host.expires_at(),
+                port: host.port(),
+                addresses: host.addresses().to_vec(),
+            };
             self.pairing.lock().map_err(|_| anyhow!("poisoned"))?.host = Some(host);
             Ok(prepared)
         })
     }
 
-    /// Release the grant when `code` is the code the phone displayed. The third wrong code
-    /// ends the session and marks it used.
-    pub fn pairing_host_release(&self, code: &str) -> Result<String> {
+    /// Feed bytes from the phone. The returned bytes are the desktop's reply.
+    pub fn pairing_host_push(&self, bytes: &[u8]) -> Result<PairingTurn> {
         self.with(|_| {
             let mut g = self.pairing.lock().map_err(|_| anyhow!("poisoned"))?;
+            let host = g.host.as_mut().ok_or(PairingError::NotReady)?;
             let now = pairing::now_unix();
-            enum Step {
-                Grant(String, String, i64),
-                Burned(String, i64),
-                Refuse(PairingError),
-            }
-            let step = {
-                let host = g.host.as_mut().ok_or(PairingError::NotReady)?;
-                let sid = host.session_id().to_string();
-                let exp = host.expires_at();
-                match host.grant_if_code_matches(code, now) {
-                    Ok(grant) => Step::Grant(grant, sid, exp),
-                    Err(PairingError::Exhausted) => Step::Burned(sid, exp),
-                    Err(e) => Step::Refuse(e),
-                }
-            };
-            match step {
-                Step::Grant(grant, sid, exp) => {
-                    let mut consumed = pairing::load_consumed(&self.settings_dir)?;
-                    consumed.mark_released(&sid, exp, now)?;
-                    pairing::save_consumed(&self.settings_dir, &consumed)?;
-                    if let Some(host) = g.host.as_mut() {
-                        host.wipe();
-                    }
-                    g.host = None;
-                    Ok(grant)
-                }
-                Step::Burned(sid, exp) => {
-                    let mut consumed = pairing::load_consumed(&self.settings_dir)?;
-                    consumed.mark_released(&sid, exp, now)?;
-                    pairing::save_consumed(&self.settings_dir, &consumed)?;
-                    g.host = None;
-                    Err(PairingError::Exhausted.into())
-                }
-                Step::Refuse(e) => Err(e.into()),
-            }
+            let step = host.push(bytes, now);
+            let phase = host.phase().to_string();
+            Ok(turn(step, &phase))
         })
     }
 
-    /// Drop the host session and allow the same offer to be accepted again until it expires.
+    /// Release the grant when `code` is the code the phone displayed.
+    /// The third wrong code ends the session and marks it used.
+    pub fn pairing_host_confirm(&self, code: &str) -> Result<PairingTurn> {
+        self.with(|_| {
+            let mut g = self.pairing.lock().map_err(|_| anyhow!("poisoned"))?;
+            let host = g.host.as_mut().ok_or(PairingError::NotReady)?;
+            let now = pairing::now_unix();
+            let sid = host.session_id().to_string();
+            let exp = host.expires_at();
+            let step = host.confirm(code, now);
+            let phase = host.phase().to_string();
+            let ended = matches!(
+                step.error,
+                Some(PairingError::Exhausted | PairingError::Expired)
+            );
+            let succeeded = step.error.is_none() && phase == "done";
+            let out = turn(step, &phase);
+            if succeeded || ended {
+                let mut consumed = pairing::load_consumed(&self.settings_dir)?;
+                consumed.mark_released(&sid, exp, now)?;
+                pairing::save_consumed(&self.settings_dir, &consumed)?;
+                g.host = None;
+            }
+            Ok(out)
+        })
+    }
+
+    /// Drop the host session and allow a new QR until the old one would have expired.
     pub fn pairing_host_cancel(&self) -> Result<()> {
         let previous = {
             let mut g = self.pairing.lock().map_err(|_| anyhow!("poisoned"))?;

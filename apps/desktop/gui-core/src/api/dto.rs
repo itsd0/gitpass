@@ -262,14 +262,18 @@ pub struct WatchtowerReport {
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct DeviceInfo { pub id: String, pub name: String, pub last_seen: String, pub revoked: bool, pub current: bool }
-/// Desktop side of QR pairing after the phone's offer is accepted.
+/// Desktop side of pairing v2. `qr` is what the phone scans.
 ///
-/// `announce` is the QR the phone scans. This struct has no code: only the phone displays the
-/// 6-digit string, and the person types it on the desktop (#458). A field here would let the
-/// desktop confirm a code it computed itself.
+/// This struct has no code: only the phone displays the 6-digit string, and the person types
+/// it on the desktop. A field here would let the desktop confirm a code it computed itself.
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
-pub struct PairingHostPrepared { pub announce: String, pub expires_at: i64 }
+pub struct PairingHostPrepared {
+    pub qr: String,
+    pub expires_at: i64,
+    pub port: u16,
+    pub addresses: Vec<String>,
+}
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum Theme { Dark, Light, System }

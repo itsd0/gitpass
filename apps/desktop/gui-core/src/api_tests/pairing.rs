@@ -15,34 +15,45 @@ fn configure_sync(vault: &Path) {
     std::fs::write(vault.join(".gitpass-sync-token"), format!("{TOKEN}\n")).unwrap();
 }
 
+fn exchange(app: &App, joiner: &mut JoinerSession, now: i64) -> String {
+    let commit = joiner.push(&[], now);
+    assert!(commit.error.is_none());
+    let reveal = app.pairing_host_push(&commit.outbound).unwrap();
+    assert!(reveal.error.is_none());
+    let open = joiner.push(&reveal.outbound, now);
+    assert!(open.error.is_none());
+    let ready = app.pairing_host_push(&open.outbound).unwrap();
+    assert!(ready.error.is_none());
+    let shown = joiner.push(&ready.outbound, now);
+    assert!(shown.error.is_none());
+    joiner.code().unwrap().to_string()
+}
+
 #[test]
-fn host_release_requires_the_phones_code_and_lock_drops_the_session() {
+fn host_confirm_requires_the_phones_code_and_lock_drops_the_session() {
     let e = env();
     configure_sync(e._vault.path());
     let now = pairing::now_unix();
-    let mut joiner = JoinerSession::begin(now).unwrap();
-    let prepared = e.app.pairing_host_prepare(&joiner.offer()).unwrap();
-    let bad = e.app.pairing_host_prepare("not-a-frame").unwrap_err();
-    assert_eq!(bad.to_string(), "unrecognized pairing message");
-    assert!(!bad.to_string().contains(TOKEN));
-    // The code comes from the phone, not from the desktop result.
-    let code = joiner.read_announce(&prepared.announce, now).unwrap();
-    assert_eq!(code.len(), 6);
-    assert!(!prepared.announce.contains(TOKEN));
-    assert!(!prepared.announce.contains(&e.sk));
+    let prepared = e.app.pairing_host_begin(&["127.0.0.1".into()], 27611).unwrap();
+    assert!(prepared.qr.starts_with("gitpass-pair:2:qr:"));
+    assert!(!prepared.qr.contains(TOKEN));
+    assert!(!prepared.qr.contains(&e.sk));
     assert!(!format!("{prepared:?}").contains("code:"));
+    let mut joiner = JoinerSession::from_qr(&prepared.qr, now, &mut pairing::ConsumedPairings::default()).unwrap();
+    let code = exchange(&e.app, &mut joiner, now);
     let wrong = if code == "000000" { "000001" } else { "000000" };
-    let err = e.app.pairing_host_release(wrong).unwrap_err();
-    assert_eq!(err.to_string(), "pairing verification code does not match");
-    assert!(!err.to_string().contains(TOKEN));
-    assert!(!err.to_string().contains(&e.sk));
-    let grant = e.app.pairing_host_release(&code).unwrap();
-    assert!(!grant.contains(TOKEN));
-    assert!(!grant.contains(&e.sk));
-    assert!(!grant.contains("correct horse"));
-    let payload = joiner
-        .open(&grant, &code, now, &mut pairing::ConsumedPairings::default())
-        .unwrap();
+    let err = e.app.pairing_host_confirm(wrong).unwrap();
+    assert_eq!(err.error.as_deref(), Some("pairing verification code does not match"));
+    assert!(!err.error.as_deref().unwrap().contains(TOKEN));
+    let grant = e.app.pairing_host_confirm(&code).unwrap();
+    assert!(grant.error.is_none());
+    let text = String::from_utf8_lossy(&grant.outbound);
+    assert!(!text.contains(TOKEN));
+    assert!(!text.contains(&e.sk));
+    assert!(!text.contains("correct horse"));
+    let opened = joiner.push(&grant.outbound, now);
+    assert!(opened.error.is_none());
+    let payload = joiner.take_payload().unwrap();
     assert_eq!(payload.secret_key.encode(), e.sk);
     assert_eq!(&payload.sync_token[..], TOKEN);
     assert_eq!(payload.repo_owner, "fake-owner");
@@ -54,34 +65,37 @@ fn host_release_requires_the_phones_code_and_lock_drops_the_session() {
     assert!(!stored.contains(TOKEN));
     assert!(!stored.contains(&e.sk));
     assert_eq!(
-        e.app.pairing_host_release(&code).unwrap_err().to_string(),
+        e.app.pairing_host_confirm(&code).unwrap_err().to_string(),
         "no pairing in progress"
     );
 }
 
 #[test]
-fn three_wrong_codes_mark_the_offer_used() {
+fn three_wrong_codes_mark_the_session_used() {
     let e = env();
     configure_sync(e._vault.path());
     let now = pairing::now_unix();
-    let mut joiner = JoinerSession::begin(now).unwrap();
-    let offer = joiner.offer();
-    let prepared = e.app.pairing_host_prepare(&offer).unwrap();
-    let code = joiner.read_announce(&prepared.announce, now).unwrap();
+    let prepared = e.app.pairing_host_begin(&["127.0.0.1".into()], 27612).unwrap();
+    let qr = prepared.qr.clone();
+    let mut joiner = JoinerSession::from_qr(&qr, now, &mut pairing::ConsumedPairings::default()).unwrap();
+    let code = exchange(&e.app, &mut joiner, now);
     let wrong = if code == "000000" { "000001" } else { "000000" };
     assert_eq!(
-        e.app.pairing_host_release(wrong).unwrap_err().to_string(),
-        "pairing verification code does not match"
+        e.app.pairing_host_confirm(wrong).unwrap().error.as_deref(),
+        Some("pairing verification code does not match")
     );
     assert_eq!(
-        e.app.pairing_host_release(wrong).unwrap_err().to_string(),
-        "pairing verification code does not match"
+        e.app.pairing_host_confirm(wrong).unwrap().error.as_deref(),
+        Some("pairing verification code does not match")
     );
-    let burned = e.app.pairing_host_release(wrong).unwrap_err();
-    assert_eq!(burned.to_string(), "too many wrong pairing codes");
-    assert!(!burned.to_string().contains(TOKEN));
-    let again = e.app.pairing_host_prepare(&offer).unwrap_err();
-    assert_eq!(again.to_string(), "pairing session already used");
+    let burned = e.app.pairing_host_confirm(wrong).unwrap();
+    assert_eq!(burned.error.as_deref(), Some("too many wrong pairing codes"));
+    assert!(!burned.outbound.is_empty());
+    let mut consumed = pairing::load_consumed(e._cfg.path()).unwrap();
+    assert_eq!(
+        JoinerSession::from_qr(&qr, now, &mut consumed).unwrap_err(),
+        pairing::PairingError::Replay
+    );
 }
 
 #[test]
@@ -89,33 +103,28 @@ fn classic_token_file_is_refused_without_echoing_it() {
     let e = env();
     configure_sync(e._vault.path());
     std::fs::write(e._vault.path().join(".gitpass-sync-token"), "ghp_FAKE0123456789\n").unwrap();
-    let now = pairing::now_unix();
-    let joiner = JoinerSession::begin(now).unwrap();
-    let err = e.app.pairing_host_prepare(&joiner.offer()).unwrap_err();
+    let err = e.app.pairing_host_begin(&["127.0.0.1".into()], 27613).unwrap_err();
     assert_eq!(err.to_string(), "pairing payload field rejected");
     assert!(!err.to_string().contains("ghp_"));
 }
 
 #[test]
-fn lock_cancels_an_in_progress_host_so_the_offer_can_be_retried() {
+fn lock_cancels_an_in_progress_host_so_a_new_qr_can_start() {
     let e = env();
     configure_sync(e._vault.path());
-    let now = pairing::now_unix();
-    let joiner = JoinerSession::begin(now).unwrap();
-    let offer = joiner.offer();
-    e.app.pairing_host_prepare(&offer).unwrap();
+    e.app.pairing_host_begin(&["127.0.0.1".into()], 27614).unwrap();
     e.app.lock();
-    let locked = e.app.pairing_host_release("000000").unwrap_err();
+    let locked = e.app.pairing_host_confirm("000000").unwrap_err();
     assert_eq!(locked.to_string(), "vault is locked");
     assert!(!locked.to_string().contains(TOKEN));
     e.app
         .unlock(&e._vault.path().display().to_string(), "correct horse", Some(&e.sk))
         .unwrap();
-    let again = e.app.pairing_host_prepare(&offer).unwrap();
-    assert!(again.announce.starts_with("gitpass-pair:1:announce:"));
+    let again = e.app.pairing_host_begin(&["127.0.0.1".into()], 27615).unwrap();
+    assert!(again.qr.starts_with("gitpass-pair:2:qr:"));
     e.app.pairing_host_cancel().unwrap();
     assert_eq!(
-        e.app.pairing_host_release("000000").unwrap_err().to_string(),
+        e.app.pairing_host_confirm("000000").unwrap_err().to_string(),
         "no pairing in progress"
     );
 }

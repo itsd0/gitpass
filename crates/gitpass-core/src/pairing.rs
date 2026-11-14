@@ -1,57 +1,84 @@
-//! QR device pairing (phase 4 of cross-platform sync).
+//! Device pairing v2 (#491). The desktop shows one QR. Only the phone scans it.
+//! The two devices then speak over a caller-provided byte stream (a LAN TCP
+//! connection; this module does not open sockets). The phone shows a 6-digit
+//! code. The person types it on the desktop. The desktop compares it in
+//! constant time and only then sends the encrypted grant.
 //!
-//! The new device needs a sync token and the account Secret Key. The master password is never
-//! part of this protocol: the person types it on the new device. There is no gitpass server and
-//! the new device cannot read the git remote until it has the token, so the ciphertext moves
-//! only inside QR frames (any other local copy of the same text is the same message).
+//! The master password is never an input. The QR contains no secrets.
 //!
-//! Direction: the joiner (new device) generates an ephemeral X25519 key and reveals only the
-//! public key (`offer`). The host (desktop) generates its own ephemeral key after that and shows
-//! `announce` (host public key + session id, no secrets). Only the phone displays the 6-digit
-//! code derived from the transcript. The person types that code on the desktop. The desktop API
-//! does not return its own code: a screen that confirms a code it just computed is not a check.
-//! `grant` (the ciphertext) is released only after the typed code matches, and the joiner decrypts
-//! only after the typed code matches. A photographed grant is unreadable without the joiner's
-//! ephemeral private key, which never leaves the process and is wiped on success.
+//! # QR (desktop → phone)
 //!
-//! UI for #458: show `announce` as the desktop QR and the joiner's code on the phone only.
-//! Three wrong codes end the session. The sync token must be a fine-grained GitHub PAT.
+//! `gitpass-pair:2:qr:<sid>.<exp>.<port>.<addrs>.<host_pub>`
 //!
-//! Frames, all ASCII, one line:
-//! - `gitpass-pair:1:offer:<sid>.<joiner_pub>.<exp>`
-//! - `gitpass-pair:1:announce:<sid>.<joiner_pub>.<host_pub>.<exp>`
-//! - `gitpass-pair:1:grant:<sid>.<joiner_pub>.<host_pub>.<exp>.<envelope>`
+//! `<sid>` and `<host_pub>` are unpadded URL-safe base64. `<exp>` is the
+//! absolute expiry (Unix seconds), two minutes after the desktop starts.
+//! `<port>` is the TCP port. `<addrs>` is unpadded URL-safe base64 of a
+//! canonical JSON array of IP addresses (no names, no ports). Version 1
+//! frames are rejected.
 //!
-//! `<exp>` is the absolute expiry (Unix seconds), two minutes after the offer is created.
-//! Session ids are single-use: callers persist [`ConsumedPairings`] (public ids and expiries
-//! only) and reject a repeat. Device registration is not done here. After the person types the
-//! master password, a normal unlock with device registration (`Session::unlock_device`) adds the
-//! new device to `devices.enc`.
+//! # Commitment
+//!
+//! An active LAN peer can swap the phone's key. The exchange removes the
+//! offline grind that a 6-digit code would otherwise allow:
+//!
+//! 1. The phone sends `SHA-256(phone_pub || nonce_p)` and does not reveal
+//!    either value yet.
+//! 2. The desktop then reveals a fresh `nonce_d` and repeats its public key.
+//! 3. The phone opens the commitment. A different key does not match the hash.
+//! 4. Both sides derive the code from the full transcript. The desktop typed
+//!    check therefore gets one guess per session (at most 1 in 10^6).
+//!
+//! # Transcript and keys
+//!
+//! The transcript is version, session id, expiry, port, the address JSON,
+//! both public keys, the commitment and both nonces. HKDF-SHA256 uses the
+//! X25519 shared secret as input, `SHA-256(transcript)` as salt, and the
+//! distinct info strings `gitpass/pair/v2/aead` and `gitpass/pair/v2/sas`.
+//! The grant is the vault's XChaCha20-Poly1305 envelope with
+//! `gitpass/pair/v2 || salt` as additional data.
+//!
+//! # Frames
+//!
+//! A frame is `u32be` length (1..=4096, counting the type byte), one type
+//! byte, then the body. Types: commit (1), reveal (2), open (3), ready (4),
+//! grant (5), fail (6). A declared length above 4096 is rejected before the
+//! body is buffered. `finish` rejects a leftover partial frame.
+//!
+//! The desktop API does not return the code. Three wrong codes end the
+//! session. Session ids are single-use via [`ConsumedPairings`].
+//!
+//! Device registration is not done here. After the person types the master
+//! password, `Session::unlock_device` adds the phone to `devices.enc`.
 
-use crate::crypto::{hkdf32, open, random_bytes, seal_with_nonce, Key32, SecretKey};
+use crate::crypto::{hkdf32, open, random_bytes, seal_with_nonce, Envelope, Key32, SecretKey};
 use crate::device;
 use crate::fsutil;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD as B64U, Engine};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
+use std::net::IpAddr;
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 use x25519_dalek::{PublicKey, StaticSecret};
 use zeroize::{Zeroize, Zeroizing};
 
-/// Protocol version carried in every frame and inside the sealed payload.
-pub const PAIRING_VERSION: u32 = 1;
-/// How long an offer stays valid.
+/// Protocol version carried in the QR, the transcript and the sealed payload.
+pub const PAIRING_VERSION: u32 = 2;
+/// How long a session stays valid.
 pub const PAIRING_TTL_SECS: i64 = 120;
-/// Host clock may be this far behind the joiner when checking `exp`.
+/// Peer clock may be this far ahead when checking `exp`.
 pub const PAIRING_CLOCK_SKEW_SECS: i64 = 60;
 /// Local replay record. Git-ignored. Contains no secrets.
 pub const CONSUMED_FILE: &str = ".gitpass-pairing-consumed.json";
 
 const MAX_MESSAGE_BYTES: usize = 4096;
+const MAX_FRAME: usize = 4096;
+const MAX_INBOX: usize = 16 * 1024;
 const RETAIN_AFTER_EXP_SECS: i64 = 24 * 60 * 60;
 const MAX_CONSUMED_ENTRIES: usize = 1024;
 const MAX_CONSUMED_BYTES: usize = 256 * 1024;
+const MAX_ADDRS: usize = 8;
 const PAYLOAD_KEYS: [&str; 8] = [
     "v",
     "account_id",
@@ -62,10 +89,22 @@ const PAYLOAD_KEYS: [&str; 8] = [
     "sync_token",
     "token_kind",
 ];
-/// Only value accepted for `token_kind`. A later token type needs a new payload version.
+/// Only value accepted for `token_kind`.
 pub const TOKEN_KIND_FINE_GRAINED_PAT: &str = "fine_grained_pat";
-/// Wrong codes before the session is wiped and must be marked used.
 const MAX_WRONG_CODES: u8 = 3;
+
+const T_COMMIT: u8 = 1;
+const T_REVEAL: u8 = 2;
+const T_OPEN: u8 = 3;
+const T_READY: u8 = 4;
+const T_GRANT: u8 = 5;
+const T_FAIL: u8 = 6;
+const FAIL_REFUSED: u8 = 1;
+const FAIL_EXPIRED: u8 = 2;
+
+const COMMIT_LEN: usize = 16 + 8 + 32;
+const REVEAL_LEN: usize = 16 + 32 + 32;
+const OPEN_LEN: usize = 32 + 32;
 
 /// Why a pairing step was refused. Display text never includes secrets, paths or message bytes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +121,11 @@ pub enum PairingError {
     NotReady,
     /// Three wrong codes. The session is wiped and must be marked used.
     Exhausted,
+    Oversized,
+    Truncated,
+    WrongSession,
+    /// The peer sent a fail frame, or the session can no longer continue.
+    Failed,
 }
 
 impl PairingError {
@@ -98,6 +142,18 @@ impl PairingError {
             Self::State => "pairing state unavailable",
             Self::NotReady => "no pairing in progress",
             Self::Exhausted => "too many wrong pairing codes",
+            Self::Oversized => "pairing message too large",
+            Self::Truncated => "pairing message truncated",
+            Self::WrongSession => "pairing session does not match",
+            Self::Failed => "pairing failed",
+        }
+    }
+
+    fn fail_byte(self) -> u8 {
+        if self == Self::Expired {
+            FAIL_EXPIRED
+        } else {
+            FAIL_REFUSED
         }
     }
 }
@@ -109,12 +165,12 @@ impl std::fmt::Display for PairingError {
 }
 impl std::error::Error for PairingError {}
 
-/// Which frame a scanned string is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum PairingKind {
-    Offer,
-    Announce,
-    Grant,
+/// Bytes to write, and a fixed error when the step did not succeed.
+/// `outbound` is still meaningful on failure: it is the fail frame, when one was queued.
+#[derive(Debug)]
+pub struct PairingStep {
+    pub outbound: Vec<u8>,
+    pub error: Option<PairingError>,
 }
 
 /// Unix time in seconds. `0` if the clock is before the epoch.
@@ -160,6 +216,12 @@ impl PairingRequest {
     }
 }
 
+impl Drop for PairingRequest {
+    fn drop(&mut self) {
+        self.secret_key.0.zeroize();
+    }
+}
+
 impl std::fmt::Debug for PairingRequest {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("PairingRequest")
@@ -181,6 +243,12 @@ pub struct PairingPayload {
     pub branch: String,
     pub secret_key: SecretKey,
     pub sync_token: Zeroizing<String>,
+}
+
+impl Drop for PairingPayload {
+    fn drop(&mut self) {
+        self.secret_key.0.zeroize();
+    }
 }
 
 impl std::fmt::Debug for PairingPayload {
@@ -243,10 +311,6 @@ impl ConsumedPairings {
         self.prune(now);
         self.accepted.contains_key(sid) || self.released.contains_key(sid)
     }
-    pub fn is_released(&mut self, sid: &str, now: i64) -> bool {
-        self.prune(now);
-        self.released.contains_key(sid)
-    }
     pub fn mark_accepted(&mut self, sid: &str, exp: i64, now: i64) -> Result<(), PairingError> {
         self.prune(now);
         if self.accepted.contains_key(sid) || self.released.contains_key(sid) {
@@ -305,183 +369,83 @@ pub fn save_consumed(dir: &Path, consumed: &ConsumedPairings) -> Result<(), Pair
     fsutil::atomic_write(&dir.join(CONSUMED_FILE), &bytes).map_err(|_| PairingError::State)
 }
 
-/// New device. The private key stays here until [`JoinerSession::consume`].
-pub struct JoinerSession {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Phase {
+    WaitCommit,
+    WaitReveal,
+    WaitOpen,
+    WaitReady,
+    WaitCode,
+    ShowCode,
+    Done,
+    Dead,
+}
+
+impl Phase {
+    fn name(self) -> &'static str {
+        match self {
+            Self::WaitCommit | Self::WaitReveal | Self::WaitOpen | Self::WaitReady => "wait",
+            Self::WaitCode | Self::ShowCode => "code",
+            Self::Done => "done",
+            Self::Dead => "failed",
+        }
+    }
+}
+
+struct Transcript {
+    sid: [u8; 16],
+    exp: i64,
+    port: u16,
+    addrs_json: String,
+    host_pub: [u8; 32],
+    commitment: [u8; 32],
+    nonce_d: [u8; 32],
+    phone_pub: [u8; 32],
+    nonce_p: [u8; 32],
+}
+
+impl Transcript {
+    fn bytes(&self) -> Vec<u8> {
+        let aj = self.addrs_json.as_bytes();
+        let mut t = Vec::with_capacity(4 + 16 + 8 + 2 + 2 + aj.len() + 32 * 4);
+        t.extend_from_slice(&PAIRING_VERSION.to_be_bytes());
+        t.extend_from_slice(&self.sid);
+        t.extend_from_slice(&self.exp.to_be_bytes());
+        t.extend_from_slice(&self.port.to_be_bytes());
+        t.extend_from_slice(&(aj.len() as u16).to_be_bytes());
+        t.extend_from_slice(aj);
+        t.extend_from_slice(&self.host_pub);
+        t.extend_from_slice(&self.commitment);
+        t.extend_from_slice(&self.nonce_d);
+        t.extend_from_slice(&self.phone_pub);
+        t.extend_from_slice(&self.nonce_p);
+        t
+    }
+}
+
+/// Desktop side. The 6-digit code is never returned; [`HostSession::confirm`] only compares.
+pub struct HostSession {
     secret: Option<StaticSecret>,
     public: [u8; 32],
-    session_id: [u8; 16],
+    sid: [u8; 16],
     sid_b64: String,
     exp: i64,
-    announced_host: Option<[u8; 32]>,
-    wrong_codes: u8,
-}
-
-impl std::fmt::Debug for JoinerSession {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("JoinerSession")
-            .field("session_id", &self.sid_b64)
-            .field("exp", &self.exp)
-            .finish_non_exhaustive()
-    }
-}
-
-impl JoinerSession {
-    pub fn begin(now: i64) -> Result<Self, PairingError> {
-        let exp = expiry_from(now)?;
-        Self::from_parts(random_bytes(), random_bytes(), exp)
-    }
-    fn from_parts(
-        secret_bytes: [u8; 32],
-        session_id: [u8; 16],
-        exp: i64,
-    ) -> Result<Self, PairingError> {
-        let secret = StaticSecret::from(secret_bytes);
-        let public = PublicKey::from(&secret).to_bytes();
-        if public == [0u8; 32] {
-            return Err(PairingError::LowOrder);
-        }
-        Ok(Self {
-            secret: Some(secret),
-            public,
-            sid_b64: b64(&session_id),
-            session_id,
-            exp,
-            announced_host: None,
-            wrong_codes: 0,
-        })
-    }
-    pub fn offer(&self) -> String {
-        format!(
-            "gitpass-pair:{PAIRING_VERSION}:offer:{}.{}.{}",
-            self.sid_b64,
-            b64(&self.public),
-            self.exp
-        )
-    }
-    pub fn session_id(&self) -> &str {
-        &self.sid_b64
-    }
-    pub fn expires_at(&self) -> i64 {
-        self.exp
-    }
-    /// Read the host's announce frame and return the 6-digit code the phone shows.
-    /// Does not decrypt anything. The desktop must not display this value.
-    pub fn read_announce(&mut self, announce: &str, now: i64) -> Result<String, PairingError> {
-        if self.secret.is_none() {
-            return Err(PairingError::Replay);
-        }
-        if now >= self.exp {
-            self.consume();
-            return Err(PairingError::Expired);
-        }
-        let a = parse_announce(announce)?;
-        if a.sid != self.session_id || a.joiner_pub != self.public || a.exp != self.exp {
-            return Err(PairingError::BadMessage);
-        }
-        let secret = self.secret.as_ref().ok_or(PairingError::Replay)?;
-        let mut shared = dh(secret, &a.host_pub)?;
-        let code = sas_code(
-            &shared,
-            &self.public,
-            &a.host_pub,
-            &self.session_id,
-            self.exp,
-        );
-        shared.zeroize();
-        self.announced_host = Some(a.host_pub);
-        Ok(code)
-    }
-    /// Decrypt `grant` when `code` matches the announce. Does not mark the session used; call
-    /// [`ConsumedPairings::mark_released`] and [`JoinerSession::consume`] after that record is saved.
-    /// The third wrong code wipes the ephemeral key and returns [`PairingError::Exhausted`].
-    pub fn open(
-        &mut self,
-        grant: &str,
-        code: &str,
-        now: i64,
-        consumed: &mut ConsumedPairings,
-    ) -> Result<PairingPayload, PairingError> {
-        if self.secret.is_none() {
-            return Err(PairingError::Replay);
-        }
-        if now >= self.exp {
-            self.consume();
-            return Err(PairingError::Expired);
-        }
-        let host_pub = self.announced_host.ok_or(PairingError::BadMessage)?;
-        let g = parse_grant(grant)?;
-        if g.sid != self.session_id
-            || g.joiner_pub != self.public
-            || g.host_pub != host_pub
-            || g.exp != self.exp
-        {
-            return Err(PairingError::BadMessage);
-        }
-        if consumed.is_released(&self.sid_b64, now) {
-            return Err(PairingError::Replay);
-        }
-        let entered = match normalize_code(code) {
-            Ok(c) => c.to_string(),
-            Err(_) => return Err(self.note_wrong_code()),
-        };
-        let opened = {
-            let secret = self.secret.as_ref().ok_or(PairingError::Replay)?;
-            let mut shared = dh(secret, &g.host_pub)?;
-            let expect = sas_code(
-                &shared,
-                &self.public,
-                &g.host_pub,
-                &self.session_id,
-                self.exp,
-            );
-            if !ct_eq(expect.as_bytes(), entered.as_bytes()) {
-                shared.zeroize();
-                None
-            } else {
-                let aead = derive_aead(
-                    &shared,
-                    &self.public,
-                    &g.host_pub,
-                    &self.session_id,
-                    self.exp,
-                );
-                shared.zeroize();
-                let aad = transcript_aad(&self.session_id, &self.public, &g.host_pub, self.exp);
-                Some(open_grant_blob(&aead, &g.envelope_b64, &aad)?)
-            }
-        };
-        let Some(pt) = opened else {
-            return Err(self.note_wrong_code());
-        };
-        decode_payload(&pt)
-    }
-    fn note_wrong_code(&mut self) -> PairingError {
-        self.wrong_codes = self.wrong_codes.saturating_add(1);
-        if self.wrong_codes >= MAX_WRONG_CODES {
-            self.consume();
-            PairingError::Exhausted
-        } else {
-            PairingError::BadCode
-        }
-    }
-    pub fn consume(&mut self) {
-        self.secret = None;
-        self.announced_host = None;
-    }
-}
-
-/// Desktop side. Holds the payload in memory until [`HostSession::wipe`].
-pub struct HostSession {
-    aead: Option<Key32>,
-    code: String,
-    joiner_pub: [u8; 32],
-    host_pub: [u8; 32],
-    session_id: [u8; 16],
-    sid_b64: String,
-    exp: i64,
+    port: u16,
+    addresses: Vec<String>,
+    addrs_json: String,
+    qr: String,
     request: Option<PairingRequest>,
-    cached_grant: Option<String>,
+    commitment: Option<[u8; 32]>,
+    nonce_d: Option<[u8; 32]>,
+    phone_pub: Option<[u8; 32]>,
+    nonce_p: Option<[u8; 32]>,
+    reveal_nonce: Option<[u8; 32]>,
+    grant_nonce: Option<[u8; 24]>,
+    cached_grant: Option<Vec<u8>>,
     wrong_codes: u8,
+    phase: Phase,
+    inbox: Vec<u8>,
+    outbox: Vec<u8>,
 }
 
 impl std::fmt::Debug for HostSession {
@@ -489,167 +453,703 @@ impl std::fmt::Debug for HostSession {
         f.debug_struct("HostSession")
             .field("session_id", &self.sid_b64)
             .field("exp", &self.exp)
-            .field("has_payload", &self.request.is_some())
+            .field("port", &self.port)
+            .field("phase", &self.phase.name())
             .finish_non_exhaustive()
     }
 }
 
-impl HostSession {
-    pub fn accept(
-        offer: &str,
-        request: PairingRequest,
-        now: i64,
-        consumed: &mut ConsumedPairings,
-    ) -> Result<Self, PairingError> {
-        Self::accept_with(offer, request, now, consumed, None)
+impl Drop for HostSession {
+    fn drop(&mut self) {
+        self.wipe();
     }
-    fn accept_with(
-        offer: &str,
+}
+
+impl HostSession {
+    pub fn begin(
+        addresses: &[String],
+        port: u16,
         request: PairingRequest,
         now: i64,
         consumed: &mut ConsumedPairings,
-        host_secret_bytes: Option<[u8; 32]>,
-    ) -> Result<Self, PairingError> {
+    ) -> Result<(Self, String), PairingError> {
+        Self::begin_parts(addresses, port, request, now, consumed, None, None, None, None)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn begin_parts(
+        addresses: &[String],
+        port: u16,
+        request: PairingRequest,
+        now: i64,
+        consumed: &mut ConsumedPairings,
+        secret_bytes: Option<[u8; 32]>,
+        sid_bytes: Option<[u8; 16]>,
+        reveal_nonce: Option<[u8; 32]>,
+        grant_nonce: Option<[u8; 24]>,
+    ) -> Result<(Self, String), PairingError> {
         if now <= 0 {
             return Err(PairingError::BadMessage);
         }
-        let offer = parse_offer(offer)?;
-        if consumed.is_used(&offer.sid_b64, now) {
+        check_port(port)?;
+        let addresses = canonical_addresses(addresses)?;
+        let addrs_json = serde_json::to_string(&addresses).map_err(|_| PairingError::BadMessage)?;
+        let exp = expiry_from(now)?;
+        let secret_bytes = secret_bytes.unwrap_or_else(random_bytes);
+        let secret = StaticSecret::from(secret_bytes);
+        let public = PublicKey::from(&secret).to_bytes();
+        if public == [0u8; 32] {
+            return Err(PairingError::LowOrder);
+        }
+        let sid = sid_bytes.unwrap_or_else(random_bytes);
+        let sid_b64 = b64(&sid);
+        if consumed.is_used(&sid_b64, now) {
             return Err(PairingError::Replay);
         }
-        check_window(now, offer.exp)?;
-        let host_secret = StaticSecret::from(host_secret_bytes.unwrap_or_else(random_bytes));
-        let host_pub = PublicKey::from(&host_secret).to_bytes();
-        let mut shared = dh(&host_secret, &offer.joiner_pub)?;
-        drop(host_secret);
-        let aead = derive_aead(&shared, &offer.joiner_pub, &host_pub, &offer.sid, offer.exp);
-        let code = sas_code(&shared, &offer.joiner_pub, &host_pub, &offer.sid, offer.exp);
-        shared.zeroize();
-        consumed.mark_accepted(&offer.sid_b64, offer.exp, now)?;
-        Ok(Self {
-            aead: Some(aead),
-            code,
-            joiner_pub: offer.joiner_pub,
-            host_pub,
-            session_id: offer.sid,
-            sid_b64: offer.sid_b64,
-            exp: offer.exp,
+        let qr = build_qr(&sid, exp, port, &addrs_json, &public)?;
+        consumed.mark_accepted(&sid_b64, exp, now)?;
+        let session = Self {
+            secret: Some(secret),
+            public,
+            sid,
+            sid_b64,
+            exp,
+            port,
+            addresses,
+            addrs_json,
+            qr: qr.clone(),
             request: Some(request),
+            commitment: None,
+            nonce_d: None,
+            phone_pub: None,
+            nonce_p: None,
+            reveal_nonce,
+            grant_nonce,
             cached_grant: None,
             wrong_codes: 0,
-        })
+            phase: Phase::WaitCommit,
+            inbox: Vec::new(),
+            outbox: Vec::new(),
+        };
+        Ok((session, qr))
     }
-    /// The code the phone will show after it reads [`HostSession::announce`].
-    /// Not part of the desktop API: returning it would let a screen confirm itself.
-    fn code(&self) -> &str {
-        &self.code
-    }
+
     pub fn session_id(&self) -> &str {
         &self.sid_b64
     }
     pub fn expires_at(&self) -> i64 {
         self.exp
     }
-    pub fn announce(&self) -> String {
-        format!(
-            "gitpass-pair:{PAIRING_VERSION}:announce:{}.{}.{}.{}",
-            self.sid_b64,
-            b64(&self.joiner_pub),
-            b64(&self.host_pub),
-            self.exp
-        )
+    pub fn port(&self) -> u16 {
+        self.port
     }
-    /// Build the grant when `code` matches. The same ciphertext is returned on a retry so a failed
-    /// save of the replay record does not mint a second grant. Call [`HostSession::wipe`] after the
-    /// record is saved.
-    pub fn grant_if_code_matches(&mut self, code: &str, now: i64) -> Result<String, PairingError> {
-        self.grant_with_nonce(code, now, None)
+    pub fn addresses(&self) -> &[String] {
+        &self.addresses
     }
-    fn grant_with_nonce(
-        &mut self,
-        code: &str,
-        now: i64,
-        nonce: Option<[u8; 24]>,
-    ) -> Result<String, PairingError> {
-        if self.aead.is_none() || self.request.is_none() {
-            return Err(PairingError::Replay);
+    pub fn qr(&self) -> &str {
+        &self.qr
+    }
+    pub fn phase(&self) -> &'static str {
+        self.phase.name()
+    }
+    /// Still willing to take the first peer frame. False after success, failure or expiry.
+    pub fn accepts_peer(&self, now: i64) -> bool {
+        self.phase == Phase::WaitCommit && now < self.exp && self.secret.is_some()
+    }
+
+    pub fn push(&mut self, chunk: &[u8], now: i64) -> PairingStep {
+        if self.phase == Phase::Dead {
+            return err_step(PairingError::Replay);
+        }
+        if self.phase == Phase::Done {
+            return err_step(PairingError::Replay);
         }
         if now >= self.exp {
-            self.wipe();
-            return Err(PairingError::Expired);
+            return self.fail(PairingError::Expired);
+        }
+        if let Err(e) = self.absorb(chunk) {
+            return self.fail(e);
+        }
+        let mut outbound = Vec::new();
+        loop {
+            match next_frame(&mut self.inbox) {
+                Ok(None) => break,
+                Ok(Some((ty, body))) => match self.on_frame(ty, &body) {
+                    Ok(()) => outbound.append(&mut self.drain()),
+                    Err(e) => {
+                        outbound.append(&mut self.drain());
+                        let failed = self.fail(e);
+                        outbound.extend_from_slice(&failed.outbound);
+                        return PairingStep {
+                            outbound,
+                            error: Some(e),
+                        };
+                    }
+                },
+                Err(e) => return self.fail(e),
+            }
+        }
+        outbound.append(&mut self.drain());
+        PairingStep {
+            outbound,
+            error: None,
+        }
+    }
+
+    /// Compare `code` with the phone's code. Does not return the expected code.
+    /// A matching call returns the grant frame. The same frame is returned again
+    /// until [`HostSession::wipe`], so a failed save does not mint a second nonce.
+    pub fn confirm(&mut self, code: &str, now: i64) -> PairingStep {
+        if self.phase == Phase::Done {
+            if let Some(frame) = &self.cached_grant {
+                return PairingStep {
+                    outbound: frame.clone(),
+                    error: None,
+                };
+            }
+            return err_step(PairingError::Replay);
+        }
+        if self.phase != Phase::WaitCode || self.secret.is_none() {
+            return err_step(PairingError::NotReady);
+        }
+        if now >= self.exp {
+            return self.fail(PairingError::Expired);
         }
         let entered = match normalize_code(code) {
-            Ok(c) => c,
+            Ok(c) => c.to_string(),
             Err(_) => return self.reject_code(),
         };
-        if !ct_eq(self.code.as_bytes(), entered.as_bytes()) {
+        let (aead, mut expected) = match self.derive() {
+            Ok(v) => v,
+            Err(e) => return self.fail(e),
+        };
+        let matches = ct_eq(expected.as_bytes(), entered.as_bytes());
+        expected.zeroize();
+        if !matches {
             return self.reject_code();
         }
         if self.cached_grant.is_none() {
-            let nonce = nonce.unwrap_or_else(random_bytes);
-            let req = self.request.as_ref().ok_or(PairingError::Replay)?;
-            let pt = payload_bytes(req)?;
-            let aead = self.aead.as_ref().ok_or(PairingError::Replay)?;
-            let aad = transcript_aad(&self.session_id, &self.joiner_pub, &self.host_pub, self.exp);
-            let blob = seal_payload(aead, &pt, &aad, nonce)?;
-            self.cached_grant = Some(format!(
-                "gitpass-pair:{PAIRING_VERSION}:grant:{}.{}.{}.{}.{}",
-                self.sid_b64,
-                b64(&self.joiner_pub),
-                b64(&self.host_pub),
-                self.exp,
-                blob
-            ));
+            let nonce = self.grant_nonce.take().unwrap_or_else(random_bytes);
+            let req = match self.request.as_ref() {
+                Some(r) => r,
+                None => return self.fail(PairingError::Replay),
+            };
+            let pt = match payload_bytes(req) {
+                Ok(p) => p,
+                Err(e) => return self.fail(e),
+            };
+            let salt = transcript_hash(&self.transcript_bytes());
+            let frame = match seal_frame(&aead, &pt, &aad(&salt), nonce) {
+                Ok(f) => f,
+                Err(e) => {
+                    let mut aead = aead;
+                    aead.0.zeroize();
+                    return self.fail(e);
+                }
+            };
+            let mut aead = aead;
+            aead.0.zeroize();
+            self.cached_grant = Some(frame);
         }
-        self.cached_grant.clone().ok_or(PairingError::Replay)
-    }
-    fn reject_code(&mut self) -> Result<String, PairingError> {
-        self.wrong_codes = self.wrong_codes.saturating_add(1);
-        if self.wrong_codes >= MAX_WRONG_CODES {
-            self.wipe();
-            Err(PairingError::Exhausted)
-        } else {
-            Err(PairingError::BadCode)
-        }
-    }
-    pub fn wipe(&mut self) {
-        self.aead = None;
+        // The grant is cached. Drop the private key now; a retry resends the cache.
+        self.secret = None;
         self.request = None;
+        self.phase = Phase::Done;
+        let frame = self.cached_grant.clone().unwrap_or_default();
+        PairingStep {
+            outbound: frame,
+            error: None,
+        }
+    }
+
+    pub fn wipe(&mut self) {
+        self.secret = None;
+        self.request = None;
+        self.commitment = None;
+        self.nonce_d = None;
+        self.phone_pub = None;
+        self.nonce_p = None;
+        self.reveal_nonce = None;
         if let Some(mut g) = self.cached_grant.take() {
             g.zeroize();
         }
+        self.inbox.zeroize();
+        self.outbox.zeroize();
     }
-    #[cfg(test)]
-    fn seal_raw(&self, plaintext: &[u8], nonce: [u8; 24]) -> Result<String, PairingError> {
-        let aead = self.aead.as_ref().ok_or(PairingError::Replay)?;
-        let aad = transcript_aad(&self.session_id, &self.joiner_pub, &self.host_pub, self.exp);
-        let blob = seal_payload(aead, plaintext, &aad, nonce)?;
-        Ok(format!(
-            "gitpass-pair:{PAIRING_VERSION}:grant:{}.{}.{}.{}.{}",
-            self.sid_b64,
-            b64(&self.joiner_pub),
-            b64(&self.host_pub),
-            self.exp,
-            blob
-        ))
+
+    /// A finished stream with an incomplete header or body is a truncated frame.
+    pub fn finish(&mut self) -> Result<(), PairingError> {
+        if self.inbox.is_empty() {
+            Ok(())
+        } else {
+            self.inbox.clear();
+            self.wipe();
+            self.phase = Phase::Dead;
+            Err(PairingError::Truncated)
+        }
+    }
+
+    fn on_frame(&mut self, ty: u8, body: &[u8]) -> Result<(), PairingError> {
+        match (self.phase, ty) {
+            (Phase::WaitCommit, T_COMMIT) => self.on_commit(body),
+            (Phase::WaitOpen, T_OPEN) => self.on_open(body),
+            _ => Err(PairingError::BadMessage),
+        }
+    }
+
+    fn on_commit(&mut self, body: &[u8]) -> Result<(), PairingError> {
+        if body.len() != COMMIT_LEN {
+            return Err(PairingError::BadMessage);
+        }
+        let mut sid = [0u8; 16];
+        sid.copy_from_slice(&body[..16]);
+        if sid != self.sid {
+            return Err(PairingError::WrongSession);
+        }
+        let exp = i64::from_be_bytes(copy8(&body[16..24]));
+        if exp != self.exp {
+            return Err(PairingError::BadMessage);
+        }
+        let mut commitment = [0u8; 32];
+        commitment.copy_from_slice(&body[24..56]);
+        self.commitment = Some(commitment);
+        let nonce_d = self.reveal_nonce.take().unwrap_or_else(random_bytes);
+        self.nonce_d = Some(nonce_d);
+        let mut reveal = Vec::with_capacity(REVEAL_LEN);
+        reveal.extend_from_slice(&self.sid);
+        reveal.extend_from_slice(&nonce_d);
+        reveal.extend_from_slice(&self.public);
+        self.enqueue(T_REVEAL, &reveal)?;
+        self.phase = Phase::WaitOpen;
+        Ok(())
+    }
+
+    fn on_open(&mut self, body: &[u8]) -> Result<(), PairingError> {
+        if body.len() != OPEN_LEN {
+            return Err(PairingError::BadMessage);
+        }
+        let mut phone_pub = [0u8; 32];
+        let mut nonce_p = [0u8; 32];
+        phone_pub.copy_from_slice(&body[..32]);
+        nonce_p.copy_from_slice(&body[32..64]);
+        let commitment = self.commitment.ok_or(PairingError::NotReady)?;
+        if sha256_2(&phone_pub, &nonce_p) != commitment {
+            return Err(PairingError::BadMessage);
+        }
+        let secret = self.secret.as_ref().ok_or(PairingError::Replay)?;
+        let mut shared = dh(secret, &phone_pub)?;
+        shared.zeroize();
+        self.phone_pub = Some(phone_pub);
+        self.nonce_p = Some(nonce_p);
+        self.enqueue(T_READY, &[])?;
+        self.phase = Phase::WaitCode;
+        Ok(())
+    }
+
+    fn reject_code(&mut self) -> PairingStep {
+        self.wrong_codes = self.wrong_codes.saturating_add(1);
+        if self.wrong_codes >= MAX_WRONG_CODES {
+            self.fail(PairingError::Exhausted)
+        } else {
+            err_step(PairingError::BadCode)
+        }
+    }
+
+    fn derive(&self) -> Result<(Key32, String), PairingError> {
+        let secret = self.secret.as_ref().ok_or(PairingError::Replay)?;
+        let phone_pub = self.phone_pub.ok_or(PairingError::NotReady)?;
+        let mut shared = dh(secret, &phone_pub)?;
+        let salt = transcript_hash(&self.transcript_bytes());
+        let aead = hkdf32(&shared, Some(&salt), b"gitpass/pair/v2/aead");
+        let mut sas = hkdf32(&shared, Some(&salt), b"gitpass/pair/v2/sas");
+        shared.zeroize();
+        let code = code_from_key(&sas);
+        sas.0.zeroize();
+        Ok((aead, code))
+    }
+
+    fn transcript_bytes(&self) -> Vec<u8> {
+        Transcript {
+            sid: self.sid,
+            exp: self.exp,
+            port: self.port,
+            addrs_json: self.addrs_json.clone(),
+            host_pub: self.public,
+            commitment: self.commitment.unwrap_or([0u8; 32]),
+            nonce_d: self.nonce_d.unwrap_or([0u8; 32]),
+            phone_pub: self.phone_pub.unwrap_or([0u8; 32]),
+            nonce_p: self.nonce_p.unwrap_or([0u8; 32]),
+        }
+        .bytes()
+    }
+
+    fn absorb(&mut self, chunk: &[u8]) -> Result<(), PairingError> {
+        if chunk.len() > MAX_INBOX || self.inbox.len() + chunk.len() > MAX_INBOX {
+            self.inbox.clear();
+            return Err(PairingError::Oversized);
+        }
+        self.inbox.extend_from_slice(chunk);
+        Ok(())
+    }
+
+    fn enqueue(&mut self, ty: u8, body: &[u8]) -> Result<(), PairingError> {
+        self.outbox.extend_from_slice(&encode(ty, body)?);
+        Ok(())
+    }
+
+    fn drain(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.outbox)
+    }
+
+    fn fail(&mut self, e: PairingError) -> PairingStep {
+        let _ = self.enqueue(T_FAIL, &[e.fail_byte()]);
+        let outbound = self.drain();
+        self.wipe();
+        self.phase = Phase::Dead;
+        PairingStep {
+            outbound,
+            error: Some(e),
+        }
     }
 }
 
-/// `offer` / `announce` / `grant`, or an error if it is not a pairing frame.
-pub fn message_kind(message: &str) -> Result<PairingKind, PairingError> {
-    Ok(parse_framed(message)?.0)
+/// Phone side. [`JoinerSession::code`] is the string the phone shows.
+pub struct JoinerSession {
+    secret: Option<StaticSecret>,
+    public: [u8; 32],
+    nonce_p: [u8; 32],
+    commitment: [u8; 32],
+    sid: [u8; 16],
+    sid_b64: String,
+    exp: i64,
+    port: u16,
+    addresses: Vec<String>,
+    addrs_json: String,
+    host_pub: [u8; 32],
+    nonce_d: Option<[u8; 32]>,
+    code: Option<String>,
+    payload: Option<PairingPayload>,
+    phase: Phase,
+    inbox: Vec<u8>,
+    outbox: Vec<u8>,
 }
 
-/// Synthetic vector (fixed keys, fake token). For Kotlin/Swift tests via the bridge.
+impl std::fmt::Debug for JoinerSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("JoinerSession")
+            .field("session_id", &self.sid_b64)
+            .field("exp", &self.exp)
+            .field("port", &self.port)
+            .field("phase", &self.phase.name())
+            .finish_non_exhaustive()
+    }
+}
+
+impl Drop for JoinerSession {
+    fn drop(&mut self) {
+        self.wipe();
+    }
+}
+
+impl JoinerSession {
+    pub fn from_qr(
+        qr: &str,
+        now: i64,
+        consumed: &mut ConsumedPairings,
+    ) -> Result<Self, PairingError> {
+        Self::from_qr_parts(qr, now, consumed, None, None)
+    }
+
+    fn from_qr_parts(
+        qr: &str,
+        now: i64,
+        consumed: &mut ConsumedPairings,
+        secret_bytes: Option<[u8; 32]>,
+        nonce_p: Option<[u8; 32]>,
+    ) -> Result<Self, PairingError> {
+        if now <= 0 {
+            return Err(PairingError::BadMessage);
+        }
+        let parsed = parse_qr(qr)?;
+        check_window(now, parsed.exp)?;
+        if consumed.is_used(&parsed.sid_b64, now) {
+            return Err(PairingError::Replay);
+        }
+        let secret_bytes = secret_bytes.unwrap_or_else(random_bytes);
+        let secret = StaticSecret::from(secret_bytes);
+        let public = PublicKey::from(&secret).to_bytes();
+        if public == [0u8; 32] {
+            return Err(PairingError::LowOrder);
+        }
+        let nonce_p = nonce_p.unwrap_or_else(random_bytes);
+        let commitment = sha256_2(&public, &nonce_p);
+        let mut body = Vec::with_capacity(COMMIT_LEN);
+        body.extend_from_slice(&parsed.sid);
+        body.extend_from_slice(&parsed.exp.to_be_bytes());
+        body.extend_from_slice(&commitment);
+        let mut session = Self {
+            secret: Some(secret),
+            public,
+            nonce_p,
+            commitment,
+            sid: parsed.sid,
+            sid_b64: parsed.sid_b64,
+            exp: parsed.exp,
+            port: parsed.port,
+            addresses: parsed.addresses,
+            addrs_json: parsed.addrs_json,
+            host_pub: parsed.host_pub,
+            nonce_d: None,
+            code: None,
+            payload: None,
+            phase: Phase::WaitReveal,
+            inbox: Vec::new(),
+            outbox: Vec::new(),
+        };
+        session.enqueue(T_COMMIT, &body)?;
+        Ok(session)
+    }
+
+    pub fn session_id(&self) -> &str {
+        &self.sid_b64
+    }
+    pub fn expires_at(&self) -> i64 {
+        self.exp
+    }
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+    pub fn addresses(&self) -> &[String] {
+        &self.addresses
+    }
+    pub fn phase(&self) -> &'static str {
+        self.phase.name()
+    }
+
+    /// The 6-digit code, only after the desktop has accepted the commitment.
+    pub fn code(&self) -> Result<&str, PairingError> {
+        self.code.as_deref().ok_or(PairingError::NotReady)
+    }
+
+    pub fn push(&mut self, chunk: &[u8], now: i64) -> PairingStep {
+        if self.phase == Phase::Dead {
+            return err_step(PairingError::Replay);
+        }
+        if self.phase == Phase::Done {
+            return err_step(PairingError::Replay);
+        }
+        if now >= self.exp {
+            self.wipe();
+            self.phase = Phase::Dead;
+            return err_step(PairingError::Expired);
+        }
+        if let Err(e) = self.absorb(chunk) {
+            self.wipe();
+            self.phase = Phase::Dead;
+            return err_step(e);
+        }
+        let mut outbound = Vec::new();
+        loop {
+            match next_frame(&mut self.inbox) {
+                Ok(None) => break,
+                Ok(Some((ty, body))) => match self.on_frame(ty, &body) {
+                    Ok(()) => outbound.append(&mut self.drain()),
+                    Err(e) => {
+                        self.wipe();
+                        self.phase = Phase::Dead;
+                        return PairingStep {
+                            outbound,
+                            error: Some(e),
+                        };
+                    }
+                },
+                Err(e) => {
+                    self.wipe();
+                    self.phase = Phase::Dead;
+                    return err_step(e);
+                }
+            }
+        }
+        outbound.append(&mut self.drain());
+        PairingStep {
+            outbound,
+            error: None,
+        }
+    }
+
+    pub fn take_payload(&mut self) -> Result<PairingPayload, PairingError> {
+        self.payload.take().ok_or(PairingError::NotReady)
+    }
+
+    pub fn finish(&mut self) -> Result<(), PairingError> {
+        if self.inbox.is_empty() {
+            Ok(())
+        } else {
+            self.inbox.clear();
+            self.wipe();
+            self.phase = Phase::Dead;
+            Err(PairingError::Truncated)
+        }
+    }
+
+    pub fn wipe(&mut self) {
+        self.secret = None;
+        self.nonce_p.zeroize();
+        self.nonce_d = None;
+        if let Some(mut c) = self.code.take() {
+            c.zeroize();
+        }
+        self.payload = None;
+        self.inbox.zeroize();
+        self.outbox.zeroize();
+    }
+
+    fn on_frame(&mut self, ty: u8, body: &[u8]) -> Result<(), PairingError> {
+        if ty == T_FAIL {
+            return self.on_fail(body);
+        }
+        match (self.phase, ty) {
+            (Phase::WaitReveal, T_REVEAL) => self.on_reveal(body),
+            (Phase::WaitReady, T_READY) => self.on_ready(body),
+            (Phase::ShowCode, T_GRANT) => self.on_grant(body),
+            _ => Err(PairingError::BadMessage),
+        }
+    }
+
+    fn on_reveal(&mut self, body: &[u8]) -> Result<(), PairingError> {
+        if body.len() != REVEAL_LEN {
+            return Err(PairingError::BadMessage);
+        }
+        let mut sid = [0u8; 16];
+        sid.copy_from_slice(&body[..16]);
+        if sid != self.sid {
+            return Err(PairingError::WrongSession);
+        }
+        let mut nonce_d = [0u8; 32];
+        let mut host_pub = [0u8; 32];
+        nonce_d.copy_from_slice(&body[16..48]);
+        host_pub.copy_from_slice(&body[48..80]);
+        if host_pub != self.host_pub {
+            return Err(PairingError::BadMessage);
+        }
+        self.nonce_d = Some(nonce_d);
+        let mut open_body = Vec::with_capacity(OPEN_LEN);
+        open_body.extend_from_slice(&self.public);
+        open_body.extend_from_slice(&self.nonce_p);
+        self.enqueue(T_OPEN, &open_body)?;
+        self.phase = Phase::WaitReady;
+        Ok(())
+    }
+
+    fn on_ready(&mut self, body: &[u8]) -> Result<(), PairingError> {
+        if !body.is_empty() {
+            return Err(PairingError::BadMessage);
+        }
+        let (mut aead, code) = self.derive()?;
+        aead.0.zeroize();
+        self.code = Some(code);
+        self.phase = Phase::ShowCode;
+        Ok(())
+    }
+
+    fn on_grant(&mut self, body: &[u8]) -> Result<(), PairingError> {
+        let (mut aead, _code) = self.derive()?;
+        let salt = transcript_hash(&self.transcript_bytes());
+        let payload = open_grant(&aead, body, &aad(&salt))?;
+        aead.0.zeroize();
+        self.payload = Some(payload);
+        self.secret = None;
+        if let Some(mut c) = self.code.take() {
+            c.zeroize();
+        }
+        self.phase = Phase::Done;
+        Ok(())
+    }
+
+    fn on_fail(&mut self, body: &[u8]) -> Result<(), PairingError> {
+        let expired = body == [FAIL_EXPIRED];
+        self.wipe();
+        self.phase = Phase::Dead;
+        if expired {
+            Err(PairingError::Expired)
+        } else {
+            Err(PairingError::Failed)
+        }
+    }
+
+    fn derive(&self) -> Result<(Key32, String), PairingError> {
+        let secret = self.secret.as_ref().ok_or(PairingError::Replay)?;
+        let nonce_d = self.nonce_d.ok_or(PairingError::NotReady)?;
+        let mut shared = dh(secret, &self.host_pub)?;
+        let salt = transcript_hash(&Transcript {
+            sid: self.sid,
+            exp: self.exp,
+            port: self.port,
+            addrs_json: self.addrs_json.clone(),
+            host_pub: self.host_pub,
+            commitment: self.commitment,
+            nonce_d,
+            phone_pub: self.public,
+            nonce_p: self.nonce_p,
+        }
+        .bytes());
+        let aead = hkdf32(&shared, Some(&salt), b"gitpass/pair/v2/aead");
+        let mut sas = hkdf32(&shared, Some(&salt), b"gitpass/pair/v2/sas");
+        shared.zeroize();
+        let code = code_from_key(&sas);
+        sas.0.zeroize();
+        Ok((aead, code))
+    }
+
+    fn transcript_bytes(&self) -> Vec<u8> {
+        Transcript {
+            sid: self.sid,
+            exp: self.exp,
+            port: self.port,
+            addrs_json: self.addrs_json.clone(),
+            host_pub: self.host_pub,
+            commitment: self.commitment,
+            nonce_d: self.nonce_d.unwrap_or([0u8; 32]),
+            phone_pub: self.public,
+            nonce_p: self.nonce_p,
+        }
+        .bytes()
+    }
+
+    fn absorb(&mut self, chunk: &[u8]) -> Result<(), PairingError> {
+        if chunk.len() > MAX_INBOX || self.inbox.len() + chunk.len() > MAX_INBOX {
+            self.inbox.clear();
+            return Err(PairingError::Oversized);
+        }
+        self.inbox.extend_from_slice(chunk);
+        Ok(())
+    }
+
+    fn enqueue(&mut self, ty: u8, body: &[u8]) -> Result<(), PairingError> {
+        self.outbox.extend_from_slice(&encode(ty, body)?);
+        Ok(())
+    }
+
+    fn drain(&mut self) -> Vec<u8> {
+        std::mem::take(&mut self.outbox)
+    }
+}
+
+/// Synthetic vector (fixed keys, fake token). For Kotlin and Swift tests via the bridge.
 pub fn test_vector_json() -> Result<String, PairingError> {
     let v = vector_parts()?;
     let body = TestVectorOut {
         v: PAIRING_VERSION,
         now: TV_NOW,
-        offer: v.offer,
-        announce: v.announce,
+        qr: v.qr,
         code: v.code,
-        grant: v.grant,
+        port: v.port,
+        addresses: v.addresses,
+        commit: b64(&v.commit),
+        reveal: b64(&v.reveal),
+        open: b64(&v.open),
+        ready: b64(&v.ready),
+        grant: b64(&v.grant),
         account_id: v.payload.account_id.clone(),
         repo_owner: v.payload.repo_owner.clone(),
         repo_name: v.payload.repo_name.clone(),
@@ -669,15 +1169,21 @@ pub fn test_vector_open() -> Result<PairingPayload, PairingError> {
 const TV_NOW: i64 = 1_700_000_000;
 const TV_TOKEN: &str = "github_pat_FAKE_pairing_test_vector";
 const TV_ACCOUNT: &str = "00000000-0000-4000-8000-000000000001";
+const TV_PORT: u16 = 27463;
 
 #[derive(Serialize)]
 struct TestVectorOut {
     v: u32,
     now: i64,
-    offer: String,
-    announce: String,
-    /// The code the phone would show. The live desktop API does not return a code.
+    qr: String,
+    /// The code the phone shows. The live desktop API does not return a code.
     code: String,
+    port: u16,
+    addresses: Vec<String>,
+    commit: String,
+    reveal: String,
+    open: String,
+    ready: String,
     grant: String,
     account_id: String,
     repo_owner: String,
@@ -689,10 +1195,15 @@ struct TestVectorOut {
 }
 
 struct VectorParts {
-    offer: String,
-    announce: String,
+    qr: String,
     code: String,
-    grant: String,
+    port: u16,
+    addresses: Vec<String>,
+    commit: Vec<u8>,
+    reveal: Vec<u8>,
+    open: Vec<u8>,
+    ready: Vec<u8>,
+    grant: Vec<u8>,
     payload: PairingPayload,
 }
 
@@ -708,37 +1219,77 @@ fn tv_request() -> Result<PairingRequest, PairingError> {
 }
 
 fn vector_parts() -> Result<VectorParts, PairingError> {
-    let exp = TV_NOW + PAIRING_TTL_SECS;
-    let mut joiner = JoinerSession::from_parts([0x11; 32], [0x33; 16], exp)?;
-    let offer = joiner.offer();
     let mut consumed = ConsumedPairings::default();
-    let mut host = HostSession::accept_with(
-        &offer,
+    let addrs = vec!["127.0.0.1".to_string()];
+    let (mut host, qr) = HostSession::begin_parts(
+        &addrs,
+        TV_PORT,
         tv_request()?,
         TV_NOW,
         &mut consumed,
-        Some([0x22; 32]),
+        Some([0x11; 32]),
+        Some([0x55; 16]),
+        Some([0x44; 32]),
+        Some([0x66; 24]),
     )?;
-    let announce = host.announce();
-    let code = joiner.read_announce(&announce, TV_NOW)?;
-    if code != host.code() {
+    let mut joiner = JoinerSession::from_qr_parts(
+        &qr,
+        TV_NOW,
+        &mut ConsumedPairings::default(),
+        Some([0x22; 32]),
+        Some([0x33; 32]),
+    )?;
+    let commit = take_ok(joiner.push(&[], TV_NOW))?;
+    let reveal = take_ok(host.push(&commit, TV_NOW))?;
+    let open = take_ok(joiner.push(&reveal, TV_NOW))?;
+    let ready = take_ok(host.push(&open, TV_NOW))?;
+    let none = joiner.push(&ready, TV_NOW);
+    if none.error.is_some() || !none.outbound.is_empty() {
         return Err(PairingError::BadMessage);
     }
-    let grant = host.grant_with_nonce(&code, TV_NOW, Some([0x44; 24]))?;
-    let payload = joiner.open(&grant, &code, TV_NOW, &mut ConsumedPairings::default())?;
+    let code = joiner.code()?.to_string();
+    let grant_step = host.confirm(&code, TV_NOW);
+    if grant_step.error.is_some() {
+        return Err(grant_step.error.unwrap_or(PairingError::BadMessage));
+    }
+    let grant = grant_step.outbound;
+    let opened = joiner.push(&grant, TV_NOW);
+    if opened.error.is_some() {
+        return Err(opened.error.unwrap_or(PairingError::BadMessage));
+    }
+    let payload = joiner.take_payload()?;
     Ok(VectorParts {
-        offer,
-        announce,
+        qr,
         code,
+        port: TV_PORT,
+        addresses: addrs,
+        commit,
+        reveal,
+        open,
+        ready,
         grant,
         payload,
     })
 }
 
-fn expiry_from(now: i64) -> Result<i64, PairingError> {
-    if now <= 0 {
+fn take_ok(step: PairingStep) -> Result<Vec<u8>, PairingError> {
+    if let Some(e) = step.error {
+        return Err(e);
+    }
+    if step.outbound.is_empty() {
         return Err(PairingError::BadMessage);
     }
+    Ok(step.outbound)
+}
+
+fn err_step(e: PairingError) -> PairingStep {
+    PairingStep {
+        outbound: Vec::new(),
+        error: Some(e),
+    }
+}
+
+fn expiry_from(now: i64) -> Result<i64, PairingError> {
     now.checked_add(PAIRING_TTL_SECS)
         .ok_or(PairingError::BadMessage)
 }
@@ -751,6 +1302,154 @@ fn check_window(now: i64, exp: i64) -> Result<(), PairingError> {
         return Err(PairingError::BadMessage);
     }
     Ok(())
+}
+
+fn check_port(port: u16) -> Result<(), PairingError> {
+    if port == 0 {
+        Err(PairingError::BadMessage)
+    } else {
+        Ok(())
+    }
+}
+
+fn canonical_ip(s: &str) -> Result<String, PairingError> {
+    let ip: IpAddr = s.parse().map_err(|_| PairingError::BadMessage)?;
+    if ip.is_unspecified() || ip.is_multicast() {
+        return Err(PairingError::BadMessage);
+    }
+    if let IpAddr::V4(v4) = ip {
+        if v4.is_broadcast() {
+            return Err(PairingError::BadMessage);
+        }
+    }
+    let canon = ip.to_string();
+    if canon != s {
+        return Err(PairingError::BadMessage);
+    }
+    Ok(canon)
+}
+
+fn canonical_addresses(addrs: &[String]) -> Result<Vec<String>, PairingError> {
+    if addrs.is_empty() || addrs.len() > MAX_ADDRS {
+        return Err(PairingError::BadMessage);
+    }
+    addrs.iter().map(|s| canonical_ip(s)).collect()
+}
+
+fn build_qr(
+    sid: &[u8; 16],
+    exp: i64,
+    port: u16,
+    addrs_json: &str,
+    host_pub: &[u8; 32],
+) -> Result<String, PairingError> {
+    let s = format!(
+        "gitpass-pair:{PAIRING_VERSION}:qr:{}.{}.{}.{}.{}",
+        b64(sid),
+        exp,
+        port,
+        b64(addrs_json.as_bytes()),
+        b64(host_pub)
+    );
+    if s.len() > MAX_MESSAGE_BYTES || !s.is_ascii() {
+        return Err(PairingError::BadMessage);
+    }
+    Ok(s)
+}
+
+struct QrParts {
+    sid: [u8; 16],
+    sid_b64: String,
+    exp: i64,
+    port: u16,
+    addresses: Vec<String>,
+    addrs_json: String,
+    host_pub: [u8; 32],
+}
+
+fn parse_qr(qr: &str) -> Result<QrParts, PairingError> {
+    if qr.len() > MAX_MESSAGE_BYTES || !qr.is_ascii() {
+        return Err(PairingError::BadMessage);
+    }
+    let rest = qr
+        .strip_prefix("gitpass-pair:")
+        .ok_or(PairingError::BadMessage)?;
+    let (ver, rest) = rest.split_once(':').ok_or(PairingError::BadMessage)?;
+    if ver != "2" {
+        return Err(PairingError::BadVersion);
+    }
+    let rest = rest.strip_prefix("qr:").ok_or(PairingError::BadMessage)?;
+    let mut parts = rest.split('.');
+    let sid_b64 = parts.next().ok_or(PairingError::BadMessage)?;
+    let exp_s = parts.next().ok_or(PairingError::BadMessage)?;
+    let port_s = parts.next().ok_or(PairingError::BadMessage)?;
+    let addrs_b64 = parts.next().ok_or(PairingError::BadMessage)?;
+    let host_b64 = parts.next().ok_or(PairingError::BadMessage)?;
+    if parts.next().is_some() {
+        return Err(PairingError::BadMessage);
+    }
+    let sid = decode_exact::<16>(sid_b64)?;
+    let exp = parse_i64(exp_s)?;
+    let port = parse_port(port_s)?;
+    let addrs_raw = B64U
+        .decode(addrs_b64)
+        .map_err(|_| PairingError::BadMessage)?;
+    if b64(&addrs_raw) != addrs_b64 {
+        return Err(PairingError::BadMessage);
+    }
+    let addrs_json = String::from_utf8(addrs_raw).map_err(|_| PairingError::BadMessage)?;
+    let addresses = parse_addrs(&addrs_json)?;
+    let host_pub = decode_exact::<32>(host_b64)?;
+    Ok(QrParts {
+        sid,
+        sid_b64: sid_b64.to_string(),
+        exp,
+        port,
+        addresses,
+        addrs_json,
+        host_pub,
+    })
+}
+
+fn parse_addrs(json: &str) -> Result<Vec<String>, PairingError> {
+    let value: serde_json::Value =
+        serde_json::from_str(json).map_err(|_| PairingError::BadMessage)?;
+    let arr = value.as_array().ok_or(PairingError::BadMessage)?;
+    if arr.is_empty() || arr.len() > MAX_ADDRS {
+        return Err(PairingError::BadMessage);
+    }
+    let mut out = Vec::with_capacity(arr.len());
+    for v in arr {
+        let s = v.as_str().ok_or(PairingError::BadMessage)?;
+        out.push(canonical_ip(s)?);
+    }
+    let canon = serde_json::to_string(&out).map_err(|_| PairingError::BadMessage)?;
+    if canon != json {
+        return Err(PairingError::BadMessage);
+    }
+    Ok(out)
+}
+
+fn parse_i64(s: &str) -> Result<i64, PairingError> {
+    if s.is_empty() || s.len() > 20 || !s.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(PairingError::BadMessage);
+    }
+    s.parse().map_err(|_| PairingError::BadMessage)
+}
+
+fn parse_port(s: &str) -> Result<u16, PairingError> {
+    if s.is_empty() || s.len() > 5 || !s.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(PairingError::BadMessage);
+    }
+    let n: u32 = s.parse().map_err(|_| PairingError::BadMessage)?;
+    if n == 0 || n > u32::from(u16::MAX) {
+        return Err(PairingError::BadMessage);
+    }
+    let port = n as u16;
+    if port.to_string() != s {
+        return Err(PairingError::BadMessage);
+    }
+    Ok(port)
 }
 
 fn b64(bytes: &[u8]) -> String {
@@ -766,6 +1465,64 @@ fn decode_exact<const N: usize>(s: &str) -> Result<[u8; N], PairingError> {
     Ok(a)
 }
 
+fn encode(ty: u8, body: &[u8]) -> Result<Vec<u8>, PairingError> {
+    let n = 1 + body.len();
+    if n == 0 || n > MAX_FRAME {
+        return Err(PairingError::Oversized);
+    }
+    let mut v = Vec::with_capacity(4 + n);
+    v.extend_from_slice(&(n as u32).to_be_bytes());
+    v.push(ty);
+    v.extend_from_slice(body);
+    Ok(v)
+}
+
+fn next_frame(buf: &mut Vec<u8>) -> Result<Option<(u8, Vec<u8>)>, PairingError> {
+    if buf.len() < 4 {
+        return Ok(None);
+    }
+    let n = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]]) as usize;
+    if n == 0 {
+        buf.clear();
+        return Err(PairingError::BadMessage);
+    }
+    if n > MAX_FRAME {
+        buf.clear();
+        return Err(PairingError::Oversized);
+    }
+    if buf.len() < 4 + n {
+        return Ok(None);
+    }
+    let ty = buf[4];
+    let body = buf[5..4 + n].to_vec();
+    buf.drain(..4 + n);
+    Ok(Some((ty, body)))
+}
+
+fn copy8(b: &[u8]) -> [u8; 8] {
+    let mut a = [0u8; 8];
+    a.copy_from_slice(b);
+    a
+}
+
+fn sha256_2(a: &[u8], b: &[u8]) -> [u8; 32] {
+    let mut h = Sha256::new();
+    h.update(a);
+    h.update(b);
+    h.finalize().into()
+}
+
+fn transcript_hash(t: &[u8]) -> [u8; 32] {
+    Sha256::digest(t).into()
+}
+
+fn aad(salt: &[u8; 32]) -> Vec<u8> {
+    let mut a = Vec::with_capacity(16 + 32);
+    a.extend_from_slice(b"gitpass/pair/v2");
+    a.extend_from_slice(salt);
+    a
+}
+
 fn dh(secret: &StaticSecret, peer: &[u8; 32]) -> Result<[u8; 32], PairingError> {
     if *peer == [0u8; 32] {
         return Err(PairingError::LowOrder);
@@ -777,56 +1534,9 @@ fn dh(secret: &StaticSecret, peer: &[u8; 32]) -> Result<[u8; 32], PairingError> 
     Ok(*shared.as_bytes())
 }
 
-fn salt(joiner: &[u8; 32], host: &[u8; 32], sid: &[u8; 16], exp: i64) -> [u8; 88] {
-    let mut s = [0u8; 88];
-    s[..32].copy_from_slice(joiner);
-    s[32..64].copy_from_slice(host);
-    s[64..80].copy_from_slice(sid);
-    s[80..88].copy_from_slice(&exp.to_be_bytes());
-    s
-}
-
-fn derive_aead(
-    shared: &[u8; 32],
-    joiner: &[u8; 32],
-    host: &[u8; 32],
-    sid: &[u8; 16],
-    exp: i64,
-) -> Key32 {
-    hkdf32(
-        shared,
-        Some(&salt(joiner, host, sid, exp)),
-        b"gitpass/pair/v1/aead",
-    )
-}
-
-/// Six digits from HKDF. `u32 % 1_000_000` has a tiny bias; this is a comparison string, not a key.
-fn sas_code(
-    shared: &[u8; 32],
-    joiner: &[u8; 32],
-    host: &[u8; 32],
-    sid: &[u8; 16],
-    exp: i64,
-) -> String {
-    let k = hkdf32(
-        shared,
-        Some(&salt(joiner, host, sid, exp)),
-        b"gitpass/pair/v1/sas",
-    );
-    let mut b = [0u8; 4];
-    b.copy_from_slice(&k.0[..4]);
-    let n = u32::from_be_bytes(b) % 1_000_000;
+fn code_from_key(k: &Key32) -> String {
+    let n = u32::from_be_bytes([k.0[0], k.0[1], k.0[2], k.0[3]]) % 1_000_000;
     format!("{n:06}")
-}
-
-fn transcript_aad(sid: &[u8; 16], joiner: &[u8; 32], host: &[u8; 32], exp: i64) -> Vec<u8> {
-    let mut a = Vec::with_capacity(16 + 16 + 32 + 32 + 8);
-    a.extend_from_slice(b"gitpass/pair/v1");
-    a.extend_from_slice(sid);
-    a.extend_from_slice(joiner);
-    a.extend_from_slice(host);
-    a.extend_from_slice(&exp.to_be_bytes());
-    a
 }
 
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {
@@ -848,29 +1558,17 @@ fn normalize_code(code: &str) -> Result<&str, PairingError> {
     Ok(code)
 }
 
-fn seal_payload(
-    aead: &Key32,
-    plaintext: &[u8],
-    aad: &[u8],
-    nonce: [u8; 24],
-) -> Result<String, PairingError> {
+fn seal_frame(aead: &Key32, plaintext: &[u8], aad: &[u8], nonce: [u8; 24]) -> Result<Vec<u8>, PairingError> {
     let env = seal_with_nonce(aead, plaintext, aad, nonce).map_err(|_| PairingError::BadMessage)?;
-    let bytes = serde_json::to_vec(&env).map_err(|_| PairingError::BadMessage)?;
-    Ok(b64(&bytes))
+    let body = serde_json::to_vec(&env).map_err(|_| PairingError::BadMessage)?;
+    encode(T_GRANT, &body)
 }
 
-fn open_grant_blob(
-    aead: &Key32,
-    envelope_b64: &str,
-    aad: &[u8],
-) -> Result<Zeroizing<Vec<u8>>, PairingError> {
-    let raw = B64U
-        .decode(envelope_b64)
-        .map_err(|_| PairingError::Tampered)?;
-    let env = serde_json::from_slice(&raw).map_err(|_| PairingError::Tampered)?;
-    open(aead, &env, aad)
-        .map(Zeroizing::new)
-        .map_err(|_| PairingError::Tampered)
+fn open_grant(aead: &Key32, body: &[u8], aad: &[u8]) -> Result<PairingPayload, PairingError> {
+    let env: Envelope = serde_json::from_slice(body).map_err(|_| PairingError::Tampered)?;
+    let pt = open(aead, &env, aad).map_err(|_| PairingError::Tampered)?;
+    let pt = Zeroizing::new(pt);
+    decode_payload(&pt)
 }
 
 #[derive(Serialize, Deserialize)]
@@ -904,19 +1602,20 @@ fn payload_bytes(req: &PairingRequest) -> Result<Zeroizing<Vec<u8>>, PairingErro
 }
 
 fn decode_payload(pt: &[u8]) -> Result<PairingPayload, PairingError> {
-    let value: serde_json::Value =
-        serde_json::from_slice(pt).map_err(|_| PairingError::Tampered)?;
+    let value: serde_json::Value = serde_json::from_slice(pt).map_err(|_| PairingError::Tampered)?;
     let obj = value.as_object().ok_or(PairingError::Tampered)?;
     match obj.get("v") {
         Some(serde_json::Value::Number(n)) if n.as_u64() == Some(u64::from(PAIRING_VERSION)) => {}
         Some(serde_json::Value::Number(_)) => return Err(PairingError::BadVersion),
         _ => return Err(PairingError::BadField),
     }
+    if obj.contains_key("password") || obj.contains_key("master_password") {
+        return Err(PairingError::BadField);
+    }
     if obj.len() != PAYLOAD_KEYS.len() || PAYLOAD_KEYS.iter().any(|k| !obj.contains_key(*k)) {
         return Err(PairingError::BadField);
     }
-    let mut plain: PayloadPlain =
-        serde_json::from_value(value).map_err(|_| PairingError::BadField)?;
+    let mut plain: PayloadPlain = serde_json::from_value(value).map_err(|_| PairingError::BadField)?;
     let parsed = SecretKey::parse(&plain.secret_key);
     plain.secret_key.zeroize();
     let secret_key = parsed.map_err(|_| PairingError::BadField)?;
@@ -997,127 +1696,14 @@ fn validate_token(s: &str) -> Result<(), PairingError> {
     }
 }
 
-struct OfferParts {
-    sid: [u8; 16],
-    sid_b64: String,
-    joiner_pub: [u8; 32],
-    exp: i64,
-}
-struct AnnounceParts {
-    sid: [u8; 16],
-    joiner_pub: [u8; 32],
-    host_pub: [u8; 32],
-    exp: i64,
-}
-struct GrantParts {
-    sid: [u8; 16],
-    joiner_pub: [u8; 32],
-    host_pub: [u8; 32],
-    exp: i64,
-    envelope_b64: String,
-}
-
-fn parse_framed(message: &str) -> Result<(PairingKind, Vec<&str>), PairingError> {
-    let s = message.trim();
-    if s.len() > MAX_MESSAGE_BYTES || !s.is_ascii() || s.chars().any(char::is_whitespace) {
-        return Err(PairingError::BadMessage);
-    }
-    let rest = s
-        .strip_prefix("gitpass-pair:")
-        .ok_or(PairingError::BadMessage)?;
-    let (ver, rest) = rest.split_once(':').ok_or(PairingError::BadMessage)?;
-    if !ver.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(PairingError::BadMessage);
-    }
-    if ver.parse::<u32>().ok() != Some(PAIRING_VERSION) {
-        return Err(PairingError::BadVersion);
-    }
-    let (kind, body) = rest.split_once(':').ok_or(PairingError::BadMessage)?;
-    let kind = match kind {
-        "offer" => PairingKind::Offer,
-        "announce" => PairingKind::Announce,
-        "grant" => PairingKind::Grant,
-        _ => return Err(PairingError::BadMessage),
-    };
-    if body.is_empty() {
-        return Err(PairingError::BadMessage);
-    }
-    let parts: Vec<&str> = body.split('.').collect();
-    if parts.iter().any(|p| p.is_empty()) {
-        return Err(PairingError::BadMessage);
-    }
-    Ok((kind, parts))
-}
-
-fn parse_exp(s: &str) -> Result<i64, PairingError> {
-    if s.is_empty() || s.len() > 18 || !s.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(PairingError::BadMessage);
-    }
-    let n: i64 = s.parse().map_err(|_| PairingError::BadMessage)?;
-    if n <= 0 {
-        return Err(PairingError::BadMessage);
-    }
-    Ok(n)
-}
-
-fn parse_offer(message: &str) -> Result<OfferParts, PairingError> {
-    let (kind, parts) = parse_framed(message)?;
-    if kind != PairingKind::Offer || parts.len() != 3 {
-        return Err(PairingError::BadMessage);
-    }
-    let sid = decode_exact::<16>(parts[0])?;
-    Ok(OfferParts {
-        sid,
-        sid_b64: parts[0].to_string(),
-        joiner_pub: decode_exact(parts[1])?,
-        exp: parse_exp(parts[2])?,
-    })
-}
-
-fn parse_announce(message: &str) -> Result<AnnounceParts, PairingError> {
-    let (kind, parts) = parse_framed(message)?;
-    if kind != PairingKind::Announce || parts.len() != 4 {
-        return Err(PairingError::BadMessage);
-    }
-    Ok(AnnounceParts {
-        sid: decode_exact(parts[0])?,
-        joiner_pub: decode_exact(parts[1])?,
-        host_pub: decode_exact(parts[2])?,
-        exp: parse_exp(parts[3])?,
-    })
-}
-
-fn parse_grant(message: &str) -> Result<GrantParts, PairingError> {
-    let (kind, parts) = parse_framed(message)?;
-    if kind != PairingKind::Grant || parts.len() != 5 {
-        return Err(PairingError::BadMessage);
-    }
-    Ok(GrantParts {
-        sid: decode_exact(parts[0])?,
-        joiner_pub: decode_exact(parts[1])?,
-        host_pub: decode_exact(parts[2])?,
-        exp: parse_exp(parts[3])?,
-        envelope_b64: parts[4].to_string(),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::{self, Session, UnlockOpts};
-    use std::fs;
+    use base64::{engine::general_purpose::STANDARD as B64, Engine};
 
     const PASSWORD: &str = "FAKE-master-password-must-not-appear";
     const TOKEN: &str = "github_pat_FAKE_from_desktop";
 
-    fn fast() -> crate::crypto::KdfParams {
-        crate::crypto::KdfParams {
-            alg: "argon2id".into(),
-            m_kib: 8192,
-            t: 1,
-            p: 1,
-        }
-    }
     fn req(token: &str) -> PairingRequest {
         PairingRequest::new(
             TV_ACCOUNT,
@@ -1140,350 +1726,236 @@ mod tests {
         assert!(!text.contains(PASSWORD), "{text}");
         assert!(!text.contains(TOKEN), "{text}");
         assert!(!text.contains(TV_TOKEN));
+        assert!(!text.contains("github_pat_"), "{text}");
     }
-
-    #[test]
-    fn happy_path_codes_match_and_secrets_round_trip() {
-        let now = 1_700_000_000;
-        let mut joiner = JoinerSession::begin(now).unwrap();
-        let offer = joiner.offer();
-        assert_eq!(message_kind(&offer).unwrap(), PairingKind::Offer);
+    fn pair_at(now: i64) -> (HostSession, JoinerSession, String) {
         let mut consumed = ConsumedPairings::default();
-        let mut host = HostSession::accept(&offer, req(TOKEN), now, &mut consumed).unwrap();
-        let announce = host.announce();
-        assert_eq!(message_kind(&announce).unwrap(), PairingKind::Announce);
-        let code = joiner.read_announce(&announce, now).unwrap();
-        assert_eq!(code, host.code());
-        assert_eq!(code.len(), 6);
-        let bad = host.grant_if_code_matches(&wrong(&code), now).unwrap_err();
-        assert_eq!(bad, PairingError::BadCode);
-        assert_clean(&bad.to_string());
-        let grant = host.grant_if_code_matches(&code, now).unwrap();
-        assert_eq!(message_kind(&grant).unwrap(), PairingKind::Grant);
-        assert_eq!(host.grant_if_code_matches(&code, now).unwrap(), grant);
-        assert_clean(&offer);
-        assert_clean(&announce);
-        assert_clean(&grant);
-        assert_eq!(
-            joiner
-                .open(&grant, &wrong(&code), now, &mut ConsumedPairings::default())
-                .unwrap_err(),
-            PairingError::BadCode
-        );
-        let payload = joiner
-            .open(&grant, &code, now, &mut ConsumedPairings::default())
-            .unwrap();
-        assert_eq!(payload.account_id, TV_ACCOUNT);
-        assert_eq!(payload.repo_owner, "fake-owner");
-        assert_eq!(payload.repo_name, "fake-vault");
-        assert_eq!(payload.branch, "main");
-        assert_eq!(&payload.sync_token[..], TOKEN);
-        assert_eq!(payload.secret_key.encode(), SecretKey([0xAB; 16]).encode());
-        let dbg = format!("{payload:?}");
-        assert!(dbg.contains("<redacted>"));
-        assert!(!dbg.contains(TOKEN));
-        assert!(!dbg.contains(&payload.secret_key.encode()));
-        assert!(!dbg.contains(PASSWORD));
-        host.wipe();
-        assert_eq!(
-            host.grant_if_code_matches(&code, now).unwrap_err(),
-            PairingError::Replay
-        );
-    }
-
-    #[test]
-    fn expired_replay_version_low_order_and_field_rejection() {
-        let now = 1_700_000_000;
-        let joiner = JoinerSession::begin(now).unwrap();
-        let mut consumed = ConsumedPairings::default();
-        assert_eq!(
-            HostSession::accept(
-                &joiner.offer(),
-                req(TOKEN),
-                now + PAIRING_TTL_SECS,
-                &mut consumed
-            )
-            .unwrap_err(),
-            PairingError::Expired
-        );
-        assert!(consumed.accepted.is_empty());
-        let _host = HostSession::accept(&joiner.offer(), req(TOKEN), now, &mut consumed).unwrap();
-        assert_eq!(
-            HostSession::accept(&joiner.offer(), req(TOKEN), now, &mut consumed).unwrap_err(),
-            PairingError::Replay
-        );
-        let mut late = JoinerSession::begin(now).unwrap();
-        let mut host2 = HostSession::accept(
-            &late.offer(),
-            req(TOKEN),
-            now,
-            &mut ConsumedPairings::default(),
-        )
-        .unwrap();
-        let announce = host2.announce();
-        let code = late.read_announce(&announce, now).unwrap();
-        assert_eq!(
-            late.read_announce(&announce, now + PAIRING_TTL_SECS)
-                .unwrap_err(),
-            PairingError::Expired
-        );
-        assert_eq!(
-            host2
-                .grant_if_code_matches(&code, now + PAIRING_TTL_SECS)
-                .unwrap_err(),
-            PairingError::Expired
-        );
-
-        let sid = b64(&[0x33; 16]);
-        let zpub = b64(&[0u8; 32]);
-        let exp = now + PAIRING_TTL_SECS;
-        let zero_offer = format!("gitpass-pair:1:offer:{sid}.{zpub}.{exp}");
-        assert_eq!(
-            HostSession::accept(
-                &zero_offer,
-                req(TOKEN),
-                now,
-                &mut ConsumedPairings::default()
-            )
-            .unwrap_err(),
-            PairingError::LowOrder
-        );
-        let bad_ver = format!("gitpass-pair:9:offer:{sid}.{zpub}.{exp}");
-        assert_eq!(
-            message_kind(&bad_ver).unwrap_err(),
-            PairingError::BadVersion
-        );
-        assert_eq!(
-            HostSession::accept(&bad_ver, req(TOKEN), now, &mut ConsumedPairings::default())
-                .unwrap_err(),
-            PairingError::BadVersion
-        );
-        let crafted = format!(
-            "gitpass-pair:1:offer:{}.{}.{}",
-            b64(&joiner.session_id),
-            b64(&joiner.public),
-            now + 10_000
-        );
-        let err = HostSession::accept(&crafted, req(TOKEN), now, &mut ConsumedPairings::default())
-            .unwrap_err();
-        assert_eq!(err, PairingError::BadMessage);
-        assert_clean(&err.to_string());
-        assert_eq!(
-            PairingRequest::new(
-                TV_ACCOUNT,
-                "fake-owner",
-                "fake-vault",
-                "main",
-                SecretKey([0xAB; 16]),
-                "https://example.invalid/FAKE-token"
-            )
-            .unwrap_err(),
-            PairingError::BadField
-        );
-        assert_eq!(
-            PairingRequest::new(
-                TV_ACCOUNT,
-                "../etc",
-                "fake-vault",
-                "main",
-                SecretKey([0xAB; 16]),
-                TOKEN
-            )
-            .unwrap_err(),
-            PairingError::BadField
-        );
-        let leaked = PairingError::BadField.to_string();
-        assert!(!leaked.contains("https://"));
-        assert!(!leaked.contains("../etc"));
-    }
-
-    #[test]
-    fn tamper_wrong_inner_version_password_field_and_replayed_grant() {
-        let now = TV_NOW;
-        let mut joiner =
-            JoinerSession::from_parts([0x11; 32], [0x55; 16], now + PAIRING_TTL_SECS).unwrap();
-        let mut consumed = ConsumedPairings::default();
-        let mut host = HostSession::accept_with(
-            &joiner.offer(),
+        let (host, qr) = HostSession::begin(
+            &["127.0.0.1".into()],
+            27500,
             req(TOKEN),
             now,
             &mut consumed,
-            Some([0x22; 32]),
         )
         .unwrap();
-        assert_eq!(
-            HostSession::accept_with(
-                &joiner.offer(),
-                req(TOKEN),
-                now,
-                &mut consumed,
-                Some([0x22; 32])
-            )
-            .unwrap_err(),
-            PairingError::Replay
-        );
-        let code = joiner.read_announce(&host.announce(), now).unwrap();
-        let grant = host.grant_with_nonce(&code, now, Some([0x44; 24])).unwrap();
-        let tampered = flip_ct(&grant);
-        assert_eq!(
-            joiner
-                .open(&tampered, &code, now, &mut ConsumedPairings::default())
-                .unwrap_err(),
-            PairingError::Tampered
-        );
-        let payload = joiner
-            .open(&grant, &code, now, &mut ConsumedPairings::default())
-            .unwrap();
-        assert_eq!(&payload.sync_token[..], TOKEN);
-        consumed
-            .mark_released(joiner.session_id(), joiner.expires_at(), now)
-            .unwrap();
-        assert_eq!(
-            joiner.open(&grant, &code, now, &mut consumed).unwrap_err(),
-            PairingError::Replay
-        );
+        let joiner = JoinerSession::from_qr(&qr, now, &mut ConsumedPairings::default()).unwrap();
+        (host, joiner, qr)
+    }
+    fn handshake(
+        host: &mut HostSession,
+        joiner: &mut JoinerSession,
+        now: i64,
+    ) -> String {
+        let commit = take_ok(joiner.push(&[], now)).unwrap();
+        let reveal = take_ok(host.push(&commit, now)).unwrap();
+        let open = take_ok(joiner.push(&reveal, now)).unwrap();
+        let ready = take_ok(host.push(&open, now)).unwrap();
+        let done = joiner.push(&ready, now);
+        assert!(done.error.is_none());
+        assert!(done.outbound.is_empty());
+        assert_eq!(joiner.phase(), "code");
+        assert_eq!(host.phase(), "code");
+        joiner.code().unwrap().to_string()
+    }
 
-        let secret = SecretKey([0xAB; 16]).encode();
-        let password_json = serde_json::json!({
-            "v": 1, "account_id": TV_ACCOUNT, "repo_owner": "fake-owner", "repo_name": "fake-vault",
-            "branch": "main", "secret_key": secret, "sync_token": TOKEN,
-            "token_kind": TOKEN_KIND_FINE_GRAINED_PAT, "password": PASSWORD,
-        });
-        let injected = host
-            .seal_raw(&serde_json::to_vec(&password_json).unwrap(), [0x45; 24])
+    #[test]
+    fn happy_path_and_password_stays_out_of_every_message() {
+        let now = 1_700_000_100;
+        let (mut host, mut joiner, qr) = pair_at(now);
+        assert!(qr.starts_with("gitpass-pair:2:qr:"));
+        assert_clean(&qr);
+        assert!(!format!("{host:?}").contains("code"));
+        let code = handshake(&mut host, &mut joiner, now);
+        assert_eq!(code.len(), 6);
+        let bad = host.confirm(wrong(&code).as_str(), now);
+        assert_eq!(bad.error, Some(PairingError::BadCode));
+        assert!(bad.outbound.is_empty());
+        let grant = host.confirm(&code, now);
+        assert!(grant.error.is_none());
+        let frame = String::from_utf8_lossy(&grant.outbound);
+        assert_clean(&frame);
+        assert!(!frame.contains(&code));
+        let opened = joiner.push(&grant.outbound, now);
+        assert!(opened.error.is_none());
+        let payload = joiner.take_payload().unwrap();
+        assert_eq!(payload.repo_owner, "fake-owner");
+        assert_eq!(&payload.sync_token[..], TOKEN);
+        assert_eq!(payload.secret_key.0, [0xAB; 16]);
+        assert!(!format!("{payload:?}").contains(TOKEN));
+        assert_eq!(joiner.phase(), "done");
+        assert!(joiner.code().is_err());
+        let again = host.confirm(&code, now);
+        assert!(again.error.is_none());
+        assert_eq!(again.outbound, grant.outbound);
+    }
+
+    #[test]
+    fn three_wrong_codes_end_the_session() {
+        let now = 1_700_000_100;
+        let (mut host, mut joiner, qr) = pair_at(now);
+        let code = handshake(&mut host, &mut joiner, now);
+        let wrong = wrong(&code);
+        assert_eq!(host.confirm(&wrong, now).error, Some(PairingError::BadCode));
+        assert_eq!(host.confirm(&wrong, now).error, Some(PairingError::BadCode));
+        let burned = host.confirm(&wrong, now);
+        assert_eq!(burned.error, Some(PairingError::Exhausted));
+        assert!(!burned.outbound.is_empty());
+        assert!(!host.accepts_peer(now));
+        let seen = joiner.push(&burned.outbound, now);
+        assert_eq!(seen.error, Some(PairingError::Failed));
+        let mut consumed = ConsumedPairings::default();
+        consumed
+            .mark_released(host.session_id(), host.expires_at(), now)
             .unwrap();
-        let err = joiner
-            .open(&injected, &code, now, &mut ConsumedPairings::default())
-            .unwrap_err();
-        assert_eq!(err, PairingError::BadField);
-        assert_clean(&err.to_string());
-        assert!(!injected.contains(PASSWORD));
-        let v2 = serde_json::json!({
-            "v": 2, "account_id": TV_ACCOUNT, "repo_owner": "fake-owner", "repo_name": "fake-vault",
-            "branch": "main", "secret_key": SecretKey([0xAB; 16]).encode(), "sync_token": TOKEN,
-            "token_kind": TOKEN_KIND_FINE_GRAINED_PAT,
-        });
-        let wrong_v = host
-            .seal_raw(&serde_json::to_vec(&v2).unwrap(), [0x46; 24])
-            .unwrap();
+        let again = JoinerSession::from_qr(&qr, now, &mut consumed);
+        assert_eq!(again.unwrap_err(), PairingError::Replay);
+    }
+
+    #[test]
+    fn expiry_skew_and_version() {
+        let now = 1_700_000_100;
+        let (host, _joiner, qr) = pair_at(now);
+        let exp = host.expires_at();
+        assert_eq!(exp, now + PAIRING_TTL_SECS);
+        assert!(check_window(exp - 1, exp).is_ok());
+        assert_eq!(check_window(exp, exp), Err(PairingError::Expired));
+        let mut consumed = ConsumedPairings::default();
+        let early = now + PAIRING_TTL_SECS + PAIRING_CLOCK_SKEW_SECS;
+        assert!(check_window(now, early).is_ok());
         assert_eq!(
-            joiner
-                .open(&wrong_v, &code, now, &mut ConsumedPairings::default())
-                .unwrap_err(),
+            check_window(now, early + 1),
+            Err(PairingError::BadMessage)
+        );
+        let mut old = qr.clone();
+        old = old.replacen("gitpass-pair:2:", "gitpass-pair:1:", 1);
+        assert_eq!(
+            JoinerSession::from_qr(&old, now, &mut consumed).unwrap_err(),
             PairingError::BadVersion
         );
-    }
-
-    #[test]
-    fn consumed_file_round_trip_and_test_vector() {
-        let dir = tempfile::tempdir().unwrap();
-        let mut c = ConsumedPairings::default();
-        c.mark_accepted("abcDEF-_", 1_700_000_100, 1_700_000_000)
-            .unwrap();
-        c.mark_released("abcDEF-_", 1_700_000_100, 1_700_000_000)
-            .unwrap();
-        save_consumed(dir.path(), &c).unwrap();
-        let loaded = load_consumed(dir.path()).unwrap();
-        assert!(loaded.released.contains_key("abcDEF-_"));
-        assert!(!loaded.accepted.contains_key("abcDEF-_"));
-        let ignore = fs::read_to_string(dir.path().join(".gitignore")).unwrap();
-        assert!(ignore.lines().any(|l| l.trim() == CONSUMED_FILE));
-        fs::write(
-            dir.path().join(CONSUMED_FILE),
-            b"{\"v\":1,\"accepted\":{},\"released\":{},\"password\":\"x\"}",
-        )
-        .unwrap();
-        assert_eq!(load_consumed(dir.path()).unwrap_err(), PairingError::State);
-        let raw = fs::read_to_string(dir.path().join(CONSUMED_FILE)).unwrap_or_default();
-        assert!(!raw.contains(TOKEN));
-
-        let payload = test_vector_open().unwrap();
-        assert_eq!(payload.repo_owner, "fake-owner");
-        assert_eq!(&payload.sync_token[..], TV_TOKEN);
-        assert!(payload.secret_key.encode().starts_with("A3-"));
-        let json = test_vector_json().unwrap();
-        assert!(json.contains("gitpass-pair:1:offer:"));
-        assert!(json.contains("gitpass-pair:1:grant:"));
-        assert!(!json.contains(PASSWORD));
-        assert!(!json.contains("password"));
         assert_eq!(
-            test_vector_open().unwrap().secret_key.encode(),
-            payload.secret_key.encode()
+            JoinerSession::from_qr("not-a-frame", now, &mut consumed).unwrap_err(),
+            PairingError::BadMessage
         );
+        drop(host);
     }
 
     #[test]
-    fn unlock_after_pairing_registers_the_new_device() {
-        let dir = tempfile::tempdir().unwrap();
-        let root = dir.path();
-        let created = store::init(root, PASSWORD, fast()).unwrap();
-        let opts = UnlockOpts {
-            accept_rollback: false,
-            target_kdf: fast(),
-        };
-        let desktop =
-            Session::unlock_device(root, PASSWORD, &created, &opts, Some("FAKE desktop")).unwrap();
-        let account = desktop.fmt.account_id.clone();
-        drop(desktop);
-        let now = now_unix();
-        let mut joiner = JoinerSession::begin(now).unwrap();
-        let request = PairingRequest::new(
-            &account,
-            "fake-owner",
-            "fake-vault",
-            "main",
-            SecretKey(created.0),
-            TOKEN,
-        )
-        .unwrap();
-        let mut host = HostSession::accept(
-            &joiner.offer(),
-            request,
-            now,
-            &mut ConsumedPairings::default(),
-        )
-        .unwrap();
-        let code = joiner.read_announce(&host.announce(), now).unwrap();
-        let grant = host.grant_if_code_matches(&code, now).unwrap();
-        assert_clean(&grant);
-        let payload = joiner
-            .open(&grant, &code, now, &mut ConsumedPairings::default())
+    fn replay_record_prunes_and_blocks_the_sid() {
+        let now = 1_700_000_100;
+        let (host, _joiner, qr) = pair_at(now);
+        let mut consumed = ConsumedPairings::default();
+        consumed
+            .mark_released(host.session_id(), host.expires_at(), now)
             .unwrap();
-        assert_eq!(payload.secret_key.encode(), created.encode());
-        assert!(!format!("{payload:?}").contains(PASSWORD));
-        joiner.consume();
         assert_eq!(
-            joiner
-                .open(&grant, &code, now, &mut ConsumedPairings::default())
-                .unwrap_err(),
+            consumed.mark_accepted(host.session_id(), host.expires_at(), now),
+            Err(PairingError::Replay)
+        );
+        assert_eq!(
+            JoinerSession::from_qr(&qr, now, &mut consumed).unwrap_err(),
             PairingError::Replay
         );
-        fs::remove_file(root.join(crate::device::LOCAL_DEVICE_FILE)).unwrap();
-        let key_file = root.join(crate::device::LOCAL_DEVICE_KEY_FILE);
-        if key_file.exists() {
-            fs::remove_file(key_file).unwrap();
-        }
-        let phone = Session::unlock_device(
-            root,
-            PASSWORD,
-            &payload.secret_key,
-            &opts,
-            Some("FAKE phone"),
-        )
-        .unwrap();
-        let names: Vec<String> = phone
-            .devices()
-            .unwrap()
-            .devices
-            .into_iter()
-            .map(|d| d.name)
-            .collect();
-        assert!(names.iter().any(|n| n == "FAKE desktop"));
-        assert!(names.iter().any(|n| n == "FAKE phone"));
+        let dir = tempfile::tempdir().unwrap();
+        save_consumed(dir.path(), &consumed).unwrap();
+        let mut loaded = load_consumed(dir.path()).unwrap();
+        assert!(loaded.is_used(host.session_id(), now));
+        let mut stale = ConsumedPairings::default();
+        stale
+            .mark_released("old-session", now - RETAIN_AFTER_EXP_SECS - 5, now - RETAIN_AFTER_EXP_SECS - 5)
+            .unwrap();
+        // mark_released prunes using `now`, so plant an already-expired row directly.
+        stale.released.insert("older".into(), now - RETAIN_AFTER_EXP_SECS - 1);
+        stale.prune(now);
+        assert!(!stale.released.contains_key("older"));
     }
 
     #[test]
-    fn three_wrong_codes_burn_the_session_and_classic_tokens_are_refused() {
+    fn tamper_flip_ct_nonce_and_wrong_key() {
+        let now = 1_700_000_100;
+        let (mut host, mut joiner, _) = pair_at(now);
+        let code = handshake(&mut host, &mut joiner, now);
+        let grant = host.confirm(&code, now).outbound;
+        let mut flipped = grant.clone();
+        flip_ct(&mut flipped);
+        let err = joiner.push(&flipped, now);
+        assert_eq!(err.error, Some(PairingError::Tampered));
+
+        let (mut host, mut joiner, _) = pair_at(now + 1);
+        let code = handshake(&mut host, &mut joiner, now + 1);
+        let grant = host.confirm(&code, now + 1).outbound;
+        let mut nonce_flipped = grant.clone();
+        flip_nonce(&mut nonce_flipped);
+        assert_eq!(
+            joiner.push(&nonce_flipped, now + 1).error,
+            Some(PairingError::Tampered)
+        );
+
+        let (mut host, mut joiner, _) = pair_at(now + 2);
+        let code = handshake(&mut host, &mut joiner, now + 2);
+        let grant = host.confirm(&code, now + 2).outbound;
+        let mut wrong_key = grant.clone();
+        reseal_with_other_key(&mut wrong_key);
+        assert_eq!(
+            joiner.push(&wrong_key, now + 2).error,
+            Some(PairingError::Tampered)
+        );
+    }
+
+    #[test]
+    fn commitment_rejects_a_different_key_and_code_tracks_both_keys() {
+        let now = 1_700_000_100;
+        let (mut host, mut joiner, _) = pair_at(now);
+        let commit = take_ok(joiner.push(&[], now)).unwrap();
+        let reveal = take_ok(host.push(&commit, now)).unwrap();
+        let mut open = take_ok(joiner.push(&reveal, now)).unwrap();
+        // OPEN body starts at byte 5. Flip the first public-key byte.
+        open[5] ^= 0x01;
+        let rejected = host.push(&open, now);
+        assert_eq!(rejected.error, Some(PairingError::BadMessage));
+        assert!(!rejected.outbound.is_empty());
+
+        let mut phone = [0x22u8; 32];
+        let host_pub = [0x11u8; 32];
+        let a = sample_code(&phone, &host_pub);
+        phone[0] ^= 0x01;
+        let b = sample_code(&phone, &host_pub);
+        assert_ne!(a, b);
+        let mut host_pub2 = host_pub;
+        host_pub2[0] ^= 0x01;
+        let c = sample_code(&[0x22u8; 32], &host_pub2);
+        assert_ne!(a, c);
+        let committed = sha256_2(&[0x22u8; 32], &[0x33u8; 32]);
+        let mut other = [0x22u8; 32];
+        other[1] ^= 0x01;
+        assert_ne!(committed, sha256_2(&other, &[0x33u8; 32]));
+    }
+
+    #[test]
+    fn wrong_session_oversized_and_truncated_frames() {
+        let now = 1_700_000_100;
+        let (mut host, joiner, _) = pair_at(now);
+        let (host2, mut joiner2, _) = pair_at(now);
+        drop(host2);
+        let commit = take_ok(joiner2.push(&[], now)).unwrap();
+        let wrong = host.push(&commit, now);
+        assert_eq!(wrong.error, Some(PairingError::WrongSession));
+        drop(joiner);
+
+        let (mut host, _, _) = pair_at(now);
+        let huge = 100_000u32.to_be_bytes();
+        let big = host.push(&huge, now);
+        assert_eq!(big.error, Some(PairingError::Oversized));
+
+        let (mut host, _, _) = pair_at(now);
+        let partial = 40u32.to_be_bytes();
+        let wait = host.push(&partial, now);
+        assert!(wait.error.is_none());
+        assert!(wait.outbound.is_empty());
+        assert_eq!(host.finish(), Err(PairingError::Truncated));
+    }
+
+    #[test]
+    fn payload_rejects_a_password_field_and_a_classic_token() {
         assert_eq!(
             PairingRequest::new(
                 TV_ACCOUNT,
@@ -1491,152 +1963,106 @@ mod tests {
                 "fake-vault",
                 "main",
                 SecretKey([0xAB; 16]),
-                "ghp_FAKE0123456789"
+                "ghp_FAKE0123456789",
             )
             .unwrap_err(),
             PairingError::BadField
         );
-        let now = 1_700_000_000;
-        let mut joiner = JoinerSession::from_parts([0x11; 32], [0x55; 16], now + PAIRING_TTL_SECS).unwrap();
-        let mut host = HostSession::accept_with(
-            &joiner.offer(),
-            req(TOKEN),
-            now,
-            &mut ConsumedPairings::default(),
-            Some([0x22; 32]),
-        )
-        .unwrap();
-        let code = joiner.read_announce(&host.announce(), now).unwrap();
-        let bad = wrong(&code);
-        assert_eq!(host.grant_if_code_matches(&bad, now).unwrap_err(), PairingError::BadCode);
-        assert_eq!(host.grant_if_code_matches(&bad, now).unwrap_err(), PairingError::BadCode);
+        let mut extra = serde_json::json!({
+            "v": PAIRING_VERSION,
+            "account_id": TV_ACCOUNT,
+            "repo_owner": "fake-owner",
+            "repo_name": "fake-vault",
+            "branch": "main",
+            "secret_key": SecretKey([0xAB; 16]).encode(),
+            "sync_token": TOKEN,
+            "token_kind": TOKEN_KIND_FINE_GRAINED_PAT,
+            "password": PASSWORD,
+        });
+        let err = decode_payload(&serde_json::to_vec(&extra).unwrap()).unwrap_err();
+        assert_eq!(err, PairingError::BadField);
+        assert!(!err.to_string().contains(PASSWORD));
+        extra.as_object_mut().unwrap().remove("password");
+        extra["v"] = serde_json::json!(1);
         assert_eq!(
-            host.grant_if_code_matches(&bad, now).unwrap_err(),
-            PairingError::Exhausted
+            decode_payload(&serde_json::to_vec(&extra).unwrap()).unwrap_err(),
+            PairingError::BadVersion
         );
-        assert_eq!(
-            host.grant_if_code_matches(&code, now).unwrap_err(),
-            PairingError::Replay
-        );
-        let mut joiner = JoinerSession::from_parts([0x12; 32], [0x56; 16], now + PAIRING_TTL_SECS).unwrap();
-        let mut host = HostSession::accept_with(
-            &joiner.offer(),
-            req(TOKEN),
-            now,
-            &mut ConsumedPairings::default(),
-            Some([0x23; 32]),
-        )
-        .unwrap();
-        let code = joiner.read_announce(&host.announce(), now).unwrap();
-        let grant = host.grant_with_nonce(&code, now, Some([0x47; 24])).unwrap();
-        let bad = wrong(&code);
-        let mut consumed = ConsumedPairings::default();
-        assert_eq!(
-            joiner.open(&grant, &bad, now, &mut consumed).unwrap_err(),
-            PairingError::BadCode
-        );
-        assert_eq!(
-            joiner.open(&grant, &bad, now, &mut consumed).unwrap_err(),
-            PairingError::BadCode
-        );
-        assert_eq!(
-            joiner.open(&grant, &bad, now, &mut consumed).unwrap_err(),
-            PairingError::Exhausted
-        );
-        assert_eq!(
-            joiner.open(&grant, &code, now, &mut consumed).unwrap_err(),
-            PairingError::Replay
-        );
+        let vector = test_vector_json().unwrap();
+        assert!(vector.contains("gitpass-pair:2:qr:"));
+        assert!(!vector.contains(PASSWORD));
+        assert!(!vector.contains("master_password"));
+        let opened = test_vector_open().unwrap();
+        assert_eq!(&opened.sync_token[..], TV_TOKEN);
+        assert_eq!(opened.repo_owner, "fake-owner");
     }
 
     #[test]
-    fn clock_skew_boundary_and_replay_prune() {
-        let now = 1_700_000_000;
-        // A peer clock 60s ahead of this one still fits (exp = now + ttl + 60). 61s does not.
-        assert!(check_window(now, now + PAIRING_TTL_SECS + 60).is_ok());
-        assert_eq!(
-            check_window(now, now + PAIRING_TTL_SECS + 61).unwrap_err(),
-            PairingError::BadMessage
-        );
-        assert_eq!(check_window(now, now).unwrap_err(), PairingError::Expired);
-        let dir = tempfile::tempdir().unwrap();
-        let mut c = ConsumedPairings::default();
-        let fresh_exp = now + 30;
-        let stale_exp = now - RETAIN_AFTER_EXP_SECS - 1;
-        c.mark_accepted("freshSID", fresh_exp, 1).unwrap();
-        c.mark_released("staleSID", stale_exp, 1).unwrap();
-        save_consumed(dir.path(), &c).unwrap();
-        let mut loaded = load_consumed(dir.path()).unwrap();
-        assert!(loaded.is_used("freshSID", now));
-        assert!(!loaded.is_used("staleSID", now));
-        save_consumed(dir.path(), &loaded).unwrap();
-        let raw = fs::read_to_string(dir.path().join(CONSUMED_FILE)).unwrap();
-        assert!(raw.contains("freshSID"));
-        assert!(!raw.contains("staleSID"));
+    fn open_before_commit_is_rejected() {
+        let now = 1_700_000_100;
+        let (mut host, _, _) = pair_at(now);
+        let early = encode(T_OPEN, &[0u8; OPEN_LEN]).unwrap();
+        assert_eq!(host.push(&early, now).error, Some(PairingError::BadMessage));
     }
 
-    #[test]
-    fn tamper_inside_ciphertext_nonce_or_key_fails_authentication() {
-        let now = 1_700_000_000;
-        let mut joiner = JoinerSession::from_parts([0x11; 32], [0x33; 16], now + PAIRING_TTL_SECS).unwrap();
-        let mut host = HostSession::accept_with(
-            &joiner.offer(),
-            req(TOKEN),
-            now,
-            &mut ConsumedPairings::default(),
-            Some([0x22; 32]),
-        )
-        .unwrap();
-        let code = joiner.read_announce(&host.announce(), now).unwrap();
-        let grant = host.grant_with_nonce(&code, now, Some([0x44; 24])).unwrap();
-        let mut consumed = ConsumedPairings::default();
-        for bad in [flip_ct(&grant), flip_nonce(&grant), seal_with_other_key(&grant)] {
-            assert_eq!(
-                joiner.open(&bad, &code, now, &mut consumed).unwrap_err(),
-                PairingError::Tampered,
-                "{bad}"
-            );
-        }
-        joiner
-            .open(&grant, &code, now, &mut consumed)
-            .unwrap();
+    fn sample_code(phone: &[u8; 32], host_pub: &[u8; 32]) -> String {
+        let ikm = [0x07u8; 32];
+        let t = Transcript {
+            sid: [0x55; 16],
+            exp: TV_NOW + PAIRING_TTL_SECS,
+            port: TV_PORT,
+            addrs_json: "[\"127.0.0.1\"]".into(),
+            host_pub: *host_pub,
+            commitment: sha256_2(phone, &[0x33; 32]),
+            nonce_d: [0x44; 32],
+            phone_pub: *phone,
+            nonce_p: [0x33; 32],
+        };
+        let salt = transcript_hash(&t.bytes());
+        let mut sas = hkdf32(&ikm, Some(&salt), b"gitpass/pair/v2/sas");
+        let code = code_from_key(&sas);
+        sas.0.zeroize();
+        code
     }
 
-    fn envelope_of(grant: &str) -> (String, crate::crypto::Envelope) {
-        let dot = grant.rfind('.').unwrap();
-        let (head, blob) = grant.split_at(dot);
-        let raw = B64U.decode(&blob[1..]).unwrap();
-        let env = serde_json::from_slice(&raw).unwrap();
-        (head.to_string(), env)
+    fn grant_body(frame: &mut [u8]) -> (usize, Envelope) {
+        let n = u32::from_be_bytes([frame[0], frame[1], frame[2], frame[3]]) as usize;
+        assert_eq!(frame[4], T_GRANT);
+        let env: Envelope = serde_json::from_slice(&frame[5..4 + n]).unwrap();
+        (n, env)
     }
-    fn grant_with(head: &str, env: &crate::crypto::Envelope) -> String {
-        let raw = serde_json::to_vec(env).unwrap();
-        format!("{head}.{}", b64(&raw))
+
+    fn write_grant(frame: &mut Vec<u8>, env: &Envelope) {
+        let body = serde_json::to_vec(env).unwrap();
+        let encoded = encode(T_GRANT, &body).unwrap();
+        frame.clear();
+        frame.extend_from_slice(&encoded);
     }
-    fn flip_ct(grant: &str) -> String {
-        use base64::engine::general_purpose::STANDARD as B64;
-        use base64::Engine;
-        let (head, mut env) = envelope_of(grant);
+
+    fn flip_ct(frame: &mut Vec<u8>) {
+        let (_n, mut env) = grant_body(frame);
         let mut ct = B64.decode(&env.ct).unwrap();
         let i = ct.len() / 2;
         ct[i] ^= 0x01;
         env.ct = B64.encode(ct);
-        grant_with(&head, &env)
+        write_grant(frame, &env);
     }
-    fn flip_nonce(grant: &str) -> String {
-        use base64::engine::general_purpose::STANDARD as B64;
-        use base64::Engine;
-        let (head, mut env) = envelope_of(grant);
+
+    fn flip_nonce(frame: &mut Vec<u8>) {
+        let (_n, mut env) = grant_body(frame);
         let mut nonce = B64.decode(&env.nonce).unwrap();
         nonce[0] ^= 0x01;
         env.nonce = B64.encode(nonce);
-        grant_with(&head, &env)
+        write_grant(frame, &env);
     }
-    fn seal_with_other_key(grant: &str) -> String {
-        let (head, env) = envelope_of(grant);
-        let wrong = crate::crypto::Key32([0x99; 32]);
-        let sealed = crate::crypto::seal_with_nonce(&wrong, b"{}", b"aad", [0x48; 24]).unwrap();
-        let _ = env;
-        grant_with(&head, &sealed)
+
+    fn reseal_with_other_key(frame: &mut Vec<u8>) {
+        let (_n, env) = grant_body(frame);
+        let other = Key32([0x5A; 32]);
+        let nonce = B64.decode(&env.nonce).unwrap();
+        let mut n = [0u8; 24];
+        n.copy_from_slice(&nonce);
+        let sealed = seal_with_nonce(&other, b"not-the-payload", b"gitpass/pair/v2", n).unwrap();
+        write_grant(frame, &sealed);
     }
 }
