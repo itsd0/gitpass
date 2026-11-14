@@ -417,3 +417,110 @@ describe("Unlock focus while another app is in front", () => {
     expect(api.unlockBiometric).not.toHaveBeenCalled();
   });
 });
+
+describe("Unlock Secret Key requirement", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    useI18n.getState().setLang("en");
+    useApp.setState({
+      locked: true,
+      account: null,
+      sidebarCollapsed: false,
+      route: { name: "items", filter: { kind: "all" } },
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    useI18n.getState().setLang("en");
+  });
+
+  it("requires a Secret Key and shows the localized error when none is on disk", async () => {
+    const unlockSpy = vi.spyOn(api, "unlock").mockRejectedValue(
+      new Error("secret key required: enter your Secret Key (from your Emergency Kit) or use Touch ID"),
+    );
+    for (const lang of ["en", "my", "th"] as const) {
+      cleanup();
+      unlockSpy.mockClear();
+      useI18n.getState().setLang(lang);
+      vi.spyOn(api, "status").mockResolvedValue({
+        unlocked: false,
+        vaultPath: "/tmp/fake-vault",
+        account: null,
+        vaultExists: true,
+        biometricAvailable: true,
+        secretKeyOnDisk: false,
+      });
+      render(<Unlock />);
+      await act(async () => {});
+
+      const field = screen.getByLabelText(translate(lang, "unlock.secretKey"));
+      expect(field.getAttribute("placeholder")).toBe(translate(lang, "unlock.secretKeyPlaceholderRequired"));
+      expect(field.getAttribute("placeholder")).not.toMatch(/optional|ရွေးချယ်|ไม่บังคับ/i);
+      expect(screen.queryByPlaceholderText(translate(lang, "unlock.secretKeyPlaceholder"))).toBeNull();
+
+      const buttons = screen.getAllByRole("button", { name: translate(lang, "unlock.submit") });
+      for (const button of buttons) expect((button as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole("button", { name: new RegExp(translate(lang, "unlock.touchId"), "i") }) as HTMLButtonElement).disabled).toBe(false);
+
+      fireEvent.change(screen.getByLabelText(translate(lang, "unlock.masterPassword")), { target: { value: "correct horse" } });
+      for (const button of screen.getAllByRole("button", { name: translate(lang, "unlock.submit") })) {
+        expect((button as HTMLButtonElement).disabled).toBe(true);
+      }
+      fireEvent.submit(screen.getByTestId("unlock").querySelector("form")!);
+      expect(screen.getByRole("alert").textContent).toBe(translate(lang, "unlock.errSecretKeyRequired"));
+      expect(screen.getByRole("alert").textContent).not.toContain("/tmp/fake-vault");
+      expect(unlockSpy).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByLabelText(translate(lang, "unlock.masterPassword")), { target: { value: "correct horse" } });
+      fireEvent.change(field, { target: { value: "A3-NOT-A-REAL-KEY" } });
+      for (const button of screen.getAllByRole("button", { name: translate(lang, "unlock.submit") })) {
+        expect((button as HTMLButtonElement).disabled).toBe(false);
+      }
+      await act(async () => {
+        fireEvent.click(screen.getAllByRole("button", { name: translate(lang, "unlock.submit") })[1]);
+      });
+      expect((await screen.findByRole("alert")).textContent).toBe(translate(lang, "unlock.errSecretKeyRequired"));
+      expect(screen.getByRole("alert").textContent).not.toContain("/tmp/fake-vault");
+      expect(screen.getByRole("alert").textContent).not.toContain("A3-NOT-A-REAL-KEY");
+      expect(unlockSpy).toHaveBeenCalledTimes(1);
+      cleanup();
+    }
+  });
+
+  it("keeps the Secret Key optional when secret.key is on disk", async () => {
+    vi.spyOn(api, "status").mockResolvedValue({
+      unlocked: false,
+      vaultPath: "/tmp/fake-vault",
+      account: null,
+      vaultExists: true,
+      biometricAvailable: false,
+      secretKeyOnDisk: true,
+    });
+    const unlockSpy = vi.spyOn(api, "unlock").mockResolvedValue({
+      unlocked: true,
+      vaultPath: "/tmp/fake-vault",
+      account: "Demo",
+      secretKeyOnDisk: false,
+    });
+    render(<Unlock />);
+    await act(async () => {});
+
+    expect(screen.queryByLabelText("Secret Key")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Master password"), { target: { value: "correct horse" } });
+    const submit = screen.getAllByRole("button", { name: "Unlock" })[1] as HTMLButtonElement;
+    expect(submit.disabled).toBe(false);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Vault folder & Secret Key/i }));
+    });
+    expect(screen.getByPlaceholderText("Secret Key (A3-XXXXXX-…), optional")).toBeTruthy();
+    fireEvent.click(submit);
+    await act(async () => {});
+    expect(unlockSpy).toHaveBeenCalledWith({
+      vaultPath: "/tmp/fake-vault",
+      password: "correct horse",
+      secretKey: null,
+    });
+  });
+});

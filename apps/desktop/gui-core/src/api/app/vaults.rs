@@ -14,7 +14,7 @@ impl App {
         let g = self.state.inner.lock().map_err(|_| anyhow!("state poisoned"))?;
         Ok(match &g.unlocked {
             Some(u) => UnlockState { unlocked: true, vault_path: u.session.root.display().to_string(), account: Some(u.session.fmt.account_id.clone()), vault_exists: true,
-                biometric_available: false, throttled_secs: None },
+                biometric_available: false, secret_key_on_disk: false, throttled_secs: None },
             None => {
                 let vp = self.read_local().last_vault_path.unwrap_or_else(|| crate::default_vault_dir().display().to_string());
                 let p = PathBuf::from(&vp);
@@ -25,7 +25,9 @@ impl App {
                 } else {
                     None
                 };
-                UnlockState { unlocked: false, vault_path: vp, account: None, vault_exists: exists, biometric_available: bio, throttled_secs }
+                // Presence only. The file is never read here, and an unlocked or missing vault reports false.
+                let secret_key_on_disk = exists && p.join("secret.key").is_file();
+                UnlockState { unlocked: false, vault_path: vp, account: None, vault_exists: exists, biometric_available: bio, secret_key_on_disk, throttled_secs }
             }
         })
     }
@@ -40,9 +42,17 @@ impl App {
         if !is_biometric {
             gitpass_core::unlock_throttle::check_throttle(&dir)?;
         }
-        let sk = match secret_key.filter(|k| !k.trim().is_empty()) {
+        let sk = match secret_key.map(str::trim).filter(|k| !k.is_empty()) {
             Some(k) => crate::parse_secret_key(k)?,
-            None => crate::read_secret_key_file(&dir.join("secret.key"))?,
+            None => {
+                let path = dir.join("secret.key");
+                // Missing file is a user-facing prompt, not an I/O error. Do not create the file
+                // and do not include a path (or any key material) in the message.
+                if !path.is_file() {
+                    bail!("secret key required: enter your Secret Key (from your Emergency Kit) or use Touch ID");
+                }
+                crate::read_secret_key_file(&path)?
+            }
         };
         let opts = { let o = self.unlock_opts.lock().map_err(|_| anyhow!("poisoned"))?; UnlockOpts { accept_rollback: o.accept_rollback, target_kdf: o.target_kdf.clone() } };
         if is_biometric {

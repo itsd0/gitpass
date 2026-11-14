@@ -96,6 +96,38 @@ fn create_account_and_biometric_unlock() {
 }
 
 #[test]
+fn unlock_requires_typed_secret_key_when_file_missing() {
+    let root = tempfile::tempdir().unwrap();
+    let cfg = tempfile::tempdir().unwrap();
+    let dir = root.path().join("v");
+    let sk = store::init(dir.as_path(), "correct horse", fast()).unwrap().encode();
+    assert!(!dir.join("secret.key").exists());
+    let app = App::new(cfg.path().to_path_buf(), Arc::new(MemClipboard::default()));
+    app.set_unlock_opts(UnlockOpts { accept_rollback: false, target_kdf: fast() });
+    let path = dir.display().to_string();
+
+    let missing = app.unlock(&path, "correct horse", None).unwrap_err().to_string();
+    assert!(missing.starts_with("secret key required"), "{missing}");
+    assert!(!missing.contains(&path) && !missing.contains("secret.key") && !missing.contains("os error"), "{missing}");
+    let blank = app.unlock(&path, "correct horse", Some("  \n")).unwrap_err().to_string();
+    assert_eq!(blank, missing);
+    assert!(!dir.join("secret.key").exists(), "unlock must not create secret.key");
+    assert!(gitpass_core::unlock_throttle::seconds_remaining(&dir).is_none());
+
+    let st = app.unlock(&path, "correct horse", Some(&sk)).unwrap();
+    assert!(st.unlocked && !st.secret_key_on_disk);
+    app.lock();
+    let locked = app.status().unwrap();
+    assert!(!locked.unlocked && locked.vault_exists && !locked.secret_key_on_disk);
+
+    std::fs::write(dir.join("secret.key"), format!("{sk}\n")).unwrap();
+    let with_file = app.status().unwrap();
+    assert!(with_file.secret_key_on_disk);
+    assert!(app.unlock(&path, "correct horse", None).unwrap().unlocked);
+    assert!(!app.status().unwrap().secret_key_on_disk);
+}
+
+#[test]
 fn emergency_kit_data_reveal_rules() {
     let root = tempfile::tempdir().unwrap();
     let cfg = tempfile::tempdir().unwrap();

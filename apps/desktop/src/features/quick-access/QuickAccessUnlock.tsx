@@ -13,10 +13,16 @@ function isForegroundWindow(): boolean {
   return document.visibilityState === 'visible' && document.hasFocus();
 }
 
+function shownUnlockError(message: string, localized: string): string {
+  return message.toLowerCase().startsWith('secret key required') ? localized : message;
+}
+
 export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
   const t = useT();
   const { unlock, setAccount } = useApp();
   const [pw, setPw] = useState('');
+  const [sk, setSk] = useState('');
+  const [skOnDisk, setSkOnDisk] = useState<boolean | null>(null);
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   const [vaultPath, setVaultPath] = useState('');
@@ -41,6 +47,7 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
     Promise.all([api.status(), api.getSettings()]).then(([st, sett]) => {
       if (!active) return;
       setVaultPath(st.vaultPath);
+      setSkOnDisk(typeof st.secretKeyOnDisk === 'boolean' ? st.secretKeyOnDisk : null);
       const canBio = !!st.biometricAvailable && !!sett.biometricUnlock;
       setBioAvailable(canBio);
       if (st.throttledSecs && st.throttledSecs > 0) {
@@ -90,7 +97,7 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
       if (throttleMatch) {
         setThrottleLeft(parseInt(throttleMatch[1], 10));
       } else {
-        setErr(msg);
+        setErr(shownUnlockError(msg, t('unlock.errSecretKeyRequired')));
       }
     } finally {
       bioInFlight.current = false;
@@ -98,21 +105,26 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
     }
   }
 
+  const skRequired = skOnDisk === false;
+  const skMissing = skRequired && !sk.trim();
+
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!pw || busy) return;
-    setBusy(true);
     setErr('');
+    if (skMissing) { setErr(t('unlock.errSecretKeyRequired')); return; }
+    setBusy(true);
     try {
-      const s = await api.unlock({ vaultPath, password: pw, secretKey: null });
+      const s = await api.unlock({ vaultPath, password: pw, secretKey: sk.trim() || null });
       setAccount(s.account);
       unlock();
       onDone?.();
     } catch (x) {
       const msg = x instanceof Error ? x.message : String(x);
-      setErr(msg);
+      setErr(shownUnlockError(msg, t('unlock.errSecretKeyRequired')));
     } finally {
       setPw('');
+      setSk('');
       setBusy(false);
     }
   }
@@ -153,6 +165,19 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
           className="h-10 focus-visible:ring-accent"
         />
 
+        {skRequired && (
+          <Input
+            type="password"
+            autoComplete="off"
+            value={sk}
+            onChange={(e) => setSk(e.target.value)}
+            placeholder={t('unlock.secretKeyPlaceholderRequired')}
+            aria-label={t('unlock.secretKey')}
+            aria-required="true"
+            className="h-10 focus-visible:ring-accent"
+          />
+        )}
+
         {(throttleLeft > 0 ? t('unlock.throttled', { n: throttleLeft }) : err) && (
           <p role="alert" className="text-xs text-danger leading-tight">
             {throttleLeft > 0 ? t('unlock.throttled', { n: throttleLeft }) : err}
@@ -163,7 +188,7 @@ export function QuickAccessUnlock({ onDone }: { onDone?: () => void }) {
           <Button
             type="submit"
             className="flex-1"
-            disabled={busy || !pw || throttleLeft > 0}
+            disabled={busy || !pw || throttleLeft > 0 || skMissing}
           >
             {busy ? (
               <Loader2 className="h-4 w-4 animate-spin" />

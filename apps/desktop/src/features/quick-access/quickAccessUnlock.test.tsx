@@ -323,4 +323,37 @@ describe('QuickAccessUnlock', () => {
 
     vi.useRealTimers();
   });
+
+  it('requires a Secret Key when none is saved on disk', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    vi.spyOn(api, 'status').mockResolvedValue({
+      unlocked: false,
+      vaultPath: '~/.gitpass-test',
+      account: null,
+      biometricAvailable: true,
+      secretKeyOnDisk: false,
+    });
+    vi.spyOn(api, 'getSettings').mockResolvedValue({
+      ...bioSettings,
+      biometricUnlock: true,
+    });
+    const unlockSpy = vi.spyOn(api, 'unlock');
+    render(
+      <TooltipProvider>
+        <QuickAccessUnlock />
+      </TooltipProvider>
+    );
+
+    const key = await screen.findByLabelText('Secret Key');
+    expect(key.getAttribute('placeholder')).toBe('Secret Key (A3-XXXXXX-…)');
+    const submit = screen.getByRole('button', { name: 'Unlock' }) as HTMLButtonElement;
+    expect(submit.disabled).toBe(true);
+    expect((screen.getByRole('button', { name: /Touch ID/i }) as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.change(screen.getByLabelText(/Master password/i), { target: { value: 'correct horse' } });
+    expect(submit.disabled).toBe(true);
+    fireEvent.submit(screen.getByTestId('quick-access-unlock').querySelector('form')!);
+    expect(screen.getByRole('alert').textContent).toBe('Enter your Secret Key from your Emergency Kit, or unlock with Touch ID.');
+    expect(unlockSpy).not.toHaveBeenCalled();
+  });
 });

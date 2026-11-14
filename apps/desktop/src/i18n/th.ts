@@ -752,6 +752,8 @@ export const th: Partial<Record<Key, string>> = {
   "unlock.vaultFolder": "โฟลเดอร์ห้องนิรภัย",
   "unlock.secretKey": "Secret Key",
   "unlock.secretKeyPlaceholder": "Secret Key (A3-XXXXXX-…), ไม่บังคับ",
+  "unlock.secretKeyPlaceholderRequired": "Secret Key (A3-XXXXXX-…)",
+  "unlock.errSecretKeyRequired": "ป้อน Secret Key จาก Emergency Kit หรือปลดล็อกด้วย Touch ID",
   "unlock.errShortPassword": "รหัสผ่านหลักต้องมีความยาวอย่างน้อย 8 ตัวอักษร",
   "unlock.errPasswordMismatch": "รหัสผ่านไม่ตรงกัน",
   "unlock.createTitle": "สร้างห้องนิรภัย gitpass",

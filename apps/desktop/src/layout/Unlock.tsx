@@ -9,6 +9,11 @@ import { CapsLockHint, useCapsLockHint } from '../lib/capsLock';
 
 const msg = (x: unknown) => (x instanceof Error ? x.message : String(x));
 
+/** Map the fixed missing-Secret-Key error. The backend text has no path or key material. */
+function shownUnlockError(message: string, localized: string): string {
+  return message.toLowerCase().startsWith('secret key required') ? localized : message;
+}
+
 export function Unlock() {
   const { unlock, setAccount } = useApp();
   const t = useT();
@@ -24,6 +29,7 @@ export function Unlock() {
   const [mode, setMode] = useState<'unlock' | 'create'>('unlock');
   const [saveSk, setSaveSk] = useState(false);
   const [throttleLeft, setThrottleLeft] = useState<number>(0);
+  const [skOnDisk, setSkOnDisk] = useState<boolean | null>(null);
   const [created, setCreated] = useState<{ secretKey: string; account: string | null } | null>(null); const [showKit, setShowKit] = useState(false);
   const [saved, setSaved] = useState(false);
   const capsPw = useCapsLockHint();
@@ -54,6 +60,7 @@ export function Unlock() {
       setVaultPath((p) => p || s.vaultPath);
       if (s.unlocked) { setAccount(s.account); unlock(); return; }
       const ex = s.vaultExists ?? true; setExists(ex); if (!ex) setMode('create');
+      setSkOnDisk(typeof s.secretKeyOnDisk === 'boolean' ? s.secretKeyOnDisk : null);
       setBio(!!s.biometricAvailable);
       if (s.throttledSecs && s.throttledSecs > 0) {
         setThrottleLeft(s.throttledSecs);
@@ -69,10 +76,15 @@ export function Unlock() {
     return () => clearInterval(interval);
   }, [throttleLeft]);
 
+  const skRequired = exists && skOnDisk === false;
+  const skMissing = skRequired && !sk.trim();
+
   async function submit(e: FormEvent) {
-    e.preventDefault(); setBusy(true); setErr('');
+    e.preventDefault(); setErr('');
+    if (skMissing) { setErr(t('unlock.errSecretKeyRequired')); return; }
+    setBusy(true);
     try {
-      const s = await api.unlock({ vaultPath, password: pw, secretKey: sk || null });
+      const s = await api.unlock({ vaultPath, password: pw, secretKey: sk.trim() || null });
       setAccount(s.account); unlock();
     } catch (x) {
       const m = msg(x);
@@ -80,7 +92,7 @@ export function Unlock() {
       if (throttleMatch) {
         setThrottleLeft(parseInt(throttleMatch[1], 10));
       } else {
-        setErr(m);
+        setErr(shownUnlockError(m, t('unlock.errSecretKeyRequired')));
         if (/not a gitpass vault/i.test(m)) { setExists(false); }
       }
     } finally { setPw(''); setSk(''); setBusy(false); }
@@ -88,7 +100,7 @@ export function Unlock() {
   async function touchId() {
     setBusy(true); setErr('');
     try { const s = await api.unlockBiometric({ vaultPath }); setAccount(s.account); unlock(); }
-    catch (x) { setErr(msg(x)); } finally { setBusy(false); }
+    catch (x) { setErr(shownUnlockError(msg(x), t('unlock.errSecretKeyRequired'))); } finally { setBusy(false); }
   }
   async function create(e: FormEvent) {
     e.preventDefault(); setErr('');
@@ -145,9 +157,12 @@ export function Unlock() {
         <label className="mb-1 block text-xs text-muted" htmlFor="pw">{t('unlock.masterPassword')}</label>
         <div className="relative">
           <Input ref={passwordRef} id="pw" type="password" autoComplete="off" className="h-10 pr-10" value={pw} onChange={(e) => setPw(e.target.value)} placeholder={t('unlock.masterPasswordPlaceholder')} {...capsPw.fieldProps} />
-          <button type="submit" disabled={busy || !pw || throttleLeft > 0} aria-label={t('unlock.submit')} className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md bg-accent text-white disabled:opacity-40">{busy ? <Loader2 size={15} className="animate-spin" /> : <ChevronRight size={16} />}</button>
+          <button type="submit" disabled={busy || !pw || throttleLeft > 0 || skMissing} aria-label={t('unlock.submit')} className="absolute right-1 top-1 flex h-8 w-8 items-center justify-center rounded-md bg-accent text-white disabled:opacity-40">{busy ? <Loader2 size={15} className="animate-spin" /> : <ChevronRight size={16} />}</button>
         </div>
         <CapsLockHint id={capsPw.hintId} show={capsPw.show} />
+        {skRequired && (
+          <Input aria-label={t('unlock.secretKey')} aria-required="true" type="password" autoComplete="off" className="mt-3" value={sk} onChange={(e) => setSk(e.target.value)} placeholder={t('unlock.secretKeyPlaceholderRequired')} />
+        )}
         {(throttleLeft > 0 ? t('unlock.throttled', { n: throttleLeft }) : err) && (
           <p className="mt-2 text-xs text-danger" role="alert">
             {throttleLeft > 0 ? t('unlock.throttled', { n: throttleLeft }) : err}
@@ -157,9 +172,9 @@ export function Unlock() {
         <button type="button" onClick={() => setShowSk(!showSk)} className="mt-4 flex items-center gap-1.5 text-xs text-accent hover:underline"><KeyRound size={12} />{showSk ? t('unlock.hideAdvanced') : t('unlock.showAdvanced')}</button>
         {showSk && <div className="mt-3 space-y-2">
           <Input aria-label={t('unlock.vaultFolder')} value={vaultPath} onChange={(e) => setVaultPath(e.target.value)} placeholder="~/.gitpass" />
-          <Input aria-label={t('unlock.secretKey')} type="password" autoComplete="off" value={sk} onChange={(e) => setSk(e.target.value)} placeholder={t('unlock.secretKeyPlaceholder')} />
+          {!skRequired && <Input aria-label={t('unlock.secretKey')} type="password" autoComplete="off" value={sk} onChange={(e) => setSk(e.target.value)} placeholder={t('unlock.secretKeyPlaceholder')} />}
         </div>}
-        <Button type="submit" size="lg" className="mt-6 w-full" disabled={busy || !pw || throttleLeft > 0}>{busy ? t('unlock.unlocking') : t('unlock.submit')}</Button>
+        <Button type="submit" size="lg" className="mt-6 w-full" disabled={busy || !pw || throttleLeft > 0 || skMissing}>{busy ? t('unlock.unlocking') : t('unlock.submit')}</Button>
         {bio && <Button type="button" variant="outline" size="lg" className="mt-2 w-full" disabled={busy} onClick={() => void touchId()}><Fingerprint size={16} /> {t('unlock.touchId')}</Button>}
       </form>
     </div>
