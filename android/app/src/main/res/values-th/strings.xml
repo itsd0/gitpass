@@ -122,4 +122,23 @@
     <string name="passkey_failed">คำขอพาสคีย์ไม่สำเร็จ โปรดลองอีกครั้ง</string>
     <string name="passkey_none">ไม่มีพาสคีย์ของ gitpass สำหรับ %1$s</string>
     <string name="passkey_setting">การตั้งค่าพาสคีย์</string>
+    <!-- TODO(i18n-review) Pairing v2 (#491). -->
+    <string name="pair_setup">ตั้งค่าด้วย QR</string>
+    <string name="pair_title">ตั้งค่าโทรศัพท์นี้</string>
+    <string name="pair_scan">สแกนคิวอาร์โค้ดบนคอมพิวเตอร์</string>
+    <string name="pair_connecting">กำลังเชื่อมต่อกับคอมพิวเตอร์</string>
+    <string name="pair_code_help">พิมพ์รหัสนี้บนคอมพิวเตอร์ รหัสนี้ไม่ใช่รหัสผ่าน</string>
+    <string name="pair_waiting">กำลังรอคอมพิวเตอร์</string>
+    <string name="pair_expires_in">เหลือเวลา %1$d วินาที</string>
+    <string name="pair_password_hint">พิมพ์รหัสผ่านหลักบนโทรศัพท์นี้ รหัสผ่านอยู่บนโทรศัพท์นี้เท่านั้น</string>
+    <string name="pair_received">โทรศัพท์นี้ซิงค์ %1$s (%2$s) ได้</string>
+    <string name="pair_finish">ตั้งค่าให้เสร็จ</string>
+    <string name="pair_expired">คิวอาร์โค้ดหมดอายุ เริ่มใหม่บนคอมพิวเตอร์</string>
+    <string name="pair_connect">โทรศัพท์เชื่อมต่อไม่ได้ ใช้ Wi-Fi เดียวกัน และอย่าใช้เครือข่ายแขกที่แยกอุปกรณ์ออกจากกัน</string>
+    <string name="pair_timeout">หมดเวลาจับคู่ เริ่มใหม่บนคอมพิวเตอร์</string>
+    <string name="pair_closed">การเชื่อมต่อถูกปิด เริ่มใหม่</string>
+    <string name="pair_failed">จับคู่ไม่สำเร็จ เริ่มใหม่</string>
+    <string name="pair_pull_failed">ดาวน์โหลดคลังไม่ได้ ข้อมูลเดิมยังอยู่</string>
+    <string name="pair_camera_unavailable">กล้องใช้ไม่ได้ การจับคู่ต้องใช้กล้องสแกนคิวอาร์โค้ด</string>
+    <string name="pair_restart">เริ่มใหม่</string>
 </resources>

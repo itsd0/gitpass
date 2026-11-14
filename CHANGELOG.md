@@ -9,6 +9,9 @@
   only then releases an XChaCha20-Poly1305 grant. The master password is not in any message, and
   the desktop API does not return its own code. Replaces the v1 QR frames from #457. Bridge
   `FFI_API_LEVEL` 9. The LAN transport and the pairing screens are separate changes.
+- Android pairing (#491, part): the phone scans the desktop QR, connects on the local
+  network, and shows the 6-digit code. The Master Password is typed on the phone, then the
+  first pull runs. Replaces the Android screens from #488.
 
 ## 0.7.0 — 2026-11-13
 

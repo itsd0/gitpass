@@ -121,4 +121,23 @@
     <string name="passkey_failed">The passkey request didn\'t work. Try again.</string>
     <string name="passkey_none">No gitpass passkey for %1$s.</string>
     <string name="passkey_setting">Passkey settings</string>
+    <!-- Pairing v2 (#491). The desktop shows the QR. This phone scans it. -->
+    <string name="pair_setup">Set up with QR</string>
+    <string name="pair_title">Set up this phone</string>
+    <string name="pair_scan">Scan the QR code on the computer.</string>
+    <string name="pair_connecting">Connecting to the computer.</string>
+    <string name="pair_code_help">Type this code on the computer. It is not a password.</string>
+    <string name="pair_waiting">Waiting for the computer.</string>
+    <string name="pair_expires_in">Time left %1$d s</string>
+    <string name="pair_password_hint">Type the Master Password on this phone. It stays on this phone.</string>
+    <string name="pair_received">This phone can sync %1$s (%2$s).</string>
+    <string name="pair_finish">Finish setup</string>
+    <string name="pair_expired">That QR code expired. Start again on the computer.</string>
+    <string name="pair_connect">The phone could not connect. Use the same Wi-Fi, and not a guest network that isolates devices.</string>
+    <string name="pair_timeout">Pairing timed out. Start again on the computer.</string>
+    <string name="pair_closed">The connection closed. Start again.</string>
+    <string name="pair_failed">Pairing failed. Start again.</string>
+    <string name="pair_pull_failed">The vault could not be downloaded. Existing data was kept.</string>
+    <string name="pair_camera_unavailable">The camera is not available. Pairing needs it to scan the QR code.</string>
+    <string name="pair_restart">Start again</string>
 </resources>

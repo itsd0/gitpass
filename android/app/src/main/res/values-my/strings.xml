@@ -122,4 +122,23 @@
     <string name="passkey_failed">passkey တောင်းဆိုမှု မအောင်မြင်ပါ။ ထပ်စမ်းကြည့်ပါ။</string>
     <string name="passkey_none">%1$s အတွက် gitpass passkey မရှိပါ။</string>
     <string name="passkey_setting">Passkey ဆက်တင်များ</string>
+    <!-- TODO(i18n-review) Pairing v2 (#491). -->
+    <string name="pair_setup">QR ဖြင့် စတင်မည်</string>
+    <string name="pair_title">ဤဖုန်းကို စတင်သတ်မှတ်မည်</string>
+    <string name="pair_scan">ကွန်ပျူတာပေါ်က QR ကုဒ်ကို စကန်ဖတ်ပါ။</string>
+    <string name="pair_connecting">ကွန်ပျူတာနှင့် ချိတ်ဆက်နေသည်။</string>
+    <string name="pair_code_help">ဤကုဒ်ကို ကွန်ပျူတာတွင် ရိုက်ထည့်ပါ။ ၎င်းသည် စကားဝှက်မဟုတ်ပါ။</string>
+    <string name="pair_waiting">ကွန်ပျူတာကို စောင့်နေသည်။</string>
+    <string name="pair_expires_in">ကျန်ချိန် %1$d စက္ကန့်</string>
+    <string name="pair_password_hint">ပင်မစကားဝှက်ကို ဤဖုန်းတွင် ရိုက်ထည့်ပါ။ ၎င်းသည် ဤဖုန်းထဲတွင်သာ ရှိသည်။</string>
+    <string name="pair_received">ဤဖုန်းသည် %1$s (%2$s) ကို စင့်ခ်လုပ်နိုင်သည်။</string>
+    <string name="pair_finish">စတင်သတ်မှတ်မှု ပြီးမည်</string>
+    <string name="pair_expired">QR ကုဒ် သက်တမ်းကုန်ပါပြီ။ ကွန်ပျူတာတွင် ပြန်စပါ။</string>
+    <string name="pair_connect">ဖုန်း ချိတ်ဆက်၍ မရပါ။ တူညီသော Wi-Fi ကို သုံးပါ။ စက်များကို ခွဲထားသော ဧည့်သည်ကွန်ရက် မဖြစ်ပါစေနှင့်။</string>
+    <string name="pair_timeout">ချိတ်ဆက်ချိန် ကုန်ပါပြီ။ ကွန်ပျူတာတွင် ပြန်စပါ။</string>
+    <string name="pair_closed">ချိတ်ဆက်မှု ပိတ်သွားသည်။ ပြန်စပါ။</string>
+    <string name="pair_failed">ချိတ်ဆက်မှု မအောင်မြင်ပါ။ ပြန်စပါ။</string>
+    <string name="pair_pull_failed">သိုလှောင်ခန်းကို ဒေါင်းလုဒ်လုပ်၍ မရပါ။ ရှိပြီးသား ဒေတာကို ထိန်းထားသည်။</string>
+    <string name="pair_camera_unavailable">ကင်မရာ မရနိုင်ပါ။ QR ကုဒ် စကန်ဖတ်ရန် လိုအပ်သည်။</string>
+    <string name="pair_restart">ပြန်စမည်</string>
 </resources>
