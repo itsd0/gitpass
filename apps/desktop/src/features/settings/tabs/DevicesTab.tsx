@@ -7,6 +7,7 @@ import { Badge, Button, Modal, Skeleton, toast } from '../../../ui';
 import { useT } from '../../../i18n';
 import { SettingsSection, SettingsRow } from '../SettingsSection';
 import { errMsg } from '../shared';
+import { AddDeviceDialog } from '../devices/AddDeviceDialog';
 
 export function DevicesTab({ highlightedId }: { highlightedId?: string | null }) {
   const t = useT();
@@ -14,6 +15,7 @@ export function DevicesTab({ highlightedId }: { highlightedId?: string | null })
   const [target, setTarget] = useState<DeviceInfo | null>(null);
   const [rotate, setRotate] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const load = () =>
     api
       .listDevices()
@@ -26,9 +28,14 @@ export function DevicesTab({ highlightedId }: { highlightedId?: string | null })
     load();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!list) return <Skeleton className="h-24" />;
-  if (!list.length) return <p className="py-6 text-sm text-muted">{t('devices.empty')}</p>;
   return (
     <>
+      <div className="mb-3 flex justify-end">
+        <Button onClick={() => setAddOpen(true)}>{t('devices.add')}</Button>
+      </div>
+      {!list.length ? (
+        <p className="py-6 text-sm text-muted">{t('devices.empty')}</p>
+      ) : (
       <SettingsSection id="setting-devices" title={t('settings.sectionDevices')} className={cn(highlightedId === 'setting-devices' && 'rounded-lg bg-accent/15 ring-2 ring-accent')}>
         {list.map((d) => (
           <SettingsRow
@@ -59,6 +66,7 @@ export function DevicesTab({ highlightedId }: { highlightedId?: string | null })
           </SettingsRow>
         ))}
       </SettingsSection>
+      )}
       <Modal
         open={!!target}
         onOpenChange={(o) => !o && setTarget(null)}
@@ -103,6 +111,7 @@ export function DevicesTab({ highlightedId }: { highlightedId?: string | null })
         </label>
         <p className="mt-2 text-xs text-muted">{t('devices.rotateHelp')}</p>
       </Modal>
+      <AddDeviceDialog open={addOpen} onOpenChange={setAddOpen} />
     </>
   );
 }

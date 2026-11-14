@@ -412,3 +412,77 @@ fn lan_listen_error_stays_fixed() {
         }
     }
 }
+
+const TYPED: &str = "github_pat_FAKE_typed_only";
+
+fn configure_remote(vault: &Path) {
+    let git = |args: &[&str]| {
+        let out = Command::new("git").arg("-C").arg(vault).args(args).output().unwrap();
+        assert!(out.status.success(), "git command failed");
+    };
+    git(&["init", "-b", "main"]);
+    git(&["remote", "add", "origin", "https://github.com/fake-owner/fake-vault.git"]);
+}
+
+#[test]
+fn a_typed_token_is_used_once_and_not_written() {
+    let e = env();
+    configure_remote(e._vault.path());
+    let path = e._vault.path().join(".gitpass-sync-token");
+    assert!(!path.exists());
+    let now = pairing::now_unix();
+    let prepared = e
+        .app
+        .pairing_host_begin_with(&["127.0.0.1".into()], 27621, Some(TYPED))
+        .unwrap();
+    assert!(!path.exists(), "typed token was written to disk");
+    assert!(prepared.qr.starts_with("gitpass-pair:2:qr:"));
+    assert!(!prepared.qr.contains(TYPED));
+    assert!(!prepared.qr.contains(PASSWORD));
+    assert!(!prepared.qr.contains(&e.sk));
+    let mut joiner = JoinerSession::from_qr(&prepared.qr, now, &mut pairing::ConsumedPairings::default()).unwrap();
+    let code = exchange(&e.app, &mut joiner, now);
+    let grant = e.app.pairing_host_confirm(&code).unwrap();
+    assert!(grant.error.is_none(), "grant step failed");
+    assert!(!String::from_utf8_lossy(&grant.outbound).contains(TYPED));
+    assert!(!String::from_utf8_lossy(&grant.outbound).contains(PASSWORD));
+    let opened = joiner.push(&grant.outbound, now);
+    assert!(opened.error.is_none(), "phone could not open the grant");
+    let payload = joiner.take_payload().unwrap();
+    assert!(payload.sync_token.as_str() == TYPED, "grant token mismatch");
+    assert!(payload.secret_key.encode() == e.sk, "grant secret mismatch");
+    assert!(!path.exists(), "typed token was written after the grant");
+    e.app.pairing_host_cancel().unwrap();
+}
+
+#[test]
+fn a_stored_token_wins_and_a_classic_token_is_not_echoed() {
+    let e = env();
+    configure_sync(e._vault.path());
+    let prepared = e
+        .app
+        .pairing_host_begin_with(&["127.0.0.1".into()], 27622, Some(TYPED))
+        .unwrap();
+    assert!(!prepared.qr.contains(TYPED));
+    assert!(!prepared.qr.contains(TOKEN));
+    let now = pairing::now_unix();
+    let mut joiner = JoinerSession::from_qr(&prepared.qr, now, &mut pairing::ConsumedPairings::default()).unwrap();
+    let code = exchange(&e.app, &mut joiner, now);
+    let grant = e.app.pairing_host_confirm(&code).unwrap();
+    let opened = joiner.push(&grant.outbound, now);
+    assert!(opened.error.is_none(), "phone could not open the grant");
+    let payload = joiner.take_payload().unwrap();
+    assert!(payload.sync_token.as_str() == TOKEN, "stored token was not used");
+    assert!(!String::from_utf8_lossy(&grant.outbound).contains(TYPED));
+
+    let e = env();
+    configure_remote(e._vault.path());
+    let err = e
+        .app
+        .pairing_host_begin_with(&["127.0.0.1".into()], 27623, Some("ghp_FAKE0123456789"))
+        .unwrap_err();
+    let text = err.to_string();
+    assert_eq!(text, "pairing payload field rejected");
+    assert!(!text.contains("ghp_"));
+    assert!(!e._vault.path().join(".gitpass-sync-token").exists());
+}

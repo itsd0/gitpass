@@ -93,9 +93,11 @@ pub(crate) fn clear_host_on_lock(slots: &Mutex<PairingHold>, dir: &Path) {
 
 const SYNC_TOKEN_FILE: &str = ".gitpass-sync-token";
 
-/// Owner, repository and branch from the vault's `origin` plus the fine-grained PAT
-/// in `.gitpass-sync-token`. Errors are fixed strings and do not include the token or the URL.
-fn load_github_sync(root: &Path) -> Result<(String, String, String, String)> {
+/// Owner, repository and branch from the vault's `origin`.
+/// The fine-grained PAT comes from `.gitpass-sync-token` when that file exists.
+/// Otherwise `typed` is used and is not written to disk. Errors do not include
+/// the token or the URL.
+fn load_github_sync(root: &Path, typed: Option<&str>) -> Result<(String, String, String, String)> {
     let url = super::sync::git(root, &["remote", "get-url", "origin"])
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow!("sync is not configured"))?;
@@ -103,15 +105,28 @@ fn load_github_sync(root: &Path) -> Result<(String, String, String, String)> {
         .filter(|s| !s.is_empty())
         .ok_or_else(|| anyhow!("sync is not configured"))?;
     let (owner, repo) = github_owner_repo(&url).ok_or_else(|| anyhow!("sync is not configured"))?;
-    gitpass_core::device::ensure_ignored(root, SYNC_TOKEN_FILE)
-        .map_err(|_| anyhow!("sync token is not configured"))?;
-    let raw = std::fs::read_to_string(root.join(SYNC_TOKEN_FILE))
-        .map_err(|_| anyhow!("sync token is not configured"))?;
+    if root.join(SYNC_TOKEN_FILE).is_file() {
+        gitpass_core::device::ensure_ignored(root, SYNC_TOKEN_FILE)
+            .map_err(|_| anyhow!("sync token is not configured"))?;
+        let stored = stored_token(root).ok_or_else(|| anyhow!("sync token is not configured"))?;
+        return Ok((owner, repo, branch, stored));
+    }
+    let typed = typed
+        .map(str::trim)
+        .filter(|t| !t.is_empty() && !t.contains('\n') && !t.contains('\0'));
+    let Some(token) = typed else {
+        return Err(anyhow!("sync token is not configured"));
+    };
+    Ok((owner, repo, branch, token.to_string()))
+}
+
+fn stored_token(root: &Path) -> Option<String> {
+    let raw = std::fs::read_to_string(root.join(SYNC_TOKEN_FILE)).ok()?;
     let token = raw.trim();
     if token.is_empty() || token.contains('\n') || token.contains('\0') {
-        return Err(anyhow!("sync token is not configured"));
+        return None;
     }
-    Ok((owner, repo, branch, token.to_string()))
+    Some(token.to_string())
 }
 
 fn github_owner_repo(url: &str) -> Option<(String, String)> {
@@ -142,8 +157,17 @@ fn turn(step: PairingStep, phase: &str) -> PairingTurn {
 impl App {
     /// Open a host session for `addresses` and `port`. Returns the QR only.
     pub fn pairing_host_begin(&self, addresses: &[String], port: u16) -> Result<PairingHostPrepared> {
+        self.pairing_host_begin_with(addresses, port, None)
+    }
+
+    pub(crate) fn pairing_host_begin_with(
+        &self,
+        addresses: &[String],
+        port: u16,
+        typed_token: Option<&str>,
+    ) -> Result<PairingHostPrepared> {
         let (account_id, secret, owner, repo, branch, token) = self.with(|u| {
-            let (owner, repo, branch, token) = load_github_sync(&u.session.root)?;
+            let (owner, repo, branch, token) = load_github_sync(&u.session.root, typed_token)?;
             Ok((
                 u.session.fmt.account_id.clone(),
                 SecretKey(u.secret.0),
@@ -257,20 +281,30 @@ impl App {
 
     /// Bind on this machine's LAN addresses and publish them in the QR.
     /// There is no code in the result. An empty LAN returns a fixed error.
-    pub fn pairing_host_listen(&self) -> Result<PairingHostPrepared> {
+    /// `typed_token` is used only when `.gitpass-sync-token` is missing, and it is never written.
+    pub fn pairing_host_listen_with(&self, typed_token: Option<&str>) -> Result<PairingHostPrepared> {
         let ips = lan_ips();
         if ips.is_empty() {
             return Err(anyhow!("pairing needs a local network address"));
         }
-        self.pairing_host_listen_on(&ips)
+        self.listen_on(&ips, typed_token)
+    }
+
+    pub fn pairing_host_listen(&self) -> Result<PairingHostPrepared> {
+        self.pairing_host_listen_with(None)
     }
 
     /// Bind `ips` on one shared port. Tests pass the loopback address.
     /// Production uses [`App::pairing_host_listen`], which skips loopback.
-    pub(crate) fn pairing_host_listen_on(&self, ips: &[IpAddr]) -> Result<PairingHostPrepared> {
+    #[cfg(test)]
+    pub fn pairing_host_listen_on(&self, ips: &[IpAddr]) -> Result<PairingHostPrepared> {
+        self.listen_on(ips, None)
+    }
+
+    fn listen_on(&self, ips: &[IpAddr], typed_token: Option<&str>) -> Result<PairingHostPrepared> {
         self.with(|_| Ok(()))?;
         let (listeners, port, bound) = bind_shared_port(ips)?;
-        let prepared = self.pairing_host_begin(&bound, port)?;
+        let prepared = self.pairing_host_begin_with(&bound, port, typed_token)?;
         let mut g = self.pairing.lock().map_err(|_| anyhow!("poisoned"))?;
         g.cancel.store(false, Ordering::SeqCst);
         g.listeners = listeners;

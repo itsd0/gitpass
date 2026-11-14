@@ -1035,6 +1035,17 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   accept_share: () => { const v: T.VaultInfo = { id: uid('v'), name: 'Accepted Share (demo)', description: null, itemCount: 0, shared: true, members: [SELF], icon: null, color: '#22c55e' }; vaults.push(v); return delay(v); },
   list_devices: () => delay(devices),
   revoke_device: (a: { id: string }) => { const d = devices.find((x) => x.id === a.id); if (d) d.revoked = true; return delay(undefined); },
+  // Pairing v2 mock. The fake phone code is 123456. Nothing here is a real token.
+  pairing_host_listen: (a: { token?: string | null }) => {
+    if (a.token && !/^github_pat_[A-Za-z0-9_]+$/.test(a.token)) return Promise.reject(new Error('pairing payload field rejected'));
+    return delay<T.PairingHostPrepared>({ qr: 'gitpass-pair:2:qr:FAKE', expiresAt: Math.floor(Date.now() / 1000) + 120, port: 9, addresses: ['192.0.2.10'] });
+  },
+  pairing_host_accept: () => delay(undefined),
+  pairing_host_confirm: (a: { code: string }) =>
+    a.code === '123456'
+      ? delay<T.PairingStatus>({ phase: 'done', error: null })
+      : delay<T.PairingStatus>({ phase: 'code', error: 'pairing verification code does not match' }),
+  pairing_host_cancel: () => delay(undefined),
   get_settings: () => delay(settings),
   set_settings: (a: { settings: T.Settings }) => { settings = { ...a.settings }; return delay(settings); },
   change_password: (a: { current: string; next: string }) => (!a.current || !a.next ? Promise.reject(new Error('both passwords required')) : delay(undefined, 300)),

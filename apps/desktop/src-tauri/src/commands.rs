@@ -122,6 +122,24 @@ pub fn scan_totp(s: State<'_, App>, source: String, data_base64: Option<String>)
 #[tauri::command] pub fn accept_share(s: State<App>, path: String) -> R<a::VaultInfo> { s.accept_share(&path).map_err(e) }
 #[tauri::command] pub fn list_devices(s: State<App>) -> R<Vec<a::DeviceInfo>> { s.list_devices().map_err(e) }
 #[tauri::command(async)] pub fn revoke_device(s: State<'_, App>, id: String, rotate_credentials: bool) -> R<()> { s.revoke_device(&id, rotate_credentials).map_err(e) }
+/// Start the LAN listener. `token` is used only when no sync token file exists and is not written.
+#[tauri::command(async)] pub fn pairing_host_listen(s: State<'_, App>, token: Option<String>) -> R<a::PairingHostPrepared> {
+    let token = token.map(Zeroizing::new);
+    s.pairing_host_listen_with(token.as_deref()).map_err(e)
+}
+/// Block until the phone has connected and the person can type the code.
+#[tauri::command(async)] pub fn pairing_host_accept(s: State<'_, App>) -> R<()> {
+    s.pairing_host_accept(std::time::Duration::from_secs(120)).map_err(e)
+}
+/// Compare the typed code. The grant bytes stay on the socket; the UI only gets the phase.
+#[tauri::command(async)] pub fn pairing_host_confirm(s: State<'_, App>, code: String) -> R<PairingStatus> {
+    let turn = s.pairing_host_confirm(&code).map_err(e)?;
+    Ok(PairingStatus { phase: turn.phase, error: turn.error })
+}
+#[tauri::command(async)] pub fn pairing_host_cancel(s: State<'_, App>) -> R<()> { s.pairing_host_cancel().map_err(e) }
+
+#[derive(serde::Serialize)]
+struct PairingStatus { phase: String, error: Option<String> }
 #[tauri::command] pub fn get_settings(s: State<App>) -> a::Settings { s.get_settings() }
 /// Apply content protection to every open window (main, Quick Access, any secondary window).
 /// Best-effort per window: a window that cannot be protected must not fail the settings save.
