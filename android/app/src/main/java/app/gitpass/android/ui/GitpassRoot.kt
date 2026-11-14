@@ -131,6 +131,7 @@ private fun AccountRoot(app: GitpassApplication) {
     var revealedKeys by remember(snapshot.epoch) { mutableStateOf(setOf<String>()) }
     var queryText by remember(snapshot.epoch) { mutableStateOf("") }
     var importing by remember(snapshot.epoch) { mutableStateOf(false) }
+    var pairing by remember(snapshot.epoch) { mutableStateOf(false) }
     var writing by remember(snapshot.epoch) { mutableStateOf(false) }
 
     // Biometric unlock (#473). [enrollNext] is not keyed on the lock epoch so a
@@ -296,11 +297,14 @@ private fun AccountRoot(app: GitpassApplication) {
             },
         containerColor = GitpassBackground,
     ) { padding ->
-        if (importing && !snapshot.unlocked) {
+        if (pairing && !snapshot.unlocked) {
+            PairingSetupScreen(app, snapshot.epoch, padding) { pairing = false }
+        } else if (importing && !snapshot.unlocked) {
             FirstPullScreen(app, snapshot.epoch, padding) { importing = false }
         } else if (!snapshot.unlocked) {
             Column {
             TextButton(onClick = { password = ""; secretKey = ""; importing = true }, enabled = !busy, modifier = Modifier.testTag("first-pull")) { Text(stringResource(R.string.first_pull)) }
+            TextButton(onClick = { password = ""; secretKey = ""; pairing = true }, enabled = !busy, modifier = Modifier.testTag("pair-setup")) { Text(stringResource(R.string.pair_setup)) }
             UnlockScreen(
                 padding = padding,
                 vaultExists = vaultExists,
