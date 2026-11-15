@@ -20,8 +20,9 @@ impl App {
         let dirty = git(&root, &["status", "--porcelain"]).is_some_and(|s| !s.is_empty());
         Ok(SyncStatus { remote, last_sync, ahead, behind, dirty })
     }
-    /// Settings → Sync → Connect: `gitpass remote add <url>` for the unlocked vault. Uses the user's existing git
-    /// credentials only (no tokens are asked for or stored). Errors start with a `remote::E_*` category marker.
+    /// Settings → Sync → Connect: `gitpass remote add <url>` for the unlocked vault. Git push uses the
+    /// user's existing git credentials. The optional Add-device token is a separate git-ignored file.
+    /// Errors start with a `remote::E_*` category marker.
     pub fn remote_connect(&self, url: &str) -> Result<SyncStatus> { self.remote_connect_opts(url, false) }
     #[doc(hidden)]
     pub fn remote_connect_opts(&self, url: &str, allow_local: bool) -> Result<SyncStatus> {

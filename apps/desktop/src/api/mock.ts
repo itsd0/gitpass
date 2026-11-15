@@ -360,6 +360,7 @@ function genPw(length: number, symbols: boolean, digits: boolean, words?: boolea
 
 type A = any; // eslint-disable-line @typescript-eslint/no-explicit-any
 let syncState: T.SyncStatus = { remote: 'git@example.com:demo/vault.git', lastSync: '2026-10-25T09:00:00Z', ahead: 0, behind: 1, dirty: false };
+let syncTokenSaved = false;
 function resolveMockRelated(ids?: string[]): T.RelatedItem[] {
   if (!ids || ids.length === 0) return [];
   return ids.map((rid) => {
@@ -1051,10 +1052,20 @@ export const mock: Record<string, (a: A) => Promise<unknown>> = {
   change_password: (a: { current: string; next: string }) => (!a.current || !a.next ? Promise.reject(new Error('both passwords required')) : delay(undefined, 300)),
   rotate_secret_key: () => delay({ emergencyKit: 'gitpass Emergency Kit (DEMO)\nSecret Key: A3-FAKE00-FAKE00-FAKE00-FAKE00' }),
   sync_status: () => delay<T.SyncStatus>({ ...syncState }),
+  sync_token_saved: () => delay(syncTokenSaved),
+  save_sync_token: (a: { token: string }) => {
+    if (a.token.includes('\n') || a.token.includes('\0') || !/^github_pat_[A-Za-z0-9_]+$/.test(a.token.trim())) {
+      return Promise.reject(new Error('sync token was rejected'));
+    }
+    syncTokenSaved = true;
+    return delay(undefined);
+  },
+  remove_sync_token: () => { syncTokenSaved = false; return delay(undefined); },
   remote_connect: (a: { url: string }) => (/fail|bad/.test(a.url) ? Promise.reject(new Error('AUTH_FAILED: git push failed (mock)'))
     : (syncState = { remote: a.url, lastSync: new Date().toISOString(), ahead: 0, behind: 0, dirty: false }, onboarding = { ...onboarding, repoConnected: true }, delay<T.SyncStatus>({ ...syncState }, 400))),
   remote_disconnect: () => { syncState = { remote: null, lastSync: syncState.lastSync, ahead: 0, behind: 0, dirty: false }; onboarding = { ...onboarding, repoConnected: false }; return delay<T.SyncStatus>({ ...syncState }); },
   open_new_repo_page: () => { if (typeof window !== 'undefined') window.open('https://github.com/new', '_blank', 'noopener'); return delay(undefined); },
+  open_github_fine_grained_token_page: () => { if (typeof window !== 'undefined') window.open('https://github.com/settings/personal-access-tokens/new', '_blank', 'noopener'); return delay(undefined); },
   open_github_ssh_keys_page: () => { if (typeof window !== 'undefined') window.open('https://github.com/settings/ssh/new', '_blank', 'noopener'); return delay(undefined); },
   open_change_password: (a: { itemId: string }) => {
     const url = summary(get(a.itemId).detail).changePasswordUrl;

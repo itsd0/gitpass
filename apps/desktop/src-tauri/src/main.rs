@@ -79,7 +79,8 @@ fn main() {
             c::save_attachment, c::remove_attachment, c::list_tags, c::rename_tag, c::delete_tag, c::generate_password, c::get_generator_history, c::delete_generator_history_entry, c::clear_generator_history, c::record_generated_password, c::copy_password, c::password_strength, c::watchtower, c::import_file, c::export_items,
             c::identity, c::fingerprint_of, c::list_members, c::share_vault, c::unshare_vault, c::accept_share, c::list_devices,
             c::revoke_device, c::pairing_host_listen, c::pairing_host_accept, c::pairing_host_confirm, c::pairing_host_cancel, c::get_settings, c::set_settings, c::change_password, c::rotate_secret_key, c::sync_status,
-            c::sync, c::remote_connect, c::remote_disconnect, c::open_new_repo_page, c::open_github_ssh_keys_page, c::open_change_password, c::open_passkey_site, c::onboarding, c::set_onboarding, c::emergency_kit, c::emergency_kit_data, c::save_emergency_kit_pdf, c::favicon_url, c::touch, c::create_account, c::unlock_biometric, c::ssh_generate, c::ssh_import, c::ssh_agent_info, c::ssh_git_signing_config, c::ssh_apply_git_signing, c::ssh_agent_activity, c::clear_ssh_agent_activity,
+            c::sync_token_saved, c::save_sync_token, c::remove_sync_token,
+            c::sync, c::remote_connect, c::remote_disconnect, c::open_new_repo_page, c::open_github_fine_grained_token_page, c::open_github_ssh_keys_page, c::open_change_password, c::open_passkey_site, c::onboarding, c::set_onboarding, c::emergency_kit, c::emergency_kit_data, c::save_emergency_kit_pdf, c::favicon_url, c::touch, c::create_account, c::unlock_biometric, c::ssh_generate, c::ssh_import, c::ssh_agent_info, c::ssh_git_signing_config, c::ssh_apply_git_signing, c::ssh_agent_activity, c::clear_ssh_agent_activity,
         ])
         .run(tauri::generate_context!())
         .expect("error while running gitpass desktop");

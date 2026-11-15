@@ -488,6 +488,125 @@ fn a_stored_token_wins_and_a_classic_token_is_not_echoed() {
 }
 
 #[test]
+fn saved_sync_token_is_private_ignored_and_preferred() {
+    let e = env();
+    configure_remote(e._vault.path());
+    let path = e._vault.path().join(".gitpass-sync-token");
+    let ignore = e._vault.path().join(".gitignore");
+    let stripped = std::fs::read_to_string(&ignore).unwrap().replace(".gitpass-sync-token\n", "");
+    std::fs::write(&ignore, stripped).unwrap();
+    assert!(!std::fs::read_to_string(&ignore).unwrap().lines().any(|l| l.trim() == ".gitpass-sync-token"));
+
+    let saved = "github_pat_FAKE_saved_on_mac";
+    for bad in ["", "   ", "github_pat_FAKE\nTAIL", "github_pat_FAKE\0", "ghp_FAKE0123456789", "github_pat_"] {
+        let err = e.app.save_sync_token(bad).unwrap_err().to_string();
+        assert_eq!(err, "sync token was rejected");
+        assert!(!err.contains("github_pat_") && !err.contains("ghp_") && !err.contains("TAIL"), "{err}");
+        assert!(!path.exists());
+    }
+
+    e.app.save_sync_token(saved).unwrap();
+    assert!(e.app.sync_token_saved().unwrap());
+    assert!(std::fs::read_to_string(&ignore).unwrap().lines().any(|l| l.trim() == ".gitpass-sync-token"));
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+    }
+    let porcelain = Command::new("git")
+        .arg("-C")
+        .arg(e._vault.path())
+        .args(["status", "--porcelain"])
+        .output()
+        .unwrap();
+    let status = String::from_utf8_lossy(&porcelain.stdout);
+    assert!(!status.contains(".gitpass-sync-token"), "{status}");
+    let ignored = Command::new("git")
+        .arg("-C")
+        .arg(e._vault.path())
+        .args(["check-ignore", "-q", ".gitpass-sync-token"])
+        .status()
+        .unwrap();
+    assert!(ignored.success());
+
+    let prepared = e
+        .app
+        .pairing_host_begin_with(&["127.0.0.1".into()], 27624, Some(TYPED))
+        .unwrap();
+    assert!(!prepared.qr.contains(saved));
+    assert!(!prepared.qr.contains(TYPED));
+    let now = pairing::now_unix();
+    let mut joiner = JoinerSession::from_qr(&prepared.qr, now, &mut pairing::ConsumedPairings::default()).unwrap();
+    let code = exchange(&e.app, &mut joiner, now);
+    let grant = e.app.pairing_host_confirm(&code).unwrap();
+    assert!(grant.error.is_none(), "grant step failed");
+    assert!(!String::from_utf8_lossy(&grant.outbound).contains(saved));
+    assert!(!String::from_utf8_lossy(&grant.outbound).contains(TYPED));
+    let opened = joiner.push(&grant.outbound, now);
+    assert!(opened.error.is_none(), "phone could not open the grant");
+    let payload = joiner.take_payload().unwrap();
+    assert_eq!(payload.sync_token.as_str(), saved);
+    e.app.pairing_host_cancel().unwrap();
+
+    e.app.remove_sync_token().unwrap();
+    assert!(!e.app.sync_token_saved().unwrap());
+    assert!(!path.exists());
+    e.app.remove_sync_token().unwrap();
+    let missing = e
+        .app
+        .pairing_host_begin_with(&["127.0.0.1".into()], 27625, None)
+        .unwrap_err()
+        .to_string();
+    assert_eq!(missing, "sync token is not configured");
+    assert!(!missing.contains(saved) && !missing.contains(TYPED));
+}
+
+fn tree_has_name(root: &Path, name: &str) -> bool {
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+        for entry in entries.flatten() {
+            if entry.file_name().to_str() == Some(name) { return true; }
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) { stack.push(entry.path()); }
+        }
+    }
+    false
+}
+
+#[test]
+fn removed_sync_token_leaves_no_copy_under_the_vault() {
+    let e = env();
+    let bare = tempfile::tempdir().unwrap();
+    let ok = Command::new("git")
+        .args(["init", "--bare", "-q", "-b", "main"])
+        .arg(bare.path())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false);
+    if !ok {
+        eprintln!("git unavailable; skipping");
+        return;
+    }
+    let root = e._vault.path();
+    let init = Command::new("git").arg("-C").arg(root).args(["init", "-q", "-b", "main"]).status().unwrap();
+    assert!(init.success());
+    for (k, v) in [("user.email", "t@example.invalid"), ("user.name", "test")] {
+        let st = Command::new("git").arg("-C").arg(root).args(["config", k, v]).status().unwrap();
+        assert!(st.success());
+    }
+    e.app.save_sync_token("github_pat_FAKE_backup_excluded").unwrap();
+    e.app.remote_connect_opts(&bare.path().display().to_string(), true).unwrap();
+    e.app.sync(false).unwrap();
+    let saw_backup = std::fs::read_dir(root).unwrap().flatten().any(|ent| {
+        ent.file_name().to_str().is_some_and(|n| n.starts_with(".gitpass-backup-"))
+    });
+    assert!(saw_backup, "sync did not take a backup");
+    e.app.remove_sync_token().unwrap();
+    assert!(!tree_has_name(root, ".gitpass-sync-token"));
+}
+
+#[test]
 fn pairing_status_json_is_phase_and_error_only() {
     let status = PairingStatus { phase: "done".into(), error: None };
     let json = serde_json::to_string(&status).unwrap();

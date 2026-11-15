@@ -9,7 +9,7 @@
 //! the pairing frames; this module does not decrypt them.
 use super::super::dto::PairingHostPrepared;
 use super::App;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, bail, Result};
 use gitpass_core::crypto::SecretKey;
 use gitpass_core::pairing::{self, HostSession, PairingError, PairingRequest, PairingStep};
 use std::io::{ErrorKind, Read, Write};
@@ -129,6 +129,17 @@ fn stored_token(root: &Path) -> Option<String> {
     Some(token.to_string())
 }
 
+/// Same shape as the fine-grained PAT check used by pairing. Classic tokens are refused.
+/// Newline and NUL are rejected before this trim-based check.
+fn acceptable_sync_token(token: &str) -> bool {
+    let Some(rest) = token.strip_prefix("github_pat_") else {
+        return false;
+    };
+    token.len() <= 255
+        && !rest.is_empty()
+        && rest.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_')
+}
+
 fn github_owner_repo(url: &str) -> Option<(String, String)> {
     let path = url
         .trim()
@@ -155,6 +166,51 @@ fn turn(step: PairingStep, phase: &str) -> PairingTurn {
 }
 
 impl App {
+    /// Whether this Mac has a usable saved sync token. The token itself is never returned.
+    pub fn sync_token_saved(&self) -> Result<bool> {
+        let root = self.with(|u| Ok(u.session.root.clone()))?;
+        Ok(stored_token(&root).is_some())
+    }
+
+    /// Save a fine-grained PAT for Add device. The file is git-ignored and mode 0600.
+    /// The pairing listener already reads this file on every platform, so the same store
+    /// works in tests and on Linux. The token is not returned and is not put in errors.
+    pub fn save_sync_token(&self, raw: &str) -> Result<()> {
+        if raw.contains('\n') || raw.contains('\0') {
+            bail!("sync token was rejected");
+        }
+        let token = raw.trim();
+        if !acceptable_sync_token(token) {
+            bail!("sync token was rejected");
+        }
+        let root = self.with(|u| Ok(u.session.root.clone()))?;
+        gitpass_core::device::ensure_ignored(&root, SYNC_TOKEN_FILE)
+            .map_err(|_| anyhow!("sync token could not be saved"))?;
+        let path = root.join(SYNC_TOKEN_FILE);
+        let body = zeroize::Zeroizing::new(format!("{token}\n"));
+        gitpass_core::fsutil::atomic_write(&path, body.as_bytes())
+            .map_err(|_| anyhow!("sync token could not be saved"))?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            if std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600)).is_err() {
+                let _ = std::fs::remove_file(&path);
+                bail!("sync token could not be saved");
+            }
+        }
+        Ok(())
+    }
+
+    /// Delete the saved sync token. Missing file is success. The path is not in the error.
+    pub fn remove_sync_token(&self) -> Result<()> {
+        let root = self.with(|u| Ok(u.session.root.clone()))?;
+        match std::fs::remove_file(root.join(SYNC_TOKEN_FILE)) {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(_) => Err(anyhow!("sync token could not be removed")),
+        }
+    }
+
     /// Open a host session for `addresses` and `port`. Returns the QR only.
     pub fn pairing_host_begin(&self, addresses: &[String], port: u16) -> Result<PairingHostPrepared> {
         self.pairing_host_begin_with(addresses, port, None)

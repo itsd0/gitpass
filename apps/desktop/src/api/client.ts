@@ -101,12 +101,18 @@ export const api = {
   changePassword: (a:{current:string; next:string}) => call<void>('change_password', a),
   rotateSecretKey: () => call<{emergencyKit:string}>('rotate_secret_key'),
   syncStatus: () => call<T.SyncStatus>('sync_status'),
+  /** Whether a sync token is saved. The token itself is never returned. */
+  syncTokenSaved: () => call<boolean>('sync_token_saved'),
+  saveSyncToken: (a:{token:string}) => call<void>('save_sync_token', a),
+  removeSyncToken: () => call<void>('remove_sync_token'),
   sync: (a:{merge:boolean}) => call<{message:string}>('sync', a),
   /** `gitpass remote add <url>`: git init, .gitignore, commit encrypted files, push -u origin main. Uses existing git credentials. */
   remoteConnect: (a:{url:string}) => call<T.SyncStatus>('remote_connect', a),
   remoteDisconnect: () => call<T.SyncStatus>('remote_disconnect'),
   /** Opens https://github.com/new in the default browser (fixed URL). */
   openNewRepoPage: () => call<void>('open_new_repo_page'),
+  /** Opens the fine-grained personal access token page (fixed URL). */
+  openGithubFineGrainedTokenPage: () => call<void>('open_github_fine_grained_token_page'),
   openGithubSshKeysPage: () => call<void>('open_github_ssh_keys_page'),
   /** Opens the item's `https://<host>/.well-known/change-password` page in the default browser (URL derived in Rust). */
   openChangePassword: (a:{vaultId:string; itemId:string}) => call<void>('open_change_password', a),

@@ -42,8 +42,9 @@ pub fn lock(root: &Path) -> Result<LockGuard> {
 }
 
 /// Names never copied into backups / never treated as vault data.
+/// `.gitpass-sync-token` stays out of backups so removing the live file leaves no copy.
 pub fn is_local_only(name: &str) -> bool {
-    name == ".git" || name == ".gitpass.lock" || name.starts_with(".gitpass-backup-") || name == ".gitpass-migrate-tmp"
+    name == ".git" || name == ".gitpass.lock" || name == ".gitpass-sync-token" || name.starts_with(".gitpass-backup-") || name == ".gitpass-migrate-tmp"
 }
 
 pub fn copy_dir(src: &Path, dst: &Path, skip: &dyn Fn(&str) -> bool) -> Result<()> {
@@ -63,7 +64,7 @@ pub fn ts() -> String {
     format!("{}-{:09}", d.as_secs(), d.subsec_nanos())
 }
 
-/// Copy the vault dir (minus .git, locks, other backups) to `<root>/.gitpass-backup-<tag><ts>/`.
+/// Copy the vault dir (minus .git, the sync token, locks, other backups) to `<root>/.gitpass-backup-<tag><ts>/`.
 pub fn backup(root: &Path, tag: &str) -> Result<PathBuf> {
     let dst = root.join(format!(".gitpass-backup-{tag}{}", ts()));
     copy_dir(root, &dst, &is_local_only)?;
@@ -152,6 +153,7 @@ mod tests {
         // Excluded
         assert!(is_local_only(".git"));
         assert!(is_local_only(".gitpass.lock"));
+        assert!(is_local_only(".gitpass-sync-token"));
         assert!(is_local_only(".gitpass-migrate-tmp"));
         assert!(is_local_only(".gitpass-backup-123456789"));
         assert!(is_local_only(".gitpass-backup-v1-20261028"));
@@ -232,6 +234,33 @@ mod tests {
         assert!(!b.join(".gitpass.lock").exists());
         assert!(!b.join(".gitpass-migrate-tmp").exists());
         assert!(!b.join(".gitpass-backup-old123").exists());
+    }
+
+    #[test]
+    fn backup_omits_sync_token() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("vault");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("vault.json"), b"{}").unwrap();
+        fs::write(root.join(".gitpass-sync-token"), b"github_pat_FAKE_not_for_backup\n").unwrap();
+
+        let b = backup(&root, "test-").unwrap();
+
+        assert!(root.join(".gitpass-sync-token").is_file());
+        assert!(b.join("vault.json").is_file());
+        assert!(!tree_has_name(&b, ".gitpass-sync-token"));
+    }
+
+    fn tree_has_name(root: &Path, name: &str) -> bool {
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(dir) = stack.pop() {
+            let Ok(entries) = fs::read_dir(&dir) else { continue };
+            for entry in entries.flatten() {
+                if entry.file_name().to_str() == Some(name) { return true; }
+                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) { stack.push(entry.path()); }
+            }
+        }
+        false
     }
 
     #[test]

@@ -74,32 +74,46 @@ export function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenC
   }, [phase, expiresAt]);
 
   async function run(id: number, typed: string | null) {
+    setBusy(true);
+    setErrorKey(null);
+    let prepared;
     try {
-      const prepared = await api.pairingHostListen({ token: typed });
-      if (gen.current !== id) return;
-      if (prepared.expiresAt * 1000 <= Date.now()) {
-        setPhase('error');
-        setErrorKey('devices.add.expired');
-        await api.pairingHostCancel().catch(() => {});
-        return;
-      }
-      setToken('');
-      setQr(prepared.qr);
-      setExpiresAt(prepared.expiresAt);
-      setPhase('qr');
-      await api.pairingHostAccept();
-      if (gen.current !== id) return;
-      setPhase('code');
+      prepared = await api.pairingHostListen({ token: typed });
     } catch (e) {
       if (gen.current !== id) return;
       const msg = safeError(e);
       if (msg === 'sync token is not configured') {
         setPhase('needToken');
+        if (typed != null && typed.trim()) setErrorKey('devices.add.tokenMissing');
         return;
       }
       setPhase('error');
       setErrorKey(messageKey(msg));
+      return;
+    } finally {
+      if (gen.current === id) setBusy(false);
     }
+    if (gen.current !== id || !prepared) return;
+    if (prepared.expiresAt * 1000 <= Date.now()) {
+      setPhase('error');
+      setErrorKey('devices.add.expired');
+      await api.pairingHostCancel().catch(() => {});
+      return;
+    }
+    setToken('');
+    setQr(prepared.qr);
+    setExpiresAt(prepared.expiresAt);
+    setPhase('qr');
+    try {
+      await api.pairingHostAccept();
+    } catch (e) {
+      if (gen.current !== id) return;
+      setPhase('error');
+      setErrorKey(messageKey(safeError(e)));
+      return;
+    }
+    if (gen.current !== id) return;
+    setPhase('code');
   }
 
   async function close() {
@@ -157,8 +171,10 @@ export function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenC
       {phase === 'needToken' && (
         <form
           className="mt-4 space-y-2"
+          aria-busy={busy}
           onSubmit={(ev) => {
             ev.preventDefault();
+            if (busy || !token.trim()) return;
             const id = ++gen.current;
             void run(id, token);
           }}
@@ -168,7 +184,12 @@ export function AddDeviceDialog({ open, onOpenChange }: { open: boolean; onOpenC
           </label>
           <Input id="pairing-token" type="password" autoComplete="off" value={token} onChange={(ev) => setToken(ev.target.value)} />
           <p className="text-xs text-muted">{t('devices.add.tokenHelp')}</p>
-          <Button type="submit">{t('devices.add.start')}</Button>
+          <button type="button" className="text-xs text-accent underline" onClick={() => void api.openGithubFineGrainedTokenPage().catch(() => {})}>
+            {t('devices.add.openTokenPage')}
+          </button>
+          {busy && <p role="status" className="text-sm">{t('devices.add.starting')}</p>}
+          {errorKey === 'devices.add.tokenMissing' && <p role="alert" className="text-sm text-danger">{t('devices.add.tokenMissing')}</p>}
+          <Button type="submit" disabled={busy || !token.trim()}>{busy ? t('devices.add.starting') : t('devices.add.start')}</Button>
         </form>
       )}
       {(phase === 'qr' || phase === 'code') && (

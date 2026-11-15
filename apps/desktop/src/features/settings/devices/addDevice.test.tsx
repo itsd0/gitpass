@@ -118,6 +118,54 @@ describe('Add device', () => {
     expect(screen.queryByLabelText('Fine-grained personal access token')).toBeNull();
   });
 
+  it('keeps Show QR code disabled for an empty or blank token', async () => {
+    const user = userEvent.setup();
+    const listen = vi.spyOn(api, 'pairingHostListen').mockRejectedValue(new Error('sync token is not configured'));
+    vi.spyOn(api, 'pairingHostCancel').mockResolvedValue(undefined);
+    open();
+    const button = (await screen.findByRole('button', { name: 'Show QR code' })) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    await user.type(screen.getByLabelText('Fine-grained personal access token'), '   ');
+    expect(button.disabled).toBe(true);
+    expect(listen).toHaveBeenCalledTimes(1);
+    expect(listen).toHaveBeenCalledWith({ token: null });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('shows an error when a typed token is still not configured', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(api, 'pairingHostListen').mockRejectedValue(new Error('sync token is not configured'));
+    vi.spyOn(api, 'pairingHostCancel').mockResolvedValue(undefined);
+    open();
+    await user.type(await screen.findByLabelText('Fine-grained personal access token'), TOKEN);
+    await user.click(screen.getByRole('button', { name: 'Show QR code' }));
+    expect(await screen.findByRole('alert')).toHaveProperty(
+      'textContent',
+      'That token could not be used. Paste a fine-grained token for this vault and try again.',
+    );
+    expect(screen.getByLabelText('Fine-grained personal access token')).toBeTruthy();
+    expect(screen.queryByAltText('Pairing QR code')).toBeNull();
+    expect(document.body.textContent).not.toContain(TOKEN);
+  });
+
+  it('shows a busy state while the session starts', async () => {
+    const user = userEvent.setup();
+    let release: (value: ReturnType<typeof prepared>) => void = () => {};
+    vi.spyOn(api, 'pairingHostListen')
+      .mockRejectedValueOnce(new Error('sync token is not configured'))
+      .mockImplementationOnce(() => new Promise((resolve) => { release = resolve; }));
+    vi.spyOn(api, 'pairingHostAccept').mockResolvedValue(undefined);
+    vi.spyOn(api, 'pairingHostCancel').mockResolvedValue(undefined);
+    open();
+    await user.type(await screen.findByLabelText('Fine-grained personal access token'), TOKEN);
+    await user.click(screen.getByRole('button', { name: 'Show QR code' }));
+    expect(await screen.findByRole('status')).toHaveProperty('textContent', 'Starting…');
+    expect((screen.getByRole('button', { name: 'Starting…' }) as HTMLButtonElement).disabled).toBe(true);
+    release(prepared());
+    expect(await screen.findByAltText('Pairing QR code')).toBeTruthy();
+    expect(document.body.textContent).not.toContain(TOKEN);
+  });
+
   it('offers Add device when the device list is empty', async () => {
     vi.spyOn(api, 'listDevices').mockResolvedValue([]);
     vi.spyOn(api, 'pairingHostListen').mockResolvedValue(prepared());
