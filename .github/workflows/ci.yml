@@ -46,6 +46,8 @@ jobs:
         run: |
           chmod +x scripts/test-ci.sh
           ./scripts/test-ci.sh < /dev/null
+      - name: verify macOS signing-leaf check
+        run: bash scripts/check-macos-designated-requirement.test.sh < /dev/null
       - id: f
         name: detect changed areas
         env:

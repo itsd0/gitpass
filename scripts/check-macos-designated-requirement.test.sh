@@ -42,6 +42,37 @@ if FAKE_REQ='designated => identifier "dev.gitpass.desktop" and certificate leaf
   exit 1
 fi
 
+# Real codesign output prints the leaf hash in lowercase.
+lower_leaf="$(tr '[:upper:]' '[:lower:]' <<<"$leaf")"
+FAKE_REQ="designated => identifier \"dev.gitpass.desktop\" and certificate leaf = H\"${lower_leaf}\"" \
+  FAKE_RC=0 run "$check" "$tmp/Gitpass.app" >/dev/null
+
+# A lowercase expected file matches the lowercase codesign output too.
+printf '%s\n' "$lower_leaf" > "$tmp/leaf.txt"
+FAKE_REQ="designated => identifier \"dev.gitpass.desktop\" and certificate leaf = H\"${lower_leaf}\"" \
+  FAKE_RC=0 run "$check" "$tmp/Gitpass.app" >/dev/null
+printf '%s\n' "$leaf" > "$tmp/leaf.txt"
+
+# A different lowercase hash still fails.
+if FAKE_REQ='designated => identifier "dev.gitpass.desktop" and certificate leaf = H"4f62e0ad9f26bedb25e81ef10dc1abb416bddc83"' \
+  FAKE_RC=0 run "$check" "$tmp/Gitpass.app" >/dev/null; then
+  echo "wrong lowercase leaf should fail" >&2
+  exit 1
+fi
+
+# The identifier check stays exact: a different identifier fails even with the right leaf.
+if FAKE_REQ="designated => identifier \"dev.gitpass.Desktop\" and certificate leaf = H\"${lower_leaf}\"" \
+  FAKE_RC=0 run "$check" "$tmp/Gitpass.app" >/dev/null; then
+  echo "wrong identifier should fail" >&2
+  exit 1
+fi
+
+# A failing codesign call fails the check.
+if FAKE_REQ="$good" FAKE_RC=1 run "$check" "$tmp/Gitpass.app" >/dev/null; then
+  echo "codesign failure should fail" >&2
+  exit 1
+fi
+
 printf 'not-a-hash\n' > "$tmp/leaf.txt"
 if FAKE_REQ="$good" FAKE_RC=0 run "$check" "$tmp/Gitpass.app" >/dev/null; then
   echo "bad expected hash should fail" >&2

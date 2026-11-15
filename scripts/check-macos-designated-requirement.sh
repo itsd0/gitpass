@@ -33,7 +33,11 @@ fi
 
 want_id='identifier "dev.gitpass.desktop"'
 want_leaf="certificate leaf = H\"${leaf}\""
-if ! grep -F -q -- "$want_id" <<<"$req" || ! grep -F -q -- "$want_leaf" <<<"$req"; then
+# codesign prints the leaf hash in lowercase. Compare the hash case-insensitively by
+# uppercasing the requirement for the leaf match only; the identifier match stays exact.
+req_upper="$(tr '[:lower:]' '[:upper:]' <<<"$req")"
+want_leaf_upper="$(tr '[:lower:]' '[:upper:]' <<<"$want_leaf")"
+if ! grep -F -q -- "$want_id" <<<"$req" || ! grep -F -q -- "$want_leaf_upper" <<<"$req_upper"; then
   echo "::error::designated requirement does not pin dev.gitpass.desktop and leaf ${leaf}. Touch ID Keychain trust would break. See docs/RELEASE.md."
   printf '%s\n' "$req" | grep -E 'designated|identifier|certificate leaf' || true
   exit 1
