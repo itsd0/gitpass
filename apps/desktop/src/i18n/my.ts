@@ -772,6 +772,7 @@ export const my: Partial<Record<Key, string>> = {
   "unlock.secretKeyPlaceholder": "Secret Key (A3-XXXXXX-…), ရွေးချယ်နိုင်သည်",
   "unlock.secretKeyPlaceholderRequired": "Secret Key (A3-XXXXXX-…)",
   "unlock.errSecretKeyRequired": "Emergency Kit မှ Secret Key ကို ရိုက်ထည့်ပါ၊ သို့မဟုတ် Touch ID ဖြင့် သော့ဖွင့်ပါ။",
+  "unlock.errTouchIdKeychain": "Touch ID ဖြင့် သော့ဖွင့်ခြင်း မအောင်မြင်ပါ။ မာစတာ စကားဝှက်နှင့် Secret Key ဖြင့် သော့ဖွင့်ပြီး Settings တွင် Touch ID ကို ပြန်ဖွင့်ပါ။",
   "unlock.errShortPassword": "မာစတာ စကားဝှက်သည် အနည်းဆုံး စာလုံး ၈ လုံး ရှိရပါမည်။",
   "unlock.errPasswordMismatch": "စကားဝှက်များ ကိုက်ညီမှု မရှိပါ။",
   "unlock.createTitle": "gitpass သော့ခတ်သေတ္တာ ဖန်တီးရန်",

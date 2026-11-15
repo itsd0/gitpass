@@ -764,6 +764,7 @@ export const th: Partial<Record<Key, string>> = {
   "unlock.secretKeyPlaceholder": "Secret Key (A3-XXXXXX-…), ไม่บังคับ",
   "unlock.secretKeyPlaceholderRequired": "Secret Key (A3-XXXXXX-…)",
   "unlock.errSecretKeyRequired": "ป้อน Secret Key จาก Emergency Kit หรือปลดล็อกด้วย Touch ID",
+  "unlock.errTouchIdKeychain": "ปลดล็อกด้วย Touch ID ไม่สำเร็จ โปรดปลดล็อกด้วยรหัสผ่านหลักและ Secret Key แล้วเปิด Touch ID อีกครั้งในการตั้งค่า",
   "unlock.errShortPassword": "รหัสผ่านหลักต้องมีความยาวอย่างน้อย 8 ตัวอักษร",
   "unlock.errPasswordMismatch": "รหัสผ่านไม่ตรงกัน",
   "unlock.createTitle": "สร้างห้องนิรภัย gitpass",
