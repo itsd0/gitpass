@@ -121,6 +121,56 @@ const HIGHLIGHTS_0_6_6: WhatsNewHighlight[] = [
 
 export const RELEASES: ReleaseHighlights[] = [
   {
+    version: '0.7.2',
+    highlights: [
+      {
+        id: 'unlock-secret-key-prompt',
+        icon: KeyRound,
+        title: {
+          en: 'Clearer Secret Key prompt',
+          my: 'ပိုရှင်းလင်းသော Secret Key တောင်းခံချက်',
+          th: 'ขอ Secret Key ได้ชัดเจนขึ้น',
+        },
+        description: {
+          en: 'If this Mac has no saved Secret Key, the unlock screen asks for it instead of showing a file error. Touch ID still works.',
+          my: 'ဤ Mac တွင် Secret Key သိမ်းမထားပါက ဖွင့်ရန်စခရင်သည် ဖိုင်အမှားပြမည့်အစား Secret Key ကို တောင်းပါမည်။ Touch ID ကို ဆက်သုံးနိုင်ပါသည်။',
+          th: 'หาก Mac เครื่องนี้ไม่มี Secret Key ที่บันทึกไว้ หน้าปลดล็อกจะขอ Secret Key แทนการแสดงข้อผิดพลาดของไฟล์ Touch ID ยังใช้ได้',
+        },
+      },
+      {
+        id: 'add-device-token',
+        icon: QrCode,
+        title: {
+          en: 'Easier Add device',
+          my: 'စက်ထည့်ခြင်း ပိုလွယ်ကူလာပြီ',
+          th: 'เพิ่มอุปกรณ์ได้ง่ายขึ้น',
+        },
+        description: {
+          en: 'Add device explains which GitHub token it needs and shows token errors on the form. You can save an optional sync token on this Mac in Sync settings and remove it at any time.',
+          my: 'စက်ထည့်ခြင်းတွင် လိုအပ်သော GitHub token အမျိုးအစားကို ရှင်းပြပြီး token အမှားများကို ဖောင်ပေါ်တွင် ပြပါသည်။ Sync ဆက်တင်တွင် ဤ Mac အတွက် sync token ကို ရွေးချယ်၍ သိမ်းနိုင်ပြီး အချိန်မရွေး ဖယ်ရှားနိုင်ပါသည်။',
+          th: 'เพิ่มอุปกรณ์จะอธิบายว่าต้องใช้โทเค็น GitHub แบบใดและแสดงข้อผิดพลาดของโทเค็นบนฟอร์ม คุณสามารถบันทึกโทเค็นซิงก์บน Mac เครื่องนี้ได้ในการตั้งค่าซิงก์ และลบออกได้ทุกเมื่อ',
+        },
+        showMe: {
+          route: { name: 'settings', tab: 'sync' },
+        },
+      },
+      {
+        id: 'sync-token-not-in-backups',
+        icon: ShieldCheck,
+        title: {
+          en: 'Saved token stays out of backups',
+          my: 'သိမ်းထားသော token ကို backup ထဲ မထည့်ပါ',
+          th: 'โทเค็นที่บันทึกไว้ไม่อยู่ในข้อมูลสำรอง',
+        },
+        description: {
+          en: 'Vault backups do not copy the saved sync token, so removing it leaves no copy in the vault folder.',
+          my: 'Vault backup များတွင် သိမ်းထားသော sync token ကို မကူးယူပါ။ ထို့ကြောင့် ဖယ်ရှားလိုက်ပါက vault ဖိုင်တွဲထဲတွင် မိတ္တူ မကျန်ပါ။',
+          th: 'ข้อมูลสำรองของคลังไม่คัดลอกโทเค็นซิงก์ที่บันทึกไว้ เมื่อลบออกจึงไม่เหลือสำเนาในโฟลเดอร์คลัง',
+        },
+      },
+    ],
+  },
+  {
     version: '0.7.1',
     highlights: [
       {
