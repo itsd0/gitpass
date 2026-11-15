@@ -14,6 +14,13 @@ function shownUnlockError(message: string, localized: string): string {
   return message.toLowerCase().startsWith('secret key required') ? localized : message;
 }
 
+/** Map a Touch ID Keychain read failure to the recovery guidance (#502 item 4).
+ * The backend text is a raw OS error ("Keychain: …"); the user needs the
+ * recovery path instead. Other Touch ID errors pass through unchanged. */
+function shownBiometricError(message: string, localized: string): string {
+  return /keychain/i.test(message) ? localized : message;
+}
+
 export function Unlock() {
   const { unlock, setAccount } = useApp();
   const t = useT();
@@ -100,7 +107,7 @@ export function Unlock() {
   async function touchId() {
     setBusy(true); setErr('');
     try { const s = await api.unlockBiometric({ vaultPath }); setAccount(s.account); unlock(); }
-    catch (x) { setErr(shownUnlockError(msg(x), t('unlock.errSecretKeyRequired'))); } finally { setBusy(false); }
+    catch (x) { setErr(shownBiometricError(shownUnlockError(msg(x), t('unlock.errSecretKeyRequired')), t('unlock.errTouchIdKeychain'))); } finally { setBusy(false); }
   }
   async function create(e: FormEvent) {
     e.preventDefault(); setErr('');

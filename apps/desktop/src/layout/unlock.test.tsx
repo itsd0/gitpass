@@ -524,3 +524,67 @@ describe("Unlock Secret Key requirement", () => {
     });
   });
 });
+
+describe("Unlock Touch ID Keychain failure", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    useI18n.getState().setLang("en");
+    useApp.setState({
+      locked: true,
+      account: null,
+      sidebarCollapsed: false,
+      route: { name: "items", filter: { kind: "all" } },
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    useI18n.getState().setLang("en");
+  });
+
+  it("shows the recovery guidance when the Touch ID Keychain read fails", async () => {
+    const bioSpy = vi.spyOn(api, "unlockBiometric").mockRejectedValue(
+      new Error("Keychain: errSecItemNotFound (-25300) (re-enable Touch ID in Settings)"),
+    );
+    for (const lang of ["en", "my", "th"] as const) {
+      cleanup();
+      bioSpy.mockClear();
+      useI18n.getState().setLang(lang);
+      vi.spyOn(api, "status").mockResolvedValue({
+        unlocked: false,
+        vaultPath: "/tmp/fake-vault",
+        account: null,
+        vaultExists: true,
+        biometricAvailable: true,
+      });
+      render(<Unlock />);
+      await act(async () => {});
+
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: new RegExp(translate(lang, "unlock.touchId"), "i") }));
+      });
+      expect((await screen.findByRole("alert")).textContent).toBe(translate(lang, "unlock.errTouchIdKeychain"));
+      expect(screen.getByRole("alert").textContent).not.toContain("errSecItemNotFound");
+      expect(bioSpy).toHaveBeenCalledTimes(1);
+      cleanup();
+    }
+  });
+
+  it("passes other Touch ID errors through unchanged", async () => {
+    vi.spyOn(api, "status").mockResolvedValue({
+      unlocked: false,
+      vaultPath: "/tmp/fake-vault",
+      account: null,
+      vaultExists: true,
+      biometricAvailable: true,
+    });
+    vi.spyOn(api, "unlockBiometric").mockRejectedValue(new Error("Touch ID: User canceled"));
+    render(<Unlock />);
+    await act(async () => {});
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Unlock with Touch ID/i }));
+    });
+    expect((await screen.findByRole("alert")).textContent).toBe("Touch ID: User canceled");
+  });
+});

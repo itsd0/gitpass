@@ -760,6 +760,7 @@ export const en = {
   "unlock.secretKeyPlaceholder": "Secret Key (A3-XXXXXX-…), optional",
   "unlock.secretKeyPlaceholderRequired": "Secret Key (A3-XXXXXX-…)",
   "unlock.errSecretKeyRequired": "Enter your Secret Key from your Emergency Kit, or unlock with Touch ID.",
+  "unlock.errTouchIdKeychain": "Touch ID unlock failed. Unlock with your master password and Secret Key, then re-enable Touch ID in Settings.",
   "unlock.errShortPassword": "Master password must be at least 8 characters.",
   "unlock.errPasswordMismatch": "Passwords do not match.",
   "unlock.createTitle": "Create a gitpass vault",
