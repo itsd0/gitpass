@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.7.2 — 2026-11-15
+
+### Highlights
+- **Secret Key prompt on unlock.** When the vault folder has no `secret.key`, desktop unlock asks for the Secret Key (or Touch ID) with a fixed message instead of a raw file error. Nothing writes the Secret Key to disk (#500).
+- **Add device token help.** Show QR code stays disabled until a token is typed, shows a busy state, and shows token errors on the form. The help text explains the fine-grained token it needs (#501).
+
+### Added
+- Optional saved sync token on the desktop (#501, #504): Sync settings can save a fine-grained
+  token on this Mac. It is written with mode 0600, never shown again, and can be removed. Pairing
+  uses it and skips the prompt.
+- Release check for the macOS signing identity (#502, #506): a tag build fails if the signed app
+  no longer pins the `gitpass Local Signing` leaf. `docs/RELEASE.md` explains why the identity
+  must stay stable and how a rotation affects Touch ID.
+
+### Fixed
+- Desktop unlock without a typed Secret Key and without `secret.key` returns a fixed
+  "Secret Key required" message, and the unlock screens keep the field required (#500, #503).
+- Add device no longer does nothing when Show QR code is pressed with an empty token (#501, #504).
+
+### Security
+- Vault backups (`.gitpass-backup-*`) no longer copy `.gitpass-sync-token`, so removing the
+  saved token leaves no copy under the vault (#504).
+
 ## 0.7.1 — 2026-11-13
 
 ### Highlights
