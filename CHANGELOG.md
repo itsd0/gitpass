@@ -2,7 +2,18 @@
 
 ## Unreleased
 
-## 0.7.2 — 2026-11-15
+## 0.7.3 — 2026-11-15
+
+0.7.3 contains the 0.7.2 changes below. 0.7.2 was tagged but never published: the release
+check for the macOS signing identity compared the certificate hash case-sensitively and failed
+on a correctly signed app.
+
+### Fixed
+- The macOS signing-leaf release check compares the hash case-insensitively, matching the
+  lowercase `codesign` output. The identifier check stays exact, and CI now runs the check's
+  tests (#502, #509).
+
+## 0.7.2 — 2026-11-15 (not published; shipped in 0.7.3)
 
 ### Highlights
 - **Secret Key prompt on unlock.** When the vault folder has no `secret.key`, desktop unlock asks for the Secret Key (or Touch ID) with a fixed message instead of a raw file error. Nothing writes the Secret Key to disk (#500).
