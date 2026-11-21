@@ -35,9 +35,7 @@ ignore = [
     # (API changes in the import path) and is tracked as future work, not
     # done silently here. Re-verify this reachability claim if import.rs
     # ever gains an extract call.
-    "RUSTSEC-2026-0367",
     "RUSTSEC-2026-0368",
-    "RUSTSEC-2026-0369",
     # RUSTSEC-2026-0387 (crypto-bigint timing variability): cargo-deny
     # has no per-crate vulnerability ignore, so this ID ignore is the only
     # mechanism — but it is scoped by the lock, not by wishful thinking:
